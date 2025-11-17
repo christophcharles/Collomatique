@@ -40,9 +40,6 @@ impl ExprType {
             // Int → LinExpr (but NOT LinExpr → Int)
             (ExprType::Int, ExprType::LinExpr) => true,
 
-            // Bool → Constraint (but NOT Constraint → Bool)
-            (ExprType::Bool, ExprType::Constraint) => true,
-
             // EmptyList → [T] for any T (but NOT [T] → EmptyList)
             (ExprType::EmptyList, ExprType::List(_)) => true,
 
@@ -69,11 +66,6 @@ impl ExprType {
             // Int/LinExpr unify to LinExpr (bidirectional)
             (ExprType::Int, ExprType::LinExpr) | (ExprType::LinExpr, ExprType::Int) => {
                 Some(ExprType::LinExpr)
-            }
-
-            // Bool/Constraint unify to Constraint (bidirectional)
-            (ExprType::Bool, ExprType::Constraint) | (ExprType::Constraint, ExprType::Bool) => {
-                Some(ExprType::Constraint)
             }
 
             // Lists: unify element types recursively
@@ -491,6 +483,50 @@ impl LocalEnv {
                 global_env, &path.node, &path.span, type_info, errors, warnings,
             ),
 
+            // ========== As construct ==========
+            Expr::ExplicitType { expr, typ } => {
+                // Check the inner expression
+                let expr_type =
+                    self.check_expr(global_env, &expr.node, type_info, errors, warnings);
+
+                // Convert the declared type
+                let target_type = ExprType::from(typ.node.clone());
+
+                // Validate that the target type is actually valid
+                if !global_env.validate_type(&target_type) {
+                    errors.push(SemError::UnknownType {
+                        typ: target_type.to_string(),
+                        span: typ.span.clone(),
+                    });
+                    return expr_type; // Fallback to inferred type
+                }
+
+                match expr_type {
+                    Some(inferred) => {
+                        // Check if the inferred type can coerce to the target type
+                        if inferred.can_coerce_to(&target_type) {
+                            // Success: use the target type
+                            Some(target_type)
+                        } else {
+                            // Error: can't coerce
+                            errors.push(SemError::TypeMismatch {
+                                span: expr.span.clone(),
+                                expected: target_type.clone(),
+                                found: inferred,
+                                context: "explicit type annotation".to_string(),
+                            });
+                            // Return target type anyway (user's intent is clear)
+                            Some(target_type)
+                        }
+                    }
+                    None => {
+                        // Expression failed to type-check, but we have explicit type
+                        // Use the explicit type as a hint for recovery
+                        Some(target_type)
+                    }
+                }
+            }
+
             // ========== Arithmetic Operations ==========
             // Int + Int -> Int
             // LinExpr + Int -> LinExpr (coerce Int to LinExpr)
@@ -665,6 +701,50 @@ impl LocalEnv {
                 }
             }
 
+            // ========== Constraints operators ==========
+            Expr::ConstraintEq(left, right)
+            | Expr::ConstraintLe(left, right)
+            | Expr::ConstraintGe(left, right) => {
+                let left_type =
+                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                let right_type =
+                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+
+                match (left_type, right_type) {
+                    (Some(l), Some(r)) => {
+                        // Check if both can coerce to LinExpr
+                        let l_ok = l.can_coerce_to(&ExprType::LinExpr);
+                        let r_ok = r.can_coerce_to(&ExprType::LinExpr);
+
+                        if !l_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: left.span.clone(),
+                                expected: ExprType::LinExpr,
+                                found: l,
+                                context: "constraint operator requires LinExpr or Int operands"
+                                    .to_string(),
+                            });
+                        }
+                        if !r_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: ExprType::LinExpr,
+                                found: r,
+                                context: "constraint operator requires LinExpr or Int operands"
+                                    .to_string(),
+                            });
+                        }
+
+                        // Always return Constraint (even on error, intent is clear)
+                        Some(ExprType::Constraint)
+                    }
+                    _ => {
+                        // Something failed, but we know user wanted a constraint
+                        Some(ExprType::Constraint)
+                    }
+                }
+            }
+
             // ========== Comparison Operations ==========
             // Int == Int -> Bool
             // LinExpr == LinExpr -> Constraint
@@ -676,147 +756,71 @@ impl LocalEnv {
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
                 match (left_type, right_type) {
-                    // Both Int -> Bool
-                    (Some(ExprType::Int), Some(ExprType::Int)) => Some(ExprType::Bool),
-                    // Both Bool -> Bool
-                    (Some(ExprType::Bool), Some(ExprType::Bool)) => Some(ExprType::Bool),
-                    // Any LinExpr -> Constraint
-                    (Some(ExprType::LinExpr), Some(ExprType::Int))
-                    | (Some(ExprType::Int), Some(ExprType::LinExpr))
-                    | (Some(ExprType::LinExpr), Some(ExprType::LinExpr)) => {
-                        Some(ExprType::Constraint)
-                    }
-                    // Same object types -> Bool
-                    (Some(ExprType::Object(l)), Some(ExprType::Object(r))) if l == r => {
-                        Some(ExprType::Bool)
-                    }
-                    (Some(ExprType::List(l)), Some(ExprType::List(r))) if l == r => {
-                        Some(ExprType::Bool)
-                    }
-                    (Some(ExprType::List(_)), Some(ExprType::EmptyList)) => Some(ExprType::Bool),
-                    (Some(ExprType::EmptyList), Some(ExprType::List(_))) => Some(ExprType::Bool),
-                    (Some(ExprType::EmptyList), Some(ExprType::EmptyList)) => Some(ExprType::Bool),
                     (Some(l), Some(r)) => {
-                        if l != r {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: l.clone(),
-                                found: r,
-                                context: "equality comparison requires matching types".to_string(),
-                            });
+                        // Try to unify the types
+                        match ExprType::unify(&l, &r) {
+                            Some(_unified) => Some(ExprType::Bool),
+                            None => {
+                                // Types don't unify - incompatible
+                                errors.push(SemError::TypeMismatch {
+                                    span: right.span.clone(),
+                                    expected: l.clone(),
+                                    found: r,
+                                    context: "equality comparison requires compatible types"
+                                        .to_string(),
+                                });
+                                Some(ExprType::Bool) // Fallback
+                            }
                         }
-                        Some(ExprType::Bool)
                     }
-                    _ => None,
-                }
-            }
-
-            // Relational: Int <= Int -> Bool, LinExpr <= LinExpr -> Constraint
-            Expr::Le(left, right) | Expr::Ge(left, right) => {
-                let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
-                let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
-
-                match (left_type, right_type) {
-                    // Both Int -> Bool
-                    (Some(ExprType::Int), Some(ExprType::Int)) => Some(ExprType::Bool),
-                    // Any LinExpr -> Constraint
-                    (Some(ExprType::LinExpr), Some(ExprType::Int))
-                    | (Some(ExprType::Int), Some(ExprType::LinExpr))
-                    | (Some(ExprType::LinExpr), Some(ExprType::LinExpr)) => {
-                        Some(ExprType::Constraint)
-                    }
-                    (Some(l), Some(r)) if l == ExprType::Int || l == ExprType::LinExpr => {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: l.clone(),
-                            found: r.clone(),
-                            context: format!(
-                                "relational comparison requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        None
-                    }
-                    (Some(l), Some(r)) if r == ExprType::Int || r == ExprType::LinExpr => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: r.clone(),
-                            found: l.clone(),
-                            context: format!(
-                                "relational comparison requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        None
-                    }
-                    (Some(l), Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::Int,
-                            found: l.clone(),
-                            context: format!(
-                                "relational comparison requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: r.clone(),
-                            context: format!(
-                                "relational comparison requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        None
-                    }
-                    _ => None,
+                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool), // One side failed
+                    (None, None) => None,
                 }
             }
 
             // Relational: Int < Int -> Bool
-            Expr::Lt(left, right) | Expr::Gt(left, right) => {
+            Expr::Le(left, right)
+            | Expr::Ge(left, right)
+            | Expr::Lt(left, right)
+            | Expr::Gt(left, right) => {
                 let left_type =
                     self.check_expr(global_env, &left.node, type_info, errors, warnings);
                 let right_type =
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
                 match (left_type, right_type) {
-                    // Both Int -> Bool
-                    (Some(ExprType::Int), Some(ExprType::Int)) => Some(ExprType::Bool),
                     (Some(l), Some(r)) => {
-                        if l != ExprType::Int {
+                        // Check if both can coerce to Int
+                        let l_ok = l.can_coerce_to(&ExprType::Int);
+                        let r_ok = r.can_coerce_to(&ExprType::Int);
+
+                        if !l_ok {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::Int,
-                                found: l.clone(),
-                                context: format!(
-                                    "strict relational comparison requires Int, got {}",
-                                    l
-                                ),
+                                found: l,
+                                context: "relational comparison requires Int operands".to_string(),
                             });
                         }
-                        if r != ExprType::Int {
+                        if !r_ok {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: ExprType::Int,
-                                found: r.clone(),
-                                context: format!(
-                                    "strict relational comparison requires Int, got {}",
-                                    r
-                                ),
+                                found: r,
+                                context: "relational comparison requires Int operands".to_string(),
                             });
                         }
-                        None
+
+                        // Always return Bool (even on error, intent is clear)
+                        Some(ExprType::Bool)
                     }
-                    _ => None,
+                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool),
+                    (None, None) => None,
                 }
             }
 
             // ========== Boolean Operations ==========
-            // Bool and Bool -> Bool
+            // Bool and Bool -> Bool, Constraint and Constraint -> Constraint
             Expr::And(left, right) | Expr::Or(left, right) => {
                 let left_type =
                     self.check_expr(global_env, &left.node, type_info, errors, warnings);
@@ -824,72 +828,56 @@ impl LocalEnv {
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
                 match (left_type, right_type) {
-                    (Some(ExprType::Bool), Some(ExprType::Bool)) => Some(ExprType::Bool),
+                    (Some(l), Some(r)) => {
+                        // Try to unify the types
+                        match ExprType::unify(&l, &r) {
+                            Some(ExprType::Bool) => Some(ExprType::Bool),
+                            Some(ExprType::Constraint) => Some(ExprType::Constraint),
+                            Some(unified) => {
+                                // Unified to something else - not valid for and/or
+                                errors.push(SemError::TypeMismatch {
+                                    span: left.span.clone(),
+                                    expected: ExprType::Bool,
+                                    found: unified,
+                                    context: "and/or requires Bool or Constraint operands"
+                                        .to_string(),
+                                });
+                                None
+                            }
+                            None => {
+                                // Can't unify - incompatible types
+                                errors.push(SemError::TypeMismatch {
+                                    span: right.span.clone(),
+                                    expected: l.clone(),
+                                    found: r,
+                                    context: "and/or requires both operands to have the same type (both Bool or both Constraint)".to_string(),
+                                });
+                                // Return whatever the left side was (for recovery)
+                                if l == ExprType::Bool || l == ExprType::Constraint {
+                                    Some(l)
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    }
                     (Some(ExprType::Bool), None) | (None, Some(ExprType::Bool)) => {
                         Some(ExprType::Bool)
-                    }
-                    (Some(ExprType::Constraint), Some(ExprType::Constraint)) => {
-                        Some(ExprType::Constraint)
-                    }
-                    (Some(ExprType::Constraint), Some(ExprType::Bool)) => {
-                        Some(ExprType::Constraint)
-                    }
-                    (Some(ExprType::Bool), Some(ExprType::Constraint)) => {
-                        Some(ExprType::Constraint)
                     }
                     (Some(ExprType::Constraint), None) | (None, Some(ExprType::Constraint)) => {
                         Some(ExprType::Constraint)
                     }
-                    (Some(l), Some(r))
-                        if (l == ExprType::Bool || l == ExprType::Constraint)
-                            && (r == ExprType::Bool || r == ExprType::Constraint) =>
-                    {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: l.clone(),
-                            found: r.clone(),
-                            context: "and/or requires both Bool or both Constraint".to_string(),
-                        });
-                        None
-                    }
-                    (Some(l), Some(r)) => {
-                        if l != ExprType::Bool && l != ExprType::Constraint {
-                            errors.push(SemError::TypeMismatch {
-                                span: left.span.clone(),
-                                expected: ExprType::Bool,
-                                found: l.clone(),
-                                context: "and/or requires Bool or Constraint".to_string(),
-                            });
-                        }
-                        if r != ExprType::Bool && r != ExprType::Constraint {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: ExprType::Bool,
-                                found: r.clone(),
-                                context: "and/or requires Bool or Constraint".to_string(),
-                            });
-                        }
-                        None
-                    }
-                    (Some(l), None) => {
+                    (Some(t), None) | (None, Some(t)) => {
+                        // One side is not Bool/Constraint
                         errors.push(SemError::TypeMismatch {
                             span: left.span.clone(),
                             expected: ExprType::Bool,
-                            found: l.clone(),
-                            context: "and/or requires Bool or Constraint".to_string(),
+                            found: t.clone(),
+                            context: "and/or requires Bool or Constraint operands".to_string(),
                         });
                         None
                     }
-                    (None, Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Bool,
-                            found: r.clone(),
-                            context: "and/or requires Bool or Constraint".to_string(),
-                        });
-                        None
-                    }
-                    _ => None,
+                    (None, None) => None,
                 }
             }
 
@@ -898,14 +886,13 @@ impl LocalEnv {
                     self.check_expr(global_env, &expr.node, type_info, errors, warnings);
 
                 match expr_type {
-                    Some(ExprType::Bool) => Some(ExprType::Bool),
-                    Some(ExprType::Constraint) => Some(ExprType::Constraint),
+                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: expr.span.clone(),
                             expected: ExprType::Bool,
                             found: typ.clone(),
-                            context: "not requires Bool or Constraint operand".to_string(),
+                            context: "not requires Bool operand".to_string(),
                         });
                         None
                     }
@@ -924,7 +911,8 @@ impl LocalEnv {
                 match coll_type {
                     Some(ExprType::List(elem_t)) => {
                         if let Some(item_t) = item_type {
-                            if item_t != *elem_t {
+                            // Check if item can coerce to the element type
+                            if !item_t.can_coerce_to(&elem_t) {
                                 errors.push(SemError::TypeMismatch {
                                     span: item.span.clone(),
                                     expected: *elem_t,
@@ -936,20 +924,25 @@ impl LocalEnv {
                         }
                     }
                     Some(ExprType::EmptyList) => {
-                        // OK
+                        // Can't check anything - we don't know the element type
+                        // But it does not matter, an element is never in an empty collection
+                        // So this will be false and the types don't matter.
                     }
-                    _ => {
-                        if let Some(list_t) = coll_type {
-                            errors.push(SemError::TypeMismatch {
-                                span: collection.span.clone(),
-                                expected: ExprType::List(Box::new(list_t.clone())),
-                                found: list_t,
-                                context: "collection must have a list type".to_string(),
-                            });
-                        }
+                    Some(t) => {
+                        // Not a list at all
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
+                            found: t,
+                            context: "membership test requires a list".to_string(),
+                        });
+                    }
+                    None => {
+                        // Collection failed to type-check
                     }
                 }
 
+                // Always returns Bool
                 Some(ExprType::Bool)
             }
 
@@ -960,7 +953,7 @@ impl LocalEnv {
                 filter,
                 body,
             } => {
-                let elem_type =
+                let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
 
                 // Check naming convention
@@ -975,36 +968,35 @@ impl LocalEnv {
                     });
                 }
 
-                // Extract element type from List
-                match elem_type {
+                // Extract element type from collection
+                match coll_type {
+                    Some(ExprType::List(elem_t)) => {
+                        // Register the loop variable with the element type
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            *elem_t,
+                            type_info,
+                            warnings,
+                        );
+                    }
                     Some(ExprType::EmptyList) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
                             expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
                             found: ExprType::EmptyList,
-                            context: "forall collection must have a known type (empty list are forbidden and useless)".to_string(),
+                            context: "forall collection must have a known type (use 'as' for explicit typing)".to_string(),
                         });
-                        return Some(ExprType::Constraint);
+                        return Some(ExprType::Constraint); // Return early
                     }
                     Some(t) => {
-                        let elem_type = if let ExprType::List(inner) = t.clone() {
-                            *inner
-                        } else {
-                            errors.push(SemError::TypeMismatch {
-                                span: collection.span.clone(),
-                                expected: ExprType::List(Box::new(t.clone())), // placeholder
-                                found: t.clone(),
-                                context: "forall collection must be a list".to_string(),
-                            });
-                            t
-                        };
-                        self.register_identifier(
-                            &var.node,
-                            var.span.clone(),
-                            elem_type,
-                            type_info,
-                            warnings,
-                        );
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(t.clone())), // placeholder
+                            found: t,
+                            context: "forall collection must be a list".to_string(),
+                        });
+                        return Some(ExprType::Constraint); // Return early
                     }
                     None => return None,
                 }
@@ -1017,7 +1009,7 @@ impl LocalEnv {
                         self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
 
                     if let Some(typ) = filter_type {
-                        if typ != ExprType::Bool {
+                        if !typ.can_coerce_to(&ExprType::Bool) {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
@@ -1028,24 +1020,28 @@ impl LocalEnv {
                     }
                 }
 
-                // Check body (must be Constraint)
+                // Check body (must be Constraint or Bool)
                 let body_type =
                     self.check_expr(global_env, &body.node, type_info, errors, warnings);
 
-                if let Some(typ) = body_type {
-                    if typ != ExprType::Constraint && typ != ExprType::Bool {
+                self.pop_scope(warnings);
+
+                match body_type {
+                    Some(typ) if typ.can_coerce_to(&ExprType::Constraint) => {
+                        Some(ExprType::Constraint)
+                    }
+                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool),
+                    Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: ExprType::Constraint,
                             found: typ,
-                            context: "forall body must be Constraint".to_string(),
+                            context: "forall body must be Constraint or Bool".to_string(),
                         });
+                        None
                     }
+                    None => None,
                 }
-
-                self.pop_scope(warnings);
-
-                Some(ExprType::Constraint)
             }
 
             Expr::Sum {
@@ -1054,7 +1050,7 @@ impl LocalEnv {
                 filter,
                 body,
             } => {
-                let elem_type =
+                let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
 
                 // Check naming convention
@@ -1069,36 +1065,35 @@ impl LocalEnv {
                     });
                 }
 
-                // Extract element type from List
-                match elem_type {
+                // Extract element type from collection
+                match coll_type {
+                    Some(ExprType::List(elem_t)) => {
+                        // Register the loop variable with the element type
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            *elem_t,
+                            type_info,
+                            warnings,
+                        );
+                    }
                     Some(ExprType::EmptyList) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
                             expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
                             found: ExprType::EmptyList,
-                            context: "sum collection must have a known type (empty list are forbidden and useless)".to_string(),
+                            context: "sum collection must have a known type (use 'as' for explicit typing)".to_string(),
                         });
-                        return None;
+                        return None; // Return early
                     }
                     Some(t) => {
-                        let elem_type = if let ExprType::List(inner) = t.clone() {
-                            *inner
-                        } else {
-                            errors.push(SemError::TypeMismatch {
-                                span: collection.span.clone(),
-                                expected: ExprType::List(Box::new(t.clone())), // placeholder
-                                found: t.clone(),
-                                context: "sum collection must be a list".to_string(),
-                            });
-                            t
-                        };
-                        self.register_identifier(
-                            &var.node,
-                            var.span.clone(),
-                            elem_type,
-                            type_info,
-                            warnings,
-                        );
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(t.clone())), // placeholder
+                            found: t,
+                            context: "sum collection must be a list".to_string(),
+                        });
+                        return None; // Return early
                     }
                     None => return None,
                 }
@@ -1111,7 +1106,7 @@ impl LocalEnv {
                         self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
 
                     if let Some(typ) = filter_type {
-                        if typ != ExprType::Bool {
+                        if !typ.can_coerce_to(&ExprType::Bool) {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
@@ -1122,28 +1117,24 @@ impl LocalEnv {
                     }
                 }
 
-                // Check body (must be LinExpr or Int)
+                // Check body (must be arithmetic: Int or LinExpr)
                 let body_type =
                     self.check_expr(global_env, &body.node, type_info, errors, warnings);
 
-                if let Some(typ) = &body_type {
-                    if *typ != ExprType::LinExpr && *typ != ExprType::Int {
+                self.pop_scope(warnings);
+
+                match body_type {
+                    Some(typ) if typ.is_arithmetic() => Some(typ), // Return Int or LinExpr
+                    Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
-                            expected: ExprType::LinExpr,
-                            found: typ.clone(),
-                            context: "sum body must be LinExpr or Int".to_string(),
+                            expected: ExprType::Int,
+                            found: typ,
+                            context: "sum body must be Int or LinExpr".to_string(),
                         });
-
-                        self.pop_scope(warnings);
                         None
-                    } else {
-                        self.pop_scope(warnings);
-                        Some(typ.clone())
                     }
-                } else {
-                    self.pop_scope(warnings);
-                    None
+                    None => None,
                 }
             }
 
@@ -1157,7 +1148,7 @@ impl LocalEnv {
                     self.check_expr(global_env, &condition.node, type_info, errors, warnings);
 
                 if let Some(typ) = cond_type {
-                    if typ != ExprType::Bool {
+                    if !typ.can_coerce_to(&ExprType::Bool) {
                         errors.push(SemError::TypeMismatch {
                             span: condition.span.clone(),
                             expected: ExprType::Bool,
@@ -1174,26 +1165,18 @@ impl LocalEnv {
 
                 match (then_type, else_type) {
                     (Some(t), Some(e)) => {
-                        // Allow coercion: Int -> LinExpr, Bool -> Constraint
-                        let coerced_type = match (&t, &e) {
-                            // Borrow instead of clone
-                            (a, b) if a == b => Some(t), // Already same, use t
-                            (ExprType::LinExpr, ExprType::Int)
-                            | (ExprType::Int, ExprType::LinExpr) => Some(ExprType::LinExpr),
-                            (ExprType::Constraint, ExprType::Bool)
-                            | (ExprType::Bool, ExprType::Constraint) => Some(ExprType::Constraint),
-                            _ => {
+                        match ExprType::unify(&t, &e) {
+                            Some(unified) => Some(unified),
+                            None => {
                                 errors.push(SemError::TypeMismatch {
                                     span: else_expr.span.clone(),
                                     expected: t.clone(),
-                                    found: e.clone(),
-                                    context: "if branches must have the same type".to_string(),
+                                    found: e,
+                                    context: "if branches must have compatible types".to_string(),
                                 });
                                 Some(t) // Fallback to then type
                             }
-                        };
-
-                        coerced_type
+                        }
                     }
                     (Some(t), None) | (None, Some(t)) => Some(t),
                     (None, None) => None,
@@ -1208,7 +1191,7 @@ impl LocalEnv {
                             var: name.node.clone(),
                             span: name.span.clone(),
                         });
-                        Some(ExprType::LinExpr) // Because of the syntax, we know the user wanted a LinExpr
+                        Some(ExprType::LinExpr) // Syntax indicates LinExpr intent
                     }
                     Some((var_args, _)) => {
                         if args.len() != var_args.len() {
@@ -1230,7 +1213,7 @@ impl LocalEnv {
                                 self.check_expr(global_env, &arg.node, type_info, errors, warnings);
 
                             if let Some(found_type) = arg_type {
-                                if &found_type != expected_type {
+                                if !found_type.can_coerce_to(expected_type) {
                                     errors.push(SemError::TypeMismatch {
                                         span: arg.span.clone(),
                                         expected: expected_type.clone(),
@@ -1279,7 +1262,7 @@ impl LocalEnv {
                             self.check_expr(global_env, &arg.node, type_info, errors, warnings);
 
                         if let Some(found_type) = arg_type {
-                            if &found_type != expected_type {
+                            if !found_type.can_coerce_to(expected_type) {
                                 errors.push(SemError::TypeMismatch {
                                     span: arg.span.clone(),
                                     expected: expected_type.clone(),
@@ -1319,83 +1302,98 @@ impl LocalEnv {
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
                 match (left_type, right_type) {
-                    (Some(ExprType::List(l)), Some(ExprType::List(r))) => {
-                        if l == r {
-                            Some(ExprType::List(l))
-                        } else {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: *l.clone(),
-                                found: *r,
-                                context: "collection operation requires matching element types"
-                                    .to_string(),
-                            });
-                            Some(ExprType::List(l))
-                        }
-                    }
-                    (Some(ExprType::List(l)), Some(ExprType::EmptyList))
-                    | (Some(ExprType::EmptyList), Some(ExprType::List(l))) => {
-                        Some(ExprType::List(l))
-                    }
-                    (Some(ExprType::EmptyList), Some(ExprType::EmptyList)) => {
-                        Some(ExprType::EmptyList)
-                    }
                     (Some(l), Some(r)) => {
-                        if !l.is_list() {
-                            errors.push(SemError::TypeMismatch {
-                                span: left.span.clone(),
-                                expected: ExprType::List(Box::new(l.clone())),
-                                found: l,
-                                context: "collection operation requires List types".to_string(),
-                            });
+                        // Try to unify - handles List, EmptyList, and coercion automatically
+                        match ExprType::unify(&l, &r) {
+                            Some(unified) if unified.is_list() => Some(unified),
+                            Some(non_list) => {
+                                // Unified but not to a list type
+                                errors.push(SemError::TypeMismatch {
+                                    span: left.span.clone(),
+                                    expected: ExprType::List(Box::new(non_list)), // placeholder
+                                    found: l,
+                                    context: "collection operation requires List types".to_string(),
+                                });
+                                None
+                            }
+                            None => {
+                                // Can't unify - incompatible types
+                                errors.push(SemError::TypeMismatch {
+                                    span: right.span.clone(),
+                                    expected: l.clone(),
+                                    found: r,
+                                    context:
+                                        "collection operation requires compatible element types"
+                                            .to_string(),
+                                });
+                                // Return left type as fallback if it's a list
+                                if l.is_list() {
+                                    Some(l)
+                                } else {
+                                    None
+                                }
+                            }
                         }
-                        if !r.is_list() {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: ExprType::List(Box::new(r.clone())),
-                                found: r,
-                                context: "collection operation requires List types".to_string(),
-                            });
-                        }
+                    }
+                    (Some(t), None) | (None, Some(t)) if t.is_list() => Some(t),
+                    (Some(t), None) | (None, Some(t)) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: ExprType::List(Box::new(t.clone())), // placeholder
+                            found: t,
+                            context: "collection operation requires List types".to_string(),
+                        });
                         None
                     }
-                    (Some(ExprType::List(l)), None) | (None, Some(ExprType::List(l))) => {
-                        Some(ExprType::List(l))
-                    }
-                    (Some(ExprType::EmptyList), None) | (None, Some(ExprType::EmptyList)) => {
-                        Some(ExprType::EmptyList)
-                    }
-                    _ => None,
+                    (None, None) => None,
                 }
             }
 
-            // ========== Lists ==========
             Expr::ListLiteral { elements } => {
                 if elements.is_empty() {
-                    // Empty list - we can't infer type
                     return Some(ExprType::EmptyList);
                 }
 
-                let first_type =
+                // Check all elements and unify their types
+                let mut unified_type =
                     self.check_expr(global_env, &elements[0].node, type_info, errors, warnings);
 
                 for item in &elements[1..] {
                     let item_type =
                         self.check_expr(global_env, &item.node, type_info, errors, warnings);
 
-                    if let (Some(expected), Some(found)) = (&first_type, item_type) {
-                        if expected != &found {
-                            errors.push(SemError::TypeMismatch {
-                                span: item.span.clone(),
-                                expected: expected.clone(),
-                                found,
-                                context: "all list elements must have the same type".to_string(),
-                            });
+                    match (unified_type.clone(), item_type) {
+                        (Some(u), Some(i)) => {
+                            match ExprType::unify(&u, &i) {
+                                Some(new_unified) => unified_type = Some(new_unified),
+                                None => {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: item.span.clone(),
+                                        expected: u.clone(),
+                                        found: i,
+                                        context: "all list elements must have compatible types"
+                                            .to_string(),
+                                    });
+                                    // Keep the current unified type for further checking
+                                }
+                            }
+                        }
+                        (Some(u), None) => {
+                            // Item failed to type-check, keep unified type
+                            unified_type = Some(u);
+                        }
+                        (None, Some(i)) => {
+                            // First element failed, use this item's type
+                            unified_type = Some(i);
+                        }
+                        (None, None) => {
+                            // Both failed
+                            unified_type = None;
                         }
                     }
                 }
 
-                first_type.map(|t| ExprType::List(Box::new(t)))
+                unified_type.map(|t| ExprType::List(Box::new(t)))
             }
 
             Expr::ListComprehension {
@@ -1419,49 +1417,48 @@ impl LocalEnv {
                     });
                 }
 
-                // Extract element type
+                // Extract element type from collection
                 match coll_type {
+                    Some(ExprType::List(elem_t)) => {
+                        // Register the loop variable with the element type
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            *elem_t,
+                            type_info,
+                            warnings,
+                        );
+                    }
                     Some(ExprType::EmptyList) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
                             expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
                             found: ExprType::EmptyList,
-                            context: "list comprehension collection must have a known type (empty list are forbidden and useless)".to_string(),
+                            context: "list comprehension collection must have a known type (use 'as' for explicit typing)".to_string(),
                         });
-                        return Some(ExprType::Constraint);
+                        return None; // Can't infer result type
                     }
                     Some(t) => {
-                        let elem_type = if let ExprType::List(inner) = t.clone() {
-                            *inner
-                        } else {
-                            errors.push(SemError::TypeMismatch {
-                                span: collection.span.clone(),
-                                expected: ExprType::List(Box::new(t.clone())), // placeholder
-                                found: t.clone(),
-                                context: "forall collection must be a list".to_string(),
-                            });
-                            t
-                        };
-                        self.register_identifier(
-                            &var.node,
-                            var.span.clone(),
-                            elem_type,
-                            type_info,
-                            warnings,
-                        );
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(t.clone())), // placeholder
+                            found: t,
+                            context: "list comprehension collection must be a list".to_string(),
+                        });
+                        return None; // Can't infer result type
                     }
                     None => return None,
                 }
 
                 self.push_scope();
 
-                // Check filter
+                // Check filter (must be Bool)
                 if let Some(filter_expr) = filter {
                     let filter_type =
                         self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
 
                     if let Some(typ) = filter_type {
-                        if typ != ExprType::Bool {
+                        if !typ.can_coerce_to(&ExprType::Bool) {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
@@ -1472,12 +1469,13 @@ impl LocalEnv {
                     }
                 }
 
-                // Check the expression that produces elements
+                // Check the output expression - this determines the result element type
                 let elem_type =
                     self.check_expr(global_env, &expr.node, type_info, errors, warnings);
 
                 self.pop_scope(warnings);
 
+                // Return [elem_type]
                 elem_type.map(|t| ExprType::List(Box::new(t)))
             }
 
@@ -1486,8 +1484,7 @@ impl LocalEnv {
                 let elem_t =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
                 match elem_t {
-                    Some(ExprType::List(_)) => (),
-                    Some(ExprType::EmptyList) => (),
+                    Some(t) if t.is_list() => (),
                     None => (),
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
@@ -1498,7 +1495,7 @@ impl LocalEnv {
                         });
                     }
                 }
-                Some(ExprType::Int)
+                Some(ExprType::Int) // Cardinality always gives an Int
             }
         }
     }
@@ -1773,12 +1770,9 @@ impl GlobalEnv {
                 if let Some(body_type) = body_type_opt {
                     let out_typ = ExprType::from(output_type.clone());
 
-                    // Allow coercion: Int -> LinExpr, Bool -> Constraint, EmptyList -> List
+                    // Allow coercion
                     let types_match = match (out_typ.clone(), body_type.clone()) {
-                        (a, b) if a == b => true,
-                        (ExprType::LinExpr, ExprType::Int) => true, // Coerce Int to LinExpr
-                        (ExprType::Constraint, ExprType::Bool) => true, // Coerce Bool to Constraint
-                        (ExprType::List(_), ExprType::EmptyList) => true, // Coerce EmptyList to typed list
+                        (a, b) if b.can_coerce_to(&a) => true,
                         _ => false,
                     };
 
@@ -1821,35 +1815,36 @@ impl GlobalEnv {
                 identifier: constraint_name.node.clone(),
                 span: constraint_name.span.clone(),
             }),
-            Some(fn_type) => match fn_type.0.output {
-                ExprType::Constraint => match self.lookup_var(&var_name.node) {
-                    Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
-                        identifier: var_name.node.clone(),
-                        span: var_name.span.clone(),
-                        here: span_opt,
-                    }),
-                    None => {
-                        if let Some(suggestion) =
-                            string_case::generate_suggestion_for_naming_convention(
+            Some(fn_type) => {
+                if fn_type.0.output.can_coerce_to(&ExprType::Constraint) {
+                    match self.lookup_var(&var_name.node) {
+                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                            identifier: var_name.node.clone(),
+                            span: var_name.span.clone(),
+                            here: span_opt,
+                        }),
+                        None => {
+                            if let Some(suggestion) =
+                                string_case::generate_suggestion_for_naming_convention(
+                                    &var_name.node,
+                                    string_case::NamingConvention::PascalCase,
+                                )
+                            {
+                                warnings.push(SemWarning::VariableNamingConvention {
+                                    identifier: var_name.node.clone(),
+                                    span: var_name.span.clone(),
+                                    suggestion,
+                                });
+                            }
+                            self.register_var(
                                 &var_name.node,
-                                string_case::NamingConvention::PascalCase,
-                            )
-                        {
-                            warnings.push(SemWarning::VariableNamingConvention {
-                                identifier: var_name.node.clone(),
-                                span: var_name.span.clone(),
-                                suggestion,
-                            });
+                                fn_type.0.args.clone(),
+                                var_name.span.clone(),
+                                type_info,
+                            );
                         }
-                        self.register_var(
-                            &var_name.node,
-                            fn_type.0.args.clone(),
-                            var_name.span.clone(),
-                            type_info,
-                        );
                     }
-                },
-                _ => {
+                } else {
                     let expected_type = FunctionType {
                         output: ExprType::Constraint,
                         ..fn_type.0.clone()
@@ -1861,7 +1856,7 @@ impl GlobalEnv {
                         found: fn_type.0,
                     });
                 }
-            },
+            }
         }
     }
 }

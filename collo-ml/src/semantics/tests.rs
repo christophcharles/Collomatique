@@ -37,7 +37,7 @@ fn test_unknown_type_in_parameter() {
 
 #[test]
 fn test_body_type_mismatch() {
-    let input = "pub let f() -> LinExpr = 5 <= 10;"; // Constraint body, LinExpr expected
+    let input = "pub let f() -> LinExpr = 5 <== 10;"; // Constraint body, LinExpr expected
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 1);
@@ -58,7 +58,7 @@ fn test_duplicate_parameter() {
 
 #[test]
 fn test_unknown_variable_in_linexpr() {
-    let input = "pub let f() -> Constraint = $UnknownVar(5) <= 10;";
+    let input = "pub let f() -> Constraint = $UnknownVar(5) <== 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(errors.len() > 0);
@@ -75,13 +75,13 @@ fn test_variable_argument_type_mismatch() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> Constraint = $MyVar(5) <= 10;";
+    let input = "pub let f() -> Constraint = $MyVar(5) <== 10;";
     let (_, errors, _) = analyze(input, types.clone(), vars.clone());
 
     assert_eq!(errors.len(), 0, "Should accept Int argument: {:?}", errors);
 
     // Wrong type
-    let input2 = "pub let f(s: Student) -> Constraint = $MyVar(s) <= 10;";
+    let input2 = "pub let f(s: Student) -> Constraint = $MyVar(s) <== 10;";
     let (_, errors2, _) = analyze(input2, types, vars);
 
     assert!(errors2
@@ -94,7 +94,7 @@ fn test_forall_with_collection() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <= 1 };";
+    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(
@@ -164,7 +164,7 @@ fn test_unused_forall_variable() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <= 1 };"; // s unused
+    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };"; // s unused
     let (_, _, warnings) = analyze(input, types, HashMap::new());
 
     assert!(warnings
@@ -219,7 +219,7 @@ fn test_no_warning_when_forall_variable_used() {
         vec![ExprType::Object("Student".to_string())],
     );
 
-    let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >= 0 };"; // s is used
+    let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };"; // s is used
     let (_, _, warnings) = analyze(input, types, vars);
 
     assert!(
@@ -309,7 +309,7 @@ fn test_function_used_no_warning() {
 fn test_function_used_in_constraint_no_warning() {
     let input = r#"
         let f(x: Int) -> LinExpr = x;
-        pub let c(y: Int) -> Constraint = f(y) == y;
+        pub let c(y: Int) -> Constraint = f(y) === y;
     "#; // f is used in c, so only c is unused
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
 
@@ -343,7 +343,7 @@ fn test_reify_with_wrong_function_type_should_fail() {
 #[test]
 fn test_reify_with_unused_variable_warning() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $MyVar;
     "#;
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -357,9 +357,9 @@ fn test_reify_with_unused_variable_warning() {
 #[test]
 fn test_reify_then_use_variable_should_work_no_warning() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $MyVar;
-        pub let g(y: Int) -> Constraint = $MyVar(y) == 1;
+        pub let g(y: Int) -> Constraint = $MyVar(y) === 1;
     "#;
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
 
@@ -370,9 +370,9 @@ fn test_reify_then_use_variable_should_work_no_warning() {
 #[test]
 fn test_reify_variable_shadowing_should_fail() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $MyVar;
-        let g(y: Int) -> Constraint = y >= 5;
+        let g(y: Int) -> Constraint = y >== 5;
         reify g as $MyVar; # shadowing: $MyVar already defined
     "#;
 
@@ -393,7 +393,7 @@ fn test_variable_then_reify_shadowing_should_fail() {
     vars.insert("MyVar".to_string(), vec![ExprType::Int]); // already defined externally
 
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $MyVar; # conflicts with external definition
     "#;
 
@@ -412,9 +412,9 @@ fn test_variable_then_reify_shadowing_should_fail() {
 fn test_function_shadowing_same_signature_should_fail() {
     let input = r#"
         # define f once
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         # redefine f with the same signature
-        let f(x: Int) -> Constraint = x >= 0;
+        let f(x: Int) -> Constraint = x >== 0;
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -432,7 +432,7 @@ fn test_function_shadowing_same_signature_should_fail() {
 fn test_function_shadowing_different_signature_should_fail() {
     let input = r#"
         # first definition of f
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         # second definition of f with different parameter/return type
         let f(y: Int) -> LinExpr = y;
     "#;
@@ -452,9 +452,9 @@ fn test_function_shadowing_different_signature_should_fail() {
 fn test_function_shadowing_public_first_should_fail() {
     let input = r#"
         # public function
-        pub let f(x: Int) -> Constraint = x <= 10;
+        pub let f(x: Int) -> Constraint = x <== 10;
         # attempt to redefine locally
-        let f(x: Int) -> Constraint = x >= 0;
+        let f(x: Int) -> Constraint = x >== 0;
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -471,11 +471,11 @@ fn test_function_shadowing_public_first_should_fail() {
 #[test]
 fn test_function_shadowing_after_use_should_fail() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         # use f in another function to ensure it's referenced
         let g(y: Int) -> Constraint = f(y);
         # redefine f later
-        let f(z: Int) -> Constraint = z >= 0;
+        let f(z: Int) -> Constraint = z >== 0;
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -492,9 +492,9 @@ fn test_function_shadowing_after_use_should_fail() {
 #[test]
 fn test_variable_naming_convention_warning() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $my_var; # variable name in snake_case instead of PascalCase
-        pub let g() -> Constraint = $my_var(42) <= 2;
+        pub let g() -> Constraint = $my_var(42) <== 2;
     "#;
 
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -518,7 +518,7 @@ fn test_variable_naming_convention_warning() {
 #[test]
 fn test_parameter_naming_convention_warning_in_function() {
     let input = r#"
-        pub let f(MyParam: Int) -> Constraint = MyParam <= 10; # parameter should be snake_case
+        pub let f(MyParam: Int) -> Constraint = MyParam <== 10; # parameter should be snake_case
     "#;
 
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -543,7 +543,7 @@ fn test_parameter_naming_convention_warning_in_function() {
 fn test_parameter_naming_convention_warning_in_forall() {
     let input = r#"
         pub let f(xs: [Int]) -> Constraint =
-            forall MyElem in xs { MyElem <= 10 }; # parameter should be snake_case
+            forall MyElem in xs { MyElem <== 10 }; # parameter should be snake_case
     "#;
 
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -595,13 +595,13 @@ fn test_naming_convention_positive_no_warnings() {
         # Function name in snake_case; parameter is a list of Int
         let my_function(xs: [Int]) -> Constraint =
             # forall parameter in snake_case, iterating over a collection
-            forall my_elem in xs { my_elem <= 10 };
+            forall my_elem in xs { my_elem <== 10 };
 
         # Variable name in PascalCase
         reify my_function as $MyVar;
 
         # Public function using the variable
-        pub let another_function(xs: [Int]) -> Constraint = $MyVar(xs) == 1;
+        pub let another_function(xs: [Int]) -> Constraint = $MyVar(xs) === 1;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -618,9 +618,9 @@ fn test_complex_constraint_should_work() {
             # For all elements, either they are <= 10 or the sum is bounded
             forall elem in xs {
                 if elem < 5 {
-                    elem <= 10
+                    elem <== 10
                 } else {
-                    sum i in xs { i } <= 100
+                    sum i in xs { i } <== 100
                 }
             };
     "#;
@@ -635,7 +635,7 @@ fn test_complex_constraint_should_work() {
 fn test_complex_constraint_wrong_collection_type() {
     let input = r#"
         pub let f(x: Int) -> Constraint =
-            forall elem in x { elem <= 10 }; # x is Int, not a collection
+            forall elem in x { elem <== 10 }; # x is Int, not a collection
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -655,7 +655,7 @@ fn test_complex_constraint_nested_forall_sum_should_work() {
         pub let f(xs: [Int], ys: [Int]) -> Constraint =
             forall x in xs {
                 forall y in ys {
-                    sum i in xs { i + x + y } <= 200
+                    sum i in xs { i + x + y } <== 200
                 }
             };
     "#;
@@ -669,7 +669,7 @@ fn test_complex_constraint_nested_forall_sum_should_work() {
 #[test]
 fn test_function_call_wrong_type_should_fail() {
     let input = r#"
-        pub let f(x: Int) -> Constraint = x <= 10;
+        pub let f(x: Int) -> Constraint = x <== 10;
         pub let g(s: Bool) -> Constraint = f(s); # wrong type: f expects Int, got Bool
     "#;
 
@@ -687,7 +687,7 @@ fn test_function_call_wrong_type_should_fail() {
 #[test]
 fn test_function_call_wrong_argument_count_should_fail() {
     let input = r#"
-        pub let f(x: Int, y: Int) -> Constraint = x <= y;
+        pub let f(x: Int, y: Int) -> Constraint = x <== y;
         pub let g(z: Int) -> Constraint = f(z); # wrong number: expected 2 args, got 1
     "#;
 
@@ -705,9 +705,9 @@ fn test_function_call_wrong_argument_count_should_fail() {
 #[test]
 fn test_reify_variable_call_wrong_type_should_fail() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $MyVar;
-        pub let g(b: Bool) -> Constraint = $MyVar(b); # wrong type: expects Int, got Bool
+        pub let g(b: Bool) -> Constraint = $MyVar(b) === 1; # wrong type: expects Int, got Bool
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -724,9 +724,9 @@ fn test_reify_variable_call_wrong_type_should_fail() {
 #[test]
 fn test_reify_variable_call_wrong_argument_count_should_fail() {
     let input = r#"
-        let f(x: Int, y: Int) -> Constraint = x <= y;
+        let f(x: Int, y: Int) -> Constraint = x <== y;
         reify f as $MyVar;
-        pub let g(z: Int) -> Constraint = $MyVar(z); # wrong number: expected 2 args, got 1
+        pub let g(z: Int) -> Constraint = $MyVar(z) === 0; # wrong number: expected 2 args, got 1
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -744,7 +744,7 @@ fn test_reify_variable_call_wrong_argument_count_should_fail() {
 fn test_function_call_correct_should_work() {
     let input = r#"
         # Function f takes an Int and returns a Constraint
-        pub let f(x: Int) -> Constraint = x <= 10;
+        pub let f(x: Int) -> Constraint = x <== 10;
 
         # Function g calls f with the correct type and arity
         pub let g(y: Int) -> Constraint = f(y);
@@ -760,13 +760,13 @@ fn test_function_call_correct_should_work() {
 fn test_reify_variable_call_correct_should_work() {
     let input = r#"
         # Function f takes an Int and returns a Constraint
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
 
         # Reify f as a variable
         reify f as $MyVar;
 
         # Public function g calls the reified variable with the correct type
-        pub let g(y: Int) -> Constraint = $MyVar(y) == 1;
+        pub let g(y: Int) -> Constraint = $MyVar(y) === 1;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -778,7 +778,7 @@ fn test_reify_variable_call_correct_should_work() {
 #[test]
 fn test_function_name_starting_with_underscore_should_work() {
     let input = r#"
-        pub let _f(x: Int) -> Constraint = x <= 10;
+        pub let _f(x: Int) -> Constraint = x <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -791,7 +791,7 @@ fn test_function_name_starting_with_underscore_should_work() {
 #[test]
 fn test_parameter_name_starting_with_underscore_should_work() {
     let input = r#"
-        pub let f(_x: Int) -> Constraint = _x <= 10;
+        pub let f(_x: Int) -> Constraint = _x <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -804,9 +804,9 @@ fn test_parameter_name_starting_with_underscore_should_work() {
 #[test]
 fn test_variable_name_starting_with_underscore_should_work() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $_Var;
-        pub let g(x: Int) -> Constraint = $_Var(x) == 1;
+        pub let g(x: Int) -> Constraint = $_Var(x) === 1;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -820,7 +820,7 @@ fn test_variable_name_starting_with_underscore_should_work() {
 fn test_function_name_starting_with_underscore_unused_should_work() {
     let input = r#"
         # Function is defined but never called
-        let _f(x: Int) -> Constraint = x <= 10;
+        let _f(x: Int) -> Constraint = x <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -834,7 +834,7 @@ fn test_function_name_starting_with_underscore_unused_should_work() {
 fn test_parameter_name_starting_with_underscore_unused_should_work() {
     let input = r#"
         # Parameter _x is never used in the body
-        pub let f(_x: Int) -> Constraint = 1 <= 10;
+        pub let f(_x: Int) -> Constraint = 1 <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -847,7 +847,7 @@ fn test_parameter_name_starting_with_underscore_unused_should_work() {
 #[test]
 fn test_variable_name_starting_with_underscore_unused_should_work() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $_Var;
         # $_Var is never used
     "#;
@@ -862,7 +862,7 @@ fn test_variable_name_starting_with_underscore_unused_should_work() {
 #[test]
 fn test_function_name_only_underscores_should_be_rejected() {
     let input = r#"
-        let __() -> Constraint = 1 <= 10;
+        let __() -> Constraint = 1 <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -889,7 +889,7 @@ fn test_function_name_only_underscores_should_be_rejected() {
 #[test]
 fn test_parameter_name_only_underscores_should_be_rejected() {
     let input = r#"
-        pub let f(___: Int) -> Constraint = ___ <= 10;
+        pub let f(___: Int) -> Constraint = ___ <== 10;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -916,7 +916,7 @@ fn test_parameter_name_only_underscores_should_be_rejected() {
 #[test]
 fn test_variable_name_only_underscores_should_be_rejected() {
     let input = r#"
-        let f(x: Int) -> Constraint = x <= 10;
+        let f(x: Int) -> Constraint = x <== 10;
         reify f as $_;
     "#;
 
@@ -953,7 +953,7 @@ fn test_path_on_list_field() {
     types.insert("Student".to_string(), student_fields);
     types.insert("Course".to_string(), HashMap::new());
 
-    let input = "pub let f(s: Student) -> Constraint = forall c in s.courses { 0 <= 1 };";
+    let input = "pub let f(s: Student) -> Constraint = forall c in s.courses { 0 <== 1 };";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(errors.is_empty());
