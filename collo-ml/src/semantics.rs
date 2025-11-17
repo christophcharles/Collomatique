@@ -1702,11 +1702,11 @@ impl GlobalEnv {
 
                 if let Some(body_type) = body_type_opt {
                     let out_typ = ExprType::from(output_type.clone());
-                    
+
                     // Allow coercion: Int -> LinExpr
                     let types_match = match (out_typ.clone(), body_type.clone()) {
                         (a, b) if a == b => true,
-                        (ExprType::LinExpr, ExprType::Int) => true,  // Coerce Int to LinExpr
+                        (ExprType::LinExpr, ExprType::Int) => true, // Coerce Int to LinExpr
                         _ => false,
                     };
 

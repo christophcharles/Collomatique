@@ -94,10 +94,14 @@ fn test_forall_with_collection() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> Constraint = forall s in @[Student]: 0 <= 1;";
+    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <= 1 };";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
-    assert!(errors.is_empty(), "Should accept forall with Student type");
+    assert!(
+        errors.is_empty(),
+        "Should accept forall with Student type: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -160,7 +164,7 @@ fn test_unused_forall_variable() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> Constraint = forall s in @[Student]: 0 <= 1;"; // s unused
+    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <= 1 };"; // s unused
     let (_, _, warnings) = analyze(input, types, HashMap::new());
 
     assert!(warnings
@@ -173,7 +177,7 @@ fn test_unused_sum_variable() {
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
 
-    let input = "pub let f() -> LinExpr = sum s in @[Student]: 5;"; // s unused
+    let input = "pub let f() -> LinExpr = sum s in @[Student] { 5 };"; // s unused
     let (_, _, warnings) = analyze(input, types, HashMap::new());
 
     assert!(warnings
@@ -215,7 +219,7 @@ fn test_no_warning_when_forall_variable_used() {
         vec![ExprType::Object("Student".to_string())],
     );
 
-    let input = "pub let f() -> Constraint = forall s in @[Student]: $V(s) >= 0;"; // s is used
+    let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >= 0 };"; // s is used
     let (_, _, warnings) = analyze(input, types, vars);
 
     assert!(
@@ -238,7 +242,7 @@ fn test_no_warning_when_sum_variable_used() {
         vec![ExprType::Object("Student".to_string())],
     );
 
-    let input = "pub let f() -> LinExpr = sum s in @[Student]: $V(s);"; // s is used
+    let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };"; // s is used
     let (_, _, warnings) = analyze(input, types, vars);
 
     assert!(
@@ -539,7 +543,7 @@ fn test_parameter_naming_convention_warning_in_function() {
 fn test_parameter_naming_convention_warning_in_forall() {
     let input = r#"
         pub let f(xs: [Int]) -> Constraint =
-            forall MyElem in xs: MyElem <= 10; # parameter should be snake_case
+            forall MyElem in xs { MyElem <= 10 }; # parameter should be snake_case
     "#;
 
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -564,7 +568,7 @@ fn test_parameter_naming_convention_warning_in_forall() {
 fn test_parameter_naming_convention_warning_in_sum() {
     let input = r#"
         pub let f(xs: [Int]) -> LinExpr =
-            sum MyElem in xs: MyElem; # parameter should be snake_case
+            sum MyElem in xs { MyElem }; # parameter should be snake_case
     "#;
 
     let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -591,7 +595,7 @@ fn test_naming_convention_positive_no_warnings() {
         # Function name in snake_case; parameter is a list of Int
         let my_function(xs: [Int]) -> Constraint =
             # forall parameter in snake_case, iterating over a collection
-            forall my_elem in xs: my_elem <= 10;
+            forall my_elem in xs { my_elem <= 10 };
 
         # Variable name in PascalCase
         reify my_function as $MyVar;
@@ -612,12 +616,13 @@ fn test_complex_constraint_should_work() {
         # Function takes a list of Ints
         pub let f(xs: [Int]) -> Constraint =
             # For all elements, either they are <= 10 or the sum is bounded
-            forall elem in xs:
+            forall elem in xs {
                 if elem < 5 {
                     elem <= 10
                 } else {
-                    sum i in xs: i <= 100
-                };
+                    sum i in xs { i <= 100 }
+                }
+            };
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -630,7 +635,7 @@ fn test_complex_constraint_should_work() {
 fn test_complex_constraint_wrong_collection_type() {
     let input = r#"
         pub let f(x: Int) -> Constraint =
-            forall elem in x: elem <= 10; # x is Int, not a collection
+            forall elem in x { elem <= 10 }; # x is Int, not a collection
     "#;
 
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -648,9 +653,11 @@ fn test_complex_constraint_wrong_collection_type() {
 fn test_complex_constraint_nested_forall_sum_should_work() {
     let input = r#"
         pub let f(xs: [Int], ys: [Int]) -> Constraint =
-            forall x in xs:
-                forall y in ys:
-                    sum i in xs: i + x + y <= 200;
+            forall x in xs {
+                forall y in ys {
+                    sum i in xs { i + x + y <= 200 }
+                }
+            };
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
@@ -946,7 +953,7 @@ fn test_path_on_list_field() {
     types.insert("Student".to_string(), student_fields);
     types.insert("Course".to_string(), HashMap::new());
 
-    let input = "pub let f(s: Student) -> Constraint = forall c in s.courses: 0 <= 1;";
+    let input = "pub let f(s: Student) -> Constraint = forall c in s.courses { 0 <= 1 };";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(errors.is_empty());
