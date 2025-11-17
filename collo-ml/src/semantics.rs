@@ -821,6 +821,12 @@ impl LocalEnv {
                     (Some(ExprType::Constraint), Some(ExprType::Constraint)) => {
                         Some(ExprType::Constraint)
                     }
+                    (Some(ExprType::Constraint), Some(ExprType::Bool)) => {
+                        Some(ExprType::Constraint)
+                    }
+                    (Some(ExprType::Bool), Some(ExprType::Constraint)) => {
+                        Some(ExprType::Constraint)
+                    }
                     (Some(ExprType::Constraint), None) | (None, Some(ExprType::Constraint)) => {
                         Some(ExprType::Constraint)
                     }
@@ -1003,7 +1009,7 @@ impl LocalEnv {
                     self.check_expr(global_env, &body.node, type_info, errors, warnings);
 
                 if let Some(typ) = body_type {
-                    if typ != ExprType::Constraint {
+                    if typ != ExprType::Constraint && typ != ExprType::Bool {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: ExprType::Constraint,
@@ -1129,15 +1135,34 @@ impl LocalEnv {
                     self.check_expr(global_env, &else_expr.node, type_info, errors, warnings);
 
                 match (then_type, else_type) {
-                    (Some(t), Some(e)) if t == e => Some(t),
                     (Some(t), Some(e)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: else_expr.span.clone(),
-                            expected: t.clone(),
-                            found: e,
-                            context: "if branches must have the same type".to_string(),
-                        });
-                        Some(t)
+                        // Allow coercion: Int -> LinExpr, Bool -> Constraint
+                        let (types_match, coercion) = match (t.clone(), e.clone()) {
+                            (a, b) if a == b => (true, Some(a.clone())),
+                            (ExprType::LinExpr, ExprType::Int) => (true, Some(ExprType::LinExpr)), // Coerce Int to LinExpr
+                            (ExprType::Int, ExprType::LinExpr) => (true, Some(ExprType::LinExpr)), // Coerce Int to LinExpr
+                            (ExprType::Constraint, ExprType::Bool) => {
+                                (true, Some(ExprType::Constraint))
+                            } // Coerce Bool to Constraint
+                            (ExprType::Bool, ExprType::Constraint) => {
+                                (true, Some(ExprType::Constraint))
+                            } // Coerce Bool to Constraint
+                            _ => (false, None),
+                        };
+
+                        if !types_match {
+                            errors.push(SemError::TypeMismatch {
+                                span: else_expr.span.clone(),
+                                expected: t.clone(),
+                                found: e,
+                                context: "if branches must have the same type".to_string(),
+                            });
+                        }
+
+                        match coercion {
+                            Some(typ) => Some(typ),
+                            None => Some(t),
+                        }
                     }
                     (Some(t), None) | (None, Some(t)) => Some(t),
                     (None, None) => None,
@@ -1703,10 +1728,11 @@ impl GlobalEnv {
                 if let Some(body_type) = body_type_opt {
                     let out_typ = ExprType::from(output_type.clone());
 
-                    // Allow coercion: Int -> LinExpr
+                    // Allow coercion: Int -> LinExpr, Bool -> Constraint
                     let types_match = match (out_typ.clone(), body_type.clone()) {
                         (a, b) if a == b => true,
                         (ExprType::LinExpr, ExprType::Int) => true, // Coerce Int to LinExpr
+                        (ExprType::Constraint, ExprType::Bool) => true, // Coerce Bool to Constraint
                         _ => false,
                     };
 
