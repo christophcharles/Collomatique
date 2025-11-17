@@ -1525,3 +1525,428 @@ fn test_function_composition_across_types() {
         errors
     );
 }
+
+// ========== Constraint Operator Tests ==========
+
+#[test]
+fn test_constraint_equality_operator() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = $V(x) === 10;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should accept === operator: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_constraint_le_operator() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = $V(x) <== 10;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should accept <== operator: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_constraint_ge_operator() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = $V(x) >== 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should accept >== operator: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_constraint_operators_with_int_coercion() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = r#"
+        pub let f(x: Int) -> Constraint = 
+            $V(x) === 5 and $V(x) <== 10 and $V(x) >== 0;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should accept all constraint operators with Int coercion: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_regular_eq_vs_constraint_eq() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    // Regular == returns Bool
+    let input1 = "pub let f(x: Int) -> Bool = 5 == 10;";
+    let (_, errors1, _) = analyze(input1, HashMap::new(), vars.clone());
+    assert!(
+        errors1.is_empty(),
+        "Regular == should return Bool: {:?}",
+        errors1
+    );
+
+    // Constraint === returns Constraint
+    let input2 = "pub let f(x: Int) -> Constraint = $V(x) === 10;";
+    let (_, errors2, _) = analyze(input2, HashMap::new(), vars);
+    assert!(
+        errors2.is_empty(),
+        "Constraint === should return Constraint: {:?}",
+        errors2
+    );
+}
+
+#[test]
+fn test_linexpr_with_regular_eq_fails() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = $V(x) == 10;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(!errors.is_empty(), "LinExpr == should fail");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+}
+
+#[test]
+fn test_constraint_operators_reject_non_arithmetic() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "pub let f(s: Student) -> Constraint = s === s;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Should reject Object in constraint operators"
+    );
+}
+
+// ========== Type Annotation Tests ==========
+
+#[test]
+fn test_empty_list_with_type_annotation() {
+    let input = "pub let f() -> [Int] = [] as [Int];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Should accept empty list with type annotation: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_empty_list_without_annotation_in_return_coerces() {
+    let input = "pub let f() -> [Int] = [];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "EmptyList should coerce to [Int] in return: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_type_annotation_nested_lists() {
+    let input = "pub let f() -> [[Int]] = [] as [[Int]];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Should accept nested type annotation: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_type_annotation_in_union() {
+    let input = "pub let f() -> [Int] = ([] as [Int]) union [1, 2, 3];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Should accept type annotation in union: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_type_annotation_invalid_coercion() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Int = $V(x) as Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(!errors.is_empty(), "LinExpr cannot coerce to Int");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn test_type_annotation_unknown_type() {
+    let input = "pub let f() -> [Int] = [] as [UnknownType];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Should reject unknown type in annotation"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::UnknownType { .. })));
+}
+
+// ========== Coercion Tests ==========
+
+#[test]
+fn test_int_coerces_to_linexpr_in_return() {
+    let input = "pub let f() -> LinExpr = 42;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_int_coerces_to_linexpr_in_function_arg() {
+    let input = r#"
+        let double(e: LinExpr) -> LinExpr = e + e;
+        pub let f() -> LinExpr = double(5);
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr in function arg: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_linexpr_does_not_coerce_to_int() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Int = $V(x);";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(!errors.is_empty(), "LinExpr should not coerce to Int");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+}
+
+#[test]
+fn test_emptylist_coerces_to_typed_list() {
+    let input = "pub let f() -> [Int] = [];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "EmptyList should coerce to [Int]: {:?}",
+        errors
+    );
+}
+
+// ========== No Bool -> Constraint Coercion ==========
+
+#[test]
+fn test_bool_does_not_coerce_to_constraint_in_return() {
+    let input = "pub let f() -> Constraint = 5 > 3;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Bool should not coerce to Constraint");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+}
+
+#[test]
+fn test_bool_allowed_in_forall_body() {
+    let input = r#"
+        pub let f(xs: [Int]) -> Bool = 
+            forall x in xs { x > 0 };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Bool should be allowed in forall body: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_bool_and_constraint_cannot_mix() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = (x > 5) and ($V(x) === 1);";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Cannot mix Bool and Constraint with 'and'"
+    );
+}
+
+// ========== Unify Tests ==========
+
+#[test]
+fn test_if_unifies_int_and_linexpr() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { 5 } else { $V(x) };";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "If should unify Int and LinExpr to LinExpr: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_if_unifies_emptylist_and_list() {
+    let input = "pub let f(flag: Bool) -> [Int] = if flag { [] } else { [1, 2, 3] };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "If should unify EmptyList and [Int]: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_literal_unifies_mixed_types() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> [LinExpr] = [5, $V(x), 10];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "List should unify Int and LinExpr to [LinExpr]: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_collection_union_unifies_types() {
+    let mut vars = HashMap::new();
+    vars.insert("V1".to_string(), vec![ExprType::Int]);
+    vars.insert("V2".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> [LinExpr] = [5] union [$V1(x)];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Union should unify [Int] and [LinExpr]: {:?}",
+        errors
+    );
+}
+
+// ========== Sum Return Type Tests ==========
+
+#[test]
+fn test_sum_returns_int_when_body_is_int() {
+    let input = "pub let f() -> Int = sum x in [1, 2, 3] { 1 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Sum should return Int when body is Int: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_sum_returns_linexpr_when_body_is_linexpr() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) };";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Sum should return LinExpr when body is LinExpr: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_sum_int_can_be_used_in_condition() {
+    let input = r#"
+        pub let f(xs: [Int]) -> Bool = 
+            (sum x in xs { 1 }) > 10;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Sum returning Int should work in Bool condition: {:?}",
+        errors
+    );
+}
+
+// ========== Complex Scenarios ==========
+
+#[test]
+fn test_nested_list_with_empty_list() {
+    let input = "pub let f() -> [[Int]] = [[], [1, 2], []];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Nested list with empty lists should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_comprehension_with_type_transformation() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1, 2, 3]];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "List comprehension should transform types: {:?}",
+        errors
+    );
+}
