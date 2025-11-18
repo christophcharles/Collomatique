@@ -1950,3 +1950,66 @@ fn test_list_comprehension_with_type_transformation() {
         errors
     );
 }
+
+#[test]
+fn test_type_annotation_prohibits_type_coercion_in_fn_definition() {
+    let vars = HashMap::new();
+
+    let input = "pub let f() -> LinExpr = 5 as Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Forced Int should not coerce to LinExpr"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+}
+
+#[test]
+fn test_type_annotation_prohibits_type_coercion_in_constraints() {
+    let vars = HashMap::new();
+
+    let input = "pub let f() -> Constraint = 5 as Int === 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Forced Int should not coerce to LinExpr"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn test_type_annotation_prohibits_type_coercion_in_list() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f() -> [LinExpr] = [$V(2), 5 as Int];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Forced Int should not coerce to LinExpr"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn test_chained_type_annotation_are_valid() {
+    let vars = HashMap::new();
+
+    let input = "pub let f() -> LinExpr = (5 as Int) as LinExpr;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Chained type annoation should be valid: {:?}",
+        errors
+    );
+}
