@@ -516,8 +516,7 @@ impl LocalEnv {
     fn pop_scope(&mut self, warnings: &mut Vec<SemWarning>) {
         assert!(!self.scopes.is_empty());
 
-        self.pending_scope.clear();
-        self.scopes.pop().unwrap();
+        self.pending_scope = self.scopes.pop().unwrap();
 
         for (name, (_typ, span, used)) in &self.pending_scope {
             if !*used {
@@ -527,6 +526,8 @@ impl LocalEnv {
                 });
             }
         }
+
+        self.pending_scope.clear();
     }
 
     fn register_identifier(
