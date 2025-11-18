@@ -1026,7 +1026,7 @@ impl Expr {
             .ok_or(AstError::MissingTypeName(span.clone()))?;
 
         let type_span = Span::from_pest(&type_pair);
-        let type_name = TypeName::from_pimitive_type(type_pair)?;
+        let type_name = TypeName::from_pest(type_pair)?;
 
         Ok(Expr::GlobalList(Spanned::new(type_name, type_span)))
     }
