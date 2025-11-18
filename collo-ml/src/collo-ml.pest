@@ -92,6 +92,7 @@ primary_expr = {
     sum |
     cardinality |
     list_comprehension |  // Must come before list_literal to parse correctly
+    list_range | // Must come before list_literal to parse correctly
     list_literal |
     global_collection |
     var_call |
@@ -107,6 +108,7 @@ sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 cardinality = { "|" ~ expr ~ "|" }
 list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "]" }
+list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }

@@ -156,6 +156,10 @@ pub enum Expr {
     ListLiteral {
         elements: Vec<Spanned<Expr>>,
     },
+    ListRange {
+        start: Box<Spanned<Expr>>,
+        end: Box<Spanned<Expr>>,
+    },
     ListComprehension {
         expr: Box<Spanned<Expr>>,
         var: Spanned<String>,
@@ -202,6 +206,8 @@ pub enum AstError {
     MissingTypeName(Span),
     #[error("Missing statement body at {0:?}")]
     MissingBody(Span),
+    #[error("Missing expression at {0:?}")]
+    MissingExpr(Span),
     #[error("Failed to parse integer at {span:?}: {error}")]
     ParseIntError {
         span: Span,
@@ -845,6 +851,7 @@ impl Expr {
             Rule::sum => Self::from_sum(inner),
             Rule::cardinality => Self::from_cardinality(inner),
             Rule::list_comprehension => Self::from_list_comprehension(inner),
+            Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
             Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
@@ -968,6 +975,23 @@ impl Expr {
         }
 
         Ok(Expr::ListLiteral { elements })
+    }
+
+    fn from_list_range(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // list_range = { "[" ~ expr ~ ".." ~ expr "]" }
+        let span = Span::from_pest(&pair);
+
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
+        let expr_span = Span::from_pest(&first);
+        let start = Box::new(Spanned::new(Expr::from_pest(first)?, expr_span));
+
+        let second = inner.next().ok_or(AstError::MissingExpr(span))?;
+        let expr_span = Span::from_pest(&second);
+        let end = Box::new(Spanned::new(Expr::from_pest(second)?, expr_span));
+
+        Ok(Expr::ListRange { start, end })
     }
 
     fn from_list_comprehension(pair: Pair<Rule>) -> Result<Self, AstError> {

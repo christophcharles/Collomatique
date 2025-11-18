@@ -1531,6 +1531,45 @@ impl LocalEnv {
                 unified_type.map(|t| ExprType::List(Box::new(t.into_inner())).into())
             }
 
+            Expr::ListRange { start, end } => {
+                let start_type =
+                    self.check_expr(global_env, &start.node, type_info, errors, warnings);
+                let end_type = self.check_expr(global_env, &end.node, type_info, errors, warnings);
+
+                match (start_type, end_type) {
+                    (Some(s), Some(e)) => {
+                        // Check if both can coerce to Int
+                        let s_ok = s.can_coerce_to(&ExprType::Int);
+                        let e_ok = e.can_coerce_to(&ExprType::Int);
+                        println!("{:?}", e);
+
+                        if !s_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: start.span.clone(),
+                                expected: ExprType::Int,
+                                found: s.into_inner(),
+                                context: "list range requires Int limits".to_string(),
+                            });
+                        }
+                        if !e_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: end.span.clone(),
+                                expected: ExprType::Int,
+                                found: e.into_inner(),
+                                context: "list range requires Int limits".to_string(),
+                            });
+                        }
+
+                        // Always return [Int] (even on error, intent is clear)
+                        Some(ExprType::List(Box::new(ExprType::Int)).into())
+                    }
+                    (Some(_), None) | (None, Some(_)) => {
+                        Some(ExprType::List(Box::new(ExprType::Int)).into())
+                    }
+                    (None, None) => None,
+                }
+            }
+
             Expr::ListComprehension {
                 expr,
                 var,

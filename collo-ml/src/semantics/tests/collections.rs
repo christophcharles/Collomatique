@@ -92,6 +92,49 @@ fn list_with_coercion() {
     );
 }
 
+// ============= List Ranges =============
+
+#[test]
+fn collection_accepts_lists_range_with_numbers() {
+    let input = "pub let f() -> [Int] = [0..42];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Simple list range should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn collection_accepts_lists_range_with_expr() {
+    let types = object_with_fields("Student", vec![]);
+    let input = r#"
+    let count() -> Int = 32;
+    pub let f() -> [Int] = [count()..|@[Student]|];
+    "#;
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Complex list range with expressions should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn collection_rejects_lists_range_with_wrong_type() {
+    let input = "pub let f() -> [Int] = [0..true];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Wrong type in list range with expressions should not work: {:?}",
+        errors
+    );
+    assert!(matches!(errors[0], SemError::TypeMismatch { .. }));
+}
+
 // ========== List Comprehensions ==========
 
 #[test]

@@ -79,6 +79,44 @@ fn parse_list_with_complex_expressions() {
     }
 }
 
+// ============= List Ranges =============
+
+#[test]
+fn collection_accepts_lists_range_with_numbers() {
+    let input = "let f() -> [Int] = [0..2];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListRange { start, end } => {
+                matches!(start.node, Expr::Number(0));
+                matches!(end.node, Expr::Number(2));
+            }
+            _ => panic!("Expected List Range"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn collection_accepts_lists_range_with_expr() {
+    let input = "let f() -> [Int] = [f(x)..|@[Student]|];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListRange { start, end } => {
+                matches!(start.node, Expr::FnCall { name: _, args: _ });
+                matches!(end.node, Expr::Cardinality(_));
+            }
+            _ => panic!("Expected List Range"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
 // ============= List Comprehensions =============
 
 #[test]

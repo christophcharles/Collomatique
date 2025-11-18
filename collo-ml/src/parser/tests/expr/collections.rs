@@ -67,6 +67,37 @@ fn collection_accepts_lists_with_complex_elements() {
 }
 
 // =============================================================================
+// LIST LITERALS
+// =============================================================================
+
+#[test]
+fn collection_accepts_lists_range_with_numbers() {
+    let cases = vec![
+        "[1..2]",
+        "[0..42]",
+        "[-1..-3]",
+        "[compute(x), calculate(y)]",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn collection_accepts_lists_range_with_expr() {
+    let cases = vec![
+        "[f(x)..g(x)]",
+        "[student.age..room.number]",
+        "[1..|@[Student]|]",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// =============================================================================
 // LIST COMPREHENSIONS
 // =============================================================================
 
@@ -479,5 +510,30 @@ fn collection_rejects_missing_for_in_comprehension() {
             case,
             result
         );
+    }
+}
+
+#[test]
+fn collection_rejects_lists_range_with_incomplete_syntax() {
+    let cases = vec!["[..]", "[0..]", "[..5]"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn collection_rejects_lists_range_with_bad_syntax() {
+    let cases = vec![
+        "[0...1]",    // Extra points
+        "[0.1]",      // Missing point
+        "[0..1, 42]", // Mixing with literals
+        "0..1",       // Missing brackets
+        "[0..1",      // Missing bracket
+        "0..1]",      // Missing bracket
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
