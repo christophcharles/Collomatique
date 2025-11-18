@@ -120,6 +120,14 @@ pub enum MaybeForced {
 }
 
 impl MaybeForced {
+    pub fn force(typ: ExprType) -> MaybeForced {
+        MaybeForced::Forced(typ)
+    }
+
+    pub fn loose(typ: ExprType) -> MaybeForced {
+        MaybeForced::Regular(typ)
+    }
+
     pub fn is_forced(&self) -> bool {
         match self {
             MaybeForced::Forced(_) => true,
@@ -148,31 +156,43 @@ impl MaybeForced {
         }
     }
 
-    pub fn unify(left: &MaybeForced, right: &MaybeForced) -> Option<ExprType> {
+    pub fn unify(left: &MaybeForced, right: &MaybeForced) -> Option<MaybeForced> {
         match (left, right) {
             (MaybeForced::Forced(a), MaybeForced::Forced(b)) => {
                 if a == b {
-                    Some(a.clone())
+                    Some(MaybeForced::Forced(a.clone()))
                 } else {
                     None
                 }
             }
             (MaybeForced::Forced(a), MaybeForced::Regular(b)) => {
                 if b.can_coerce_to(a) {
-                    Some(a.clone())
+                    Some(MaybeForced::Forced(a.clone()))
                 } else {
                     None
                 }
             }
             (MaybeForced::Regular(a), MaybeForced::Forced(b)) => {
                 if a.can_coerce_to(b) {
-                    Some(b.clone())
+                    Some(MaybeForced::Forced(b.clone()))
                 } else {
                     None
                 }
             }
-            (MaybeForced::Regular(a), MaybeForced::Regular(b)) => ExprType::unify(a, b),
+            (MaybeForced::Regular(a), MaybeForced::Regular(b)) => {
+                ExprType::unify(a, b).map(MaybeForced::Forced)
+            }
         }
+    }
+
+    pub fn loosen(&self) -> MaybeForced {
+        MaybeForced::Regular(self.inner().clone())
+    }
+}
+
+impl From<ExprType> for MaybeForced {
+    fn from(value: ExprType) -> Self {
+        MaybeForced::Regular(value)
     }
 }
 
@@ -540,23 +560,31 @@ impl LocalEnv {
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
-    ) -> Option<ExprType> {
+    ) -> Option<MaybeForced> {
         use crate::ast::Expr;
 
         match expr {
             // ========== Literals ==========
-            Expr::Number(_) => Some(ExprType::Int),
-            Expr::Boolean(_) => Some(ExprType::Bool),
+            Expr::Number(_) => Some(ExprType::Int.into()),
+            Expr::Boolean(_) => Some(ExprType::Bool.into()),
 
-            Expr::Path(path) => self.check_path(
-                global_env, &path.node, &path.span, type_info, errors, warnings,
-            ),
+            Expr::Path(path) => self
+                .check_path(
+                    global_env, &path.node, &path.span, type_info, errors, warnings,
+                )
+                .map(|x| x.into()),
 
             // ========== As construct ==========
             Expr::ExplicitType { expr, typ } => {
                 // Check the inner expression
                 let expr_type =
                     self.check_expr(global_env, &expr.node, type_info, errors, warnings);
+                // 'as' is forcing explicitly a coercion. So we don't care if we are
+                // getting a forced type.
+                //
+                // This means that chained 'as' are valid (even if a bit odd):
+                // "5 as Int as LinExpr"
+                let loose_type = expr_type.map(|x| x.into_inner());
 
                 // Convert the declared type
                 let target_type = ExprType::from(typ.node.clone());
@@ -567,15 +595,15 @@ impl LocalEnv {
                         typ: target_type.to_string(),
                         span: typ.span.clone(),
                     });
-                    return expr_type; // Fallback to inferred type
+                    return loose_type.map(MaybeForced::Forced); // Fallback to inferred type
                 }
 
-                match expr_type {
+                match loose_type {
                     Some(inferred) => {
                         // Check if the inferred type can coerce to the target type
                         if inferred.can_coerce_to(&target_type) {
                             // Success: use the target type
-                            Some(target_type)
+                            Some(MaybeForced::force(target_type))
                         } else {
                             // Error: can't coerce
                             errors.push(SemError::TypeMismatch {
@@ -585,13 +613,13 @@ impl LocalEnv {
                                 context: "explicit type annotation".to_string(),
                             });
                             // Return target type anyway (user's intent is clear)
-                            Some(target_type)
+                            Some(MaybeForced::force(target_type))
                         }
                     }
                     None => {
                         // Expression failed to type-check, but we have explicit type
                         // Use the explicit type as a hint for recovery
-                        Some(target_type)
+                        Some(MaybeForced::force(target_type))
                     }
                 }
             }
@@ -608,22 +636,23 @@ impl LocalEnv {
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
                 match (left_type.clone(), right_type) {
-                    (Some(l), Some(r)) => match ExprType::unify(&l, &r) {
-                        Some(unified) if unified.is_arithmetic() => Some(unified),
+                    (Some(l), Some(r)) => match MaybeForced::unify(&l, &r) {
+                        Some(unified) if unified.inner().is_arithmetic() => Some(unified.loosen()),
                         _ => {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
-                                expected: l.clone(),
-                                found: r.clone(),
+                                expected: l.inner().clone(),
+                                found: r.inner().clone(),
                                 context: format!(
                                     "addition/subtraction requires Int or LinExpr, got {} and {}",
-                                    l, r
+                                    l.inner(),
+                                    r.inner()
                                 ),
                             });
                             None
                         }
                     },
-                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
+                    (Some(t), None) | (None, Some(t)) if t.inner().is_arithmetic() => Some(t),
                     (Some(t), None) | (None, Some(t)) => {
                         let span = if left_type.is_some() {
                             left.span.clone()
@@ -633,7 +662,7 @@ impl LocalEnv {
                         errors.push(SemError::TypeMismatch {
                             span,
                             expected: ExprType::Int,
-                            found: t.clone(),
+                            found: t.inner().clone(),
                             context: "addition/subtraction requires Int or LinExpr".to_string(),
                         });
                         None
@@ -652,7 +681,7 @@ impl LocalEnv {
                 match (left_type.clone(), right_type) {
                     (Some(l), Some(r)) => {
                         // Special case: LinExpr * LinExpr is non-linear
-                        if l == ExprType::LinExpr && r == ExprType::LinExpr {
+                        if *l.inner() == ExprType::LinExpr && *r.inner() == ExprType::LinExpr {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::Int,
@@ -660,31 +689,34 @@ impl LocalEnv {
                                 context: "cannot multiply two linear expressions (non-linear)"
                                     .to_string(),
                             });
-                            return Some(ExprType::LinExpr); // Fallback
+                            return Some(ExprType::LinExpr.into()); // Fallback
                         }
 
                         // Try to unify (handles Int * Int, Int * LinExpr, LinExpr * Int)
-                        match ExprType::unify(&l, &r) {
-                            Some(unified) if unified.is_arithmetic() => Some(unified),
+                        match MaybeForced::unify(&l, &r) {
+                            Some(unified) if unified.inner().is_arithmetic() => {
+                                Some(unified.loosen())
+                            }
                             _ => {
                                 errors.push(SemError::TypeMismatch {
                                     span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r.clone(),
+                                    expected: l.inner().clone(),
+                                    found: r.inner().clone(),
                                     context: format!(
                                         "multiplication requires Int or LinExpr, got {} and {}",
-                                        l, r
+                                        l.inner(),
+                                        r.inner()
                                     ),
                                 });
-                                if l.is_arithmetic() {
+                                if l.inner().is_arithmetic() {
                                     Some(l)
                                 } else {
-                                    Some(ExprType::Int)
+                                    Some(ExprType::Int.into())
                                 }
                             }
                         }
                     }
-                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
+                    (Some(t), None) | (None, Some(t)) if t.inner().is_arithmetic() => Some(t),
                     (Some(t), None) | (None, Some(t)) => {
                         let span = if left_type.is_some() {
                             left.span.clone()
@@ -694,7 +726,7 @@ impl LocalEnv {
                         errors.push(SemError::TypeMismatch {
                             span,
                             expected: ExprType::Int,
-                            found: t.clone(),
+                            found: t.inner().clone(),
                             context: "multiplication requires Int or LinExpr".to_string(),
                         });
                         Some(t) // Fallback
@@ -720,7 +752,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::Int,
-                                found: l.clone(),
+                                found: l.inner().clone(),
                                 context: "division/modulo requires Int operands".to_string(),
                             });
                         }
@@ -728,14 +760,13 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: ExprType::Int,
-                                found: r.clone(),
+                                found: r.inner().clone(),
                                 context: "division/modulo requires Int operands".to_string(),
                             });
                         }
 
-                        // Always return Int
                         if l_ok || r_ok {
-                            Some(ExprType::Int)
+                            Some(ExprType::Int.into())
                         } else {
                             None
                         }
@@ -745,12 +776,12 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::Int,
-                                found: t.clone(),
+                                found: t.inner().clone(),
                                 context: "division/modulo requires Int operands".to_string(),
                             });
                             None
                         } else {
-                            Some(ExprType::Int)
+                            Some(ExprType::Int.into())
                         }
                     }
                     (None, Some(t)) => {
@@ -758,12 +789,12 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: ExprType::Int,
-                                found: t.clone(),
+                                found: t.inner().clone(),
                                 context: "division/modulo requires Int operands".to_string(),
                             });
                             None
                         } else {
-                            Some(ExprType::Int)
+                            Some(ExprType::Int.into())
                         }
                     }
                     (None, None) => None,
@@ -789,7 +820,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::LinExpr,
-                                found: l,
+                                found: l.into_inner(),
                                 context: "constraint operator requires LinExpr or Int operands"
                                     .to_string(),
                             });
@@ -798,18 +829,18 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: ExprType::LinExpr,
-                                found: r,
+                                found: r.into_inner(),
                                 context: "constraint operator requires LinExpr or Int operands"
                                     .to_string(),
                             });
                         }
 
                         // Always return Constraint (even on error, intent is clear)
-                        Some(ExprType::Constraint)
+                        Some(ExprType::Constraint.into())
                     }
                     _ => {
                         // Something failed, but we know user wanted a constraint
-                        Some(ExprType::Constraint)
+                        Some(ExprType::Constraint.into())
                     }
                 }
             }
@@ -827,22 +858,22 @@ impl LocalEnv {
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
                         // Try to unify the types
-                        match ExprType::unify(&l, &r) {
-                            Some(_unified) => Some(ExprType::Bool),
+                        match MaybeForced::unify(&l, &r) {
+                            Some(_unified) => Some(ExprType::Bool.into()),
                             None => {
                                 // Types don't unify - incompatible
                                 errors.push(SemError::TypeMismatch {
                                     span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
+                                    expected: l.inner().clone(),
+                                    found: r.into_inner(),
                                     context: "equality comparison requires compatible types"
                                         .to_string(),
                                 });
-                                Some(ExprType::Bool) // Fallback
+                                Some(ExprType::Bool.into()) // Fallback
                             }
                         }
                     }
-                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool), // One side failed
+                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool.into()), // One side failed
                     (None, None) => None,
                 }
             }
@@ -867,7 +898,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: ExprType::Int,
-                                found: l,
+                                found: l.into_inner(),
                                 context: "relational comparison requires Int operands".to_string(),
                             });
                         }
@@ -875,15 +906,15 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: ExprType::Int,
-                                found: r,
+                                found: r.into_inner(),
                                 context: "relational comparison requires Int operands".to_string(),
                             });
                         }
 
                         // Always return Bool (even on error, intent is clear)
-                        Some(ExprType::Bool)
+                        Some(ExprType::Bool.into())
                     }
-                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool),
+                    (Some(_), None) | (None, Some(_)) => Some(ExprType::Bool.into()),
                     (None, None) => None,
                 }
             }
@@ -899,15 +930,17 @@ impl LocalEnv {
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
                         // Try to unify the types
-                        match ExprType::unify(&l, &r) {
-                            Some(ExprType::Bool) => Some(ExprType::Bool),
-                            Some(ExprType::Constraint) => Some(ExprType::Constraint),
+                        match MaybeForced::unify(&l, &r) {
+                            Some(t) if *t.inner() == ExprType::Bool => Some(ExprType::Bool.into()),
+                            Some(t) if *t.inner() == ExprType::Constraint => {
+                                Some(ExprType::Constraint.into())
+                            }
                             Some(unified) => {
                                 // Unified to something else - not valid for and/or
                                 errors.push(SemError::TypeMismatch {
                                     span: left.span.clone(),
                                     expected: ExprType::Bool,
-                                    found: unified,
+                                    found: unified.into_inner(),
                                     context: "and/or requires Bool or Constraint operands"
                                         .to_string(),
                                 });
@@ -917,12 +950,14 @@ impl LocalEnv {
                                 // Can't unify - incompatible types
                                 errors.push(SemError::TypeMismatch {
                                     span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
+                                    expected: l.inner().clone(),
+                                    found: r.into_inner(),
                                     context: "and/or requires both operands to have the same type (both Bool or both Constraint)".to_string(),
                                 });
-                                // Return whatever the left side was (for recovery)
-                                if l == ExprType::Bool || l == ExprType::Constraint {
+                                // Return whatever the left side was if valid
+                                if *l.inner() == ExprType::Bool
+                                    || *l.inner() == ExprType::Constraint
+                                {
                                     Some(l)
                                 } else {
                                     None
@@ -930,18 +965,18 @@ impl LocalEnv {
                             }
                         }
                     }
-                    (Some(ExprType::Bool), None) | (None, Some(ExprType::Bool)) => {
-                        Some(ExprType::Bool)
+                    (Some(t), None) | (None, Some(t)) if *t.inner() == ExprType::Bool => {
+                        Some(ExprType::Bool.into())
                     }
-                    (Some(ExprType::Constraint), None) | (None, Some(ExprType::Constraint)) => {
-                        Some(ExprType::Constraint)
+                    (Some(t), None) | (None, Some(t)) if *t.inner() == ExprType::Constraint => {
+                        Some(ExprType::Constraint.into())
                     }
                     (Some(t), None) | (None, Some(t)) => {
                         // One side is not Bool/Constraint
                         errors.push(SemError::TypeMismatch {
                             span: left.span.clone(),
                             expected: ExprType::Bool,
-                            found: t.clone(),
+                            found: t.inner().clone(),
                             context: "and/or requires Bool or Constraint operands".to_string(),
                         });
                         None
@@ -955,12 +990,12 @@ impl LocalEnv {
                     self.check_expr(global_env, &expr.node, type_info, errors, warnings);
 
                 match expr_type {
-                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool),
+                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool.into()),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: expr.span.clone(),
                             expected: ExprType::Bool,
-                            found: typ.clone(),
+                            found: typ.inner().clone(),
                             context: "not requires Bool operand".to_string(),
                         });
                         None
@@ -976,8 +1011,10 @@ impl LocalEnv {
                     self.check_expr(global_env, &item.node, type_info, errors, warnings);
                 let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                // We don't coerce elements from the list, so we can drop the MaybeForced
+                let inner_coll_type = coll_type.map(|x| x.into_inner());
 
-                match coll_type {
+                match inner_coll_type {
                     Some(ExprType::List(elem_t)) => {
                         if let Some(item_t) = item_type {
                             // Check if item can coerce to the element type
@@ -985,7 +1022,7 @@ impl LocalEnv {
                                 errors.push(SemError::TypeMismatch {
                                     span: item.span.clone(),
                                     expected: *elem_t,
-                                    found: item_t,
+                                    found: item_t.into_inner(),
                                     context: "item type must match collection element type"
                                         .to_string(),
                                 });
@@ -1012,7 +1049,7 @@ impl LocalEnv {
                 }
 
                 // Always returns Bool
-                Some(ExprType::Bool)
+                Some(ExprType::Bool.into())
             }
 
             // ========== Quantifiers ==========
@@ -1024,6 +1061,8 @@ impl LocalEnv {
             } => {
                 let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                // We don't coerce elements from the list, so we can drop the MaybeForced
+                let inner_coll_type = coll_type.map(|x| x.into_inner());
 
                 // Check naming convention
                 if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1038,7 +1077,7 @@ impl LocalEnv {
                 }
 
                 // Extract element type from collection
-                match coll_type {
+                match inner_coll_type {
                     Some(ExprType::List(elem_t)) => {
                         // Register the loop variable with the element type
                         self.register_identifier(
@@ -1056,7 +1095,7 @@ impl LocalEnv {
                             found: ExprType::EmptyList,
                             context: "forall collection must have a known type (use 'as' for explicit typing)".to_string(),
                         });
-                        return Some(ExprType::Constraint); // Return early
+                        return Some(ExprType::Constraint.into()); // Return early
                     }
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
@@ -1065,7 +1104,7 @@ impl LocalEnv {
                             found: t,
                             context: "forall collection must be a list".to_string(),
                         });
-                        return Some(ExprType::Constraint); // Return early
+                        return Some(ExprType::Constraint.into()); // Return early
                     }
                     None => return None,
                 }
@@ -1082,7 +1121,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
-                                found: typ,
+                                found: typ.into_inner(),
                                 context: "forall filter must be Bool".to_string(),
                             });
                         }
@@ -1097,14 +1136,14 @@ impl LocalEnv {
 
                 match body_type {
                     Some(typ) if typ.can_coerce_to(&ExprType::Constraint) => {
-                        Some(ExprType::Constraint)
+                        Some(ExprType::Constraint.into())
                     }
-                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool),
+                    Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool.into()),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: ExprType::Constraint,
-                            found: typ,
+                            found: typ.into_inner(),
                             context: "forall body must be Constraint or Bool".to_string(),
                         });
                         None
@@ -1121,6 +1160,8 @@ impl LocalEnv {
             } => {
                 let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                // We don't coerce elements from the list, so we can drop the MaybeForced
+                let inner_coll_type = coll_type.map(|x| x.into_inner());
 
                 // Check naming convention
                 if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1135,7 +1176,7 @@ impl LocalEnv {
                 }
 
                 // Extract element type from collection
-                match coll_type {
+                match inner_coll_type {
                     Some(ExprType::List(elem_t)) => {
                         // Register the loop variable with the element type
                         self.register_identifier(
@@ -1179,7 +1220,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
-                                found: typ,
+                                found: typ.into_inner(),
                                 context: "sum filter must be Bool".to_string(),
                             });
                         }
@@ -1193,12 +1234,12 @@ impl LocalEnv {
                 self.pop_scope(warnings);
 
                 match body_type {
-                    Some(typ) if typ.is_arithmetic() => Some(typ), // Return Int or LinExpr
+                    Some(typ) if typ.inner().is_arithmetic() => Some(typ), // Return Int or LinExpr
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: ExprType::Int,
-                            found: typ,
+                            found: typ.into_inner(),
                             context: "sum body must be Int or LinExpr".to_string(),
                         });
                         None
@@ -1221,7 +1262,7 @@ impl LocalEnv {
                         errors.push(SemError::TypeMismatch {
                             span: condition.span.clone(),
                             expected: ExprType::Bool,
-                            found: typ,
+                            found: typ.into_inner(),
                             context: "if condition must be Bool".to_string(),
                         });
                     }
@@ -1234,13 +1275,13 @@ impl LocalEnv {
 
                 match (then_type, else_type) {
                     (Some(t), Some(e)) => {
-                        match ExprType::unify(&t, &e) {
-                            Some(unified) => Some(unified),
+                        match MaybeForced::unify(&t, &e) {
+                            Some(unified) => Some(unified.loosen()),
                             None => {
                                 errors.push(SemError::TypeMismatch {
                                     span: else_expr.span.clone(),
-                                    expected: t.clone(),
-                                    found: e,
+                                    expected: t.inner().clone(),
+                                    found: e.into_inner(),
                                     context: "if branches must have compatible types".to_string(),
                                 });
                                 Some(t) // Fallback to then type
@@ -1260,7 +1301,7 @@ impl LocalEnv {
                             var: name.node.clone(),
                             span: name.span.clone(),
                         });
-                        Some(ExprType::LinExpr) // Syntax indicates LinExpr intent
+                        Some(ExprType::LinExpr.into()) // Syntax indicates LinExpr intent
                     }
                     Some((var_args, _)) => {
                         if args.len() != var_args.len() {
@@ -1286,7 +1327,7 @@ impl LocalEnv {
                                     errors.push(SemError::TypeMismatch {
                                         span: arg.span.clone(),
                                         expected: expected_type.clone(),
-                                        found: found_type,
+                                        found: found_type.into_inner(),
                                         context: format!(
                                             "argument {} to variable ${}",
                                             i + 1,
@@ -1297,7 +1338,7 @@ impl LocalEnv {
                             }
                         }
 
-                        Some(ExprType::LinExpr)
+                        Some(ExprType::LinExpr.into())
                     }
                 }
             }
@@ -1335,7 +1376,7 @@ impl LocalEnv {
                                 errors.push(SemError::TypeMismatch {
                                     span: arg.span.clone(),
                                     expected: expected_type.clone(),
-                                    found: found_type,
+                                    found: found_type.into_inner(),
                                     context: format!(
                                         "argument {} to function {}",
                                         i + 1,
@@ -1346,7 +1387,7 @@ impl LocalEnv {
                         }
                     }
 
-                    Some(fn_type.output)
+                    Some(fn_type.output.into())
                 }
             },
 
@@ -1360,7 +1401,7 @@ impl LocalEnv {
                     });
                     None
                 } else {
-                    Some(ExprType::List(Box::new(obj_type)))
+                    Some(ExprType::List(Box::new(obj_type)).into())
                 }
             }
 
@@ -1373,14 +1414,14 @@ impl LocalEnv {
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
                         // Try to unify - handles List, EmptyList, and coercion automatically
-                        match ExprType::unify(&l, &r) {
-                            Some(unified) if unified.is_list() => Some(unified),
+                        match MaybeForced::unify(&l, &r) {
+                            Some(unified) if unified.inner().is_list() => Some(unified.loosen()),
                             Some(non_list) => {
                                 // Unified but not to a list type
                                 errors.push(SemError::TypeMismatch {
                                     span: left.span.clone(),
-                                    expected: ExprType::List(Box::new(non_list)), // placeholder
-                                    found: l,
+                                    expected: ExprType::List(Box::new(non_list.into_inner())), // placeholder
+                                    found: l.into_inner(),
                                     context: "collection operation requires List types".to_string(),
                                 });
                                 None
@@ -1389,14 +1430,14 @@ impl LocalEnv {
                                 // Can't unify - incompatible types
                                 errors.push(SemError::TypeMismatch {
                                     span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
+                                    expected: l.inner().clone(),
+                                    found: r.into_inner(),
                                     context:
                                         "collection operation requires compatible element types"
                                             .to_string(),
                                 });
                                 // Return left type as fallback if it's a list
-                                if l.is_list() {
+                                if l.inner().is_list() {
                                     Some(l)
                                 } else {
                                     None
@@ -1404,12 +1445,12 @@ impl LocalEnv {
                             }
                         }
                     }
-                    (Some(t), None) | (None, Some(t)) if t.is_list() => Some(t),
+                    (Some(t), None) | (None, Some(t)) if t.inner().is_list() => Some(t),
                     (Some(t), None) | (None, Some(t)) => {
                         errors.push(SemError::TypeMismatch {
                             span: left.span.clone(),
-                            expected: ExprType::List(Box::new(t.clone())), // placeholder
-                            found: t,
+                            expected: ExprType::List(Box::new(t.inner().clone())), // placeholder
+                            found: t.into_inner(),
                             context: "collection operation requires List types".to_string(),
                         });
                         None
@@ -1420,7 +1461,7 @@ impl LocalEnv {
 
             Expr::ListLiteral { elements } => {
                 if elements.is_empty() {
-                    return Some(ExprType::EmptyList);
+                    return Some(ExprType::EmptyList.into());
                 }
 
                 // Check all elements and unify their types
@@ -1433,13 +1474,13 @@ impl LocalEnv {
 
                     match (unified_type.clone(), item_type) {
                         (Some(u), Some(i)) => {
-                            match ExprType::unify(&u, &i) {
+                            match MaybeForced::unify(&u, &i) {
                                 Some(new_unified) => unified_type = Some(new_unified),
                                 None => {
                                     errors.push(SemError::TypeMismatch {
                                         span: item.span.clone(),
-                                        expected: u.clone(),
-                                        found: i,
+                                        expected: u.inner().clone(),
+                                        found: i.into_inner(),
                                         context: "all list elements must have compatible types"
                                             .to_string(),
                                     });
@@ -1462,7 +1503,7 @@ impl LocalEnv {
                     }
                 }
 
-                unified_type.map(|t| ExprType::List(Box::new(t)))
+                unified_type.map(|t| ExprType::List(Box::new(t.into_inner())).into())
             }
 
             Expr::ListComprehension {
@@ -1473,6 +1514,8 @@ impl LocalEnv {
             } => {
                 let coll_type =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                // We don't coerce elements from the list, so we can drop the MaybeForced
+                let inner_coll_type = coll_type.map(|x| x.into_inner());
 
                 // Check naming convention
                 if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1487,7 +1530,7 @@ impl LocalEnv {
                 }
 
                 // Extract element type from collection
-                match coll_type {
+                match inner_coll_type {
                     Some(ExprType::List(elem_t)) => {
                         // Register the loop variable with the element type
                         self.register_identifier(
@@ -1531,7 +1574,7 @@ impl LocalEnv {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: ExprType::Bool,
-                                found: typ,
+                                found: typ.into_inner(),
                                 context: "list comprehension filter must be Bool".to_string(),
                             });
                         }
@@ -1545,7 +1588,7 @@ impl LocalEnv {
                 self.pop_scope(warnings);
 
                 // Return [elem_type]
-                elem_type.map(|t| ExprType::List(Box::new(t)))
+                elem_type.map(|t| ExprType::List(Box::new(t.into_inner())).into())
             }
 
             // ========== Cardinality ==========
@@ -1553,18 +1596,18 @@ impl LocalEnv {
                 let elem_t =
                     self.check_expr(global_env, &collection.node, type_info, errors, warnings);
                 match elem_t {
-                    Some(t) if t.is_list() => (),
+                    Some(t) if t.inner().is_list() => (),
                     None => (),
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: ExprType::List(Box::new(t.clone())),
-                            found: t,
+                            expected: ExprType::List(Box::new(t.inner().clone())),
+                            found: t.into_inner(),
                             context: "cardinality is always computed on a collection".to_string(),
                         });
                     }
                 }
-                Some(ExprType::Int) // Cardinality always gives an Int
+                Some(ExprType::Int.into()) // Cardinality always gives an Int
             }
         }
     }
@@ -1850,7 +1893,7 @@ impl GlobalEnv {
                             func: name.node.clone(),
                             span: body.span.clone(),
                             expected: out_typ,
-                            found: body_type,
+                            found: body_type.into_inner(),
                         });
                     }
                 }
