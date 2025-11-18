@@ -1784,7 +1784,7 @@ impl GlobalEnv {
                 *public,
                 name,
                 params,
-                &output_type.node,
+                output_type,
                 body,
                 type_info,
                 errors,
@@ -1809,7 +1809,7 @@ impl GlobalEnv {
         public: bool,
         name: &Spanned<String>,
         params: &Vec<Param>,
-        output_type: &crate::ast::TypeName,
+        output_type: &Spanned<crate::ast::TypeName>,
         body: &Spanned<Expr>,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -1836,7 +1836,7 @@ impl GlobalEnv {
                 }
 
                 let mut local_env = LocalEnv::new();
-                let mut error_in_param_typs = false;
+                let mut error_in_typs = false;
                 for param in params {
                     let param_typ = param.typ.node.clone().into();
                     if !self.validate_type(&param_typ) {
@@ -1844,7 +1844,7 @@ impl GlobalEnv {
                             typ: param_typ.to_string(),
                             span: param.typ.span.clone(),
                         });
-                        error_in_param_typs = true;
+                        error_in_typs = true;
                     } else if let Some((_typ, span)) =
                         local_env.lookup_in_pending_scope(&param.name.node)
                     {
@@ -1882,25 +1882,32 @@ impl GlobalEnv {
                 local_env.pop_scope(warnings);
 
                 if let Some(body_type) = body_type_opt {
-                    let out_typ = ExprType::from(output_type.clone());
-
-                    // Allow coercion
-                    let types_match = match (out_typ.clone(), body_type.clone()) {
-                        (a, b) if b.can_coerce_to(&a) => true,
-                        _ => false,
-                    };
-
-                    if !types_match {
-                        errors.push(SemError::BodyTypeMismatch {
-                            func: name.node.clone(),
-                            span: body.span.clone(),
-                            expected: out_typ,
-                            found: body_type.into_inner(),
+                    let out_typ = ExprType::from(output_type.node.clone());
+                    if !self.validate_type(&out_typ) {
+                        errors.push(SemError::UnknownType {
+                            typ: out_typ.to_string(),
+                            span: output_type.span.clone(),
                         });
+                        error_in_typs = true;
+                    } else {
+                        // Allow coercion
+                        let types_match = match (out_typ.clone(), body_type.clone()) {
+                            (a, b) if b.can_coerce_to(&a) => true,
+                            _ => false,
+                        };
+
+                        if !types_match {
+                            errors.push(SemError::BodyTypeMismatch {
+                                func: name.node.clone(),
+                                span: body.span.clone(),
+                                expected: out_typ,
+                                found: body_type.into_inner(),
+                            });
+                        }
                     }
                 }
 
-                if !error_in_param_typs {
+                if !error_in_typs {
                     let args = params
                         .iter()
                         .map(|param| param.typ.node.clone().into())
@@ -1908,7 +1915,7 @@ impl GlobalEnv {
                     let fn_typ = FunctionType {
                         public,
                         args,
-                        output: output_type.clone().into(),
+                        output: output_type.node.clone().into(),
                     };
                     self.register_fn(&name.node, fn_typ, name.span.clone(), type_info);
                 }
