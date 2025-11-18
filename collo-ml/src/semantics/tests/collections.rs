@@ -217,8 +217,21 @@ fn global_collection_linexpr() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        errors.is_empty(),
+        !errors.is_empty(),
         "Global collection of LinExpr should not work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn global_collection_list() {
+    let types = simple_object("Student");
+    let input = "pub let f() -> [[Student]] = @[[Student]];";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Global collection of [Student] should not work: {:?}",
         errors
     );
 }
