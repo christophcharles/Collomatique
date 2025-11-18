@@ -623,7 +623,7 @@ impl Expr {
         let first = inner.next().unwrap();
 
         match first.as_rule() {
-            Rule::not_expr => {
+            Rule::not_op => {
                 // It's a not expression
                 let expr_pair = inner.next().unwrap();
                 let expr_span = Span::from_pest(&expr_pair);
