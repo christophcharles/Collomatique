@@ -200,12 +200,26 @@ fn collection_rejects_missing_brackets_in_global() {
 
 #[test]
 fn collection_rejects_nested_global_collections() {
-    let cases = vec!["@[@[Student]]", "@[[Subject]]"];
+    let cases = vec!["@[@[Student]]", "@[[@[Student]]]"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
             result.is_err(),
             "Should reject '{}' (nested global): {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
+fn collection_accepts_global_collections_of_lists() {
+    let cases = vec!["@[[Student]]", "@[[[Subject]]]"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should not reject '{}' (global with lists): {:?}",
             case,
             result
         );
