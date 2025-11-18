@@ -152,7 +152,7 @@ pub enum Expr {
     Inter(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Diff(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
-    GlobalList(Spanned<String>),
+    GlobalList(Spanned<TypeName>),
     ListLiteral {
         elements: Vec<Spanned<Expr>>,
     },
@@ -409,16 +409,7 @@ impl TypeName {
             .ok_or(AstError::MissingTypeName(span))?;
 
         match inner.as_rule() {
-            Rule::primitive_type => {
-                let type_name = inner.as_str();
-                match type_name {
-                    "Int" => Ok(TypeName::Int),
-                    "Bool" => Ok(TypeName::Bool),
-                    "LinExpr" => Ok(TypeName::LinExpr),
-                    "Constraint" => Ok(TypeName::Constraint),
-                    _ => Ok(TypeName::Object(type_name.to_string())),
-                }
-            }
+            Rule::primitive_type => Self::from_pimitive_type(inner),
             Rule::type_name => {
                 // It's a list type: [...]
                 Ok(TypeName::List(Box::new(Self::from_pest(inner)?)))
@@ -427,6 +418,26 @@ impl TypeName {
                 expected: "primitive_type or type_name",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
+            }),
+        }
+    }
+
+    fn from_pimitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        match pair.as_rule() {
+            Rule::primitive_type => {
+                let type_name = pair.as_str();
+                match type_name {
+                    "Int" => Ok(TypeName::Int),
+                    "Bool" => Ok(TypeName::Bool),
+                    "LinExpr" => Ok(TypeName::LinExpr),
+                    "Constraint" => Ok(TypeName::Constraint),
+                    _ => Ok(TypeName::Object(type_name.to_string())),
+                }
+            }
+            _ => Err(AstError::UnexpectedRule {
+                expected: "primitive_type",
+                found: pair.as_rule(),
+                span: Span::from_pest(&pair),
             }),
         }
     }
@@ -1014,8 +1025,8 @@ impl Expr {
             .next()
             .ok_or(AstError::MissingTypeName(span.clone()))?;
 
-        let type_name = type_pair.as_str().to_string();
         let type_span = Span::from_pest(&type_pair);
+        let type_name = TypeName::from_pimitive_type(type_pair)?;
 
         Ok(Expr::GlobalList(Spanned::new(type_name, type_span)))
     }

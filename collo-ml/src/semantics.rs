@@ -17,6 +17,13 @@ pub enum ExprType {
 }
 
 impl ExprType {
+    pub fn is_primitive_type(&self) -> bool {
+        match self {
+            ExprType::Int | ExprType::Bool | ExprType::EmptyList | ExprType::Constraint => true,
+            _ => false,
+        }
+    }
+
     pub fn is_list(&self) -> bool {
         match self {
             ExprType::List(_) => true,
@@ -387,6 +394,10 @@ pub enum SemError {
     },
     #[error("Type {typ} at {span:?} is unknown")]
     UnknownType { typ: String, span: Span },
+    #[error("Type {typ} at {span:?} is a list and is disallowed in global collections")]
+    ListNotAllowedInGlobalCollections { typ: String, span: Span },
+    #[error("Type {typ} at {span:?} is a primitive type and is disallowed in global collections")]
+    PrimitiveTypeNotAllowedInGlobalCollections { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
     ParameterAlreadyDefined {
         identifier: String,
@@ -1395,15 +1406,27 @@ impl LocalEnv {
 
             // ========== Collections ==========
             Expr::GlobalList(type_name) => {
-                let obj_type = ExprType::Object(type_name.node.clone());
-                if !global_env.validate_type(&obj_type) {
+                let typ = ExprType::from(type_name.node.clone());
+                if !global_env.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
-                        typ: type_name.node.clone(),
+                        typ: typ.to_string(),
+                        span: type_name.span.clone(),
+                    });
+                    None
+                } else if typ.is_primitive_type() {
+                    errors.push(SemError::PrimitiveTypeNotAllowedInGlobalCollections {
+                        typ: typ.to_string(),
+                        span: type_name.span.clone(),
+                    });
+                    None
+                } else if typ.is_list() {
+                    errors.push(SemError::ListNotAllowedInGlobalCollections {
+                        typ: typ.to_string(),
                         span: type_name.span.clone(),
                     });
                     None
                 } else {
-                    Some(ExprType::List(Box::new(obj_type)).into())
+                    Some(ExprType::List(Box::new(typ)).into())
                 }
             }
 

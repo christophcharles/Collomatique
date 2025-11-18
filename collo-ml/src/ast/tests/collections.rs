@@ -208,7 +208,7 @@ fn parse_global_collection() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
-                assert_eq!(name.node, "Student");
+                assert_eq!(name.node, TypeName::Object("Student".into()));
             }
             _ => panic!("Expected GlobalList"),
         },
@@ -225,7 +225,7 @@ fn parse_global_collection_with_builtin_type() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
-                assert_eq!(name.node, "Int");
+                assert_eq!(name.node, TypeName::Int);
             }
             _ => panic!("Expected GlobalList"),
         },

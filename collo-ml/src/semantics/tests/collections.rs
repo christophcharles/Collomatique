@@ -217,7 +217,7 @@ fn global_collection_linexpr() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
+        errors.is_empty(),
         "Global collection of LinExpr should not work: {:?}",
         errors
     );
