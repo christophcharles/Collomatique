@@ -19,7 +19,7 @@ pub enum ExprType {
 impl ExprType {
     pub fn is_primitive_type(&self) -> bool {
         match self {
-            ExprType::Int | ExprType::Bool | ExprType::EmptyList | ExprType::Constraint => true,
+            ExprType::Int | ExprType::Bool | ExprType::LinExpr | ExprType::Constraint => true,
             _ => false,
         }
     }
