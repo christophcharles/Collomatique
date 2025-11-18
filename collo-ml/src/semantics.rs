@@ -107,6 +107,75 @@ impl std::fmt::Display for ExprType {
     }
 }
 
+/// Represents a type but an optional forcing
+/// A type is *forced* if it cannot be coerced into any other types.
+///
+/// This is useful for 'as' expressions. Just after the 'as', coercion is
+/// prohibited. Coercion is possible after the next operation but forced type can be reintroduced
+/// with a new 'as'.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MaybeForced {
+    Forced(ExprType),
+    Regular(ExprType),
+}
+
+impl MaybeForced {
+    pub fn is_forced(&self) -> bool {
+        match self {
+            MaybeForced::Forced(_) => true,
+            MaybeForced::Regular(_) => false,
+        }
+    }
+
+    pub fn inner(&self) -> &ExprType {
+        match self {
+            MaybeForced::Forced(typ) => &typ,
+            MaybeForced::Regular(typ) => &typ,
+        }
+    }
+
+    pub fn into_inner(self) -> ExprType {
+        match self {
+            MaybeForced::Forced(typ) => typ,
+            MaybeForced::Regular(typ) => typ,
+        }
+    }
+
+    pub fn can_coerce_to(&self, target: &ExprType) -> bool {
+        match self {
+            MaybeForced::Forced(typ) => typ == target,
+            MaybeForced::Regular(typ) => typ.can_coerce_to(target),
+        }
+    }
+
+    pub fn unify(left: &MaybeForced, right: &MaybeForced) -> Option<ExprType> {
+        match (left, right) {
+            (MaybeForced::Forced(a), MaybeForced::Forced(b)) => {
+                if a == b {
+                    Some(a.clone())
+                } else {
+                    None
+                }
+            }
+            (MaybeForced::Forced(a), MaybeForced::Regular(b)) => {
+                if b.can_coerce_to(a) {
+                    Some(a.clone())
+                } else {
+                    None
+                }
+            }
+            (MaybeForced::Regular(a), MaybeForced::Forced(b)) => {
+                if a.can_coerce_to(b) {
+                    Some(b.clone())
+                } else {
+                    None
+                }
+            }
+            (MaybeForced::Regular(a), MaybeForced::Regular(b)) => ExprType::unify(a, b),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionType {
     public: bool,
