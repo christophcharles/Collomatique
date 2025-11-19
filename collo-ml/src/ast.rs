@@ -166,8 +166,7 @@ pub enum Expr {
     },
     ListComprehension {
         expr: Box<Spanned<Expr>>,
-        var: Spanned<String>,
-        collection: Box<Spanned<Expr>>,
+        vars_and_collections: Vec<(Spanned<String>, Spanned<Expr>)>,
         filter: Option<Box<Spanned<Expr>>>,
     },
 
@@ -1031,8 +1030,8 @@ impl Expr {
         // list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ "in" ~ expr ~ ("where" ~ expr)? ~ "]" }
         let span = Span::from_pest(&pair);
         let mut expr = None;
-        let mut var = None;
-        let mut collection = None;
+        let mut vars = vec![];
+        let mut collections = vec![];
         let mut filter = None;
         let mut has_filter = false;
 
@@ -1040,34 +1039,42 @@ impl Expr {
             match inner.as_rule() {
                 Rule::ident => {
                     let var_span = Span::from_pest(&inner);
-                    var = Some(Spanned::new(inner.as_str().to_string(), var_span));
+                    vars.push(Spanned::new(inner.as_str().to_string(), var_span));
                 }
                 Rule::where_op => {
                     has_filter = true;
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let parsed_expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let parsed_expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
 
-                    if expr.is_none() {
-                        // First expr is the output expression
-                        expr = Some(parsed_expr);
-                    } else if collection.is_none() {
-                        // Second expr is the collection
-                        collection = Some(parsed_expr);
-                    } else if has_filter && filter.is_none() {
-                        // Third expr (if where was seen) is the filter
-                        filter = Some(parsed_expr);
+                    if has_filter {
+                        filter = Some(Box::new(parsed_expr));
+                    } else if expr.is_none() {
+                        expr = Some(Box::new(parsed_expr));
+                    } else {
+                        collections.push(parsed_expr);
                     }
                 }
                 _ => {}
             }
         }
 
+        if vars.len() < collections.len() {
+            return Err(AstError::MissingName(span.clone()));
+        }
+        if vars.len() > collections.len() {
+            return Err(AstError::MissingExpr(span.clone()));
+        }
+        let vars_and_collections = vars
+            .into_iter()
+            .rev()
+            .zip(collections.into_iter().rev())
+            .collect();
+
         Ok(Expr::ListComprehension {
             expr: expr.ok_or(AstError::MissingBody(span.clone()))?,
-            var: var.ok_or(AstError::MissingName(span.clone()))?,
-            collection: collection.ok_or(AstError::MissingBody(span.clone()))?,
+            vars_and_collections,
             filter,
         })
     }

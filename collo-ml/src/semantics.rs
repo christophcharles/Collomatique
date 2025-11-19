@@ -1580,86 +1580,97 @@ impl LocalEnv {
 
             Expr::ListComprehension {
                 expr,
-                var,
-                collection,
+                vars_and_collections,
                 filter,
             } => {
-                let coll_type =
-                    self.check_expr(global_env, &collection.node, type_info, errors, warnings);
-                // We don't coerce elements from the list, so we can drop the MaybeForced
-                let inner_coll_type = coll_type.map(|x| x.into_inner());
+                let mut typ_error = false;
+                for (var, collection) in vars_and_collections {
+                    let coll_type =
+                        self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                    // We don't coerce elements from the list, so we can drop the MaybeForced
+                    let inner_coll_type = coll_type.map(|x| x.into_inner());
 
-                // Check naming convention
-                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
-                    &var.node,
-                    string_case::NamingConvention::SnakeCase,
-                ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
-                        identifier: var.node.clone(),
-                        span: var.span.clone(),
-                        suggestion,
-                    });
+                    // Check naming convention
+                    if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                        &var.node,
+                        string_case::NamingConvention::SnakeCase,
+                    ) {
+                        warnings.push(SemWarning::ParameterNamingConvention {
+                            identifier: var.node.clone(),
+                            span: var.span.clone(),
+                            suggestion,
+                        });
+                    }
+
+                    // Extract element type from collection
+                    match inner_coll_type {
+                        Some(ExprType::List(elem_t)) => {
+                            // Register the loop variable with the element type
+                            self.register_identifier(
+                                &var.node,
+                                var.span.clone(),
+                                *elem_t,
+                                type_info,
+                                warnings,
+                            );
+                        }
+                        Some(ExprType::EmptyList) => {
+                            errors.push(SemError::TypeMismatch {
+                                span: collection.span.clone(),
+                                expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
+                                found: ExprType::EmptyList,
+                                context: "list comprehension collection must have a known type (use 'as' for explicit typing)".to_string(),
+                            });
+                            typ_error = true; // Can't infer result type
+                        }
+                        Some(t) => {
+                            errors.push(SemError::TypeMismatch {
+                                span: collection.span.clone(),
+                                expected: ExprType::List(Box::new(t.clone())), // placeholder
+                                found: t,
+                                context: "list comprehension collection must be a list".to_string(),
+                            });
+                            typ_error = true; // Can't infer result type
+                        }
+                        None => typ_error = true, // Can't infer result type
+                    }
+
+                    self.push_scope();
                 }
 
-                // Extract element type from collection
-                match inner_coll_type {
-                    Some(ExprType::List(elem_t)) => {
-                        // Register the loop variable with the element type
-                        self.register_identifier(
-                            &var.node,
-                            var.span.clone(),
-                            *elem_t,
+                let elem_type = if !typ_error {
+                    // Check filter (must be Bool)
+                    if let Some(filter_expr) = filter {
+                        let filter_type = self.check_expr(
+                            global_env,
+                            &filter_expr.node,
                             type_info,
+                            errors,
                             warnings,
                         );
-                    }
-                    Some(ExprType::EmptyList) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: collection.span.clone(),
-                            expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
-                            found: ExprType::EmptyList,
-                            context: "list comprehension collection must have a known type (use 'as' for explicit typing)".to_string(),
-                        });
-                        return None; // Can't infer result type
-                    }
-                    Some(t) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: collection.span.clone(),
-                            expected: ExprType::List(Box::new(t.clone())), // placeholder
-                            found: t,
-                            context: "list comprehension collection must be a list".to_string(),
-                        });
-                        return None; // Can't infer result type
-                    }
-                    None => return None,
-                }
 
-                self.push_scope();
-
-                // Check filter (must be Bool)
-                if let Some(filter_expr) = filter {
-                    let filter_type =
-                        self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
-
-                    if let Some(typ) = filter_type {
-                        if !typ.can_coerce_to(&ExprType::Bool) {
-                            errors.push(SemError::TypeMismatch {
-                                span: filter_expr.span.clone(),
-                                expected: ExprType::Bool,
-                                found: typ.into_inner(),
-                                context: "list comprehension filter must be Bool".to_string(),
-                            });
+                        if let Some(typ) = filter_type {
+                            if !typ.can_coerce_to(&ExprType::Bool) {
+                                errors.push(SemError::TypeMismatch {
+                                    span: filter_expr.span.clone(),
+                                    expected: ExprType::Bool,
+                                    found: typ.into_inner(),
+                                    context: "list comprehension filter must be Bool".to_string(),
+                                });
+                            }
                         }
                     }
+
+                    // Check the output expression - this determines the result element type
+                    self.check_expr(global_env, &expr.node, type_info, errors, warnings)
+                } else {
+                    None
+                };
+
+                for (_var, _collection) in vars_and_collections {
+                    self.pop_scope(warnings);
                 }
 
-                // Check the output expression - this determines the result element type
-                let elem_type =
-                    self.check_expr(global_env, &expr.node, type_info, errors, warnings);
-
-                self.pop_scope(warnings);
-
-                // Return [elem_type]
                 elem_type.map(|t| ExprType::List(Box::new(t.into_inner())).into())
             }
 

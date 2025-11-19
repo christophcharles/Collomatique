@@ -129,11 +129,12 @@ fn parse_simple_list_comprehension() {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListComprehension {
                 expr,
-                var,
-                collection,
+                vars_and_collections,
                 filter,
             } => {
                 assert!(matches!(expr.node, Expr::Ident(_)));
+                assert_eq!(vars_and_collections.len(), 1);
+                let (var, collection) = &vars_and_collections[0];
                 assert_eq!(var.node, "x");
                 assert!(matches!(collection.node, Expr::GlobalList(_)));
                 assert!(filter.is_none());
@@ -169,7 +170,11 @@ fn parse_list_comprehension_with_field_access() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, var, .. } => {
+            Expr::ListComprehension {
+                expr,
+                vars_and_collections,
+                ..
+            } => {
                 assert!(matches!(
                     expr.node,
                     Expr::Path {
@@ -177,6 +182,8 @@ fn parse_list_comprehension_with_field_access() {
                         segments: _
                     }
                 ));
+                assert_eq!(vars_and_collections.len(), 1);
+                let (var, _collection) = &vars_and_collections[0];
                 assert_eq!(var.node, "s");
             }
             _ => panic!("Expected ListComprehension"),
@@ -234,6 +241,58 @@ fn parse_nested_list_comprehension() {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListComprehension { expr, .. } => {
                 assert!(matches!(expr.node, Expr::ListComprehension { .. }));
+            }
+            _ => panic!("Expected ListComprehension"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_list_comprehension_with_multiple_for() {
+    let input = "let f() -> [Int] = [x.age + y.num for x in @[Student] for y in @[Class]];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListComprehension { expr, .. } => {
+                assert!(matches!(expr.node, Expr::Add { .. }));
+            }
+            _ => panic!("Expected ListComprehension"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_list_comprehension_with_multiple_dependant_for() {
+    let input = "let f() -> [Int] = [x.num for x in y.room for y in @[Class]];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListComprehension { expr, .. } => {
+                assert!(matches!(expr.node, Expr::Path { .. }));
+            }
+            _ => panic!("Expected ListComprehension"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_list_comprehension_with_multiple_for_and_where_clause() {
+    let input = "let f() -> [Int] = [x.age + y.num for x in @[Student] for y in @[Class] where x in y.students];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListComprehension { expr, filter, .. } => {
+                assert!(matches!(expr.node, Expr::Add { .. }));
+                assert!(filter.is_some());
             }
             _ => panic!("Expected ListComprehension"),
         },

@@ -228,6 +228,83 @@ fn nested_list_comprehension() {
     );
 }
 
+#[test]
+fn list_comprehension_multiple_for_typechecks_correctly() {
+    let mut types = HashMap::new();
+    types.insert(
+        "Student".to_string(),
+        HashMap::from([
+            ("age".to_string(), ExprType::Int),
+            ("enroled".to_string(), ExprType::Bool),
+        ]),
+    );
+    types.insert(
+        "Class".to_string(),
+        HashMap::from([
+            ("num".to_string(), ExprType::Int),
+            (
+                "students".to_string(),
+                ExprType::List(Box::new(ExprType::Object("Student".into()))),
+            ),
+        ]),
+    );
+
+    let input = r#"
+        pub let cross_ages(classes: [Class]) -> [Int] = 
+            [x.age + y.num 
+             for x in @[Student] 
+             for y in classes 
+             where x in y.students];
+    "#;
+
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Multiple for + where with membership should typecheck: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_comprehension_where_can_reference_all_for_variables() {
+    let mut types = HashMap::new();
+    types.insert(
+        "Person".to_string(),
+        HashMap::from([
+            ("id".to_string(), ExprType::Int),
+            ("active".to_string(), ExprType::Bool),
+        ]),
+    );
+    types.insert(
+        "Group".to_string(),
+        HashMap::from([
+            (
+                "members".to_string(),
+                ExprType::List(Box::new(ExprType::Object("Person".into()))),
+            ),
+            ("min_age".to_string(), ExprType::Int),
+        ]),
+    );
+
+    let input = r#"
+        pub let active_pairs(groups: [Group]) -> [Bool] =
+            [p1.active and p2.active
+             for p2 in g.members
+             for p1 in g.members
+             for g in groups
+             where p1.id < p2.id and g.min_age > 18];
+    "#;
+
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Where clause should access variables from all for-clauses: {:?}",
+        errors
+    );
+}
+
 // ========== Global Collections ==========
 
 #[test]

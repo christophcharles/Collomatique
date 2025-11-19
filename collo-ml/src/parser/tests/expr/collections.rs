@@ -182,6 +182,82 @@ fn collection_comprehension_precedence_with_where() {
     }
 }
 
+#[test]
+fn list_comprehension_accepts_multiple_for_clauses() {
+    let cases = vec![
+        // Basic double for
+        "[x for x in xs for y in ys]",
+        "[a + b for a in list1 for b in list2]",
+        // Triple for (nested iteration)
+        "[x * y * z for x in xs for y in ys for z in zs]",
+        // Mix of idents and expressions
+        "[p.name for p in @[Person] for c in p.courses]",
+        "[x + y.age for x in numbers for y in @[Student]]",
+        // With where clause at the end
+        "[x + y for x in xs for y in ys where x > 0]",
+        "[name for person in people for name in person.names where person.age >= 18]",
+        // Complex expression, multiple for, and where
+        "[x + y.num + 1 for x in @[A] for y in x.bs where y.active and x.id == y.a_id]",
+        // Real-world style example
+        "[x.age + y.num for x in @[Student] for y in @[Class] where x in y.students]",
+        // Trailing commas not allowed (but no comma in syntax), just valid spacing
+        "[a for a in a_list for b in b_list   where a > b]",
+    ];
+
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(
+            result.is_ok(),
+            "Failed to parse valid comprehension: '{}'\nError: {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
+fn list_comprehension_rejects_missing_in_after_second_for() {
+    let cases = vec![
+        "[x for x in xs for y ys]",             // missing `in`
+        "[x for x in xs for y in]",             // incomplete
+        "[x for x in xs for y in for z in zs]", // too many 'for'
+    ];
+
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should reject invalid syntax: '{}'", case);
+    }
+}
+
+#[test]
+fn list_comprehension_rejects_multiple_where_clauses() {
+    let invalid_cases = vec![
+        // Two where clauses – classic mistake
+        "[x for x in xs where x > 0 where x < 10]",
+        // Multiple for + multiple where
+        "[a + b for a in as for b in bs where a > 0 where b < 5]",
+        // Where in the middle (allowed by accident?) + another where
+        "[x for x in xs where x > 0 for y in ys where y.is_active]",
+        // Triple where just to be sure
+        "[i for i in items where i > 0 where i < 100 where i % 2 == 0]",
+        // Where before any for (should also fail, but mainly testing duplicate where)
+        "[x where x > 0 for x in xs where x < 10]",
+        // Real-world-looking mistake
+        "[x.age + y.num for x in @[Student] for y in @[Class] where x in y.students where y.active]",
+    ];
+
+    for case in invalid_cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+
+        assert!(
+            result.is_err(),
+            "Parser should reject multiple 'where' clauses in: '{}'\nGot: {:?}",
+            case,
+            result
+        );
+    }
+}
+
 // =============================================================================
 // GLOBAL COLLECTIONS
 // =============================================================================
