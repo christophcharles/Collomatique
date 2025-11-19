@@ -128,7 +128,7 @@ fn parse_forall_with_path_collection() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Forall { collection, .. } => {
-                assert!(matches!(collection.node, Expr::Path(_)));
+                assert!(matches!(collection.node, Expr::Ident(_)));
             }
             _ => panic!("Expected Forall"),
         },
@@ -277,7 +277,13 @@ fn parse_sum_with_field_access_in_body() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Sum { var, body, .. } => {
                 assert_eq!(var.node, "s");
-                assert!(matches!(body.node, Expr::Path(_)));
+                assert!(matches!(
+                    body.node,
+                    Expr::Path {
+                        object: _,
+                        segments: _
+                    }
+                ));
             }
             _ => panic!("Expected Sum"),
         },

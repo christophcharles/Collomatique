@@ -116,7 +116,11 @@ pub enum Expr {
     // Elements
     Number(i32),
     Boolean(Boolean),
-    Path(Spanned<Path>),
+    Ident(Spanned<String>),
+    Path {
+        object: Box<Spanned<Expr>>, // first segment might be an expression - for "get_group().student.age" this is "get_group()"
+        segments: Vec<Spanned<String>>, // and this is ["student", "age"]
+    },
 
     // Arithmetic
     Add(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -180,13 +184,6 @@ pub enum Expr {
 pub enum Boolean {
     True,
     False,
-}
-
-// ============= Path (field access) =============
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Path {
-    pub segments: Vec<Spanned<String>>, // ["student", "age"] for student.age
 }
 
 // ============= Error Type =============
@@ -810,10 +807,10 @@ impl Expr {
 
         let mut inner = pair.into_inner();
 
-        // First is always primary_expr
+        // First is always path
         let expr_pair = inner.next().unwrap();
         let expr_span = Span::from_pest(&expr_pair);
-        let expr = Self::from_primary_expr(expr_pair)?;
+        let expr = Self::from_path(expr_pair)?;
 
         // Check if there's a type annotation
         if let Some(type_pair) = inner.next() {
@@ -828,6 +825,41 @@ impl Expr {
         } else {
             // No type annotation, just return the expression
             Ok(expr)
+        }
+    }
+
+    fn from_path(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::path {
+            return Err(AstError::UnexpectedRule {
+                expected: "path",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
+        let mut inner = pair.into_inner();
+
+        // First is always primary_expr
+        let expr_pair = inner.next().unwrap();
+        let expr_span = Span::from_pest(&expr_pair);
+        let expr = Self::from_primary_expr(expr_pair)?;
+
+        let mut segments = Vec::new();
+        for segment in inner {
+            if segment.as_rule() == Rule::ident {
+                let segment_span = Span::from_pest(&segment);
+                segments.push(Spanned::new(segment.as_str().to_string(), segment_span));
+            }
+        }
+
+        if segments.is_empty() {
+            Ok(expr)
+        } else {
+            Ok(Expr::Path {
+                object: Box::new(Spanned::new(expr, expr_span)),
+                segments,
+            })
         }
     }
 
@@ -867,9 +899,10 @@ impl Expr {
                     })?;
                 Ok(Expr::Number(value))
             }
-            Rule::path => {
-                let path_span = Span::from_pest(&inner);
-                Ok(Expr::Path(Spanned::new(Path::from_pest(inner)?, path_span)))
+            Rule::ident => {
+                let ident_span = Span::from_pest(&inner);
+                let ident = inner.as_str().to_string();
+                Ok(Expr::Ident(Spanned::new(ident, ident_span)))
             }
             Rule::expr => {
                 // Parenthesized expr
@@ -1128,29 +1161,6 @@ fn parse_args(pair: Pair<Rule>) -> Result<Vec<Spanned<Expr>>, AstError> {
         }
     }
     Ok(args)
-}
-
-impl Path {
-    pub fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
-        if pair.as_rule() != Rule::path {
-            return Err(AstError::UnexpectedRule {
-                expected: "path",
-                found: pair.as_rule(),
-                span,
-            });
-        }
-
-        let mut segments = Vec::new();
-        for inner in pair.into_inner() {
-            if inner.as_rule() == Rule::ident {
-                let segment_span = Span::from_pest(&inner);
-                segments.push(Spanned::new(inner.as_str().to_string(), segment_span));
-            }
-        }
-
-        Ok(Path { segments })
-    }
 }
 
 #[cfg(test)]

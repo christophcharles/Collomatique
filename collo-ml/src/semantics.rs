@@ -581,10 +581,18 @@ impl LocalEnv {
             Expr::Number(_) => Some(ExprType::Int.into()),
             Expr::Boolean(_) => Some(ExprType::Bool.into()),
 
-            Expr::Path(path) => self
-                .check_path(
-                    global_env, &path.node, &path.span, type_info, errors, warnings,
+            Expr::Ident(ident) => self
+                .check_ident(
+                    global_env,
+                    &ident.node,
+                    &ident.span,
+                    type_info,
+                    errors,
+                    warnings,
                 )
+                .map(|x| x.into()),
+            Expr::Path { object, segments } => self
+                .check_path(global_env, &object, segments, type_info, errors, warnings)
                 .map(|x| x.into()),
 
             // ========== As construct ==========
@@ -1676,35 +1684,47 @@ impl LocalEnv {
         }
     }
 
-    fn check_path(
+    fn check_ident(
         &mut self,
-        global_env: &GlobalEnv,
-        path: &crate::ast::Path,
-        _span: &Span,
+        _global_env: &GlobalEnv,
+        ident: &String,
+        span: &Span,
         _type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         _warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
-        assert!(
-            !path.segments.is_empty(),
-            "Path must have at least one segment"
-        );
-
-        // First segment must be a local identifier
-        let first_segment = &path.segments[0];
-        let mut current_type = match self.lookup_ident(&first_segment.node) {
+        let typ = match self.lookup_ident(&ident) {
             Some((typ, _)) => typ,
             None => {
                 errors.push(SemError::UnknownIdentifer {
-                    identifier: first_segment.node.clone(),
-                    span: first_segment.span.clone(),
+                    identifier: ident.clone(),
+                    span: span.clone(),
                 });
                 return None;
             }
         };
 
+        Some(typ)
+    }
+
+    fn check_path(
+        &mut self,
+        global_env: &mut GlobalEnv,
+        object: &Spanned<Expr>,
+        segments: &Vec<Spanned<String>>,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) -> Option<ExprType> {
+        assert!(!segments.is_empty(), "Path must have at least one segment");
+
+        // First segment can be an expression
+        let mut current_type = self
+            .check_expr(global_env, &object.node, type_info, errors, warnings)?
+            .into_inner();
+
         // Follow the path through fields
-        for segment in &path.segments[1..] {
+        for segment in segments {
             match &current_type {
                 ExprType::Object(type_name) => {
                     // Look up the field in this object type

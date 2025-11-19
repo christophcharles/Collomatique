@@ -84,7 +84,9 @@ relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 add_sub_expr = { mul_div_mod_expr ~ ((add_op | sub_op) ~ mul_div_mod_expr)* }
 mul_div_mod_expr = { explicit_type ~ ((mul_op | div_op | mod_op) ~ explicit_type)* }
 
-explicit_type = { primary_expr ~ ( "as" ~ type_name)? }
+explicit_type = { path ~ ( "as" ~ type_name)? }
+
+path = { primary_expr ~ ("." ~ ident)* }
 
 // Primary expressions
 primary_expr = {
@@ -99,7 +101,7 @@ primary_expr = {
     fn_call |
     boolean |
     number |
-    path |
+    ident |
     "(" ~ expr ~ ")"
 }
 
@@ -134,7 +136,6 @@ where_op = @{ "where" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
 number = @{ "-"? ~ ASCII_DIGIT+ }
-path = { ident ~ ("." ~ ident)* }
 
 // ========== Test helpers ==========
 expr_complete = { SOI ~ expr ~ EOI }

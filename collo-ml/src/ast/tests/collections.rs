@@ -133,7 +133,7 @@ fn parse_simple_list_comprehension() {
                 collection,
                 filter,
             } => {
-                assert!(matches!(expr.node, Expr::Path(_)));
+                assert!(matches!(expr.node, Expr::Ident(_)));
                 assert_eq!(var.node, "x");
                 assert!(matches!(collection.node, Expr::GlobalList(_)));
                 assert!(filter.is_none());
@@ -170,7 +170,13 @@ fn parse_list_comprehension_with_field_access() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListComprehension { expr, var, .. } => {
-                assert!(matches!(expr.node, Expr::Path(_)));
+                assert!(matches!(
+                    expr.node,
+                    Expr::Path {
+                        object: _,
+                        segments: _
+                    }
+                ));
                 assert_eq!(var.node, "s");
             }
             _ => panic!("Expected ListComprehension"),
@@ -332,7 +338,7 @@ fn parse_difference_operation() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Diff(left, right) => {
                 assert!(matches!(left.node, Expr::GlobalList(_)));
-                assert!(matches!(right.node, Expr::Path(_)));
+                assert!(matches!(right.node, Expr::Ident(_)));
             }
             _ => panic!("Expected Diff"),
         },
@@ -367,7 +373,7 @@ fn parse_chained_intersection() {
             match &body.node {
                 Expr::Inter(left, right) => {
                     assert!(matches!(left.node, Expr::Inter(_, _)));
-                    assert!(matches!(right.node, Expr::Path(_)));
+                    assert!(matches!(right.node, Expr::Ident(_)));
                 }
                 _ => panic!("Expected Inter expr"),
             }
@@ -402,7 +408,7 @@ fn parse_in_operator() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::In { item, collection } => {
-                assert!(matches!(item.node, Expr::Path(_)));
+                assert!(matches!(item.node, Expr::Ident(_)));
                 assert!(matches!(collection.node, Expr::GlobalList(_)));
             }
             _ => panic!("Expected In"),

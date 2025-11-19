@@ -84,11 +84,10 @@ fn parse_simple_path() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Path(path) => {
-                assert_eq!(path.node.segments.len(), 1);
-                assert_eq!(path.node.segments[0].node, "x");
+            Expr::Ident(name) => {
+                assert_eq!(name.node, "x");
             }
-            _ => panic!("Expected Path"),
+            _ => panic!("Expected Ident"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -102,10 +101,15 @@ fn parse_path_with_field_access() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Path(path) => {
-                assert_eq!(path.node.segments.len(), 2);
-                assert_eq!(path.node.segments[0].node, "student");
-                assert_eq!(path.node.segments[1].node, "age");
+            Expr::Path { object, segments } => {
+                match &object.node {
+                    Expr::Ident(ident) => {
+                        assert_eq!(ident.node, "student");
+                    }
+                    _ => panic!("Expected Ident"),
+                }
+                assert_eq!(segments.len(), 1);
+                assert_eq!(segments[0].node, "age");
             }
             _ => panic!("Expected Path"),
         },
@@ -121,12 +125,17 @@ fn parse_deep_path() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Path(path) => {
-                assert_eq!(path.node.segments.len(), 4);
-                assert_eq!(path.node.segments[0].node, "a");
-                assert_eq!(path.node.segments[1].node, "b");
-                assert_eq!(path.node.segments[2].node, "c");
-                assert_eq!(path.node.segments[3].node, "d");
+            Expr::Path { object, segments } => {
+                match &object.node {
+                    Expr::Ident(ident) => {
+                        assert_eq!(ident.node, "a");
+                    }
+                    _ => panic!("Expected Ident"),
+                }
+                assert_eq!(segments.len(), 3);
+                assert_eq!(segments[0].node, "b");
+                assert_eq!(segments[1].node, "c");
+                assert_eq!(segments[2].node, "d");
             }
             _ => panic!("Expected Path"),
         },
@@ -205,7 +214,13 @@ fn parse_function_call_with_complex_args() {
             Expr::FnCall { name, args } => {
                 assert_eq!(name.node, "foo");
                 assert_eq!(args.len(), 3);
-                assert!(matches!(args[0].node, Expr::Path(_)));
+                assert!(matches!(
+                    args[0].node,
+                    Expr::Path {
+                        object: _,
+                        segments: _
+                    }
+                ));
                 assert!(matches!(args[1].node, Expr::FnCall { .. }));
                 assert!(matches!(args[2].node, Expr::Number(42)));
             }
@@ -390,7 +405,7 @@ fn parse_explicit_type_annotation() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ExplicitType { expr, typ } => {
-                assert!(matches!(expr.node, Expr::Path(_)));
+                assert!(matches!(expr.node, Expr::Ident(_)));
                 assert!(matches!(typ.node, TypeName::LinExpr));
             }
             _ => panic!("Expected ExplicitType"),

@@ -502,7 +502,7 @@ fn parse_or_has_higher_precedence_than_and() {
             match &body.node {
                 Expr::And(left, right) => {
                     assert!(matches!(left.node, Expr::Or(_, _)));
-                    assert!(matches!(right.node, Expr::Path(_)));
+                    assert!(matches!(right.node, Expr::Ident(_)));
                 }
                 _ => panic!("Expected Or with And on right"),
             }
