@@ -7,7 +7,7 @@ string_literal = @{
         "\\\\" | "\\\"" | ( !("\"" | "\\") ~ ANY )
     )*
 }
-statement = { let_statement | reify_statement }
+statement = { let_statement | reify_statement | type_statement }
 
 docstring = ${
     "##" ~ docstring_content ~ EOL
@@ -47,6 +47,10 @@ let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ "
 pub_modifier = { "pub" }
 params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ type_name }
+
+// ========== Type statements ==========
+type_statement = { docstring* ~ "type" ~ ident ~ "{" ~ type_prop ~ ("," ~ type_prop)* ~ "}" ~ ";" }
+type_prop = { ident ~ ":" ~ type_name }
 
 // ========== Type Names ==========
 primitive_type = { "Int" | "Bool" | "LinExpr" | "Constraint" | ident }
@@ -101,6 +105,7 @@ primary_expr = {
     fn_call |
     boolean |
     number |
+    struct |
     ident |
     "(" ~ expr ~ ")"
 }
@@ -116,6 +121,8 @@ var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }
 args = { arg ~ ("," ~ arg)* }
 arg = { expr }
+struct = { ident ~ "{" ~ struct_prop ~ ("," ~ struct_prop)* ~ "}" }
+struct_prop = { ident ~ ":" ~ expr }
 
 // Operators
 add_op = { "+" }
