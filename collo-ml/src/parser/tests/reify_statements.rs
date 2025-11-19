@@ -34,6 +34,21 @@ fn reify_statement_minimal_structure() {
 }
 
 #[test]
+fn reify_statement_minimal_structure_with_var_list() {
+    // Most basic valid reify statements
+    let cases = vec![
+        "reify x as $[X];",
+        "reify constraint as $[Var];",
+        "reify check as $[Check];",
+        "reify rule as $[Rule];",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::reify_statement, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
 fn reify_statement_with_descriptive_names() {
     let cases = vec![
         "reify my_constraint as $MyVar;",

@@ -226,6 +226,7 @@ pub struct GlobalEnv {
     defined_types: HashMap<String, ObjectFields>,
     functions: HashMap<String, (FunctionType, Span, bool)>,
     variables: HashMap<String, (ArgsType, Option<(Span, bool)>)>,
+    variable_lists: HashMap<String, (ArgsType, Span, bool)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -356,6 +357,35 @@ impl GlobalEnv {
             (
                 args_typ.clone(),
                 Some((span.clone(), should_be_used_by_default(name))),
+            ),
+        );
+
+        type_info.types.insert(span, args_typ.into());
+    }
+
+    fn lookup_var_list(&mut self, name: &str) -> Option<(ArgsType, Span)> {
+        let (args_typ, span, used) = self.variable_lists.get_mut(name)?;
+
+        *used = true;
+
+        Some((args_typ.clone(), span.clone()))
+    }
+
+    fn register_var_list(
+        &mut self,
+        name: &str,
+        args_typ: ArgsType,
+        span: Span,
+        type_info: &mut TypeInfo,
+    ) {
+        assert!(!self.variable_lists.contains_key(name));
+
+        self.variable_lists.insert(
+            name.to_string(),
+            (
+                args_typ.clone(),
+                span.clone(),
+                should_be_used_by_default(name),
             ),
         );
 
@@ -1364,6 +1394,56 @@ impl LocalEnv {
                 }
             }
 
+            Expr::VarListCall { name, args } => {
+                match global_env.lookup_var_list(&name.node) {
+                    None => {
+                        errors.push(SemError::UnknownVariable {
+                            var: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                        Some(ExprType::List(Box::new(ExprType::LinExpr)).into())
+                        // Syntax indicates [LinExpr] intent
+                    }
+                    Some((var_args, _)) => {
+                        if args.len() != var_args.len() {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: name.node.clone(),
+                                span: args
+                                    .last()
+                                    .map(|a| a.span.clone())
+                                    .unwrap_or_else(|| name.span.clone()),
+                                expected: var_args.len(),
+                                found: args.len(),
+                            });
+                        }
+
+                        for (i, (arg, expected_type)) in
+                            args.iter().zip(var_args.iter()).enumerate()
+                        {
+                            let arg_type =
+                                self.check_expr(global_env, &arg.node, type_info, errors, warnings);
+
+                            if let Some(found_type) = arg_type {
+                                if !found_type.can_coerce_to(expected_type) {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: arg.span.clone(),
+                                        expected: expected_type.clone(),
+                                        found: found_type.into_inner(),
+                                        context: format!(
+                                            "argument {} to variable ${}",
+                                            i + 1,
+                                            name.node
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+
+                        Some(ExprType::List(Box::new(ExprType::LinExpr)).into())
+                    }
+                }
+            }
+
             // ========== Function Calls ==========
             Expr::FnCall { name, args } => match global_env.lookup_fn(&name.node) {
                 None => {
@@ -1788,6 +1868,7 @@ impl GlobalEnv {
                 .into_iter()
                 .map(|(var_name, args_type)| (var_name, (args_type, None)))
                 .collect(),
+            variable_lists: HashMap::new(),
         };
 
         for (object_type, field_desc) in &temp_env.defined_types {
@@ -1886,10 +1967,12 @@ impl GlobalEnv {
             crate::ast::Statement::Reify {
                 docstring: _,
                 constraint_name,
-                var_name,
+                name,
+                var_list,
             } => self.expand_with_reify_statement(
                 constraint_name,
-                var_name,
+                name,
+                *var_list,
                 type_info,
                 errors,
                 warnings,
@@ -2019,7 +2102,8 @@ impl GlobalEnv {
     fn expand_with_reify_statement(
         &mut self,
         constraint_name: &Spanned<String>,
-        var_name: &Spanned<String>,
+        name: &Spanned<String>,
+        var_list: bool,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
@@ -2030,37 +2114,15 @@ impl GlobalEnv {
                 span: constraint_name.span.clone(),
             }),
             Some(fn_type) => {
-                if fn_type.0.output.can_coerce_to(&ExprType::Constraint) {
-                    match self.lookup_var(&var_name.node) {
-                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
-                            identifier: var_name.node.clone(),
-                            span: var_name.span.clone(),
-                            here: span_opt,
-                        }),
-                        None => {
-                            if let Some(suggestion) =
-                                string_case::generate_suggestion_for_naming_convention(
-                                    &var_name.node,
-                                    string_case::NamingConvention::PascalCase,
-                                )
-                            {
-                                warnings.push(SemWarning::VariableNamingConvention {
-                                    identifier: var_name.node.clone(),
-                                    span: var_name.span.clone(),
-                                    suggestion,
-                                });
-                            }
-                            self.register_var(
-                                &var_name.node,
-                                fn_type.0.args.clone(),
-                                var_name.span.clone(),
-                                type_info,
-                            );
-                        }
-                    }
+                let needed_output_type = if var_list {
+                    ExprType::List(Box::new(ExprType::Constraint))
                 } else {
+                    ExprType::Constraint
+                };
+                let correct_type = fn_type.0.output.can_coerce_to(&needed_output_type);
+                if !correct_type {
                     let expected_type = FunctionType {
-                        output: ExprType::Constraint,
+                        output: needed_output_type,
                         ..fn_type.0.clone()
                     };
                     errors.push(SemError::FunctionTypeMismatch {
@@ -2069,6 +2131,65 @@ impl GlobalEnv {
                         expected: expected_type,
                         found: fn_type.0,
                     });
+                    return;
+                }
+
+                if var_list {
+                    match self.lookup_var_list(&name.node) {
+                        Some((_args, span)) => errors.push(SemError::VariableAlreadyDefined {
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            here: Some(span),
+                        }),
+                        None => {
+                            if let Some(suggestion) =
+                                string_case::generate_suggestion_for_naming_convention(
+                                    &name.node,
+                                    string_case::NamingConvention::PascalCase,
+                                )
+                            {
+                                warnings.push(SemWarning::VariableNamingConvention {
+                                    identifier: name.node.clone(),
+                                    span: name.span.clone(),
+                                    suggestion,
+                                });
+                            }
+                            self.register_var_list(
+                                &name.node,
+                                fn_type.0.args.clone(),
+                                name.span.clone(),
+                                type_info,
+                            );
+                        }
+                    }
+                } else {
+                    match self.lookup_var(&name.node) {
+                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            here: span_opt,
+                        }),
+                        None => {
+                            if let Some(suggestion) =
+                                string_case::generate_suggestion_for_naming_convention(
+                                    &name.node,
+                                    string_case::NamingConvention::PascalCase,
+                                )
+                            {
+                                warnings.push(SemWarning::VariableNamingConvention {
+                                    identifier: name.node.clone(),
+                                    span: name.span.clone(),
+                                    suggestion,
+                                });
+                            }
+                            self.register_var(
+                                &name.node,
+                                fn_type.0.args.clone(),
+                                name.span.clone(),
+                                type_info,
+                            );
+                        }
+                    }
                 }
             }
         }

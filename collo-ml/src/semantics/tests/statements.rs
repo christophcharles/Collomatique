@@ -18,6 +18,21 @@ fn reify_constraint_function() {
 }
 
 #[test]
+fn reify_constraint_list() {
+    let input = r#"
+        pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
+        reify my_constraints as $[MyVars];
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Reify should work with constraint list function: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn reify_function_with_parameters() {
     let types = simple_object("Student");
     let input = r#"
@@ -29,6 +44,51 @@ fn reify_function_with_parameters() {
     assert!(
         errors.is_empty(),
         "Reify should work with parameterized constraint: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn reify_function_with_parameters_into_var_list() {
+    let input = r#"
+        pub let constraints(s: Int) -> [Constraint] = [0 === 1, 0 <== s];
+        reify constraints as $[MyVars];
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Reify should work with parameterized constraint lists: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn disallow_reify_constraint_list_into_simple_var() {
+    let input = r#"
+        pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
+        reify my_constraints as $MyVars;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Reify should not work with constraint list without a var_list: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn disallow_reify_constraint_into_var_list() {
+    let input = r#"
+        pub let my_constraint() -> Constraint = 0 === 1;
+        reify my_constraint as $[MyVars];
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Reify should not work with single constraint into a var_list: {:?}",
         errors
     );
 }

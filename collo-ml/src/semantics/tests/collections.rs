@@ -660,3 +660,21 @@ fn filtering_with_cardinality() {
         errors
     );
 }
+
+// ============= Var list =============
+
+#[test]
+fn var_list_can_be_used_as_source_collection() {
+    let input = r#"
+    let constraints(vals: [Int]) -> [Constraint] = [0 <== v for v in vals];
+    reify constraints as $[MyConstraints];
+    pub let f() -> LinExpr = sum x in $[MyConstraints]([0..42]) { x };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Var lists should work as source collections: {:?}",
+        errors
+    );
+}

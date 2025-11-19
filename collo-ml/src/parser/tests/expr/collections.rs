@@ -11,6 +11,19 @@ use super::*;
 // - Membership tests: x in collection
 
 // =============================================================================
+// VAR LIST
+// =============================================================================
+
+#[test]
+fn collection_accepts_var_list() {
+    let cases = vec!["$[V](x)", "$[A]()", "$[StudentInGroup](s,g)"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// =============================================================================
 // LIST LITERALS
 // =============================================================================
 

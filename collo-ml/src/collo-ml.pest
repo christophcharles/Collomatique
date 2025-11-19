@@ -39,8 +39,9 @@ reserved_keyword = {
 }
 
 // ========== Reify statements ==========
-reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ var_name ~ ";" }
+reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ (var_name | var_list_name) ~ ";" }
 var_name = ${ "$" ~ ident }
+var_list_name = ${ "$[" ~ ident ~ "]" }
 
 // ========== Let statements ==========
 let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
@@ -98,6 +99,7 @@ primary_expr = {
     list_literal |
     global_collection |
     var_call |
+    var_list_call |
     fn_call |
     boolean |
     number |
@@ -113,6 +115,7 @@ list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ iden
 list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
+var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }
 args = { arg ~ ("," ~ arg)* }
 arg = { expr }

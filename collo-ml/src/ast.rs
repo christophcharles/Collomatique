@@ -58,7 +58,8 @@ pub enum Statement {
     Reify {
         docstring: Vec<String>,
         constraint_name: Spanned<String>,
-        var_name: Spanned<String>,
+        var_list: bool,
+        name: Spanned<String>,
     },
 }
 
@@ -109,6 +110,10 @@ pub enum Expr {
         args: Vec<Spanned<Expr>>,
     },
     VarCall {
+        name: Spanned<String>,
+        args: Vec<Spanned<Expr>>,
+    },
+    VarListCall {
         name: Spanned<String>,
         args: Vec<Spanned<Expr>>,
     },
@@ -323,7 +328,8 @@ impl Statement {
         let span = Span::from_pest(&pair);
         let mut docstring = Vec::new();
         let mut constraint_name = None;
-        let mut var_name = None;
+        let mut name = None;
+        let mut var_list = false;
 
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
@@ -345,10 +351,22 @@ impl Statement {
                 }
                 Rule::var_name => {
                     // var_name is "$" ~ ident, so we need to strip the $
-                    var_name = Some(Spanned::new(
+                    name = Some(Spanned::new(
                         inner_pair.as_str().trim_start_matches('$').to_string(),
                         Span::from_pest(&inner_pair),
                     ));
+                }
+                Rule::var_list_name => {
+                    // var_name is "$[" ~ ident ~ "]", so we need to strip the $[...]
+                    name = Some(Spanned::new(
+                        inner_pair
+                            .as_str()
+                            .trim_start_matches("$[")
+                            .trim_end_matches("]")
+                            .to_string(),
+                        Span::from_pest(&inner_pair),
+                    ));
+                    var_list = true;
                 }
                 _ => {}
             }
@@ -357,7 +375,8 @@ impl Statement {
         Ok(Statement::Reify {
             docstring,
             constraint_name: constraint_name.ok_or(AstError::MissingName(span.clone()))?,
-            var_name: var_name.ok_or(AstError::MissingName(span))?,
+            name: name.ok_or(AstError::MissingName(span))?,
+            var_list,
         })
     }
 }
@@ -886,6 +905,7 @@ impl Expr {
             Rule::list_literal => Self::from_list_literal(inner),
             Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
+            Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::boolean => Self::from_boolean(inner),
             Rule::number => {
@@ -1114,6 +1134,30 @@ impl Expr {
         }
 
         Ok(Expr::VarCall {
+            name: name.ok_or(AstError::MissingName(span))?,
+            args,
+        })
+    }
+
+    fn from_var_list_call(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut name = None;
+        let mut args = Vec::new();
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let name_span = Span::from_pest(&inner);
+                    name = Some(Spanned::new(inner.as_str().to_string(), name_span));
+                }
+                Rule::args => {
+                    args = parse_args(inner)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Expr::VarListCall {
             name: name.ok_or(AstError::MissingName(span))?,
             args,
         })

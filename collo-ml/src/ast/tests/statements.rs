@@ -142,12 +142,37 @@ fn parse_reify_statement() {
     match &file.statements[0].node {
         Statement::Reify {
             constraint_name,
-            var_name,
+            name,
             docstring,
+            var_list,
         } => {
             assert_eq!(constraint_name.node, "my_constraint");
-            assert_eq!(var_name.node, "MyVar");
+            assert_eq!(name.node, "MyVar");
             assert!(docstring.is_empty());
+            assert!(!*var_list);
+        }
+        _ => panic!("Expected Reify statement"),
+    }
+}
+
+#[test]
+fn parse_reify_statement_with_var_list() {
+    let input = "reify my_constraint as $[MyVarList];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Reify {
+            constraint_name,
+            name,
+            docstring,
+            var_list,
+        } => {
+            assert_eq!(constraint_name.node, "my_constraint");
+            assert_eq!(name.node, "MyVarList");
+            assert!(docstring.is_empty());
+            assert!(*var_list);
         }
         _ => panic!("Expected Reify statement"),
     }
