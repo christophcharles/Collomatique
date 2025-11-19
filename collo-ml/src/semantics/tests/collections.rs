@@ -305,6 +305,22 @@ fn list_comprehension_where_can_reference_all_for_variables() {
     );
 }
 
+#[test]
+fn list_comprehension_rejects_non_iterable_in_second_for() {
+    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+
+    let input = "
+        let f(s: Student) -> [Int] = [x for y in s.age for x in @[Student]];
+    ";
+
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Second for loop over non-iterable (Int) should fail"
+    );
+}
+
 // ========== Global Collections ==========
 
 #[test]
