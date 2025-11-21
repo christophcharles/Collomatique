@@ -5,7 +5,7 @@ mod string_case;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExprType {
     Int,
     Bool,
@@ -275,9 +275,8 @@ impl From<ExprType> for AnnotatedType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionType {
-    public: bool,
-    args: ArgsType,
-    output: ExprType,
+    pub args: ArgsType,
+    pub output: ExprType,
 }
 
 impl std::fmt::Display for FunctionType {
@@ -292,11 +291,30 @@ pub type ArgsType = Vec<ExprType>;
 pub type ObjectFields = HashMap<String, ExprType>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionDesc {
+    pub typ: FunctionType,
+    pub public: bool,
+    pub span: Span,
+    pub used: bool,
+    pub arg_names: Vec<String>,
+    pub body: crate::ast::Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariableDesc {
+    pub args: ArgsType,
+    pub span: Span,
+    pub used: bool,
+    pub referenced_fn: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
     defined_types: HashMap<String, ObjectFields>,
-    functions: HashMap<String, (FunctionType, Span, bool)>,
-    variables: HashMap<String, (ArgsType, Option<(Span, bool)>)>,
-    variable_lists: HashMap<String, (ArgsType, Span, bool)>,
+    functions: HashMap<String, FunctionDesc>,
+    external_variables: HashMap<String, ArgsType>,
+    internal_variables: HashMap<String, VariableDesc>,
+    variable_lists: HashMap<String, VariableDesc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -344,7 +362,7 @@ impl std::fmt::Display for GenericType {
 
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum GlobalEnvError {
     #[error("Field {field} of object type {object_type} has unknown type {unknown_type}")]
     UnknownTypeInField {
@@ -361,7 +379,7 @@ pub enum GlobalEnvError {
 }
 
 impl GlobalEnv {
-    fn validate_type(&self, typ: &ExprType) -> bool {
+    pub fn validate_type(&self, typ: &ExprType) -> bool {
         match typ {
             ExprType::Bool => true,
             ExprType::Int => true,
@@ -372,44 +390,61 @@ impl GlobalEnv {
         }
     }
 
+    pub fn get_functions(&self) -> &HashMap<String, FunctionDesc> {
+        &self.functions
+    }
+
+    pub fn get_vars(&self) -> &HashMap<String, VariableDesc> {
+        &self.internal_variables
+    }
+
+    pub fn get_var_lists(&self) -> &HashMap<String, VariableDesc> {
+        &self.variable_lists
+    }
+
     fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
-        let (fn_typ, span, used) = self.functions.get_mut(name)?;
-        *used = true;
-        Some((fn_typ.clone(), span.clone()))
+        let fn_desc = self.functions.get_mut(name)?;
+        fn_desc.used = true;
+        Some((fn_desc.typ.clone(), fn_desc.span.clone()))
     }
 
     fn register_fn(
         &mut self,
         name: &str,
         fn_typ: FunctionType,
+        public: bool,
         span: Span,
+        arg_names: Vec<String>,
+        body: crate::ast::Expr,
         type_info: &mut TypeInfo,
     ) {
         assert!(!self.functions.contains_key(name));
 
         self.functions.insert(
             name.to_string(),
-            (
-                fn_typ.clone(),
-                span.clone(),
-                should_be_used_by_default(name),
-            ),
+            FunctionDesc {
+                typ: fn_typ.clone(),
+                public,
+                span: span.clone(),
+                used: should_be_used_by_default(name),
+                arg_names,
+                body,
+            },
         );
 
         type_info.types.insert(span, fn_typ.into());
     }
 
     fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
-        let (args_typ, span_and_used_opt) = self.variables.get_mut(name)?;
+        if let Some(ext_var) = self.external_variables.get(name) {
+            return Some((ext_var.clone(), None));
+        };
 
-        if let Some((_span, used)) = span_and_used_opt {
-            *used = true;
-        }
+        let var_desc = self.internal_variables.get_mut(name)?;
 
-        Some((
-            args_typ.clone(),
-            span_and_used_opt.as_ref().map(|x| x.0.clone()),
-        ))
+        var_desc.used = true;
+
+        Some((var_desc.args.clone(), Some(var_desc.span.clone())))
     }
 
     fn register_var(
@@ -417,27 +452,31 @@ impl GlobalEnv {
         name: &str,
         args_typ: ArgsType,
         span: Span,
+        referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
-        assert!(!self.variables.contains_key(name));
+        assert!(!self.external_variables.contains_key(name));
+        assert!(!self.internal_variables.contains_key(name));
 
-        self.variables.insert(
+        self.internal_variables.insert(
             name.to_string(),
-            (
-                args_typ.clone(),
-                Some((span.clone(), should_be_used_by_default(name))),
-            ),
+            VariableDesc {
+                args: args_typ.clone(),
+                span: span.clone(),
+                used: should_be_used_by_default(name),
+                referenced_fn,
+            },
         );
 
         type_info.types.insert(span, args_typ.into());
     }
 
     fn lookup_var_list(&mut self, name: &str) -> Option<(ArgsType, Span)> {
-        let (args_typ, span, used) = self.variable_lists.get_mut(name)?;
+        let var_desc = self.variable_lists.get_mut(name)?;
 
-        *used = true;
+        var_desc.used = true;
 
-        Some((args_typ.clone(), span.clone()))
+        Some((var_desc.args.clone(), var_desc.span.clone()))
     }
 
     fn register_var_list(
@@ -445,17 +484,19 @@ impl GlobalEnv {
         name: &str,
         args_typ: ArgsType,
         span: Span,
+        referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
         assert!(!self.variable_lists.contains_key(name));
 
         self.variable_lists.insert(
             name.to_string(),
-            (
-                args_typ.clone(),
-                span.clone(),
-                should_be_used_by_default(name),
-            ),
+            VariableDesc {
+                args: args_typ.clone(),
+                span: span.clone(),
+                used: should_be_used_by_default(name),
+                referenced_fn,
+            },
         );
 
         type_info.types.insert(span, args_typ.into());
@@ -466,7 +507,7 @@ impl GlobalEnv {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum SemError {
     #[error("Unknown identifier \"{identifier}\" at {span:?}")]
     UnknownIdentifer { identifier: String, span: Span },
@@ -538,7 +579,7 @@ pub enum SemError {
     },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum SemWarning {
     #[error("Identifier \"{identifier}\" at {span:?} shadows previous definition at {previous:?}")]
     IdentifierShadowed {
@@ -1993,10 +2034,11 @@ impl GlobalEnv {
         let mut temp_env = GlobalEnv {
             defined_types,
             functions: HashMap::new(),
-            variables: variables
+            external_variables: variables
                 .into_iter()
-                .map(|(var_name, args_type)| (var_name, (args_type, None)))
+                .map(|(var_name, args_type)| (var_name, args_type))
                 .collect(),
+            internal_variables: HashMap::new(),
             variable_lists: HashMap::new(),
         };
 
@@ -2012,8 +2054,8 @@ impl GlobalEnv {
             }
         }
 
-        for (var, args) in &temp_env.variables {
-            for (param, typ) in args.0.iter().enumerate() {
+        for (var, args) in &temp_env.external_variables {
+            for (param, typ) in args.iter().enumerate() {
                 if !temp_env.validate_type(typ) {
                     return Err(GlobalEnvError::UnknownTypeForVariableArg {
                         var: var.clone(),
@@ -2044,25 +2086,31 @@ impl GlobalEnv {
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
-        for (name, (fn_typ, span, used)) in &self.functions {
-            if !fn_typ.public && !used {
+        for (name, fn_desc) in &self.functions {
+            if !fn_desc.public && !fn_desc.used {
                 warnings.push(SemWarning::UnusedFunction {
                     identifier: name.clone(),
-                    span: span.clone(),
+                    span: fn_desc.span.clone(),
                 });
             }
         }
     }
 
     fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
-        for (name, (_args_typ, span_and_used_opt)) in &self.variables {
-            let Some(span_and_used) = span_and_used_opt else {
-                continue;
-            };
-            if !span_and_used.1 {
+        for (name, var_desc) in &self.internal_variables {
+            if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
                     identifier: name.clone(),
-                    span: span_and_used.0.clone(),
+                    span: var_desc.span.clone(),
+                });
+            }
+        }
+
+        for (name, var_desc) in &self.variable_lists {
+            if !var_desc.used {
+                warnings.push(SemWarning::UnusedVariable {
+                    identifier: name.clone(),
+                    span: var_desc.span.clone(),
                 });
             }
         }
@@ -2218,11 +2266,18 @@ impl GlobalEnv {
                         .map(|param| param.typ.node.clone().into())
                         .collect();
                     let fn_typ = FunctionType {
-                        public,
                         args,
                         output: output_type.node.clone().into(),
                     };
-                    self.register_fn(&name.node, fn_typ, name.span.clone(), type_info);
+                    self.register_fn(
+                        &name.node,
+                        fn_typ,
+                        public,
+                        name.span.clone(),
+                        params.iter().map(|x| x.name.node.clone()).collect(),
+                        body.node.clone(),
+                        type_info,
+                    );
                 }
             }
         }
@@ -2287,6 +2342,7 @@ impl GlobalEnv {
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
+                                constraint_name.node.clone(),
                                 type_info,
                             );
                         }
@@ -2315,6 +2371,7 @@ impl GlobalEnv {
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
+                                constraint_name.node.clone(),
                                 type_info,
                             );
                         }

@@ -3,7 +3,7 @@ use pest::iterators::Pair;
 
 // ============= Span and Spanned =============
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -26,7 +26,7 @@ impl Span {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Spanned<T> {
     pub node: T,
     pub span: Span,
@@ -43,6 +43,12 @@ impl<T> Spanned<T> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File {
     pub statements: Vec<Spanned<Statement>>,
+}
+
+impl File {
+    pub fn new() -> Self {
+        File { statements: vec![] }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,7 +199,7 @@ pub enum Boolean {
 // ============= Error Type =============
 
 use thiserror::Error;
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum AstError {
     #[error("Expected {expected}, found {found:?} at {span:?}")]
     UnexpectedRule {

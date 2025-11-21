@@ -352,6 +352,7 @@ dependencies = [
 name = "collo-ml"
 version = "0.1.0"
 dependencies = [
+ "collomatique-ilp",
  "pest",
  "pest_derive",
  "thiserror",

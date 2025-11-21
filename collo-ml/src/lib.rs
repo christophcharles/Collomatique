@@ -1,3 +1,4 @@
-pub mod ast;
-pub mod parser;
-pub mod semantics;
+mod ast;
+pub mod eval;
+mod parser;
+mod semantics;
