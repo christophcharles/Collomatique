@@ -294,10 +294,9 @@ pub type ObjectFields = HashMap<String, ExprType>;
 pub struct FunctionDesc {
     pub typ: FunctionType,
     pub public: bool,
-    pub span: Span,
     pub used: bool,
     pub arg_names: Vec<String>,
-    pub body: crate::ast::Expr,
+    pub body: Spanned<crate::ast::Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -405,7 +404,7 @@ impl GlobalEnv {
     fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
         let fn_desc = self.functions.get_mut(name)?;
         fn_desc.used = true;
-        Some((fn_desc.typ.clone(), fn_desc.span.clone()))
+        Some((fn_desc.typ.clone(), fn_desc.body.span.clone()))
     }
 
     fn register_fn(
@@ -413,9 +412,8 @@ impl GlobalEnv {
         name: &str,
         fn_typ: FunctionType,
         public: bool,
-        span: Span,
         arg_names: Vec<String>,
-        body: crate::ast::Expr,
+        body: Spanned<crate::ast::Expr>,
         type_info: &mut TypeInfo,
     ) {
         assert!(!self.functions.contains_key(name));
@@ -425,14 +423,13 @@ impl GlobalEnv {
             FunctionDesc {
                 typ: fn_typ.clone(),
                 public,
-                span: span.clone(),
                 used: should_be_used_by_default(name),
                 arg_names,
-                body,
+                body: body.clone(),
             },
         );
 
-        type_info.types.insert(span, fn_typ.into());
+        type_info.types.insert(body.span, fn_typ.into());
     }
 
     fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
@@ -2296,7 +2293,7 @@ impl GlobalEnv {
             if !fn_desc.public && !fn_desc.used {
                 warnings.push(SemWarning::UnusedFunction {
                     identifier: name.clone(),
-                    span: fn_desc.span.clone(),
+                    span: fn_desc.body.span.clone(),
                 });
             }
         }
@@ -2483,9 +2480,8 @@ impl GlobalEnv {
                         &name.node,
                         fn_typ,
                         public,
-                        name.span.clone(),
                         params.iter().map(|x| x.name.node.clone()).collect(),
-                        body.node.clone(),
+                        body.clone(),
                         type_info,
                     );
                 }

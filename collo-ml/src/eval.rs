@@ -572,11 +572,11 @@ impl CheckedAST {
         }
 
         local_env.push_scope();
-        let annotated_result = local_env.eval_node(self, env, &fn_desc.body);
+        let annotated_result = local_env.eval_expr(self, env, &fn_desc.body);
         local_env.pop_scope();
 
         let origin = Origin {
-            fn_name: Spanned::new(fn_name.to_string(), fn_desc.span.clone()),
+            fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
             args: coerced_args,
         };
 
@@ -637,14 +637,14 @@ impl<T: Object> LocalEnv<T> {
         self.pending_scope.insert(ident.to_string(), value);
     }
 
-    fn eval_node(
+    fn eval_expr(
         &mut self,
         ast: &CheckedAST,
         env: &EvalEnv<T>,
-        node: &crate::ast::Expr,
+        expr: &Spanned<crate::ast::Expr>,
     ) -> AnnotatedValue<T> {
         use crate::ast::Expr;
-        match node {
+        match &expr.node {
             Expr::Boolean(val) => ExprValue::Bool(*val).into(),
             Expr::Number(val) => ExprValue::Int(*val).into(),
             Expr::Ident(ident) => self
@@ -654,7 +654,7 @@ impl<T: Object> LocalEnv<T> {
             Expr::Path { object, segments } => {
                 assert!(!segments.is_empty());
 
-                let initial_object = self.eval_node(ast, env, &object.node);
+                let initial_object = self.eval_expr(ast, env, &object);
                 let mut current_value = initial_object.into_inner().expect("Object expected");
 
                 for field in segments {
@@ -668,7 +668,7 @@ impl<T: Object> LocalEnv<T> {
                 current_value.into()
             }
             Expr::Cardinality(list_expr) => {
-                let list_value = self.eval_node(ast, env, &list_expr.node);
+                let list_value = self.eval_expr(ast, env, &list_expr);
                 let count = match list_value {
                     AnnotatedValue::Forced(ExprValue::List(_typ, list))
                     | AnnotatedValue::Regular(ExprValue::List(_typ, list)) => list.len(),
@@ -681,7 +681,7 @@ impl<T: Object> LocalEnv<T> {
                 .into()
             }
             Expr::ExplicitType { expr, typ } => {
-                let value = self.eval_node(ast, env, &expr.node);
+                let value = self.eval_expr(ast, env, &expr);
                 let target_type = ExprType::from(typ.node.clone());
 
                 // A forced value can be cast anyway
@@ -700,7 +700,7 @@ impl<T: Object> LocalEnv<T> {
 
                 let element_values: Vec<_> = elements
                     .iter()
-                    .map(|x| self.eval_node(ast, env, &x.node))
+                    .map(|x| self.eval_expr(ast, env, &x))
                     .collect();
 
                 let mut unified_type = element_values[0].get_type();
@@ -724,8 +724,8 @@ impl<T: Object> LocalEnv<T> {
                 ExprValue::List(target_type, coerced_elements).into()
             }
             Expr::ListRange { start, end } => {
-                let start_value = self.eval_node(ast, env, &start.node);
-                let end_value = self.eval_node(ast, env, &end.node);
+                let start_value = self.eval_expr(ast, env, &start);
+                let end_value = self.eval_expr(ast, env, &end);
 
                 let coerced_start = start_value.coerce_to(&ExprType::Int).expect("Int expected");
                 let coerced_end = end_value.coerce_to(&ExprType::Int).expect("Int expected");
@@ -771,17 +771,14 @@ impl<T: Object> LocalEnv<T> {
                 .into()
             }
             Expr::FnCall { name, args } => {
-                let args = args
-                    .iter()
-                    .map(|x| self.eval_node(ast, env, &x.node))
-                    .collect();
+                let args = args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
                 let result = ast
                     .eval_fn_internal(env, &name.node, args, true)
                     .expect("Function call should evaluate");
 
                 result.into()
             }
-            _ => todo!("Node not implemented: {:?}", node),
+            _ => todo!("Node not implemented: {:?}", expr),
         }
     }
 }
