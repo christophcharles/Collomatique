@@ -628,6 +628,22 @@ impl<T: Object> LocalEnv<T> {
                 .lookup_ident(&ident.node)
                 .expect("Identifiers should be defined in a checked AST")
                 .into(),
+            Expr::Path { object, segments } => {
+                assert!(!segments.is_empty());
+
+                let initial_object = self.eval_node(ast, env, &object.node);
+                let mut current_value = initial_object.into_inner().expect("Object expected");
+
+                for field in segments {
+                    let obj = match current_value {
+                        ExprValue::Object(obj) => obj,
+                        _ => panic!("Object expected"),
+                    };
+                    current_value = obj.field_access(&field.node);
+                }
+
+                current_value.into()
+            }
             Expr::Cardinality(list_expr) => {
                 let list_value = self.eval_node(ast, env, &list_expr.node);
                 let count = match list_value {
