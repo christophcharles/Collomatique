@@ -1,4 +1,4 @@
-use crate::ast::Spanned;
+use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
 use collomatique_ilp::{Constraint, LinExpr, UsableData};
@@ -413,7 +413,8 @@ impl CheckedAST {
             None => crate::ast::File::new(),
         };
 
-        let (global_env, type_info, expr_types, errors, warnings) = GlobalEnv::new(types, vars, &file)?;
+        let (global_env, type_info, expr_types, errors, warnings) =
+            GlobalEnv::new(types, vars, &file)?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
@@ -739,6 +740,28 @@ impl<T: Object> LocalEnv<T> {
                     (start_num..end_num)
                         .into_iter()
                         .map(ExprValue::Int)
+                        .collect(),
+                )
+                .into()
+            }
+            Expr::GlobalList(typ_name) => {
+                let typ_as_str = match &typ_name.node {
+                    TypeName::Object(obj) => obj.clone(),
+                    _ => panic!("Object expected"),
+                };
+                let objects = match env.typ_map.get(&typ_as_str) {
+                    Some(list) => list,
+                    None => {
+                        return ExprValue::List(ExprType::from(typ_name.node.clone()), vec![])
+                            .into()
+                    }
+                };
+
+                ExprValue::List(
+                    ExprType::from(typ_name.node.clone()),
+                    objects
+                        .iter()
+                        .map(|x| ExprValue::Object(x.clone()))
                         .collect(),
                 )
                 .into()

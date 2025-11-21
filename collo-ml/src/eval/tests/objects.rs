@@ -135,3 +135,21 @@ fn nested_field_access2() {
 
     assert_eq!(result, ExprValue::Int(20));
 }
+
+#[test]
+fn global_list() {
+    let input = "pub let f() -> [Student] = @[Student];";
+
+    let result = eval_with_simple_objects(input, "f", vec![]);
+
+    assert_eq!(
+        result,
+        ExprValue::List(
+            ExprType::Object("Student".into()),
+            vec![
+                ExprValue::Object(SimpleObject::Student1),
+                ExprValue::Object(SimpleObject::Student2),
+            ]
+        )
+    );
+}
