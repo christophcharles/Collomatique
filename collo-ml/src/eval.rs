@@ -284,6 +284,7 @@ impl Object for NoObject {
 pub struct CheckedAST {
     global_env: GlobalEnv,
     type_info: TypeInfo,
+    expr_types: HashMap<crate::ast::Span, AnnotatedType>,
     warnings: Vec<SemWarning>,
 }
 
@@ -412,7 +413,7 @@ impl CheckedAST {
             None => crate::ast::File::new(),
         };
 
-        let (global_env, type_info, errors, warnings) = GlobalEnv::new(types, vars, &file)?;
+        let (global_env, type_info, expr_types, errors, warnings) = GlobalEnv::new(types, vars, &file)?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
@@ -421,6 +422,7 @@ impl CheckedAST {
         Ok(CheckedAST {
             global_env,
             type_info,
+            expr_types,
             warnings,
         })
     }

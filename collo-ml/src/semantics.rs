@@ -710,7 +710,25 @@ impl LocalEnv {
         &mut self,
         global_env: &mut GlobalEnv,
         expr: &crate::ast::Expr,
+        span: &Span,
         type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, AnnotatedType>,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) -> Option<AnnotatedType> {
+        let result = self.check_expr_internal(global_env, expr, type_info, expr_types, errors, warnings);
+        if let Some(typ) = &result {
+            expr_types.insert(span.clone(), typ.clone());
+        }
+        result
+    }
+
+    fn check_expr_internal(
+        &mut self,
+        global_env: &mut GlobalEnv,
+        expr: &crate::ast::Expr,
+        type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, AnnotatedType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<AnnotatedType> {
@@ -732,14 +750,14 @@ impl LocalEnv {
                 )
                 .map(|x| x.into()),
             Expr::Path { object, segments } => self
-                .check_path(global_env, &object, segments, type_info, errors, warnings)
+                .check_path(global_env, &object, segments, type_info, expr_types, errors, warnings)
                 .map(|x| x.into()),
 
             // ========== As construct ==========
             Expr::ExplicitType { expr, typ } => {
                 // Check the inner expression
                 let expr_type =
-                    self.check_expr(global_env, &expr.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings);
                 // 'as' is forcing explicitly a coercion. So we don't care if we are
                 // getting a forced type.
                 //
@@ -793,9 +811,9 @@ impl LocalEnv {
             // LinExpr + LinExpr -> LinExpr
             Expr::Add(left, right) | Expr::Sub(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type.clone(), right_type) {
                     (Some(l), Some(r)) => match AnnotatedType::unify(&l, &r) {
@@ -835,9 +853,9 @@ impl LocalEnv {
             // But NOT LinExpr * LinExpr (non-linear!)
             Expr::Mul(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type.clone(), right_type) {
                     (Some(l), Some(r)) => {
@@ -896,9 +914,9 @@ impl LocalEnv {
             // These are NOT allowed on LinExpr
             Expr::Div(left, right) | Expr::Mod(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -964,9 +982,9 @@ impl LocalEnv {
             | Expr::ConstraintLe(left, right)
             | Expr::ConstraintGe(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -1009,9 +1027,9 @@ impl LocalEnv {
             // LinExpr == Int -> Constraint (coerce Int to LinExpr)
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -1042,9 +1060,9 @@ impl LocalEnv {
             | Expr::Lt(left, right)
             | Expr::Gt(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -1081,9 +1099,9 @@ impl LocalEnv {
             // Bool and Bool -> Bool, Constraint and Constraint -> Constraint
             Expr::And(left, right) | Expr::Or(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &right.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -1143,7 +1161,7 @@ impl LocalEnv {
 
             Expr::Not(expr) => {
                 let expr_type =
-                    self.check_expr(global_env, &expr.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings);
 
                 match expr_type {
                     Some(typ) if typ.can_coerce_to(&ExprType::Bool) => Some(ExprType::Bool.into()),
@@ -1164,9 +1182,9 @@ impl LocalEnv {
             // x in collection -> Bool
             Expr::In { item, collection } => {
                 let item_type =
-                    self.check_expr(global_env, &item.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &item.node, &item.span, type_info, expr_types, errors, warnings);
                 let coll_type =
-                    self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &collection.node, &collection.span, type_info, expr_types, errors, warnings);
 
                 match coll_type {
                     Some(AnnotatedType::Forced(ExprType::List(elem_t)))
@@ -1218,7 +1236,7 @@ impl LocalEnv {
                 body,
             } => {
                 let coll_type =
-                    self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &collection.node, &collection.span, type_info, expr_types, errors, warnings);
 
                 // Check naming convention
                 if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1274,7 +1292,7 @@ impl LocalEnv {
                 // Check filter (must be Bool)
                 if let Some(filter_expr) = filter {
                     let filter_type =
-                        self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
+                        self.check_expr(global_env, &filter_expr.node, &filter_expr.span, type_info, expr_types, errors, warnings);
 
                     if let Some(typ) = filter_type {
                         if !typ.can_coerce_to(&ExprType::Bool) {
@@ -1290,7 +1308,7 @@ impl LocalEnv {
 
                 // Check body (must be Constraint or Bool)
                 let body_type =
-                    self.check_expr(global_env, &body.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &body.node, &body.span, type_info, expr_types, errors, warnings);
 
                 self.pop_scope(warnings);
 
@@ -1319,7 +1337,7 @@ impl LocalEnv {
                 body,
             } => {
                 let coll_type =
-                    self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &collection.node, &collection.span, type_info, expr_types, errors, warnings);
 
                 // Check naming convention
                 if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1377,7 +1395,7 @@ impl LocalEnv {
                 // Check filter (must be Bool)
                 if let Some(filter_expr) = filter {
                     let filter_type =
-                        self.check_expr(global_env, &filter_expr.node, type_info, errors, warnings);
+                        self.check_expr(global_env, &filter_expr.node, &filter_expr.span, type_info, expr_types, errors, warnings);
 
                     if let Some(typ) = filter_type {
                         if !typ.can_coerce_to(&ExprType::Bool) {
@@ -1393,7 +1411,7 @@ impl LocalEnv {
 
                 // Check body (must be arithmetic: Int or LinExpr)
                 let body_type =
-                    self.check_expr(global_env, &body.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &body.node, &body.span, type_info, expr_types, errors, warnings);
 
                 self.pop_scope(warnings);
 
@@ -1419,7 +1437,7 @@ impl LocalEnv {
                 else_expr,
             } => {
                 let cond_type =
-                    self.check_expr(global_env, &condition.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &condition.node, &condition.span, type_info, expr_types, errors, warnings);
 
                 if let Some(typ) = cond_type {
                     if !typ.can_coerce_to(&ExprType::Bool) {
@@ -1433,9 +1451,9 @@ impl LocalEnv {
                 }
 
                 let then_type =
-                    self.check_expr(global_env, &then_expr.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &then_expr.node, &then_expr.span, type_info, expr_types, errors, warnings);
                 let else_type =
-                    self.check_expr(global_env, &else_expr.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &else_expr.node, &else_expr.span, type_info, expr_types, errors, warnings);
 
                 match (then_type, else_type) {
                     (Some(t), Some(e)) => {
@@ -1484,7 +1502,7 @@ impl LocalEnv {
                             args.iter().zip(var_args.iter()).enumerate()
                         {
                             let arg_type =
-                                self.check_expr(global_env, &arg.node, type_info, errors, warnings);
+                                self.check_expr(global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings);
 
                             if let Some(found_type) = arg_type {
                                 if !found_type.can_coerce_to(expected_type) {
@@ -1534,7 +1552,7 @@ impl LocalEnv {
                             args.iter().zip(var_args.iter()).enumerate()
                         {
                             let arg_type =
-                                self.check_expr(global_env, &arg.node, type_info, errors, warnings);
+                                self.check_expr(global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings);
 
                             if let Some(found_type) = arg_type {
                                 if !found_type.can_coerce_to(expected_type) {
@@ -1583,7 +1601,7 @@ impl LocalEnv {
                         args.iter().zip(fn_type.args.iter()).enumerate()
                     {
                         let arg_type =
-                            self.check_expr(global_env, &arg.node, type_info, errors, warnings);
+                            self.check_expr(global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings);
 
                         if let Some(found_type) = arg_type {
                             if !found_type.can_coerce_to(expected_type) {
@@ -1633,9 +1651,9 @@ impl LocalEnv {
 
             Expr::Union(left, right) | Expr::Inter(left, right) | Expr::Diff(left, right) => {
                 let left_type =
-                    self.check_expr(global_env, &left.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &left.node, &left.span, type_info, expr_types, errors, warnings);
                 let right_type =
-                    self.check_expr(global_env, &right.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &right.node, &left.span, type_info, expr_types, errors, warnings);
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
@@ -1700,11 +1718,11 @@ impl LocalEnv {
 
                 // Check all elements and unify their types
                 let mut unified_type =
-                    self.check_expr(global_env, &elements[0].node, type_info, errors, warnings);
+                    self.check_expr(global_env, &elements[0].node, &elements[0].span, type_info, expr_types, errors, warnings);
 
                 for item in &elements[1..] {
                     let item_type =
-                        self.check_expr(global_env, &item.node, type_info, errors, warnings);
+                        self.check_expr(global_env, &item.node, &item.span, type_info, expr_types, errors, warnings);
 
                     match (unified_type.clone(), item_type) {
                         (Some(u), Some(i)) => {
@@ -1758,8 +1776,8 @@ impl LocalEnv {
 
             Expr::ListRange { start, end } => {
                 let start_type =
-                    self.check_expr(global_env, &start.node, type_info, errors, warnings);
-                let end_type = self.check_expr(global_env, &end.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &start.node, &start.span, type_info, expr_types, errors, warnings);
+                let end_type = self.check_expr(global_env, &end.node, &end.span, type_info, expr_types, errors, warnings);
 
                 match (start_type, end_type) {
                     (Some(s), Some(e)) => {
@@ -1803,7 +1821,7 @@ impl LocalEnv {
                 let mut typ_error = false;
                 for (var, collection) in vars_and_collections {
                     let coll_type =
-                        self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                        self.check_expr(global_env, &collection.node, &collection.span, type_info, expr_types, errors, warnings);
 
                     // Check naming convention
                     if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
@@ -1863,7 +1881,9 @@ impl LocalEnv {
                         let filter_type = self.check_expr(
                             global_env,
                             &filter_expr.node,
+                            &filter_expr.span,
                             type_info,
+                            expr_types,
                             errors,
                             warnings,
                         );
@@ -1881,7 +1901,7 @@ impl LocalEnv {
                     }
 
                     // Check the output expression - this determines the result element type
-                    self.check_expr(global_env, &expr.node, type_info, errors, warnings)
+                    self.check_expr(global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings)
                 } else {
                     None
                 };
@@ -1912,7 +1932,7 @@ impl LocalEnv {
             // ========== Cardinality ==========
             Expr::Cardinality(collection) => {
                 let elem_t =
-                    self.check_expr(global_env, &collection.node, type_info, errors, warnings);
+                    self.check_expr(global_env, &collection.node, &collection.span, type_info, expr_types, errors, warnings);
                 match elem_t {
                     Some(t) if t.is_list() => (),
                     None => (),
@@ -1962,6 +1982,7 @@ impl LocalEnv {
         object: &Spanned<Expr>,
         segments: &Vec<Spanned<String>>,
         type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, AnnotatedType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
@@ -1969,7 +1990,7 @@ impl LocalEnv {
 
         // First segment can be an expression
         let initial_expr_type =
-            self.check_expr(global_env, &object.node, type_info, errors, warnings)?;
+            self.check_expr(global_env, &object.node, &object.span, type_info, expr_types, errors, warnings)?;
 
         let mut current_type = match initial_expr_type {
             AnnotatedType::Forced(t) | AnnotatedType::Regular(t) => t,
@@ -2030,7 +2051,7 @@ impl GlobalEnv {
         defined_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
         file: &crate::ast::File,
-    ) -> Result<(Self, TypeInfo, Vec<SemError>, Vec<SemWarning>), GlobalEnvError> {
+    ) -> Result<(Self, TypeInfo, HashMap<Span, AnnotatedType>, Vec<SemError>, Vec<SemWarning>), GlobalEnvError> {
         let mut temp_env = GlobalEnv {
             defined_types,
             functions: HashMap::new(),
@@ -2067,6 +2088,7 @@ impl GlobalEnv {
         }
 
         let mut type_info = TypeInfo::new();
+        let mut expr_types = HashMap::new();
         let mut errors = vec![];
         let mut warnings = vec![];
 
@@ -2074,6 +2096,7 @@ impl GlobalEnv {
             temp_env.expand_with_statement(
                 &statement.node,
                 &mut type_info,
+                &mut expr_types,
                 &mut errors,
                 &mut warnings,
             );
@@ -2082,7 +2105,7 @@ impl GlobalEnv {
         temp_env.check_unused_fn(&mut warnings);
         temp_env.check_unused_var(&mut warnings);
 
-        Ok((temp_env, type_info, errors, warnings))
+        Ok((temp_env, type_info, expr_types, errors, warnings))
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
@@ -2120,6 +2143,7 @@ impl GlobalEnv {
         &mut self,
         statement: &crate::ast::Statement,
         type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, AnnotatedType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -2138,6 +2162,7 @@ impl GlobalEnv {
                 output_type,
                 body,
                 type_info,
+                expr_types,
                 errors,
                 warnings,
             ),
@@ -2165,6 +2190,7 @@ impl GlobalEnv {
         output_type: &Spanned<crate::ast::TypeName>,
         body: &Spanned<Expr>,
         type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, AnnotatedType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -2231,7 +2257,7 @@ impl GlobalEnv {
 
                 local_env.push_scope();
                 let body_type_opt =
-                    local_env.check_expr(self, &body.node, type_info, errors, warnings);
+                    local_env.check_expr(self, &body.node, &body.span, type_info, expr_types, errors, warnings);
                 local_env.pop_scope(warnings);
 
                 if let Some(body_type) = body_type_opt {
