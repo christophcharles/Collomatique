@@ -94,7 +94,7 @@ fn eval_with_simple_objects(
 
 #[test]
 fn simple_object() {
-    let input = "let f(s: Student) -> Student = s;";
+    let input = "pub let f(s: Student) -> Student = s;";
 
     let args = vec![ExprValue::Object(SimpleObject::Student1)];
 
@@ -105,7 +105,7 @@ fn simple_object() {
 
 #[test]
 fn simple_field_access() {
-    let input = "let f(s: Student) -> Int = s.age;";
+    let input = "pub let f(s: Student) -> Int = s.age;";
 
     let args = vec![ExprValue::Object(SimpleObject::Student1)];
 
@@ -116,7 +116,7 @@ fn simple_field_access() {
 
 #[test]
 fn nested_field_access() {
-    let input = "let f(r: Room) -> Bool = r.first_student.enrolled;";
+    let input = "pub let f(r: Room) -> Bool = r.first_student.enrolled;";
 
     let args = vec![ExprValue::Object(SimpleObject::Room1)];
 
@@ -127,7 +127,7 @@ fn nested_field_access() {
 
 #[test]
 fn nested_field_access2() {
-    let input = "let f(r: Room) -> Int = r.first_student.age;";
+    let input = "pub let f(r: Room) -> Int = r.first_student.age;";
 
     let args = vec![ExprValue::Object(SimpleObject::Room2)];
 

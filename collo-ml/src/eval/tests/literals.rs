@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn simple_number() {
-    let input = "let f() -> Int = 42;";
+    let input = "pub let f() -> Int = 42;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -16,7 +16,7 @@ fn simple_number() {
 
 #[test]
 fn negative_number() {
-    let input = "let f() -> Int = -5;";
+    let input = "pub let f() -> Int = -5;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -30,7 +30,7 @@ fn negative_number() {
 
 #[test]
 fn boolean_true() {
-    let input = "let f() -> Bool = true;";
+    let input = "pub let f() -> Bool = true;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -44,7 +44,7 @@ fn boolean_true() {
 
 #[test]
 fn boolean_false() {
-    let input = "let f() -> Bool = false;";
+    let input = "pub let f() -> Bool = false;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -58,7 +58,7 @@ fn boolean_false() {
 
 #[test]
 fn boolean_list() {
-    let input = "let f() -> [Bool] = [true, false, true];";
+    let input = "pub let f() -> [Bool] = [true, false, true];";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -82,7 +82,7 @@ fn boolean_list() {
 
 #[test]
 fn number_list() {
-    let input = "let f() -> [Int] = [0, 42, -1];";
+    let input = "pub let f() -> [Int] = [0, 42, -1];";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -102,7 +102,7 @@ fn number_list() {
 
 #[test]
 fn cardinality_of_fixed_list() {
-    let input = "let f() -> Int = |[0, 42, -1]|;";
+    let input = "pub let f() -> Int = |[0, 42, -1]|;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -116,7 +116,7 @@ fn cardinality_of_fixed_list() {
 
 #[test]
 fn cardinality_of_list_in_param() {
-    let input = "let f(list: [Int]) -> Int = |list|;";
+    let input = "pub let f(list: [Int]) -> Int = |list|;";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -136,7 +136,7 @@ fn cardinality_of_list_in_param() {
 
 #[test]
 fn range() {
-    let input = "let f() -> [Int] = [-3..2];";
+    let input = "pub let f() -> [Int] = [-3..2];";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -162,7 +162,7 @@ fn range() {
 
 #[test]
 fn empty_range() {
-    let input = "let f() -> [Int] = [0..0];";
+    let input = "pub let f() -> [Int] = [0..0];";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -176,7 +176,7 @@ fn empty_range() {
 
 #[test]
 fn empty_range_with_end_below_start() {
-    let input = "let f() -> [Int] = [3..-2];";
+    let input = "pub let f() -> [Int] = [3..-2];";
     let types = HashMap::new();
     let vars = HashMap::new();
 
@@ -190,7 +190,7 @@ fn empty_range_with_end_below_start() {
 
 #[test]
 fn range_with_one_element() {
-    let input = "let f() -> [Int] = [4..5];";
+    let input = "pub let f() -> [Int] = [4..5];";
     let types = HashMap::new();
     let vars = HashMap::new();
 

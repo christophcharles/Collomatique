@@ -514,11 +514,27 @@ impl CheckedAST {
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<ExprValue<T>, EvalError> {
+        self.eval_fn_internal(env, fn_name, args, false)
+    }
+
+    fn eval_fn_internal<T: Object>(
+        &self,
+        env: &EvalEnv<T>,
+        fn_name: &str,
+        args: Vec<ExprValue<T>>,
+        allow_private: bool,
+    ) -> Result<ExprValue<T>, EvalError> {
         let fn_desc = self
             .global_env
             .get_functions()
             .get(fn_name)
             .ok_or(EvalError::UnknownFunction(fn_name.to_string()))?;
+
+        if !allow_private {
+            if !fn_desc.public {
+                return Err(EvalError::UnknownFunction(fn_name.to_string()));
+            }
+        }
 
         if fn_desc.typ.args.len() != args.len() {
             return Err(EvalError::ArgumentCountMismatch {
