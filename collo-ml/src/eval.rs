@@ -778,6 +778,35 @@ impl<T: Object> LocalEnv<T> {
 
                 result.into()
             }
+            Expr::VarCall { name, args } => {
+                let args: Vec<_> = args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
+                if let Some(args_typ) = ast.global_env.get_predefined_vars().get(&name.node) {
+                    let params = args
+                        .into_iter()
+                        .zip(args_typ.iter())
+                        .map(|(arg, arg_typ)| arg.coerce_to(arg_typ).expect("Coercion should work"))
+                        .collect();
+                    ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
+                        name: name.node.clone(),
+                        params,
+                    })))
+                    .into()
+                } else if let Some(var_desc) = ast.global_env.get_vars().get(&name.node) {
+                    let params = args
+                        .into_iter()
+                        .zip(var_desc.args.iter())
+                        .map(|(arg, arg_typ)| arg.coerce_to(arg_typ).expect("Coercion should work"))
+                        .collect();
+                    ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
+                        name: name.node.clone(),
+                        from_list: None,
+                        params,
+                    })))
+                    .into()
+                } else {
+                    panic!("Valid var expected")
+                }
+            }
             _ => todo!("Node not implemented: {:?}", expr),
         }
     }

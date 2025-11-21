@@ -393,6 +393,10 @@ impl GlobalEnv {
         &self.functions
     }
 
+    pub fn get_predefined_vars(&self) -> &HashMap<String, ArgsType> {
+        &self.external_variables
+    }
+
     pub fn get_vars(&self) -> &HashMap<String, VariableDesc> {
         &self.internal_variables
     }
