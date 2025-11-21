@@ -517,14 +517,21 @@ impl CheckedAST {
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<ExprValue<T>, EvalError> {
-        self.eval_fn_internal(env, fn_name, args, false)
+        let mut checked_args = vec![];
+        for (param, arg) in args.into_iter().enumerate() {
+            if !self.validate_value(&arg) {
+                return Err(EvalError::InvalidExprValue { param });
+            }
+            checked_args.push(arg.into());
+        }
+        self.eval_fn_internal(env, fn_name, checked_args, false)
     }
 
     fn eval_fn_internal<T: Object>(
         &self,
         env: &EvalEnv<T>,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
+        args: Vec<AnnotatedValue<T>>,
         allow_private: bool,
     ) -> Result<ExprValue<T>, EvalError> {
         let fn_desc = self
@@ -555,9 +562,6 @@ impl CheckedAST {
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
-            if !self.validate_value(&arg) {
-                return Err(EvalError::InvalidExprValue { param });
-            }
             let coerced_arg = arg.coerce_to(arg_typ).ok_or(EvalError::TypeMismatch {
                 param: param,
                 expected: arg_typ.clone(),
@@ -765,6 +769,17 @@ impl<T: Object> LocalEnv<T> {
                         .collect(),
                 )
                 .into()
+            }
+            Expr::FnCall { name, args } => {
+                let args = args
+                    .iter()
+                    .map(|x| self.eval_node(ast, env, &x.node))
+                    .collect();
+                let result = ast
+                    .eval_fn_internal(env, &name.node, args, true)
+                    .expect("Function call should evaluate");
+
+                result.into()
             }
             _ => todo!("Node not implemented: {:?}", node),
         }
