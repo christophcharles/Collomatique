@@ -54,7 +54,7 @@ fn parse_boolean_true() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            assert!(matches!(body.node, Expr::Boolean(Boolean::True)));
+            assert!(matches!(body.node, Expr::Boolean(true)));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -68,7 +68,7 @@ fn parse_boolean_false() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            assert!(matches!(body.node, Expr::Boolean(Boolean::False)));
+            assert!(matches!(body.node, Expr::Boolean(false)));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -342,7 +342,7 @@ fn parse_if_with_boolean_condition() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::If { condition, .. } => {
-                assert!(matches!(condition.node, Expr::Boolean(Boolean::True)));
+                assert!(matches!(condition.node, Expr::Boolean(true)));
             }
             _ => panic!("Expected If expression"),
         },

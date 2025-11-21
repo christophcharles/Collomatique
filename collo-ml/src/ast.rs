@@ -126,7 +126,7 @@ pub enum Expr {
 
     // Elements
     Number(i32),
-    Boolean(Boolean),
+    Boolean(bool),
     Ident(Spanned<String>),
     Path {
         object: Box<Spanned<Expr>>, // first segment might be an expression - for "get_group().student.age" this is "get_group()"
@@ -188,12 +188,6 @@ pub enum Expr {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Boolean {
-    True,
-    False,
 }
 
 // ============= Error Type =============
@@ -1196,8 +1190,8 @@ impl Expr {
     fn from_boolean(pair: Pair<Rule>) -> Result<Self, AstError> {
         // boolean = { "true" | "false" }
         match pair.as_str() {
-            "true" => Ok(Expr::Boolean(Boolean::True)),
-            "false" => Ok(Expr::Boolean(Boolean::False)),
+            "true" => Ok(Expr::Boolean(true)),
+            "false" => Ok(Expr::Boolean(false)),
             _ => Err(AstError::UnexpectedRule {
                 expected: "true or false",
                 found: pair.as_rule(),

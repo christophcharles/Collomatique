@@ -4,6 +4,9 @@ use crate::semantics::*;
 use collomatique_ilp::{Constraint, LinExpr, UsableData};
 use std::collections::HashMap;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct ScriptVar<T: Object> {
     pub name: String,
@@ -90,7 +93,7 @@ impl<T: Object> ExprValue<T> {
             ExprValue::LinExpr(_) => ExprType::LinExpr,
             ExprValue::Constraint(_) => ExprType::Constraint,
             ExprValue::Object(obj) => ExprType::Object(obj.typ_name()),
-            ExprValue::List(typ, _list) => typ.clone(),
+            ExprValue::List(typ, _list) => ExprType::List(Box::new(typ.clone())),
         }
     }
 
@@ -264,6 +267,19 @@ pub trait Object: UsableData {
     fn field_access(&self, field: &str) -> ExprValue<Self>;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NoObject {}
+
+impl Object for NoObject {
+    fn typ_name(&self) -> String {
+        panic!("No object has no type defined")
+    }
+
+    fn field_access(&self, _field: &str) -> ExprValue<Self> {
+        panic!("No object has no fields")
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CheckedAST {
     global_env: GlobalEnv,
@@ -298,6 +314,14 @@ pub struct EvalEnv<T: Object> {
     typ_map: HashMap<String, Vec<T>>,
 }
 
+impl<T: Object> Default for EvalEnv<T> {
+    fn default() -> Self {
+        EvalEnv {
+            typ_map: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Error)]
 pub enum EvalError {
     #[error("Unknown function \"{0}\"")]
@@ -314,10 +338,16 @@ pub enum EvalError {
         expected: usize,
         found: usize,
     },
+    #[error("Param {param} is an inconsistent ExprValue")]
+    InvalidExprValue { param: usize },
 }
 
 impl<T: Object> EvalEnv<T> {
-    pub fn new<I: IntoIterator<Item = T>>(objects: I) -> Result<Self, EnvError<T>> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_objects<I: IntoIterator<Item = T>>(objects: I) -> Result<Self, EnvError<T>> {
         let mut typ_map = HashMap::new();
         for obj in objects {
             let typ_name = obj.typ_name();
@@ -447,6 +477,37 @@ impl CheckedAST {
             .collect()
     }
 
+    pub fn validate_value<T: Object>(&self, val: &ExprValue<T>) -> bool {
+        match val {
+            ExprValue::Int(_) => true,
+            ExprValue::Bool(_) => true,
+            ExprValue::LinExpr(_) => true,
+            ExprValue::Constraint(_) => true,
+            ExprValue::Object(_) => self.global_env.validate_type(&val.get_type()),
+            ExprValue::List(typ, list) => {
+                for elem in list {
+                    let elem_t = elem.get_type();
+                    if elem_t != *typ {
+                        return false;
+                    }
+                    if !self.validate_value(elem) {
+                        return false;
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    pub fn quick_eval_fn(
+        &self,
+        fn_name: &str,
+        args: Vec<ExprValue<NoObject>>,
+    ) -> Result<ExprValue<NoObject>, EvalError> {
+        let env = EvalEnv::<NoObject>::new();
+        self.eval_fn(&env, fn_name, args)
+    }
+
     pub fn eval_fn<T: Object>(
         &self,
         env: &EvalEnv<T>,
@@ -475,6 +536,9 @@ impl CheckedAST {
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
+            if !self.validate_value(&arg) {
+                return Err(EvalError::InvalidExprValue { param });
+            }
             let coerced_arg = arg.coerce_to(arg_typ).ok_or(EvalError::TypeMismatch {
                 param: param,
                 expected: arg_typ.clone(),
@@ -520,7 +584,7 @@ impl<T: Object> LocalEnv<T> {
         LocalEnv::default()
     }
 
-    fn _lookup_ident(&self, ident: &str) -> Option<ExprValue<T>> {
+    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T>> {
         // We don't look in pending scope as these variables are not yet accessible
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(ident) {
@@ -552,10 +616,100 @@ impl<T: Object> LocalEnv<T> {
 
     fn eval_node(
         &mut self,
-        _ast: &CheckedAST,
-        _env: &EvalEnv<T>,
-        _node: &crate::ast::Expr,
+        ast: &CheckedAST,
+        env: &EvalEnv<T>,
+        node: &crate::ast::Expr,
     ) -> AnnotatedValue<T> {
-        todo!()
+        use crate::ast::Expr;
+        match node {
+            Expr::Boolean(val) => ExprValue::Bool(*val).into(),
+            Expr::Number(val) => ExprValue::Int(*val).into(),
+            Expr::Ident(ident) => self
+                .lookup_ident(&ident.node)
+                .expect("Identifiers should be defined in a checked AST")
+                .into(),
+            Expr::Cardinality(list_expr) => {
+                let list_value = self.eval_node(ast, env, &list_expr.node);
+                let count = match list_value {
+                    AnnotatedValue::Forced(ExprValue::List(_typ, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_typ, list)) => list.len(),
+                    AnnotatedValue::UntypedList => 0usize,
+                    _ => panic!("Unexpected type for list expression"),
+                };
+                ExprValue::Int(
+                    i32::try_from(count).expect("List length should not exceed i32 capacity"),
+                )
+                .into()
+            }
+            Expr::ExplicitType { expr, typ } => {
+                let value = self.eval_node(ast, env, &expr.node);
+                let target_type = ExprType::from(typ.node.clone());
+
+                // A forced value can be cast anyway
+                let loose_value = value.loosen();
+
+                let coerced_value = loose_value
+                    .coerce_to(&target_type)
+                    .expect("Resulting expression should be coercible to target type");
+
+                coerced_value.into()
+            }
+            Expr::ListLiteral { elements } => {
+                if elements.is_empty() {
+                    return AnnotatedValue::UntypedList;
+                }
+
+                let element_values: Vec<_> = elements
+                    .iter()
+                    .map(|x| self.eval_node(ast, env, &x.node))
+                    .collect();
+
+                let mut unified_type = element_values[0].get_type();
+                for item in &element_values[1..] {
+                    let item_type = item.get_type();
+                    unified_type = AnnotatedType::unify(&unified_type, &item_type)
+                        .expect("Types should be unifiable");
+                }
+                let target_type = unified_type
+                    .into_inner()
+                    .expect("Type should be determined");
+
+                let coerced_elements: Vec<_> = element_values
+                    .iter()
+                    .map(|x| {
+                        x.coerce_to(&target_type)
+                            .expect("Coercion to unified type should be possible")
+                    })
+                    .collect();
+
+                ExprValue::List(target_type, coerced_elements).into()
+            }
+            Expr::ListRange { start, end } => {
+                let start_value = self.eval_node(ast, env, &start.node);
+                let end_value = self.eval_node(ast, env, &end.node);
+
+                let coerced_start = start_value.coerce_to(&ExprType::Int).expect("Int expected");
+                let coerced_end = end_value.coerce_to(&ExprType::Int).expect("Int expected");
+
+                let start_num = match coerced_start {
+                    ExprValue::Int(v) => v,
+                    _ => panic!("Int expected"),
+                };
+                let end_num = match coerced_end {
+                    ExprValue::Int(v) => v,
+                    _ => panic!("Int expected"),
+                };
+
+                ExprValue::List(
+                    ExprType::Int,
+                    (start_num..end_num)
+                        .into_iter()
+                        .map(ExprValue::Int)
+                        .collect(),
+                )
+                .into()
+            }
+            _ => todo!("Node not implemented: {:?}", node),
+        }
     }
 }
