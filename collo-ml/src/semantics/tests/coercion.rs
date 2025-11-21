@@ -362,13 +362,25 @@ fn nested_list_int_coerces_to_nested_list_linexpr() {
 }
 
 #[test]
-fn nested_emptylist_coercion() {
+fn nested_emptylist_coercion_should_fail_without_annotation() {
     let input = "pub let f() -> [[Int]] = [[], [], []];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
+        !errors.is_empty(),
+        "Nested empty lists should not coerce without type annotation: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn nested_emptylist_coercion_should_succeed_with_annotation() {
+    let input = "pub let f() -> [[Int]] = [[], [], [] as [Int]];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
         errors.is_empty(),
-        "Nested empty lists should coerce: {:?}",
+        "Nested empty lists should coerce with type annotation: {:?}",
         errors
     );
 }
