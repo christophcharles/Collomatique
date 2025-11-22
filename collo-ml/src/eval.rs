@@ -1135,6 +1135,144 @@ impl<T: Object> LocalEnv<T> {
 
                 ExprValue::Constraint(vec![lin_expr1.geq(&lin_expr2).into()]).into()
             }
+            Expr::Eq(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let typ1 = value1.get_type();
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let typ2 = value2.get_type();
+
+                let target =
+                    AnnotatedType::unify(&typ1, &typ2).expect("It should be possible to unify");
+                let target_typ = match target {
+                    AnnotatedType::Forced(typ) | AnnotatedType::Regular(typ) => typ,
+                    AnnotatedType::UntypedList => {
+                        // We have two empty lists, they are equal
+                        return ExprValue::Bool(true).into();
+                    }
+                };
+
+                let coerced_value1 = value1
+                    .coerce_to(&target_typ)
+                    .expect("Coercion should be valid");
+                let coerced_value2 = value2
+                    .coerce_to(&target_typ)
+                    .expect("Coercion should be valid");
+                ExprValue::Bool(coerced_value1 == coerced_value2).into()
+            }
+            Expr::Ne(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let typ1 = value1.get_type();
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let typ2 = value2.get_type();
+
+                let target =
+                    AnnotatedType::unify(&typ1, &typ2).expect("It should be possible to unify");
+                let target_typ = match target {
+                    AnnotatedType::Forced(typ) | AnnotatedType::Regular(typ) => typ,
+                    AnnotatedType::UntypedList => {
+                        // We have two empty lists, they are equal
+                        return ExprValue::Bool(false).into();
+                    }
+                };
+
+                let coerced_value1 = value1
+                    .coerce_to(&target_typ)
+                    .expect("Coercion should be valid");
+                let coerced_value2 = value2
+                    .coerce_to(&target_typ)
+                    .expect("Coercion should be valid");
+                ExprValue::Bool(coerced_value1 != coerced_value2).into()
+            }
+            Expr::Lt(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Bool(num1 < num2).into()
+            }
+            Expr::Le(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Bool(num1 <= num2).into()
+            }
+            Expr::Gt(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Bool(num1 > num2).into()
+            }
+            Expr::Ge(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Bool(num1 >= num2).into()
+            }
             _ => todo!("Node not implemented: {:?}", expr),
         }
     }
