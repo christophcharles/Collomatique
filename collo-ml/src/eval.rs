@@ -1273,6 +1273,229 @@ impl<T: Object> LocalEnv<T> {
 
                 ExprValue::Bool(num1 >= num2).into()
             }
+            Expr::Add(left, right) => {
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let value1 = self.eval_expr(ast, env, &*left);
+                let value2 = self.eval_expr(ast, env, &*right);
+
+                match target {
+                    AnnotatedType::Regular(ExprType::Int) => {
+                        let number_value1 = value1
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+                        let number_value2 = value2
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+
+                        let num1 = match number_value1 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let num2 = match number_value2 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::Int(num1 + num2).into()
+                    }
+                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                        let linexpr1_value = value1
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+                        let linexpr2_value = value2
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+
+                        let linexpr1 = match linexpr1_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let linexpr2 = match linexpr2_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::LinExpr(linexpr1 + linexpr2).into()
+                    }
+                    _ => panic!("Expected Bool or Constraint"),
+                }
+            }
+            Expr::Sub(left, right) => {
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let value1 = self.eval_expr(ast, env, &*left);
+                let value2 = self.eval_expr(ast, env, &*right);
+
+                match target {
+                    AnnotatedType::Regular(ExprType::Int) => {
+                        let number_value1 = value1
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+                        let number_value2 = value2
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+
+                        let num1 = match number_value1 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let num2 = match number_value2 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::Int(num1 + num2).into()
+                    }
+                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                        let linexpr1_value = value1
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+                        let linexpr2_value = value2
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+
+                        let linexpr1 = match linexpr1_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let linexpr2 = match linexpr2_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::LinExpr(linexpr1 - linexpr2).into()
+                    }
+                    _ => panic!("Expected Bool or Constraint"),
+                }
+            }
+            Expr::Mul(left, right) => {
+                let value1 = self.eval_expr(ast, env, &*left);
+                let value2 = self.eval_expr(ast, env, &*right);
+
+                let typ1 = value1
+                    .get_type()
+                    .into_inner()
+                    .expect("We should have an inner type for multiplication");
+                let typ2 = value2
+                    .get_type()
+                    .into_inner()
+                    .expect("We should have an inner type for multiplication");
+
+                match (&typ1, &typ2) {
+                    (ExprType::Int, ExprType::Int) => {
+                        let number_value1 = value1
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+                        let number_value2 = value2
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+
+                        let num1 = match number_value1 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let num2 = match number_value2 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::Int(num1 + num2).into()
+                    }
+                    (ExprType::LinExpr, ExprType::Int) => {
+                        let linexpr1_value = value1
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+                        let number_value2 = value2
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+
+                        let linexpr1 = match linexpr1_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let num2 = match number_value2 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::LinExpr(num2 * linexpr1).into()
+                    }
+                    (ExprType::Int, ExprType::LinExpr) => {
+                        let number_value1 = value1
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+                        let linexpr2_value = value2
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+
+                        let num1 = match number_value1 {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let linexpr2 = match linexpr2_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::LinExpr(num1 * linexpr2).into()
+                    }
+                    _ => panic!(
+                        "Unexpected type combination for product: {}, {}",
+                        typ1, typ2
+                    ),
+                }
+            }
+            Expr::Div(left, right) => {
+                let value1 = self.eval_expr(ast, env, &*left);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*right);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Int(num1 / num2).into()
+            }
+            Expr::Mod(left, right) => {
+                let value1 = self.eval_expr(ast, env, &*left);
+                let number1_value = value1
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*right);
+                let number2_value = value2
+                    .coerce_to(&ExprType::Int)
+                    .expect("Coercion should be valid");
+
+                let num1 = match number1_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let num2 = match number2_value {
+                    ExprValue::Int(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Int(num1 % num2).into()
+            }
             _ => todo!("Node not implemented: {:?}", expr),
         }
     }
