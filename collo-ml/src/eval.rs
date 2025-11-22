@@ -38,6 +38,15 @@ pub struct ConstraintWithOrigin<T: Object> {
     origin: Option<Origin<T>>,
 }
 
+impl<T: Object> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
+    fn from(value: Constraint<IlpVar<T>>) -> Self {
+        ConstraintWithOrigin {
+            constraint: value,
+            origin: None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ExprValue<T: Object> {
     Int(i32),
@@ -1059,6 +1068,72 @@ impl<T: Object> LocalEnv<T> {
                     ExprValue::Bool(val) => ExprValue::Bool(!val).into(),
                     _ => panic!("Expected boolean"),
                 }
+            }
+            Expr::ConstraintEq(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let lin_expr1_value = value1
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let lin_expr2_value = value2
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let lin_expr1 = match lin_expr1_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let lin_expr2 = match lin_expr2_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Constraint(vec![lin_expr1.eq(&lin_expr2).into()]).into()
+            }
+            Expr::ConstraintLe(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let lin_expr1_value = value1
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let lin_expr2_value = value2
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let lin_expr1 = match lin_expr1_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let lin_expr2 = match lin_expr2_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Constraint(vec![lin_expr1.leq(&lin_expr2).into()]).into()
+            }
+            Expr::ConstraintGe(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let lin_expr1_value = value1
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let lin_expr2_value = value2
+                    .coerce_to(&ExprType::LinExpr)
+                    .expect("Coercion should be valid");
+
+                let lin_expr1 = match lin_expr1_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let lin_expr2 = match lin_expr2_value {
+                    ExprValue::LinExpr(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Constraint(vec![lin_expr1.geq(&lin_expr2).into()]).into()
             }
             _ => todo!("Node not implemented: {:?}", expr),
         }
