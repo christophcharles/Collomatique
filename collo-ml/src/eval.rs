@@ -1555,7 +1555,7 @@ impl<T: Object> LocalEnv<T> {
                     _ => panic!("Expected Int or LinExpr"),
                 };
 
-                let (_target_typ, list) = match collection_value {
+                let (_typ, list) = match collection_value {
                     AnnotatedValue::Regular(ExprValue::List(typ, list))
                     | AnnotatedValue::Forced(ExprValue::List(typ, list)) => (typ, list),
                     _ => panic!("Expected list"),
@@ -1635,6 +1635,109 @@ impl<T: Object> LocalEnv<T> {
                     }
 
                     ExprValue::Int(output).into()
+                }
+            }
+            Expr::Forall {
+                var,
+                collection,
+                filter,
+                body,
+            } => {
+                let collection_value = self.eval_expr(ast, env, &collection);
+
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let is_constraint = match target {
+                    AnnotatedType::Forced(ExprType::Constraint)
+                    | AnnotatedType::Regular(ExprType::Constraint) => true,
+                    AnnotatedType::Forced(ExprType::Bool)
+                    | AnnotatedType::Regular(ExprType::Bool) => false,
+                    _ => panic!("Expected Constraint or Bool"),
+                };
+
+                let (_typ, list) = match collection_value {
+                    AnnotatedValue::Regular(ExprValue::List(typ, list))
+                    | AnnotatedValue::Forced(ExprValue::List(typ, list)) => (typ, list),
+                    _ => panic!("Expected list"),
+                };
+
+                if is_constraint {
+                    let mut output = vec![];
+
+                    for elem in list {
+                        self.register_identifier(&var.node, elem);
+                        self.push_scope();
+
+                        let cond = match filter {
+                            None => true,
+                            Some(f) => {
+                                let filter_value = self.eval_expr(ast, env, &f);
+                                let coerced_filter = filter_value
+                                    .coerce_to(&ExprType::Bool)
+                                    .expect("Coercion should be valid");
+                                match coerced_filter {
+                                    ExprValue::Bool(v) => v,
+                                    _ => panic!("Expected bool"),
+                                }
+                            }
+                        };
+
+                        if cond {
+                            let new_value = self.eval_expr(ast, env, &body);
+                            let coerced_body = new_value
+                                .coerce_to(&ExprType::Constraint)
+                                .expect("Coercion should be valid");
+                            let new_constraint = match coerced_body {
+                                ExprValue::Constraint(v) => v,
+                                _ => panic!("Expected LinExpr"),
+                            };
+                            output.extend(new_constraint);
+                        }
+
+                        self.pop_scope();
+                    }
+
+                    ExprValue::Constraint(output).into()
+                } else {
+                    let mut output = true;
+
+                    for elem in list {
+                        self.register_identifier(&var.node, elem);
+                        self.push_scope();
+
+                        let cond = match filter {
+                            None => true,
+                            Some(f) => {
+                                let filter_value = self.eval_expr(ast, env, &f);
+                                let coerced_filter = filter_value
+                                    .coerce_to(&ExprType::Bool)
+                                    .expect("Coercion should be valid");
+                                match coerced_filter {
+                                    ExprValue::Bool(v) => v,
+                                    _ => panic!("Expected bool"),
+                                }
+                            }
+                        };
+
+                        if cond {
+                            let new_value = self.eval_expr(ast, env, &body);
+                            let coerced_body = new_value
+                                .coerce_to(&ExprType::Bool)
+                                .expect("Coercion should be valid");
+                            let new_bool_expr = match coerced_body {
+                                ExprValue::Bool(v) => v,
+                                _ => panic!("Expected LinExpr"),
+                            };
+                            output = output && new_bool_expr;
+                        }
+
+                        self.pop_scope();
+                    }
+
+                    ExprValue::Bool(output).into()
                 }
             }
             _ => todo!("Node not implemented: {:?}", expr),
