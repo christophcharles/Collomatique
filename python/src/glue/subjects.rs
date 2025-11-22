@@ -1,0 +1,319 @@
+use super::*;
+use pyo3::types::PyString;
+
+use std::collections::BTreeSet;
+use std::num::NonZeroU32;
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SubjectId {
+    id: collomatique_state_colloscopes::SubjectId,
+}
+
+#[pymethods]
+impl SubjectId {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<&collomatique_state_colloscopes::SubjectId> for SubjectId {
+    fn from(value: &collomatique_state_colloscopes::SubjectId) -> Self {
+        SubjectId { id: value.clone() }
+    }
+}
+
+impl From<collomatique_state_colloscopes::SubjectId> for SubjectId {
+    fn from(value: collomatique_state_colloscopes::SubjectId) -> Self {
+        SubjectId::from(&value)
+    }
+}
+
+impl From<&SubjectId> for collomatique_state_colloscopes::SubjectId {
+    fn from(value: &SubjectId) -> Self {
+        value.id.clone()
+    }
+}
+
+impl From<SubjectId> for collomatique_state_colloscopes::SubjectId {
+    fn from(value: SubjectId) -> Self {
+        collomatique_state_colloscopes::SubjectId::from(&value)
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Subject {
+    #[pyo3(get)]
+    pub id: SubjectId,
+    #[pyo3(get)]
+    pub parameters: SubjectParameters,
+    #[pyo3(get)]
+    pub excluded_periods: BTreeSet<PeriodId>,
+}
+
+#[pymethods]
+impl Subject {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectParameters {
+    #[pyo3(set, get)]
+    name: String,
+    #[pyo3(set, get)]
+    interrogation_parameters: Option<SubjectInterrogationParameters>,
+}
+
+impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParameters {
+    fn from(value: collomatique_state_colloscopes::SubjectParameters) -> Self {
+        SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
+    fn from(value: SubjectParameters) -> Self {
+        collomatique_state_colloscopes::SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectParameters {
+    #[new]
+    fn new(name: String) -> Self {
+        SubjectParameters {
+            name,
+            interrogation_parameters: Some(SubjectInterrogationParameters::new()),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectInterrogationParameters {
+    #[pyo3(set, get)]
+    students_per_group_min: NonZeroU32,
+    #[pyo3(set, get)]
+    students_per_group_max: NonZeroU32,
+    #[pyo3(set, get)]
+    groups_per_interrogation_min: NonZeroU32,
+    #[pyo3(set, get)]
+    groups_per_interrogation_max: NonZeroU32,
+    #[pyo3(set, get)]
+    duration: NonZeroU32,
+    #[pyo3(set, get)]
+    take_duration_into_account: bool,
+    #[pyo3(set, get)]
+    periodicity: SubjectPeriodicity,
+}
+
+impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
+    for SubjectInterrogationParameters
+{
+    fn from(value: collomatique_state_colloscopes::SubjectInterrogationParameters) -> Self {
+        SubjectInterrogationParameters {
+            students_per_group_min: value.students_per_group.start().clone(),
+            students_per_group_max: value.students_per_group.end().clone(),
+            groups_per_interrogation_min: value.students_per_group.start().clone(),
+            groups_per_interrogation_max: value.students_per_group.end().clone(),
+            duration: value.duration.get(),
+            take_duration_into_account: value.take_duration_into_account,
+            periodicity: value.periodicity.into(),
+        }
+    }
+}
+
+impl From<SubjectInterrogationParameters>
+    for collomatique_state_colloscopes::SubjectInterrogationParameters
+{
+    fn from(value: SubjectInterrogationParameters) -> Self {
+        collomatique_state_colloscopes::SubjectInterrogationParameters {
+            students_per_group: value.students_per_group_min..=value.students_per_group_max,
+            groups_per_interrogation: value.groups_per_interrogation_min
+                ..=value.groups_per_interrogation_max,
+            duration: value.duration.into(),
+            take_duration_into_account: value.take_duration_into_account,
+            periodicity: value.periodicity.into(),
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectInterrogationParameters {
+    #[new]
+    fn new() -> Self {
+        SubjectInterrogationParameters {
+            students_per_group_min: NonZeroU32::new(2).unwrap(),
+            students_per_group_max: NonZeroU32::new(3).unwrap(),
+            groups_per_interrogation_min: NonZeroU32::new(1).unwrap(),
+            groups_per_interrogation_max: NonZeroU32::new(1).unwrap(),
+            duration: NonZeroU32::new(60).unwrap(),
+            take_duration_into_account: true,
+            periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+            },
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectPeriodicity {
+    OnceForEveryBlockOfWeeks {
+        weeks_per_block: NonZeroU32,
+        minimum_week_separation: NonZeroU32,
+    },
+    ExactlyPeriodic {
+        periodicity_in_weeks: NonZeroU32,
+    },
+    AmountInYear {
+        interrogation_count_in_year_min: u32,
+        interrogation_count_in_year_max: u32,
+        minimum_week_separation: u32,
+    },
+    OnceForEveryArbitraryBlock {
+        minimum_week_separation: u32,
+        blocks: Vec<SubjectWeekBlock>,
+    },
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectWeekBlock {
+    #[pyo3(set, get)]
+    pub delay_in_weeks: u32,
+    #[pyo3(set, get)]
+    pub size_in_weeks: NonZeroU32,
+    #[pyo3(set, get)]
+    pub interrogation_count_in_block_min: u32,
+    #[pyo3(set, get)]
+    pub interrogation_count_in_block_max: u32,
+}
+
+impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodicity {
+    fn from(value: collomatique_state_colloscopes::SubjectPeriodicity) -> Self {
+        match value {
+            collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
+            collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            },
+            collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year,
+                minimum_week_separation,
+            } => SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year_min: interrogation_count_in_year.start().clone(),
+                interrogation_count_in_year_max: interrogation_count_in_year.end().clone(),
+                minimum_week_separation,
+            },
+            collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation,
+            } => SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+            },
+        }
+    }
+}
+
+impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodicity {
+    fn from(value: SubjectPeriodicity) -> Self {
+        match value {
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            },
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year_min,
+                interrogation_count_in_year_max,
+                minimum_week_separation,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year: interrogation_count_in_year_min
+                    ..=interrogation_count_in_year_max,
+                minimum_week_separation,
+            },
+            SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+            },
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectPeriodicity {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBlock {
+    fn from(value: collomatique_state_colloscopes::subjects::WeekBlock) -> Self {
+        SubjectWeekBlock {
+            delay_in_weeks: value.delay_in_weeks,
+            size_in_weeks: value.size_in_weeks,
+            interrogation_count_in_block_min: value.interrogation_count_in_block.start().clone(),
+            interrogation_count_in_block_max: value.interrogation_count_in_block.end().clone(),
+        }
+    }
+}
+
+impl From<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
+    fn from(value: SubjectWeekBlock) -> Self {
+        collomatique_state_colloscopes::subjects::WeekBlock {
+            delay_in_weeks: value.delay_in_weeks,
+            size_in_weeks: value.size_in_weeks,
+            interrogation_count_in_block: value.interrogation_count_in_block_min
+                ..=value.interrogation_count_in_block_max,
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectWeekBlock {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}

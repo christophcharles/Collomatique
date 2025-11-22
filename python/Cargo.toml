@@ -1,0 +1,15 @@
+[package]
+name = "collomatique-python"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-ops = { path = "../ops" }
+collomatique-rpc = { path = "../rpc" }
+collomatique-time = { path = "../time" }
+pyo3 = { version = "0.25", features = [ "py-clone" ] }
+anyhow.workspace = true
+chrono.workspace = true
+non-empty-string.workspace = true

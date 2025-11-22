@@ -1,0 +1,12 @@
+[package]
+name = "collomatique-rpc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+anyhow.workspace = true
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-ops = { path = "../ops" }

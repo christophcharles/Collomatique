@@ -1,0 +1,111 @@
+use std::num::NonZeroU32;
+
+use super::*;
+use pyo3::types::PyString;
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct IncompatId {
+    id: collomatique_state_colloscopes::IncompatId,
+}
+
+#[pymethods]
+impl IncompatId {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<&collomatique_state_colloscopes::IncompatId> for IncompatId {
+    fn from(value: &collomatique_state_colloscopes::IncompatId) -> Self {
+        IncompatId { id: value.clone() }
+    }
+}
+
+impl From<collomatique_state_colloscopes::IncompatId> for IncompatId {
+    fn from(value: collomatique_state_colloscopes::IncompatId) -> Self {
+        IncompatId::from(&value)
+    }
+}
+
+impl From<&IncompatId> for collomatique_state_colloscopes::IncompatId {
+    fn from(value: &IncompatId) -> Self {
+        value.id.clone()
+    }
+}
+
+impl From<IncompatId> for collomatique_state_colloscopes::IncompatId {
+    fn from(value: IncompatId) -> Self {
+        collomatique_state_colloscopes::IncompatId::from(&value)
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Incompat {
+    #[pyo3(set, get)]
+    pub subject_id: SubjectId,
+    #[pyo3(set, get)]
+    pub name: String,
+    #[pyo3(set, get)]
+    pub slots: Vec<time::SlotWithDuration>,
+    #[pyo3(set, get)]
+    pub minimum_free_slots: NonZeroU32,
+    #[pyo3(set, get)]
+    pub week_pattern_id: Option<WeekPatternId>,
+}
+
+#[pymethods]
+impl Incompat {
+    #[new]
+    fn new(
+        subject_id: SubjectId,
+        name: String,
+        slots: Vec<time::SlotWithDuration>,
+        minimum_free_slots: NonZeroU32,
+    ) -> Self {
+        Incompat {
+            subject_id,
+            name,
+            slots,
+            minimum_free_slots,
+            week_pattern_id: None,
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_state_colloscopes::incompats::Incompatibility> for Incompat {
+    fn from(value: collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
+        Incompat {
+            subject_id: value.subject_id.into(),
+            name: value.name,
+            slots: value.slots.into_iter().map(|x| x.into()).collect(),
+            minimum_free_slots: value.minimum_free_slots,
+            week_pattern_id: value.week_pattern_id.map(|x| x.into()),
+        }
+    }
+}
+
+impl TryFrom<Incompat> for collomatique_state_colloscopes::incompats::Incompatibility {
+    type Error = super::time::SlotWithDurationError;
+    fn try_from(value: Incompat) -> Result<Self, Self::Error> {
+        let mut slots = vec![];
+        for slot in value.slots {
+            slots.push(slot.try_into()?);
+        }
+
+        Ok(collomatique_state_colloscopes::incompats::Incompatibility {
+            subject_id: value.subject_id.into(),
+            name: value.name,
+            slots,
+            minimum_free_slots: value.minimum_free_slots,
+            week_pattern_id: value.week_pattern_id.map(|x| x.into()),
+        })
+    }
+}

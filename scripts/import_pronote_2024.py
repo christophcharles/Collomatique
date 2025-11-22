@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+
+import collomatique
+import csv
+
+def open_csv(file_path):
+    csvfile = open(file_path, newline='')
+    reader = csv.reader(csvfile, delimiter=';')
+    
+    output = []
+    
+    names = list(next(reader))
+    for row in reader:
+        new_line = {}
+        for name,val in zip(names,row):
+            if name in new_line:
+                new_line[name].append(val)
+            else:
+                new_line[name] = [val]
+        output.append(new_line)
+    
+    return names,output
+
+def build_subject_set(csv_content):
+    S = set({})
+    for csv_line in csv_content:
+        for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
+            opt = csv_line[column][0]
+            if opt:
+                S.add(opt)
+    return S
+
+def find_subject_or_new_id(session, subject, current_subjects):
+    file = session.get_current_collomatique_file()
+    for sub in current_subjects:
+        if sub.parameters.name == subject:
+            return sub.id
+    return file.subjects_add(collomatique.SubjectParameters(subject))
+
+def add_subjects(session, subject_set):
+    file = session.get_current_collomatique_file()
+    subject_ids = {}
+    current_subjects = file.get_main_params().subjects
+    for subject in subject_set:
+        sub_id = find_subject_or_new_id(session, subject, current_subjects)
+        subject_ids[subject] = sub_id
+    return subject_ids
+
+def split_student_name(student_full_name):
+    name_list = student_full_name.split(" ")
+    surname = ""
+    i = 0
+    while i < len(name_list) and name_list[i].isupper():
+        if i != 0:
+            surname += " "
+        surname += name_list[i]
+        i += 1
+    if i < len(name_list):
+        firstname = name_list[i]
+        i += 1
+    else:
+        firstname = ""
+    
+    while i < len(name_list):
+        firstname += " "
+        firstname += name_list[i]
+        i += 1
+
+    return firstname, surname
+
+def add_student_from_csv_line(session, csv_line, subject_ids):
+    file = session.get_current_collomatique_file()
+    student_full_name = csv_line['\ufeff'][0] # Yes, the pronote CSV is that bad
+    if not student_full_name:
+        collomatique.log("Bad line: {}".format(csv_line))
+        return
+    collomatique.log("Ajout de {}".format(student_full_name))
+
+    firstname, surname = split_student_name(student_full_name)
+
+    student = collomatique.Student(firstname, surname)
+    student_id = file.students_add(student)
+
+    periods = file.get_main_params().periods
+
+    for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
+        opt = csv_line[column][0]
+        if not opt:
+            continue
+        opt_id = subject_ids[opt]
+
+        for period in periods:
+            file.assignments_set(period.id, student_id, opt_id, True)
+
+def main():
+    session = collomatique.current_session()
+    file = session.get_current_collomatique_file()
+
+    file_path = session.dialog_open_file("Ouvrir un CSV", [("Fichiers CSV", "csv"), ("Tous les fichiers", "*")])
+    if file_path is None:
+        return
+    
+    csv_columns, csv_content = open_csv(file_path)
+
+    periods = file.get_main_params().periods
+    if len(periods) == 0:
+        file.periods_add(10)
+
+    subject_set = build_subject_set(csv_content)
+    subject_ids = add_subjects(session, subject_set)
+
+    for csv_line in csv_content:
+        add_student_from_csv_line(session, csv_line, subject_ids)
+
+main()

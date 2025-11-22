@@ -1,0 +1,8 @@
+[package]
+name = "collomatique-state"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror.workspace = true

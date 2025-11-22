@@ -1,0 +1,13 @@
+[package]
+name = "collomatique-state-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state = { path = "../state" }
+collomatique-time = { path = "../time" }
+thiserror.workspace = true
+non-empty-string = { workspace = true, features = ["serde"] }
+chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
