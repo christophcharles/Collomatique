@@ -1,6 +1,6 @@
 use crate::eval::{CheckedAST, EvalEnv, ExprValue, Object};
 use crate::semantics::ExprType;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum SimpleObject {
@@ -34,7 +34,7 @@ impl Object for SimpleObject {
                 "num" => ExprValue::Int(406),
                 "students" => ExprValue::List(
                     ExprType::Object("Student".into()),
-                    vec![ExprValue::Object(Self::Student1)],
+                    BTreeSet::from([ExprValue::Object(Self::Student1)]),
                 ),
                 "first_student" => ExprValue::Object(Self::Student1),
                 _ => panic!("Invalid field for Room1"),
@@ -43,10 +43,10 @@ impl Object for SimpleObject {
                 "num" => ExprValue::Int(406),
                 "students" => ExprValue::List(
                     ExprType::Object("Student".into()),
-                    vec![
+                    BTreeSet::from([
                         ExprValue::Object(Self::Student1),
                         ExprValue::Object(Self::Student2),
-                    ],
+                    ]),
                 ),
                 "first_student" => ExprValue::Object(Self::Student2),
                 _ => panic!("Invalid field for Room2"),
@@ -146,10 +146,10 @@ fn global_list() {
         result,
         ExprValue::List(
             ExprType::Object("Student".into()),
-            vec![
+            BTreeSet::from([
                 ExprValue::Object(SimpleObject::Student1),
                 ExprValue::Object(SimpleObject::Student2),
-            ]
+            ])
         )
     );
 }
