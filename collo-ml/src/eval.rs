@@ -1496,6 +1496,44 @@ impl<T: Object> LocalEnv<T> {
 
                 ExprValue::Int(num1 % num2).into()
             }
+            Expr::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let target_typ = match target {
+                    AnnotatedType::Forced(typ) | AnnotatedType::Regular(typ) => typ,
+                    AnnotatedType::UntypedList => {
+                        // Empty list either way, let's return an empty list
+                        return AnnotatedValue::UntypedList;
+                    }
+                };
+
+                let cond_value = self.eval_expr(ast, env, &condition);
+                let coerced_cond = cond_value
+                    .coerce_to(&ExprType::Bool)
+                    .expect("Coercion should be valid");
+
+                let ExprValue::Bool(cond) = coerced_cond else {
+                    panic!("Expected Bool");
+                };
+
+                let value = if cond {
+                    self.eval_expr(ast, env, &then_expr)
+                } else {
+                    self.eval_expr(ast, env, &else_expr)
+                };
+
+                value
+                    .coerce_to(target_typ)
+                    .expect("Coercion should be valid")
+                    .into()
+            }
             _ => todo!("Node not implemented: {:?}", expr),
         }
     }
