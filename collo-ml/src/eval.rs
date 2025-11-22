@@ -1740,6 +1740,49 @@ impl<T: Object> LocalEnv<T> {
                     ExprValue::Bool(output).into()
                 }
             }
+            Expr::VarListCall { name, args } => {
+                let var_lists = ast.get_var_lists();
+                let var_list_fn = var_lists
+                    .get(&name.node)
+                    .expect("Var list should be declared");
+                let evaluated_args: Vec<_> =
+                    args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
+                let constraints = ast
+                    .eval_fn_internal(env, var_list_fn, evaluated_args.clone(), true)
+                    .expect("Evaluation should be valid");
+
+                let constraint_count = match constraints {
+                    ExprValue::List(ExprType::Constraint, list) => list.len(),
+                    _ => panic!("Expected [Constraint]"),
+                };
+
+                let fn_desc = ast
+                    .global_env
+                    .get_functions()
+                    .get(var_list_fn)
+                    .expect("Function should be valid");
+
+                let coerced_args: Vec<_> = evaluated_args
+                    .into_iter()
+                    .zip(fn_desc.typ.args.iter())
+                    .map(|(arg, arg_typ)| arg.coerce_to(arg_typ).expect("Coercion should be valid"))
+                    .collect();
+
+                ExprValue::List(
+                    ExprType::LinExpr,
+                    (0..constraint_count)
+                        .into_iter()
+                        .map(|i| {
+                            ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
+                                name: name.node.clone(),
+                                from_list: Some(i),
+                                params: coerced_args.clone(),
+                            })))
+                        })
+                        .collect(),
+                )
+                .into()
+            }
             _ => todo!("Node not implemented: {:?}", expr),
         }
     }
