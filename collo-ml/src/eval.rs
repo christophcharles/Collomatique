@@ -2,7 +2,7 @@ use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
 use collomatique_ilp::{Constraint, LinExpr, UsableData};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 #[cfg(test)]
 mod tests;
@@ -45,7 +45,7 @@ pub enum ExprValue<T: Object> {
     LinExpr(LinExpr<IlpVar<T>>),
     Constraint(Vec<ConstraintWithOrigin<T>>),
     Object(T),
-    List(ExprType, Vec<ExprValue<T>>),
+    List(ExprType, BTreeSet<ExprValue<T>>),
 }
 
 impl<T: Object> From<i32> for ExprValue<T> {
@@ -239,7 +239,7 @@ impl<T: Object> AnnotatedValue<T> {
                 Some(val.coerce_to(target).expect("Coercion should be valid"))
             }
             AnnotatedValue::UntypedList if target.is_list() => {
-                Some(ExprValue::List(target.clone(), vec![]))
+                Some(ExprValue::List(target.clone(), BTreeSet::new()))
             }
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
         }
@@ -713,7 +713,7 @@ impl<T: Object> LocalEnv<T> {
                     .into_inner()
                     .expect("Type should be determined");
 
-                let coerced_elements: Vec<_> = element_values
+                let coerced_elements: BTreeSet<_> = element_values
                     .iter()
                     .map(|x| {
                         x.coerce_to(&target_type)
@@ -756,8 +756,11 @@ impl<T: Object> LocalEnv<T> {
                 let objects = match env.typ_map.get(&typ_as_str) {
                     Some(list) => list,
                     None => {
-                        return ExprValue::List(ExprType::from(typ_name.node.clone()), vec![])
-                            .into()
+                        return ExprValue::List(
+                            ExprType::from(typ_name.node.clone()),
+                            BTreeSet::new(),
+                        )
+                        .into()
                     }
                 };
 
@@ -805,6 +808,256 @@ impl<T: Object> LocalEnv<T> {
                     .into()
                 } else {
                     panic!("Valid var expected")
+                }
+            }
+            Expr::In { item, collection } => {
+                let collection_value = self.eval_expr(ast, env, &*collection);
+                let (elem_t, list) = match collection_value {
+                    AnnotatedValue::Forced(ExprValue::List(elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(elem_t, list)) => (elem_t, list),
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        return ExprValue::Bool(false).into();
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let item_value = self.eval_expr(ast, env, &*item);
+                let coerced_value = item_value.coerce_to(&elem_t).expect("Coercion should work");
+
+                for elt in list {
+                    if coerced_value == elt {
+                        return ExprValue::Bool(true).into();
+                    }
+                }
+                ExprValue::Bool(false).into()
+            }
+            Expr::Union(collection1, collection2) => {
+                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let list1 = match collection1_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let list2 = match collection2_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                match target {
+                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
+                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                        let list = list1
+                            .into_iter()
+                            .chain(list2.into_iter())
+                            .map(|e| e.coerce_to(&elem_t).expect("Coercion should be valid"))
+                            .collect();
+                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), list))
+                    }
+                    _ => panic!("Expected list as target type: {}", target),
+                }
+            }
+            Expr::Inter(collection1, collection2) => {
+                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let list1 = match collection1_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let list2 = match collection2_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                match target {
+                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
+                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                        let coerced_list2: BTreeSet<_> = list2
+                            .into_iter()
+                            .map(|e| e.coerce_to(&elem_t).expect("Coercion should be valid"))
+                            .collect();
+                        let coerced_list1: BTreeSet<_> = list1
+                            .into_iter()
+                            .map(|e| e.coerce_to(&elem_t).expect("Coercion should be valid"))
+                            .collect();
+                        let collection = coerced_list1
+                            .intersection(&coerced_list2)
+                            .cloned()
+                            .collect();
+                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), collection))
+                    }
+                    _ => panic!("Expected list as target type: {}", target),
+                }
+            }
+            Expr::Diff(collection1, collection2) => {
+                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let list1 = match collection1_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let list2 = match collection2_value {
+                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                    AnnotatedValue::UntypedList => {
+                        // The list is empty - so "in" must return false
+                        BTreeSet::new()
+                    }
+                    _ => panic!("List expected"),
+                };
+
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                match target {
+                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
+                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                        let coerced_list2: BTreeSet<_> = list2
+                            .into_iter()
+                            .map(|e| e.coerce_to(&elem_t).expect("Coercion should be valid"))
+                            .collect();
+                        let coerced_list1: BTreeSet<_> = list1
+                            .into_iter()
+                            .map(|e| e.coerce_to(&elem_t).expect("Coercion should be valid"))
+                            .collect();
+                        let collection =
+                            coerced_list1.difference(&coerced_list2).cloned().collect();
+                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), collection))
+                    }
+                    _ => panic!("Expected list as target type: {}", target),
+                }
+            }
+            Expr::And(expr1, expr2) => {
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                match target {
+                    AnnotatedType::Regular(ExprType::Bool) => {
+                        let value1 = self.eval_expr(ast, env, &*expr1);
+                        let boolean_value1 = value1
+                            .coerce_to(&ExprType::Bool)
+                            .expect("Coercion should be valid");
+
+                        let value2 = self.eval_expr(ast, env, &*expr2);
+                        let boolean_value2 = value2
+                            .coerce_to(&ExprType::Bool)
+                            .expect("Coercion should be valid");
+
+                        let bool1 = match boolean_value1 {
+                            ExprValue::Bool(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let bool2 = match boolean_value2 {
+                            ExprValue::Bool(val) => val,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::Bool(bool1 && bool2).into()
+                    }
+                    AnnotatedType::Regular(ExprType::Constraint) => {
+                        let value1 = self.eval_expr(ast, env, &*expr1);
+                        let constraint_value1 = value1
+                            .coerce_to(&ExprType::Constraint)
+                            .expect("Coercion should be valid");
+
+                        let value2 = self.eval_expr(ast, env, &*expr2);
+                        let constraint_value2 = value2
+                            .coerce_to(&ExprType::Constraint)
+                            .expect("Coercion should be valid");
+
+                        let constraint1 = match constraint_value1 {
+                            ExprValue::Constraint(constraints) => constraints,
+                            _ => panic!("Expected boolean"),
+                        };
+                        let constraint2 = match constraint_value2 {
+                            ExprValue::Constraint(constraints) => constraints,
+                            _ => panic!("Expected boolean"),
+                        };
+
+                        ExprValue::Constraint(
+                            constraint1
+                                .into_iter()
+                                .chain(constraint2.into_iter())
+                                .collect(),
+                        )
+                        .into()
+                    }
+                    _ => panic!("Expected Bool or Constraint"),
+                }
+            }
+            Expr::Or(expr1, expr2) => {
+                let value1 = self.eval_expr(ast, env, &*expr1);
+                let boolean_value1 = value1
+                    .coerce_to(&ExprType::Bool)
+                    .expect("Coercion should be valid");
+
+                let value2 = self.eval_expr(ast, env, &*expr2);
+                let boolean_value2 = value2
+                    .coerce_to(&ExprType::Bool)
+                    .expect("Coercion should be valid");
+
+                let bool1 = match boolean_value1 {
+                    ExprValue::Bool(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+                let bool2 = match boolean_value2 {
+                    ExprValue::Bool(val) => val,
+                    _ => panic!("Expected boolean"),
+                };
+
+                ExprValue::Bool(bool1 || bool2).into()
+            }
+            Expr::Not(not_expr) => {
+                let value = self.eval_expr(ast, env, &*not_expr);
+                let boolean_value = value
+                    .coerce_to(&ExprType::Bool)
+                    .expect("Coercion should be valid");
+
+                match boolean_value {
+                    ExprValue::Bool(val) => ExprValue::Bool(!val).into(),
+                    _ => panic!("Expected boolean"),
                 }
             }
             _ => todo!("Node not implemented: {:?}", expr),

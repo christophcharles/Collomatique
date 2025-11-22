@@ -51,6 +51,9 @@ fn fn_multi_call() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(ExprType::Int, vec![ExprValue::Int(0), ExprValue::Int(42),])
+        ExprValue::List(
+            ExprType::Int,
+            BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42)])
+        )
     );
 }
