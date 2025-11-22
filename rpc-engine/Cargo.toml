@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-rpc-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../rpc" }
+collomatique-python = { path = "../python" }
+anyhow.workspace = true

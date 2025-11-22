@@ -1,0 +1,1137 @@
+use adw::prelude::NavigationPageExt;
+use collomatique_state::traits::Manager;
+use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
+use libadwaita::prelude::Cast;
+use relm4::prelude::{ComponentController, RelmWidgetExt};
+use relm4::{adw, gtk};
+use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
+use std::path::PathBuf;
+
+use collomatique_ops::Desc;
+use collomatique_state::AppState;
+use collomatique_state_colloscopes::Data;
+
+use crate::tools;
+
+mod error_dialog;
+
+mod assignments;
+mod check_script;
+mod colloscope;
+mod general_planning;
+mod group_lists;
+mod incompats;
+mod run_script;
+mod settings;
+mod slots;
+mod students;
+mod subjects;
+mod teachers;
+mod week_patterns;
+
+mod warning_op;
+
+#[derive(Debug)]
+pub enum EditorInput {
+    Ignore,
+    NewFile {
+        file_name: Option<PathBuf>,
+        data: collomatique_state_colloscopes::Data,
+        dirty: bool,
+    },
+    SaveCurrentFileAs(PathBuf),
+    SaveAsClicked,
+    SaveClicked,
+    UndoClicked,
+    RedoClicked,
+    UpdateOp(collomatique_ops::UpdateOp),
+    CommitUpdateOp(
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
+    ),
+    ContinueOp,
+    CancelOp,
+    RunScriptClicked,
+    RunScript(PathBuf, String),
+    NewStateFromScript(AppState<Data, Desc>),
+}
+
+#[derive(Debug)]
+pub enum EditorOutput {
+    UpdateActions,
+    SaveError(PathBuf, String),
+    PythonLoadingError(PathBuf, String),
+    StartOpenSaveDialog,
+    EndOpenSaveDialog,
+}
+
+#[derive(Debug)]
+pub enum EditorCommandOutput {
+    FileNotChosen,
+    FileChosen(PathBuf),
+    SaveSuccessful(PathBuf),
+    SaveFailed(PathBuf, String),
+    ScriptChosen(PathBuf),
+    ScriptNotChosen,
+    ScriptLoaded(PathBuf, String),
+    ScriptLoadingFailed(PathBuf, String),
+}
+
+const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
+
+enum ToastInfo {
+    Toast {
+        text: String,
+        timeout: Option<NonZeroU32>,
+    },
+    Dismiss,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+enum PanelNumbers {
+    GeneralPlanning = 0,
+    Subjects = 1,
+    Teachers = 2,
+    WeekPatterns = 3,
+    Slots = 4,
+    Incompats = 5,
+    Students = 6,
+    Assignments = 7,
+    GroupLists = 8,
+    ExtraSettings = 9,
+    Colloscope = 10,
+}
+
+impl PanelNumbers {
+    fn iter() -> impl Iterator<Item = PanelNumbers> {
+        [
+            PanelNumbers::GeneralPlanning,
+            PanelNumbers::Subjects,
+            PanelNumbers::Teachers,
+            PanelNumbers::WeekPatterns,
+            PanelNumbers::Slots,
+            PanelNumbers::Incompats,
+            PanelNumbers::Students,
+            PanelNumbers::Assignments,
+            PanelNumbers::GroupLists,
+            PanelNumbers::ExtraSettings,
+            PanelNumbers::Colloscope,
+        ]
+        .into_iter()
+    }
+
+    fn panel_name(&self) -> &'static str {
+        match self {
+            PanelNumbers::GeneralPlanning => "general_planning",
+            PanelNumbers::WeekPatterns => "week_patterns",
+            PanelNumbers::Subjects => "subjects",
+            PanelNumbers::Teachers => "teachers",
+            PanelNumbers::Students => "students",
+            PanelNumbers::Assignments => "assignments",
+            PanelNumbers::Slots => "slots",
+            PanelNumbers::Incompats => "incompats",
+            PanelNumbers::GroupLists => "group_lists",
+            PanelNumbers::ExtraSettings => "extra_settings",
+            PanelNumbers::Colloscope => "colloscope",
+        }
+    }
+
+    fn panel_title(&self) -> &'static str {
+        match self {
+            PanelNumbers::GeneralPlanning => "Planning général",
+            PanelNumbers::WeekPatterns => "Modèles de périodicité",
+            PanelNumbers::Subjects => "Matières",
+            PanelNumbers::Teachers => "Colleurs",
+            PanelNumbers::Students => "Élèves",
+            PanelNumbers::Assignments => "Inscriptions dans les matières",
+            PanelNumbers::Slots => "Créneaux de colles",
+            PanelNumbers::Incompats => "Incompatibilités horaires",
+            PanelNumbers::GroupLists => "Groupes de colles",
+            PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
+            PanelNumbers::Colloscope => "Colloscope",
+        }
+    }
+}
+
+pub struct EditorPanel {
+    file_name: Option<PathBuf>,
+    data: AppState<Data, Desc>,
+    dirty: bool,
+    toast_info: Option<ToastInfo>,
+    pages_names: Vec<&'static str>,
+    pages_titles_map: BTreeMap<&'static str, &'static str>,
+    state_to_commit: Option<
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
+    >,
+
+    show_particular_panel: Option<PanelNumbers>,
+
+    error_dialog: Controller<error_dialog::Dialog>,
+
+    general_planning: Controller<general_planning::GeneralPlanning>,
+    subjects: Controller<subjects::Subjects>,
+    teachers: Controller<teachers::Teachers>,
+    students: Controller<students::Students>,
+    assignments: Controller<assignments::Assignments>,
+    week_patterns: Controller<week_patterns::WeekPatterns>,
+    slots: Controller<slots::Slots>,
+    incompats: Controller<incompats::Incompats>,
+    group_lists: Controller<group_lists::GroupLists>,
+    settings: Controller<settings::Settings>,
+    colloscope: Controller<colloscope::Colloscope>,
+    check_script_dialog: Controller<check_script::Dialog>,
+    run_script_dialog: Controller<run_script::Dialog>,
+    warning_op_dialog: Controller<warning_op::Dialog>,
+}
+
+impl EditorPanel {
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.data.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.data.can_redo()
+    }
+}
+
+impl EditorPanel {
+    fn generate_subtitle(&self) -> String {
+        let default_name = "Fichier sans nom".into();
+        let name = match &self.file_name {
+            Some(path) => match path.file_name() {
+                Some(file_name) => file_name.to_string_lossy().to_string(),
+                None => default_name,
+            },
+            None => default_name,
+        };
+        if self.dirty {
+            String::from("*") + &name
+        } else {
+            name
+        }
+    }
+
+    fn generate_tooltip_text(&self) -> String {
+        match &self.file_name {
+            Some(x) => x.to_string_lossy().into(),
+            None => "(Fichier non enregistré)".into(),
+        }
+    }
+
+    fn send_msg_for_interface_update(&self, sender: ComponentSender<Self>) {
+        sender.output(EditorOutput::UpdateActions).unwrap();
+        self.general_planning
+            .sender()
+            .send(general_planning::GeneralPlanningInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+            ))
+            .unwrap();
+        self.subjects
+            .sender()
+            .send(subjects::SubjectsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+            ))
+            .unwrap();
+        self.teachers
+            .sender()
+            .send(teachers::TeachersInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .clone(),
+            ))
+            .unwrap();
+        self.students
+            .sender()
+            .send(students::StudentsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+            ))
+            .unwrap();
+        self.assignments
+            .sender()
+            .send(assignments::AssignmentsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .assignments
+                    .clone(),
+            ))
+            .unwrap();
+        self.week_patterns
+            .sender()
+            .send(week_patterns::WeekPatternsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .clone(),
+            ))
+            .unwrap();
+        self.slots
+            .sender()
+            .send(slots::SlotsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .clone(),
+                self.data.get_data().get_inner_data().params.slots.clone(),
+            ))
+            .unwrap();
+        self.incompats
+            .sender()
+            .send(incompats::IncompatsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .incompats
+                    .clone(),
+            ))
+            .unwrap();
+        self.group_lists
+            .sender()
+            .send(group_lists::GroupListsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .clone(),
+            ))
+            .unwrap();
+        self.settings
+            .sender()
+            .send(settings::SettingsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .settings
+                    .clone(),
+            ))
+            .unwrap();
+        self.colloscope
+            .sender()
+            .send(colloscope::ColloscopeInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data.get_data().get_inner_data().params.slots.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .clone(),
+                self.data.get_data().get_inner_data().colloscope.clone(),
+            ))
+            .unwrap();
+    }
+
+    fn op_cat_to_panel_number(op: &collomatique_ops::OpCategory) -> Option<PanelNumbers> {
+        match op {
+            collomatique_ops::OpCategory::None => None,
+            collomatique_ops::OpCategory::GeneralPlanning => Some(PanelNumbers::GeneralPlanning),
+            collomatique_ops::OpCategory::Subjects => Some(PanelNumbers::Subjects),
+            collomatique_ops::OpCategory::Teachers => Some(PanelNumbers::Teachers),
+            collomatique_ops::OpCategory::Students => Some(PanelNumbers::Students),
+            collomatique_ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
+            collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
+            collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
+            collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
+            collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
+            collomatique_ops::OpCategory::Rules => None,
+            collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
+            collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
+        }
+    }
+
+    fn generate_undo_tooltip(&self) -> String {
+        match self.data.get_undo_name() {
+            Some((_cat, desc)) => format!("Annuler \"{}\"", desc),
+            None => "Rien à annuler".into(),
+        }
+    }
+
+    fn generate_redo_tooltip(&self) -> String {
+        match self.data.get_redo_name() {
+            Some((_cat, desc)) => format!("Rétablir \"{}\"", desc),
+            None => "Rien à rétablir".into(),
+        }
+    }
+}
+
+#[relm4::component(pub)]
+impl Component for EditorPanel {
+    type Input = EditorInput;
+    type Output = EditorOutput;
+    type Init = ();
+    type CommandOutput = EditorCommandOutput;
+
+    view! {
+        #[root]
+        nav_view = adw::NavigationSplitView {
+            set_hexpand: true,
+            set_vexpand: true,
+            #[wrap(Some)]
+            set_sidebar = &adw::NavigationPage {
+                set_title: "Collomatique",
+                #[wrap(Some)]
+                set_child = &adw::ToolbarView {
+                    add_top_bar = &adw::HeaderBar {
+                        #[wrap(Some)]
+                        set_title_widget = &adw::WindowTitle {
+                            set_title: "Collomatique",
+                            #[watch]
+                            set_subtitle: &model.generate_subtitle(),
+                            #[watch]
+                            set_tooltip_text: Some(&model.generate_tooltip_text()),
+                        },
+                        pack_end = &gtk::MenuButton {
+                            set_icon_name: "open-menu-symbolic",
+                            set_menu_model: Some(&main_menu),
+                        },
+                    },
+                    #[wrap(Some)]
+                    set_content = &gtk::Box {
+                        set_vexpand: true,
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Vertical,
+                        gtk::StackSidebar {
+                            set_vexpand: true,
+                            set_size_request: (200, -1),
+                            set_stack: &main_stack,
+                        },
+                        gtk::Button {
+                            set_hexpand: true,
+                            set_size_request: (-1,50),
+                            add_css_class: "frame",
+                            add_css_class: "warning",
+                            set_margin_all: 5,
+                            adw::ButtonContent {
+                                set_icon_name: "text-x-script",
+                                set_label: "Exécuter un script",
+                            },
+                            connect_clicked => EditorInput::RunScriptClicked,
+                        },
+                    },
+                },
+            },
+            #[wrap(Some)]
+            set_content = &adw::NavigationPage {
+                #[watch]
+                set_title: match main_stack.visible_child_name() {
+                    Some(n) => model.pages_titles_map.get(n.as_str()).unwrap(),
+                    None => "Editor Panel",
+                },
+                #[wrap(Some)]
+                set_child = &adw::ToolbarView {
+                    add_top_bar = &adw::HeaderBar {
+                        pack_start = &gtk::Box {
+                            add_css_class: "linked",
+                            gtk::Button {
+                                set_icon_name: "edit-undo",
+                                #[watch]
+                                set_sensitive: model.can_undo(),
+                                #[watch]
+                                set_tooltip_text: Some(&model.generate_undo_tooltip()),
+                                connect_clicked => EditorInput::UndoClicked,
+                            },
+                            gtk::Button {
+                                set_icon_name: "edit-redo",
+                                #[watch]
+                                set_sensitive: model.can_redo(),
+                                #[watch]
+                                set_tooltip_text: Some(&model.generate_redo_tooltip()),
+                                connect_clicked => EditorInput::RedoClicked,
+                            },
+                        },
+                        pack_end = &gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                            add_css_class: "spacer",
+                        },
+                        pack_end = &gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                            add_css_class: "spacer",
+                        },
+                        pack_end = &gtk::Box {
+                            add_css_class: "linked",
+                            gtk::Button::with_label("Enregistrer") {
+                                #[watch]
+                                set_sensitive: model.dirty,
+                                connect_clicked => EditorInput::SaveClicked,
+                            },
+                            gtk::Button {
+                                set_icon_name: "document-save-as",
+                                set_tooltip_text: Some("Enregistrer sous"),
+                                connect_clicked => EditorInput::SaveAsClicked,
+                            },
+                        },
+                    },
+                    #[wrap(Some)]
+                    #[name(toast_overlay)]
+                    set_content = &adw::ToastOverlay {
+                        #[name(main_stack)]
+                        gtk::Stack {
+                            set_hexpand: true,
+                            set_transition_type: gtk::StackTransitionType::SlideUpDown,
+                            // Force update_view when visible-child is changed
+                            // This maintains the title up top
+                            connect_notify: (
+                                Some("visible-child"),
+                                {
+                                    let sender = sender.clone();
+                                    move |_widget,_| {
+                                        sender.input(EditorInput::Ignore);
+                                    }
+                                }
+                            ),
+                        },
+                    },
+                },
+            },
+        }
+    }
+
+    menu! {
+        main_menu: {
+            section! {
+                "Nouveau" => super::NewAction,
+                "Ouvrir" => super::OpenAction,
+            },
+            section! {
+                "Annuler" => super::UndoAction,
+                "Rétablir" => super::RedoAction,
+            },
+            section! {
+                "Enregistrer" => super::SaveAction,
+                "Enregistrer sous" => super::SaveAsAction,
+            },
+            section! {
+                "Fermer" => super::CloseAction,
+            },
+            section! {
+                "À propos" => super::AboutAction
+            }
+        }
+    }
+
+    fn init(
+        _params: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let general_planning = general_planning::GeneralPlanning::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GeneralPlanning(op))
+            });
+
+        let subjects = subjects::Subjects::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Subjects(op))
+            });
+
+        let teachers = teachers::Teachers::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Teachers(op))
+            });
+
+        let students = students::Students::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Students(op))
+            });
+
+        let assignments = assignments::Assignments::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Assignments(op))
+            });
+
+        let week_patterns = week_patterns::WeekPatterns::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::WeekPatterns(op))
+            });
+
+        let slots = slots::Slots::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Slots(op))
+            });
+
+        let incompats = incompats::Incompats::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Incompatibilities(op))
+            });
+
+        let group_lists = group_lists::GroupLists::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GroupLists(op))
+            });
+
+        let settings = settings::Settings::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
+            });
+
+        let colloscope = colloscope::Colloscope::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+            });
+
+        let check_script_dialog = check_script::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                check_script::DialogOutput::Run(path, script) => {
+                    EditorInput::RunScript(path, script)
+                }
+            });
+
+        let run_script_dialog = run_script::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                run_script::DialogOutput::NewData(new_data) => {
+                    EditorInput::NewStateFromScript(new_data)
+                }
+            });
+
+        let error_dialog = error_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
+        let warning_op_dialog = warning_op::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_op::DialogOutput::Continue => EditorInput::ContinueOp,
+                warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
+            });
+
+        let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
+        let pages_titles_map =
+            BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
+
+        let model = EditorPanel {
+            file_name: None,
+            data: AppState::new(Data::new()),
+            dirty: false,
+            toast_info: None,
+            pages_names,
+            pages_titles_map,
+            show_particular_panel: None,
+            state_to_commit: None,
+            error_dialog,
+            general_planning,
+            subjects,
+            teachers,
+            students,
+            assignments,
+            week_patterns,
+            slots,
+            incompats,
+            group_lists,
+            settings,
+            colloscope,
+            check_script_dialog,
+            run_script_dialog,
+            warning_op_dialog,
+        };
+        let widgets = view_output!();
+
+        for panel in PanelNumbers::iter() {
+            let widget: gtk::Widget = match panel {
+                PanelNumbers::GeneralPlanning => model.general_planning.widget().clone().upcast(),
+                PanelNumbers::WeekPatterns => model.week_patterns.widget().clone().upcast(),
+                PanelNumbers::Subjects => model.subjects.widget().clone().upcast(),
+                PanelNumbers::Teachers => model.teachers.widget().clone().upcast(),
+                PanelNumbers::Students => model.students.widget().clone().upcast(),
+                PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
+                PanelNumbers::Slots => model.slots.widget().clone().upcast(),
+                PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
+                PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
+                PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
+                PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
+            };
+            widgets
+                .main_stack
+                .add_titled(&widget, Some(panel.panel_name()), panel.panel_title());
+        }
+
+        ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.show_particular_panel = None;
+        match message {
+            EditorInput::Ignore => {}
+            EditorInput::NewFile {
+                file_name,
+                data,
+                dirty,
+            } => {
+                self.file_name = file_name;
+                self.data = AppState::new(data);
+                self.dirty = dirty;
+                self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
+                self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::SaveClicked => match &self.file_name {
+                Some(path) => {
+                    sender.input(EditorInput::SaveCurrentFileAs(path.clone()));
+                }
+                None => {
+                    sender.input(EditorInput::SaveAsClicked);
+                }
+            },
+            EditorInput::SaveAsClicked => {
+                let file_name = self.file_name.clone();
+                sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_dialog(match &file_name {
+                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
+                        None => tools::open_save::DefaultSaveFile::SuggestedName(
+                            "FichierSansNom.collomatique".into(),
+                        ),
+                    })
+                    .await
+                    {
+                        Some(path) => EditorCommandOutput::FileChosen(path),
+                        None => EditorCommandOutput::FileNotChosen,
+                    }
+                });
+            }
+            EditorInput::SaveCurrentFileAs(path) => {
+                let data_copy = self.data.get_data().clone();
+                self.dirty = false;
+                self.file_name = Some(path.clone());
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("Enregistrement en cours de {}...", path.to_string_lossy(),),
+                    timeout: None,
+                });
+                sender.oneshot_command(async move {
+                    match collomatique_storage::save_data_to_file(&data_copy, &path).await {
+                        Ok(()) => EditorCommandOutput::SaveSuccessful(path),
+                        Err(e) => EditorCommandOutput::SaveFailed(path, e.to_string()),
+                    }
+                });
+                sender.output(EditorOutput::UpdateActions).unwrap();
+            }
+            EditorInput::UndoClicked => {
+                if self.data.can_undo() {
+                    let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
+                    self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
+                    self.data.undo().expect("Should be able to undo");
+                    self.dirty = true;
+                    self.send_msg_for_interface_update(sender);
+                }
+            }
+            EditorInput::RedoClicked => {
+                if self.data.can_redo() {
+                    let (cat, _) = self.data.get_redo_name().expect("Should be able to redo");
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
+                    self.data.redo().expect("Should be able to redo");
+                    self.dirty = true;
+                    self.send_msg_for_interface_update(sender);
+                }
+            }
+            EditorInput::UpdateOp(op) => {
+                match op.dry_apply(&self.data) {
+                    Ok(dry_result) => {
+                        if dry_result.rec_apply_result.warnings.is_empty() {
+                            sender.input(EditorInput::CommitUpdateOp(dry_result.new_state));
+                        } else {
+                            self.state_to_commit = Some(dry_result.new_state);
+                            self.warning_op_dialog
+                                .sender()
+                                .send(warning_op::DialogInput::Show(
+                                    dry_result
+                                        .rec_apply_result
+                                        .warnings
+                                        .into_iter()
+                                        .map(|x| x.1)
+                                        .collect(),
+                                ))
+                                .unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        self.error_dialog
+                            .sender()
+                            .send(error_dialog::DialogInput::Show(e.to_string()))
+                            .unwrap();
+                        // Update interface anyway, this is useful if we need to restore
+                        // some GUI element to the correct state in case of error
+                        self.send_msg_for_interface_update(sender);
+                    }
+                }
+            }
+            EditorInput::CommitUpdateOp(new_state) => {
+                self.dirty = true;
+                self.data = new_state;
+                // Update interface anyway, this is useful if we need to restore
+                // some GUI element to the correct state in case of error
+                self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::ContinueOp => {
+                if let Some(new_state) = self.state_to_commit.take() {
+                    sender.input(EditorInput::CommitUpdateOp(new_state));
+                }
+            }
+            EditorInput::CancelOp => {
+                // Update interface
+                // this is useful if we need to restore
+                // some GUI element to the correct state
+                // because of the cancelation
+                self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::RunScriptClicked => {
+                sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                sender.oneshot_command(async move {
+                    match tools::open_save::open_python_dialog().await {
+                        Some(path) => EditorCommandOutput::ScriptChosen(path),
+                        None => EditorCommandOutput::ScriptNotChosen,
+                    }
+                });
+            }
+            EditorInput::RunScript(path, script) => {
+                self.run_script_dialog
+                    .sender()
+                    .send(run_script::DialogInput::Run(
+                        path,
+                        script,
+                        self.data.clone(),
+                    ))
+                    .unwrap();
+            }
+            EditorInput::NewStateFromScript(new_data) => {
+                self.data = new_data;
+                if let Some((cat, _desc)) = self.data.get_undo_name() {
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
+                }
+                self.dirty = true;
+                self.send_msg_for_interface_update(sender);
+            }
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            EditorCommandOutput::FileNotChosen => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+            }
+            EditorCommandOutput::FileChosen(path) => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+                sender.input(EditorInput::SaveCurrentFileAs(path));
+            }
+            EditorCommandOutput::SaveSuccessful(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} enregistré", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+            }
+            EditorCommandOutput::SaveFailed(path, error) => {
+                if Some(&path) != self.file_name.as_ref() {
+                    return;
+                }
+                self.toast_info = Some(ToastInfo::Dismiss);
+                self.dirty = true;
+                sender.output(EditorOutput::UpdateActions).unwrap();
+                sender.output(EditorOutput::SaveError(path, error)).unwrap();
+            }
+            EditorCommandOutput::ScriptChosen(path) => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+                sender.oneshot_command(async move {
+                    match tokio::fs::read_to_string(&path).await {
+                        Ok(text) => EditorCommandOutput::ScriptLoaded(path, text),
+                        Err(e) => EditorCommandOutput::ScriptLoadingFailed(path, e.to_string()),
+                    }
+                });
+            }
+            EditorCommandOutput::ScriptNotChosen => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+            }
+            EditorCommandOutput::ScriptLoaded(path, text) => {
+                self.check_script_dialog
+                    .sender()
+                    .send(check_script::DialogInput::Show(path, text))
+                    .unwrap();
+            }
+            EditorCommandOutput::ScriptLoadingFailed(path, error) => {
+                sender
+                    .output(EditorOutput::PythonLoadingError(path, error))
+                    .unwrap();
+            }
+        }
+    }
+
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update(message, sender.clone(), root);
+        self.update_toast(widgets);
+        self.update_view(widgets, sender);
+    }
+
+    fn update_cmd_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update_cmd(message, sender.clone(), root);
+        self.update_toast(widgets);
+        self.update_view(widgets, sender);
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if let Some(panel_number) = &model.show_particular_panel {
+            widgets
+                .main_stack
+                .set_visible_child_name(self.pages_names[*panel_number as usize])
+        }
+    }
+}
+
+impl EditorPanel {
+    fn update_toast(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if let Some(toast_info) = self.toast_info.take() {
+            widgets.toast_overlay.dismiss_all();
+            match toast_info {
+                ToastInfo::Toast { text, timeout } => {
+                    let new_toast = adw::Toast::new(&text);
+                    new_toast.set_timeout(match timeout {
+                        Some(t) => t.get(),
+                        None => 0,
+                    });
+                    widgets.toast_overlay.add_toast(new_toast);
+                }
+                ToastInfo::Dismiss => {} // Nothing else to do
+            }
+        }
+    }
+}
+
+fn generate_week_title(
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    week_number: usize,
+) -> String {
+    match global_first_week {
+        Some(global_start_date) => {
+            let start_date = global_start_date
+                .inner()
+                .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
+                .expect("Valid start date");
+            let end_date = start_date
+                .checked_add_days(chrono::Days::new(6))
+                .expect("Valid end date");
+            format!(
+                "Semaine {} du {} au {}",
+                week_number + 1,
+                start_date.format("%d/%m/%Y").to_string(),
+                end_date.format("%d/%m/%Y").to_string(),
+            )
+        }
+        None => {
+            format!("Semaine {}", week_number + 1)
+        }
+    }
+}
+
+fn generate_period_title(
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    index: usize,
+    first_week_num: usize,
+    week_count: usize,
+) -> String {
+    generate_week_succession_title(
+        "Période",
+        global_first_week,
+        index,
+        first_week_num,
+        week_count,
+    )
+}
+
+fn generate_week_succession_title(
+    name: &str,
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    index: usize,
+    first_week_num: usize,
+    week_count: usize,
+) -> String {
+    if week_count == 0 {
+        return format!("{} {} (vide)", name, index + 1);
+    }
+
+    let start_week = first_week_num + 1;
+    let end_week = first_week_num + week_count;
+
+    match global_first_week {
+        Some(global_start_date) => {
+            let start_date = global_start_date
+                .inner()
+                .checked_add_days(chrono::Days::new(7 * (first_week_num as u64)))
+                .expect("Valid start date");
+            let end_date = start_date
+                .checked_add_days(chrono::Days::new(7 * (week_count as u64) - 1))
+                .expect("Valid end date");
+            if start_week != end_week {
+                format!(
+                    "{} {} du {} au {} (semaines {} à {})",
+                    name,
+                    index + 1,
+                    start_date.format("%d/%m/%Y").to_string(),
+                    end_date.format("%d/%m/%Y").to_string(),
+                    start_week,
+                    end_week,
+                )
+            } else {
+                format!(
+                    "{} {} du {} au {} (semaine {})",
+                    name,
+                    index + 1,
+                    start_date.format("%d/%m/%Y").to_string(),
+                    end_date.format("%d/%m/%Y").to_string(),
+                    start_week,
+                )
+            }
+        }
+        None => {
+            if start_week != end_week {
+                format!(
+                    "{} {} (semaines {} à {})",
+                    name,
+                    index + 1,
+                    start_week,
+                    end_week,
+                )
+            } else {
+                format!("{} {} (semaine {})", name, index + 1, start_week,)
+            }
+        }
+    }
+}

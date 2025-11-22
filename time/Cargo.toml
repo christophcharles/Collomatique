@@ -1,0 +1,9 @@
+[package]
+name = "collomatique-time"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true, features = [ "clock", "serde" ] }

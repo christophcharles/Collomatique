@@ -1,0 +1,12 @@
+[package]
+name = "collomatique-solver-glue"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-solver-colloscopes = { path = "../solver-colloscopes" }
+collomatique-solver = { path = "../solver" }
+collomatique-ilp = { path = "../ilp" }
+thiserror.workspace = true

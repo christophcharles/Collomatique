@@ -1,0 +1,437 @@
+use super::*;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WeekPatternsUpdateWarning {
+    LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
+    LooseScheduleIncompat(collomatique_state_colloscopes::IncompatId),
+    LooseColloscopeDataForSlot(collomatique_state_colloscopes::SlotId),
+}
+
+impl WeekPatternsUpdateWarning {
+    pub(crate) fn build_desc_from_data<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> Option<String> {
+        match self {
+            WeekPatternsUpdateWarning::LooseInterrogationSlot(slot_id) => {
+                let Some((subject_id, position)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return None;
+                };
+                let slot = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .ordered_slots[position]
+                    .1;
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .teacher_map
+                    .get(&slot.teacher_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(subject_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                ))
+            }
+            Self::LooseScheduleIncompat(incompat_id) => {
+                let Some(incompat) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .incompats
+                    .incompat_map
+                    .get(incompat_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(incompat.subject_id)
+                else {
+                    return None;
+                };
+
+                let slot_desc: Vec<_> = incompat
+                    .slots
+                    .iter()
+                    .map(|slot| {
+                        format!(
+                            "le {} à {}",
+                            slot.start().weekday,
+                            slot.start().start_time.into_inner()
+                        )
+                    })
+                    .collect();
+
+                Some(format!(
+                    "Perte d'une incompatibilité horaire pour la matière \"{}\" ({})",
+                    subject.parameters.name,
+                    slot_desc.join(", "),
+                ))
+            }
+            Self::LooseColloscopeDataForSlot(slot_id) => {
+                let Some((subject_id, position)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(subject_id)
+                else {
+                    return None;
+                };
+                let slot = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .ordered_slots[position]
+                    .1;
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .teacher_map
+                    .get(&slot.teacher_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de remplissage du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {} dans le colloscope",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                ))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WeekPatternsUpdateOp {
+    AddNewWeekPattern(collomatique_state_colloscopes::week_patterns::WeekPattern),
+    UpdateWeekPattern(
+        collomatique_state_colloscopes::WeekPatternId,
+        collomatique_state_colloscopes::week_patterns::WeekPattern,
+    ),
+    DeleteWeekPattern(collomatique_state_colloscopes::WeekPatternId),
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WeekPatternsUpdateError {
+    #[error(transparent)]
+    AddNewWeekPattern(#[from] AddNewWeekPatternError),
+    #[error(transparent)]
+    UpdateWeekPattern(#[from] UpdateWeekPatternError),
+    #[error(transparent)]
+    DeleteWeekPattern(#[from] DeleteWeekPatternError),
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddNewWeekPatternError {
+    #[error("Week pattern has the wrong number of weeks")]
+    BadWeekCountInWeekPattern,
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum UpdateWeekPatternError {
+    #[error("Week pattern ID {0:?} is invalid")]
+    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
+    #[error("Week pattern has the wrong number of weeks")]
+    BadWeekCountInWeekPattern,
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DeleteWeekPatternError {
+    #[error("Week pattern ID {0:?} is invalid")]
+    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
+}
+
+impl WeekPatternsUpdateOp {
+    pub(crate) fn get_next_cleaning_op<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
+        match self {
+            Self::AddNewWeekPattern(_) => None,
+            Self::UpdateWeekPattern(week_pattern_id, new_week_pattern) => {
+                let Some(old_week_pattern) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return None;
+                };
+                if old_week_pattern.weeks.len() != new_week_pattern.weeks.len() {
+                    return None;
+                }
+
+                for (_subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
+                {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*week_pattern_id) {
+                            continue;
+                        }
+
+                        let mut first_week_in_period = 0usize;
+                        for (period_id, period) in &data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .ordered_period_list
+                        {
+                            let collo_period = data
+                                .get_data()
+                                .get_inner_data()
+                                .colloscope
+                                .period_map
+                                .get(period_id)
+                                .expect("Period ID should appear in colloscope");
+                            let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                                continue;
+                            };
+                            for week_in_period in 0..period.len() {
+                                // If the week is disabled at the period level then it is already disabled in colloscope
+                                if !period[week_in_period].interrogations {
+                                    continue;
+                                }
+
+                                let current_week = first_week_in_period + week_in_period;
+                                let old_status = old_week_pattern.weeks[current_week];
+                                let new_status = new_week_pattern.weeks[current_week];
+                                if old_status && !new_status {
+                                    let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
+
+                                    if !interrogation.is_empty() {
+                                        return Some(CleaningOp {
+                                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(
+                                                *slot_id,
+                                            ),
+                                            op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                                *period_id,
+                                                *slot_id,
+                                                week_in_period,
+                                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                            )),
+                                        });
+                                    }
+                                }
+                            }
+
+                            first_week_in_period += period.len();
+                        }
+                    }
+                }
+
+                None
+            }
+            Self::DeleteWeekPattern(week_pattern_id) => {
+                for (_subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
+                {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern == Some(*week_pattern_id) {
+                            return Some(CleaningOp {
+                                warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(
+                                    *slot_id,
+                                ),
+                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                            });
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .incompats
+                    .incompat_map
+                {
+                    if incompat.week_pattern_id == Some(*week_pattern_id) {
+                        return Some(CleaningOp {
+                            warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),
+                            op: UpdateOp::Incompatibilities(
+                                IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
+                            ),
+                        });
+                    }
+                }
+
+                None
+            }
+        }
+    }
+
+    pub(crate) fn apply_no_cleaning<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &mut T,
+    ) -> Result<Option<collomatique_state_colloscopes::WeekPatternId>, WeekPatternsUpdateError>
+    {
+        match self {
+            Self::AddNewWeekPattern(week_pattern) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Add(
+                                week_pattern.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(
+                        |e| match e {
+                            collomatique_state_colloscopes::Error::WeekPattern(
+                                wpe
+                            ) => match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
+                                    AddNewWeekPatternError::BadWeekCountInWeekPattern
+                                }
+                                _ => panic!(
+                                    "Unexpected week pattern error during AddNewWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                            _ => panic!("Unexpected error during AddNewWeekPattern"),
+                        }
+                    )?;
+                let Some(collomatique_state_colloscopes::NewId::WeekPatternId(new_id)) = result
+                else {
+                    panic!("Unexpected result from WeekPatternOp::Add");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateWeekPattern(week_pattern_id, week_pattern) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Update(
+                                *week_pattern_id,
+                                week_pattern.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
+                            match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
+                                    UpdateWeekPatternError::InvalidWeekPatternId(id),
+                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
+                                    UpdateWeekPatternError::BadWeekCountInWeekPattern
+                                }
+                                _ => panic!(
+                                    "Unexpected week pattern error during UpdateWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during UpdateWeekPattern: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteWeekPattern(week_pattern_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Remove(*week_pattern_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
+                            match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
+                                    DeleteWeekPatternError::InvalidWeekPatternId(id),
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedIncompat(_, _) => {
+                                    panic!("Incompats should be cleaned before removing week patterns");
+                                }
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedSlots(_, _) => {
+                                    panic!("Slots should be cleaned before removing week patterns");
+                                }
+                                _ => panic!(
+                                    "Unexpected week pattern error during DeleteWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteWeekPattern: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
+    }
+
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::WeekPatterns,
+            match self {
+                WeekPatternsUpdateOp::AddNewWeekPattern(_desc) => {
+                    "Ajouter un modèle de périodicité".into()
+                }
+                WeekPatternsUpdateOp::UpdateWeekPattern(_id, _desc) => {
+                    "Modifier un modèle de périodicité".into()
+                }
+                WeekPatternsUpdateOp::DeleteWeekPattern(_id) => {
+                    "Supprimer un modèle de périodicité".into()
+                }
+            },
+        )
+    }
+}

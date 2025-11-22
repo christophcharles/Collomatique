@@ -1,0 +1,27 @@
+[package]
+name = "collomatique-gtk4"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state = { path = "../state" }
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-storage = { path = "../storage" }
+collomatique-time = { path = "../time" }
+collomatique-ilp = { path = "../ilp" }
+collomatique-solver = { path = "../solver" }
+collomatique-ops = { path = "../ops" }
+collomatique-rpc = { path = "../rpc" }
+collomatique-rpc-engine = { path = "../rpc-engine" }
+collomatique-solver-glue = { path = "../solver-glue" }
+libadwaita = { version = "0.7", features = [ "v1_7" ] }
+relm4 = { version = "0.9", features = [ "libadwaita" ] }
+glib = "*"
+rustix = { version = "1.0", features = [ "pty" ] }
+rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "process"] }
+chrono.workspace = true
+anyhow.workspace = true
+non-empty-string.workspace = true

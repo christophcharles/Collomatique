@@ -1,0 +1,13 @@
+[package]
+name = "collomatique-solver-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-ilp = { path = "../ilp" }
+collomatique-solver = { path = "../solver" }
+collomatique-time = { path = "../time" }
+ordered-float.workspace = true
+thiserror.workspace = true
+chrono.workspace = true

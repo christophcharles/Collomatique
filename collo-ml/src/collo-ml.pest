@@ -1,0 +1,149 @@
+// ========== General structure ==========
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT = _{ (!"##" ~ "#") ~ (!EOL ~ ANY)* }
+file = { SOI ~ statement* ~ EOI }
+string_literal = @{
+    (
+        "\\\\" | "\\\"" | ( !("\"" | "\\") ~ ANY )
+    )*
+}
+statement = { let_statement | reify_statement }
+
+docstring = ${
+    "##" ~ docstring_content ~ EOL
+}
+docstring_content = { (!EOL ~ ANY)* }
+EOL = _{ "\r\n" | "\n" | "\r" }
+
+ident_char = _{ ASCII_ALPHANUMERIC | "_" }
+ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
+reserved_keyword = { 
+    "forall" |  // before "for"
+    "false" |
+    "inter" |   // before "in"
+    "union" |
+    "reify" |
+    "where" |
+    "else" |
+    "true" |
+    "sum" |
+    "let" |
+    "pub" |
+    "not" |
+    "and" |
+    "for" |   // NEW: for comprehensions
+    "or" |
+    "as" |
+    "if" |
+    "in"        // shortest, comes last
+}
+
+// ========== Reify statements ==========
+reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ (var_name | var_list_name) ~ ";" }
+var_name = ${ "$" ~ ident }
+var_list_name = ${ "$[" ~ ident ~ "]" }
+
+// ========== Let statements ==========
+let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
+pub_modifier = { "pub" }
+params = { param ~ ("," ~ param)* }
+param = { ident ~ ":" ~ type_name }
+
+// ========== Type Names ==========
+primitive_type = { "Int" | "Bool" | "LinExpr" | "Constraint" | ident }
+type_name = { 
+    "[" ~ type_name ~ "]" |
+    primitive_type
+}
+
+// ========== Unified Expressions ==========
+expr = { and_expr }
+
+// Logical AND (lowest precedence for constraint-like operations)
+and_expr = { forall_expr ~ (and_op ~ forall_expr)* }
+
+// Quantifiers
+forall_expr = { forall | or_expr }
+forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+
+// Logical OR
+or_expr = { not_expr ~ (or_op ~ not_expr)* }
+not_expr = { not_op ~ not_expr | comparison_expr }
+
+// Comparisons and membership
+comparison_expr = { in_expr | union_expr }
+in_expr = { union_expr ~ in_op ~ union_expr }
+
+// Collection operations
+union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
+inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
+diff_expr = { relational_expr ~ (diff_op ~ relational_expr)? }
+
+relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
+
+// Arithmetic
+add_sub_expr = { mul_div_mod_expr ~ ((add_op | sub_op) ~ mul_div_mod_expr)* }
+mul_div_mod_expr = { explicit_type ~ ((mul_op | div_op | mod_op) ~ explicit_type)* }
+
+explicit_type = { path ~ ( "as" ~ type_name)? }
+
+path = { primary_expr ~ ("." ~ ident)* }
+
+// Primary expressions
+primary_expr = {
+    if_expr |
+    sum |
+    cardinality |
+    list_comprehension |  // Must come before list_literal to parse correctly
+    list_range | // Must come before list_literal to parse correctly
+    list_literal |
+    global_collection |
+    var_call |
+    var_list_call |
+    fn_call |
+    boolean |
+    number |
+    ident |
+    "(" ~ expr ~ ")"
+}
+
+if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
+sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+cardinality = { "|" ~ expr ~ "|" }
+list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
+list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
+list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
+global_collection = { "@" ~ "[" ~ type_name ~ "]" }
+var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
+var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
+fn_call = { ident ~ "(" ~ args? ~ ")" }
+args = { arg ~ ("," ~ arg)* }
+arg = { expr }
+
+// Operators
+add_op = { "+" }
+sub_op = { "-" }
+mul_op = { "*" }
+div_op = { "//" }
+mod_op = { "%" }
+comp_op = { "===" | "<==" | ">==" | "==" | "!=" | "<=" | ">=" | "<" | ">" }
+in_op = @{ "in" ~ !ident_char }
+union_op = @{ "union" ~ !ident_char }
+inter_op = @{ "inter" ~ !ident_char }
+diff_op = { "\\" }
+or_op = @{ "||" | "or" ~ !ident_char }
+and_op = @{ "&&" | "and" ~ !ident_char }
+not_op = @{ "!" | "not" ~ !ident_char }
+
+where_op = @{ "where" ~ !ident_char }
+
+boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
+number = @{ "-"? ~ ASCII_DIGIT+ }
+
+// ========== Test helpers ==========
+expr_complete = { SOI ~ expr ~ EOI }
+path_complete = { SOI ~ path ~ EOI }
+type_name_complete = { SOI ~ type_name ~ EOI }
+let_statement_complete = { SOI ~ let_statement ~ EOI }
+reify_statement_complete = { SOI ~ reify_statement ~ EOI }
+ident_complete = { SOI ~ ident ~ EOI }

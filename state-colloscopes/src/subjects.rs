@@ -1,0 +1,247 @@
+//! Subjects submodule
+//!
+//! This module defines the relevant types to describes the subjects
+
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeSet, num::NonZeroU32};
+
+use crate::ids::{PeriodId, SubjectId};
+
+/// Description of the subjects
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subjects {
+    /// Ordered list of subjects
+    ///
+    /// Each item represent a subject. It is described
+    /// by a unique id and a description of type [Subject]
+    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
+}
+
+/// Description of one subject
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subject {
+    /// Parameters for the subject
+    ///
+    /// This is separated because those parameters do
+    /// not need to be checked
+    pub parameters: SubjectParameters,
+    /// Periods that should not be covered by the subject
+    ///
+    /// By default a subject is present for every period.
+    pub excluded_periods: BTreeSet<PeriodId>,
+}
+
+/// Description of one subject
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectParameters {
+    /// Name of the subject
+    ///
+    /// This is just a descriptive string
+    pub name: String,
+    /// Parameters for the interrogations
+    ///
+    /// If `None`, this means there are no interrogations
+    /// for this subject.
+    pub interrogation_parameters: Option<SubjectInterrogationParameters>,
+}
+
+/// Description of the interrogations parameters for a subject
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectInterrogationParameters {
+    /// Students per group
+    ///
+    /// This is the number of students that should be
+    /// in a single group.
+    ///
+    /// This is not entirely fixed by the group list as
+    /// the same group list can be used for different
+    /// subjects and not all students must attend all subjects.
+    pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
+    /// number of groups to have during a single interrogation
+    ///
+    /// an interrogation can always have no groups. But we can
+    /// force having several groups in a single interrogation
+    /// and obviously, we can limit the number.
+    ///
+    /// This has two main applications:
+    /// - for practical tutorials (in physics or computer science for instance),
+    ///   it is sometimes practical to use the same group list as for other
+    ///   subjects with 2 or 3 students per group, but the tutorial should host
+    ///   basically half the class.
+    ///
+    ///   This allows the use of the same group list in such cases.
+    /// - for some subjects, the use of groups might not be ideal and students should
+    ///   be registered individually. But it might be possible to have several
+    ///   students at the same time. Having group size of 1 student and several
+    ///   groups at the same time can represent this situation.
+    pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
+    /// Duration of an interrogation in minutes
+    pub duration: collomatique_time::NonZeroDurationInMinutes,
+    /// This is useful when we try to limit or regulate
+    /// the number of interrogations a student has in a week.
+    ///
+    /// This settles the question of: should we take this time into
+    /// account?
+    ///
+    /// If set to `true`, the time will be taken into account and possibility limited.
+    /// If set to `false`, this will be ignored when accounting for the total amount of time
+    pub take_duration_into_account: bool,
+    /// Periodicity of the interrogations.
+    ///
+    /// See [SubjectPeriodicity] for more details.
+    pub periodicity: SubjectPeriodicity,
+}
+
+/// Periodicity information for a subject
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SubjectPeriodicity {
+    /// The interrogation must happen once for every block of time
+    ///
+    /// For instance, with a block of 2 weeks, a student must have
+    /// an interrogation in the first two weeks (either on the first
+    /// or second week) then a second interrogation in the next two
+    /// weeks (so either on the third or forth week) but it can perfectly
+    /// be on week 2 and week 3. We do not enforce a *perfect* regularity.
+    OnceForEveryBlockOfWeeks {
+        /// Number of weeks per block
+        weeks_per_block: NonZeroU32,
+        /// Minimum of weeks between two interrogations for the same student
+        ///
+        /// Note that `0` is not a valid possibility:
+        /// because there is at most one interrogation per block, there can't
+        /// be two interrogations the same week
+        minimum_week_separation: NonZeroU32,
+    },
+    /// The interrogation must happen every week or every other week
+    /// and the periodicity must be *strict*.
+    ///
+    /// For instance, with a periodicity of 2 weeks, a student must have
+    /// an interrogation in the first two weeks (either on the first
+    /// or second week) then a second interrogation in the next two
+    /// weeks (so either on the third or forth week). However, if they have
+    /// an interrogation on week 1, then the other one *must* be on week 3.
+    /// Similarly, if they have an interrogation on week 2, the next one will
+    /// be on week 4. We **do** enforce a *perfect* regularity.
+    ExactlyPeriodic {
+        /// Periodicity expressed in week count
+        periodicity_in_weeks: NonZeroU32,
+    },
+    /// Fixes the total number of interrogations during the year
+    ///
+    /// This leaves the maximum flexibility on the placement of each
+    /// interrogation. But this can lead to *very* unequal colloscopes.
+    ///
+    /// Apart from the total number of interrogations, we can also
+    /// impose a minimum separation between two consecutive interrogations
+    /// for a student.
+    AmountInYear {
+        /// Total number of interrogations during the year
+        ///
+        /// The total amount can be in a range and it is technically possible
+        /// to have a minimum of zero interrogations
+        interrogation_count_in_year: std::ops::RangeInclusive<u32>,
+        /// Minimum of weeks between two interrogations for the same student
+        ///
+        /// Note that `0` is a valid possibility: it might be possible to have
+        /// two interrogations during the same week!
+        minimum_week_separation: u32,
+    },
+    /// This is a generalization of [SubjectPeriodicity::OnceForEveryBlockOfWeeks].
+    ///
+    /// Interrogations should happen every block but the blocks are arbitrary.
+    ///
+    /// This is useful for instance when we have a limited number of interrogations
+    /// in the year (say 2) but the dates are not quite regular.
+    ///
+    /// Technically, [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is a special
+    /// case where the blocks start on the first week and then all have the same
+    /// size. We distinguish between them for practical purposes:
+    /// [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is used *way* more often
+    /// and can be represented in a simpler way on screen in a GUI.
+    AmountForEveryArbitraryBlock {
+        /// Description of the blocks that should each have a number of interrogations
+        ///
+        /// Blocks are in order and described by a [WeekBlock] structure.
+        ///
+        /// It is technically possible to have 0 blocks. This will imply that there are
+        /// no interrogations for the subject which is a bit weird.
+        ///
+        /// It is also possible to have blocks after the end of the schedule or without
+        /// any actual interrogations planned in them. But of course, no consistent
+        /// colloscope will be found for this.
+        blocks: Vec<WeekBlock>,
+        /// Minimum of weeks between two interrogations for the same student
+        ///
+        /// Note that `0` is a valid possibility: it might be possible to have
+        /// two interrogations during the same week!
+        minimum_week_separation: u32,
+    },
+}
+
+/// Description of a block of weeks for [SubjectPeriodicity::AmountForEveryArbitraryBlock]
+///
+/// This describes a single block of weeks that should have one interrogation.
+/// There are two parameters: [WeekBlock::delay_in_weeks] is the number of weeks
+/// between the previous block and the current block. It can be zero if two blocks are consecutive.
+/// For the first block, this correspond to the number of weeks from the start of
+/// the schedule without interrogations.
+///
+/// The second parameter is [WeekBlock::size_in_weeks]. This is the length of the block
+/// in weeks. It cannot be zero sized: a block always has at least one week.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WeekBlock {
+    /// Delay (in weeks) between the previous blocks and the current one.
+    ///
+    /// If this is the first block, this is the delay between the start of the schedule
+    /// and the first block.
+    pub delay_in_weeks: u32,
+    /// Number of weeks in the block.
+    ///
+    /// This can't be zero.
+    pub size_in_weeks: NonZeroU32,
+    /// Total number of interrogations that should happen during this block
+    ///
+    /// This is described by a range and it is technically possible
+    /// The total amount can be in a range
+    /// to have a minimum of zero interrogations
+    pub interrogation_count_in_block: std::ops::RangeInclusive<u32>,
+}
+
+impl Default for SubjectParameters {
+    fn default() -> Self {
+        SubjectParameters {
+            name: String::new(),
+            interrogation_parameters: Some(SubjectInterrogationParameters::default()),
+        }
+    }
+}
+
+impl Default for SubjectInterrogationParameters {
+    fn default() -> Self {
+        SubjectInterrogationParameters {
+            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+            take_duration_into_account: true,
+            periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+            },
+        }
+    }
+}
+
+impl Subjects {
+    /// Finds the position of a subject by id
+    pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
+        self.ordered_subject_list
+            .iter()
+            .position(|(current_id, _desc)| *current_id == id)
+    }
+
+    /// Finds a subject by id
+    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
+        let pos = self.find_subject_position(id)?;
+
+        Some(&self.ordered_subject_list[pos].1)
+    }
+}

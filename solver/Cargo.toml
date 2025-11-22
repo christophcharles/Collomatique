@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-solver"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-ilp = { path = "../ilp" }
+ordered-float.workspace = true
+thiserror.workspace = true
