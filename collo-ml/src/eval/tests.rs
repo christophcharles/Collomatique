@@ -7,6 +7,7 @@ mod comparisons;
 mod constraints;
 mod fn_call;
 mod if_branches;
+mod list_comprehensions;
 mod literals;
 mod objects;
 mod quantifiers;

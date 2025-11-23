@@ -1802,12 +1802,12 @@ impl<T: Object> LocalEnv<T> {
             } => {
                 let target = ast
                     .expr_types
-                    .get(&body.span)
+                    .get(&expr.span)
                     .expect("Semantic analysis should have given a target type");
 
                 let inner_typ = match target {
                     AnnotatedType::Regular(ExprType::List(typ)) => typ.as_ref().clone(),
-                    _ => panic!("Expected type list: {:?}", target),
+                    _ => panic!("Expected typed list: {:?}", target),
                 };
 
                 let list = self.build_naked_list_for_list_comprehension(
