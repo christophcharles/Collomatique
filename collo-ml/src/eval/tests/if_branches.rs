@@ -252,7 +252,7 @@ fn if_with_constraint() {
     match result_true {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
                 params: vec![],

@@ -667,7 +667,7 @@ fn var_list_with_forall() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Script(ScriptVar {
                 name: "MyVars".into(),

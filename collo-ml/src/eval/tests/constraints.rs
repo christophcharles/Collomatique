@@ -17,7 +17,7 @@ fn constraint_eq_two_ints() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Should create: LinExpr(5) == LinExpr(3)
             let constraint = LinExpr::constant(5.).eq(&LinExpr::constant(3.));
@@ -42,7 +42,7 @@ fn constraint_eq_var_with_int() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -70,7 +70,7 @@ fn constraint_eq_two_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
                 params: vec![],
@@ -100,7 +100,7 @@ fn constraint_eq_with_arithmetic() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = (2 * LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -128,7 +128,7 @@ fn constraint_eq_with_params() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -158,7 +158,7 @@ fn constraint_le_two_ints() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::constant(5.).leq(&LinExpr::constant(10.));
             assert!(constraints.contains(&constraint));
@@ -182,7 +182,7 @@ fn constraint_le_var_with_int() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -210,7 +210,7 @@ fn constraint_le_with_arithmetic() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = (3 * LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
@@ -242,7 +242,7 @@ fn constraint_le_two_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
@@ -275,7 +275,7 @@ fn constraint_ge_two_ints() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::constant(10.).geq(&LinExpr::constant(5.));
             assert!(constraints.contains(&constraint));
@@ -299,7 +299,7 @@ fn constraint_ge_var_with_int() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -327,7 +327,7 @@ fn constraint_ge_with_arithmetic() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = (LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
@@ -358,7 +358,7 @@ fn constraint_ge_two_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),

@@ -27,7 +27,7 @@ fn forall_with_reified_var_and_filter() {
         ExprValue::Constraint(constraints) => {
             // Only x=1 and x=2 pass the filter
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Expected: $MyVar(1) === 1 and $MyVar(2) === 1
             let expected1 = LinExpr::var(IlpVar::Script(ScriptVar {
@@ -411,7 +411,7 @@ fn function_returning_constraint_system() {
         ExprValue::Constraint(constraints) => {
             // 1 sum constraint + 6 bound constraints (2 per variable)
             assert_eq!(constraints.len(), 7);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Check sum constraint: V(1) + V(2) + V(3) === 2
             let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
@@ -475,7 +475,7 @@ fn function_composition_with_reified_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Expected: MyVar(1,5) + MyVar(2,5) <= 10
             let expected = (LinExpr::var(IlpVar::Script(ScriptVar {
@@ -534,7 +534,7 @@ fn assignment_constraint_pattern() {
         ExprValue::Constraint(constraints) => {
             // 2 student constraints + 2 slot constraints = 4 total
             assert_eq!(constraints.len(), 4);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Student 1 exactly one: Assigned(1,1) + Assigned(1,2) === 1
             let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
@@ -611,7 +611,7 @@ fn conditional_constraint_with_reification() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Expected: Assigned(1,5) <= IsAvailable(1,5)
             let expected = LinExpr::var(IlpVar::Base(ExternVar {
@@ -963,7 +963,7 @@ fn all_features_combined() {
             // (1,3):4, (1,4):5, (2,3):5, (2,4):6 all in range [1,10]
             // 4 le constraints + 1 sum constraint = 5 total
             assert_eq!(constraints.len(), 5);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Verify some constraints exist
             let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar {

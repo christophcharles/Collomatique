@@ -9,6 +9,7 @@ mod complex_combinations;
 mod constraints;
 mod functions;
 mod if_branches;
+mod let_expr;
 mod list_comprehensions;
 mod literals;
 mod objects;
