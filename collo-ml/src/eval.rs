@@ -2,7 +2,7 @@ use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
 use collomatique_ilp::{Constraint, LinExpr, UsableData};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[cfg(test)]
 mod tests;
@@ -518,12 +518,15 @@ impl CheckedAST {
             }
             checked_args.push(arg.into());
         }
-        self.eval_fn_internal(env, fn_name, checked_args, false)
+        let mut call_history = BTreeMap::new();
+
+        self.add_fn_to_eval_history(env, &mut call_history, fn_name, checked_args.clone(), false)
     }
 
-    fn eval_fn_internal<E: EvalEnv>(
+    fn add_fn_to_eval_history<E: EvalEnv>(
         &self,
         env: &E,
+        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
         fn_name: &str,
         args: Vec<AnnotatedValue<E::Object>>,
         allow_private: bool,
@@ -540,6 +543,10 @@ impl CheckedAST {
             }
         }
 
+        if let Some(r) = call_history.get(&(fn_name.to_string(), args.clone())) {
+            return Ok(r.clone());
+        }
+
         if fn_desc.typ.args.len() != args.len() {
             return Err(EvalError::ArgumentCountMismatch {
                 identifier: fn_name.to_string(),
@@ -551,6 +558,7 @@ impl CheckedAST {
         let mut coerced_args = vec![];
         let mut local_env = LocalEnv::new();
         for (param, ((arg, arg_typ), arg_name)) in args
+            .clone()
             .into_iter()
             .zip(fn_desc.typ.args.iter())
             .zip(fn_desc.arg_names.iter())
@@ -566,7 +574,7 @@ impl CheckedAST {
         }
 
         local_env.push_scope();
-        let annotated_result = local_env.eval_expr(self, env, &fn_desc.body);
+        let annotated_result = local_env.eval_expr(self, env, call_history, &fn_desc.body);
         local_env.pop_scope();
 
         let origin = Origin {
@@ -574,13 +582,16 @@ impl CheckedAST {
             args: coerced_args,
         };
 
-        Ok(annotated_result
+        let result = annotated_result
             .coerce_to(env, &fn_desc.typ.output)
             .expect(&format!(
                 "Coercion to output type should always work in a checked AST: {:?} -> {:?}",
                 annotated_result, fn_desc.typ.output
             ))
-            .with_origin(&origin))
+            .with_origin(&origin);
+        call_history.insert((fn_name.to_string(), args), result.clone());
+
+        Ok(result)
     }
 }
 
@@ -638,6 +649,7 @@ impl<T: UsableData> LocalEnv<T> {
         &mut self,
         ast: &CheckedAST,
         env: &E,
+        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
         expr: &Spanned<crate::ast::Expr>,
     ) -> AnnotatedValue<T> {
         use crate::ast::Expr;
@@ -651,7 +663,7 @@ impl<T: UsableData> LocalEnv<T> {
             Expr::Path { object, segments } => {
                 assert!(!segments.is_empty());
 
-                let initial_object = self.eval_expr(ast, env, &object);
+                let initial_object = self.eval_expr(ast, env, call_history, &object);
                 let mut current_value = initial_object.into_inner().expect("Object expected");
 
                 for field in segments {
@@ -667,7 +679,7 @@ impl<T: UsableData> LocalEnv<T> {
                 current_value.into()
             }
             Expr::Cardinality(list_expr) => {
-                let list_value = self.eval_expr(ast, env, &list_expr);
+                let list_value = self.eval_expr(ast, env, call_history, &list_expr);
                 let count = match list_value {
                     AnnotatedValue::Forced(ExprValue::List(_typ, list))
                     | AnnotatedValue::Regular(ExprValue::List(_typ, list)) => list.len(),
@@ -680,7 +692,7 @@ impl<T: UsableData> LocalEnv<T> {
                 .into()
             }
             Expr::ExplicitType { expr, typ } => {
-                let value = self.eval_expr(ast, env, &expr);
+                let value = self.eval_expr(ast, env, call_history, &expr);
                 let target_type = ExprType::from(typ.node.clone());
 
                 // A forced value can be cast anyway
@@ -699,7 +711,7 @@ impl<T: UsableData> LocalEnv<T> {
 
                 let element_values: Vec<_> = elements
                     .iter()
-                    .map(|x| self.eval_expr(ast, env, &x))
+                    .map(|x| self.eval_expr(ast, env, call_history, &x))
                     .collect();
 
                 let mut unified_type = element_values[0].get_type(env);
@@ -723,8 +735,8 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::List(target_type, coerced_elements).into()
             }
             Expr::ListRange { start, end } => {
-                let start_value = self.eval_expr(ast, env, &start);
-                let end_value = self.eval_expr(ast, env, &end);
+                let start_value = self.eval_expr(ast, env, call_history, &start);
+                let end_value = self.eval_expr(ast, env, call_history, &end);
 
                 let coerced_start = start_value
                     .coerce_to(env, &ExprType::Int)
@@ -768,15 +780,19 @@ impl<T: UsableData> LocalEnv<T> {
                 .into()
             }
             Expr::FnCall { name, args } => {
-                let args = args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
-                let result = ast
-                    .eval_fn_internal(env, &name.node, args, true)
-                    .expect("Function call should evaluate");
-
-                result.into()
+                let args = args
+                    .iter()
+                    .map(|x| self.eval_expr(ast, env, call_history, &x))
+                    .collect();
+                ast.add_fn_to_eval_history(env, call_history, &name.node, args, true)
+                    .expect("Function call should evaluate")
+                    .into()
             }
             Expr::VarCall { name, args } => {
-                let args: Vec<_> = args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|x| self.eval_expr(ast, env, call_history, &x))
+                    .collect();
                 if let Some(args_typ) = ast.global_env.get_predefined_vars().get(&name.node) {
                     let params = args
                         .into_iter()
@@ -809,7 +825,7 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::In { item, collection } => {
-                let collection_value = self.eval_expr(ast, env, &*collection);
+                let collection_value = self.eval_expr(ast, env, call_history, &*collection);
                 let (elem_t, list) = match collection_value {
                     AnnotatedValue::Forced(ExprValue::List(elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(elem_t, list)) => (elem_t, list),
@@ -820,7 +836,7 @@ impl<T: UsableData> LocalEnv<T> {
                     _ => panic!("List expected"),
                 };
 
-                let item_value = self.eval_expr(ast, env, &*item);
+                let item_value = self.eval_expr(ast, env, call_history, &*item);
                 let coerced_value = item_value
                     .coerce_to(env, &elem_t)
                     .expect("Coercion should work");
@@ -833,7 +849,7 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(false).into()
             }
             Expr::Union(collection1, collection2) => {
-                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let collection1_value = self.eval_expr(ast, env, call_history, &*collection1);
                 let list1 = match collection1_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -844,7 +860,7 @@ impl<T: UsableData> LocalEnv<T> {
                     _ => panic!("List expected"),
                 };
 
-                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let collection2_value = self.eval_expr(ast, env, call_history, &*collection2);
                 let list2 = match collection2_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -874,7 +890,7 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::Inter(collection1, collection2) => {
-                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let collection1_value = self.eval_expr(ast, env, call_history, &*collection1);
                 let list1 = match collection1_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -885,7 +901,7 @@ impl<T: UsableData> LocalEnv<T> {
                     _ => panic!("List expected"),
                 };
 
-                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let collection2_value = self.eval_expr(ast, env, call_history, &*collection2);
                 let list2 = match collection2_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -922,7 +938,7 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::Diff(collection1, collection2) => {
-                let collection1_value = self.eval_expr(ast, env, &*collection1);
+                let collection1_value = self.eval_expr(ast, env, call_history, &*collection1);
                 let list1 = match collection1_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -933,7 +949,7 @@ impl<T: UsableData> LocalEnv<T> {
                     _ => panic!("List expected"),
                 };
 
-                let collection2_value = self.eval_expr(ast, env, &*collection2);
+                let collection2_value = self.eval_expr(ast, env, call_history, &*collection2);
                 let list2 = match collection2_value {
                     AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                     | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -975,12 +991,12 @@ impl<T: UsableData> LocalEnv<T> {
 
                 match target {
                     AnnotatedType::Regular(ExprType::Bool) => {
-                        let value1 = self.eval_expr(ast, env, &*expr1);
+                        let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                         let boolean_value1 = value1
                             .coerce_to(env, &ExprType::Bool)
                             .expect("Coercion should be valid");
 
-                        let value2 = self.eval_expr(ast, env, &*expr2);
+                        let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                         let boolean_value2 = value2
                             .coerce_to(env, &ExprType::Bool)
                             .expect("Coercion should be valid");
@@ -997,12 +1013,12 @@ impl<T: UsableData> LocalEnv<T> {
                         ExprValue::Bool(bool1 && bool2).into()
                     }
                     AnnotatedType::Regular(ExprType::Constraint) => {
-                        let value1 = self.eval_expr(ast, env, &*expr1);
+                        let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                         let constraint_value1 = value1
                             .coerce_to(env, &ExprType::Constraint)
                             .expect("Coercion should be valid");
 
-                        let value2 = self.eval_expr(ast, env, &*expr2);
+                        let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                         let constraint_value2 = value2
                             .coerce_to(env, &ExprType::Constraint)
                             .expect("Coercion should be valid");
@@ -1028,12 +1044,12 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::Or(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let boolean_value1 = value1
                     .coerce_to(env, &ExprType::Bool)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let boolean_value2 = value2
                     .coerce_to(env, &ExprType::Bool)
                     .expect("Coercion should be valid");
@@ -1050,7 +1066,7 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(bool1 || bool2).into()
             }
             Expr::Not(not_expr) => {
-                let value = self.eval_expr(ast, env, &*not_expr);
+                let value = self.eval_expr(ast, env, call_history, &*not_expr);
                 let boolean_value = value
                     .coerce_to(env, &ExprType::Bool)
                     .expect("Coercion should be valid");
@@ -1061,12 +1077,12 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::ConstraintEq(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let lin_expr1_value = value1
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let lin_expr2_value = value2
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
@@ -1083,12 +1099,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Constraint(BTreeSet::from([lin_expr1.eq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintLe(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let lin_expr1_value = value1
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let lin_expr2_value = value2
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
@@ -1105,12 +1121,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Constraint(BTreeSet::from([lin_expr1.leq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintGe(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let lin_expr1_value = value1
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let lin_expr2_value = value2
                     .coerce_to(env, &ExprType::LinExpr)
                     .expect("Coercion should be valid");
@@ -1127,10 +1143,10 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Constraint(BTreeSet::from([lin_expr1.geq(&lin_expr2).into()])).into()
             }
             Expr::Eq(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let typ1 = value1.get_type(env);
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let typ2 = value2.get_type(env);
 
                 let target =
@@ -1152,10 +1168,10 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(coerced_value1 == coerced_value2).into()
             }
             Expr::Ne(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let typ1 = value1.get_type(env);
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let typ2 = value2.get_type(env);
 
                 let target =
@@ -1177,12 +1193,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(coerced_value1 != coerced_value2).into()
             }
             Expr::Lt(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1199,12 +1215,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(num1 < num2).into()
             }
             Expr::Le(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1221,12 +1237,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(num1 <= num2).into()
             }
             Expr::Gt(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1243,12 +1259,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Bool(num1 > num2).into()
             }
             Expr::Ge(expr1, expr2) => {
-                let value1 = self.eval_expr(ast, env, &*expr1);
+                let value1 = self.eval_expr(ast, env, call_history, &*expr1);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*expr2);
+                let value2 = self.eval_expr(ast, env, call_history, &*expr2);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1270,8 +1286,8 @@ impl<T: UsableData> LocalEnv<T> {
                     .get(&expr.span)
                     .expect("Semantic analysis should have given a target type");
 
-                let value1 = self.eval_expr(ast, env, &*left);
-                let value2 = self.eval_expr(ast, env, &*right);
+                let value1 = self.eval_expr(ast, env, call_history, &*left);
+                let value2 = self.eval_expr(ast, env, call_history, &*right);
 
                 match target {
                     AnnotatedType::Regular(ExprType::Int) => {
@@ -1321,8 +1337,8 @@ impl<T: UsableData> LocalEnv<T> {
                     .get(&expr.span)
                     .expect("Semantic analysis should have given a target type");
 
-                let value1 = self.eval_expr(ast, env, &*left);
-                let value2 = self.eval_expr(ast, env, &*right);
+                let value1 = self.eval_expr(ast, env, call_history, &*left);
+                let value2 = self.eval_expr(ast, env, call_history, &*right);
 
                 match target {
                     AnnotatedType::Regular(ExprType::Int) => {
@@ -1372,7 +1388,7 @@ impl<T: UsableData> LocalEnv<T> {
                     .get(&expr.span)
                     .expect("Semantic analysis should have given a target type");
 
-                let value = self.eval_expr(ast, env, &*term);
+                let value = self.eval_expr(ast, env, call_history, &*term);
 
                 match target {
                     AnnotatedType::Regular(ExprType::Int) => {
@@ -1403,8 +1419,8 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::Mul(left, right) => {
-                let value1 = self.eval_expr(ast, env, &*left);
-                let value2 = self.eval_expr(ast, env, &*right);
+                let value1 = self.eval_expr(ast, env, call_history, &*left);
+                let value2 = self.eval_expr(ast, env, call_history, &*right);
 
                 let typ1 = value1
                     .get_type(env)
@@ -1480,12 +1496,12 @@ impl<T: UsableData> LocalEnv<T> {
                 }
             }
             Expr::Div(left, right) => {
-                let value1 = self.eval_expr(ast, env, &*left);
+                let value1 = self.eval_expr(ast, env, call_history, &*left);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*right);
+                let value2 = self.eval_expr(ast, env, call_history, &*right);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1502,12 +1518,12 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::Int(num1 / num2).into()
             }
             Expr::Mod(left, right) => {
-                let value1 = self.eval_expr(ast, env, &*left);
+                let value1 = self.eval_expr(ast, env, call_history, &*left);
                 let number1_value = value1
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
 
-                let value2 = self.eval_expr(ast, env, &*right);
+                let value2 = self.eval_expr(ast, env, call_history, &*right);
                 let number2_value = value2
                     .coerce_to(env, &ExprType::Int)
                     .expect("Coercion should be valid");
@@ -1541,7 +1557,7 @@ impl<T: UsableData> LocalEnv<T> {
                     }
                 };
 
-                let cond_value = self.eval_expr(ast, env, &condition);
+                let cond_value = self.eval_expr(ast, env, call_history, &condition);
                 let coerced_cond = cond_value
                     .coerce_to(env, &ExprType::Bool)
                     .expect("Coercion should be valid");
@@ -1551,9 +1567,9 @@ impl<T: UsableData> LocalEnv<T> {
                 };
 
                 let value = if cond {
-                    self.eval_expr(ast, env, &then_expr)
+                    self.eval_expr(ast, env, call_history, &then_expr)
                 } else {
-                    self.eval_expr(ast, env, &else_expr)
+                    self.eval_expr(ast, env, call_history, &else_expr)
                 };
 
                 value
@@ -1567,7 +1583,7 @@ impl<T: UsableData> LocalEnv<T> {
                 filter,
                 body,
             } => {
-                let collection_value = self.eval_expr(ast, env, &collection);
+                let collection_value = self.eval_expr(ast, env, call_history, &collection);
 
                 let target = ast
                     .expr_types
@@ -1598,7 +1614,7 @@ impl<T: UsableData> LocalEnv<T> {
                         let cond = match filter {
                             None => true,
                             Some(f) => {
-                                let filter_value = self.eval_expr(ast, env, &f);
+                                let filter_value = self.eval_expr(ast, env, call_history, &f);
                                 let coerced_filter = filter_value
                                     .coerce_to(env, &ExprType::Bool)
                                     .expect("Coercion should be valid");
@@ -1610,7 +1626,7 @@ impl<T: UsableData> LocalEnv<T> {
                         };
 
                         if cond {
-                            let new_value = self.eval_expr(ast, env, &body);
+                            let new_value = self.eval_expr(ast, env, call_history, &body);
                             let coerced_body = new_value
                                 .coerce_to(env, &ExprType::LinExpr)
                                 .expect("Coercion should be valid");
@@ -1635,7 +1651,7 @@ impl<T: UsableData> LocalEnv<T> {
                         let cond = match filter {
                             None => true,
                             Some(f) => {
-                                let filter_value = self.eval_expr(ast, env, &f);
+                                let filter_value = self.eval_expr(ast, env, call_history, &f);
                                 let coerced_filter = filter_value
                                     .coerce_to(env, &ExprType::Bool)
                                     .expect("Coercion should be valid");
@@ -1647,7 +1663,7 @@ impl<T: UsableData> LocalEnv<T> {
                         };
 
                         if cond {
-                            let new_value = self.eval_expr(ast, env, &body);
+                            let new_value = self.eval_expr(ast, env, call_history, &body);
                             let coerced_body = new_value
                                 .coerce_to(env, &ExprType::Int)
                                 .expect("Coercion should be valid");
@@ -1670,7 +1686,7 @@ impl<T: UsableData> LocalEnv<T> {
                 filter,
                 body,
             } => {
-                let collection_value = self.eval_expr(ast, env, &collection);
+                let collection_value = self.eval_expr(ast, env, call_history, &collection);
 
                 let target = ast
                     .expr_types
@@ -1701,7 +1717,7 @@ impl<T: UsableData> LocalEnv<T> {
                         let cond = match filter {
                             None => true,
                             Some(f) => {
-                                let filter_value = self.eval_expr(ast, env, &f);
+                                let filter_value = self.eval_expr(ast, env, call_history, &f);
                                 let coerced_filter = filter_value
                                     .coerce_to(env, &ExprType::Bool)
                                     .expect("Coercion should be valid");
@@ -1713,7 +1729,7 @@ impl<T: UsableData> LocalEnv<T> {
                         };
 
                         if cond {
-                            let new_value = self.eval_expr(ast, env, &body);
+                            let new_value = self.eval_expr(ast, env, call_history, &body);
                             let coerced_body = new_value
                                 .coerce_to(env, &ExprType::Constraint)
                                 .expect("Coercion should be valid");
@@ -1738,7 +1754,7 @@ impl<T: UsableData> LocalEnv<T> {
                         let cond = match filter {
                             None => true,
                             Some(f) => {
-                                let filter_value = self.eval_expr(ast, env, &f);
+                                let filter_value = self.eval_expr(ast, env, call_history, &f);
                                 let coerced_filter = filter_value
                                     .coerce_to(env, &ExprType::Bool)
                                     .expect("Coercion should be valid");
@@ -1750,7 +1766,7 @@ impl<T: UsableData> LocalEnv<T> {
                         };
 
                         if cond {
-                            let new_value = self.eval_expr(ast, env, &body);
+                            let new_value = self.eval_expr(ast, env, call_history, &body);
                             let coerced_body = new_value
                                 .coerce_to(env, &ExprType::Bool)
                                 .expect("Coercion should be valid");
@@ -1772,10 +1788,18 @@ impl<T: UsableData> LocalEnv<T> {
                 let var_list_fn = var_lists
                     .get(&name.node)
                     .expect("Var list should be declared");
-                let evaluated_args: Vec<_> =
-                    args.iter().map(|x| self.eval_expr(ast, env, &x)).collect();
+                let evaluated_args: Vec<_> = args
+                    .iter()
+                    .map(|x| self.eval_expr(ast, env, call_history, &x))
+                    .collect();
                 let constraints = ast
-                    .eval_fn_internal(env, var_list_fn, evaluated_args.clone(), true)
+                    .add_fn_to_eval_history(
+                        env,
+                        call_history,
+                        var_list_fn,
+                        evaluated_args.clone(),
+                        true,
+                    )
                     .expect("Evaluation should be valid");
 
                 let constraint_count = match constraints {
@@ -1829,6 +1853,7 @@ impl<T: UsableData> LocalEnv<T> {
                 };
 
                 let list = self.build_naked_list_for_list_comprehension(
+                    call_history,
                     ast,
                     env,
                     &body,
@@ -1839,13 +1864,13 @@ impl<T: UsableData> LocalEnv<T> {
                 ExprValue::List(inner_typ, list).into()
             }
             Expr::Let { var, value, body } => {
-                let value_value = self.eval_expr(ast, env, &value);
+                let value_value = self.eval_expr(ast, env, call_history, &value);
                 let inner_value = value_value.into_inner().expect("Should have a known type");
 
                 self.register_identifier(&var.node, inner_value);
                 self.push_scope();
 
-                let body_value = self.eval_expr(ast, env, &body);
+                let body_value = self.eval_expr(ast, env, call_history, &body);
 
                 self.pop_scope();
 
@@ -1856,6 +1881,7 @@ impl<T: UsableData> LocalEnv<T> {
 
     fn build_naked_list_for_list_comprehension<E: EvalEnv<Object = T>>(
         &mut self,
+        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
         ast: &CheckedAST,
         env: &E,
         body: &Spanned<crate::ast::Expr>,
@@ -1866,7 +1892,7 @@ impl<T: UsableData> LocalEnv<T> {
             let cond = match filter {
                 None => true,
                 Some(f) => {
-                    let filter_value = self.eval_expr(ast, env, &f);
+                    let filter_value = self.eval_expr(ast, env, call_history, &f);
                     let coerced_filter = filter_value
                         .coerce_to(env, &ExprType::Bool)
                         .expect("Coercion should be valid");
@@ -1878,7 +1904,7 @@ impl<T: UsableData> LocalEnv<T> {
             };
 
             return if cond {
-                let new_value = self.eval_expr(ast, env, &body);
+                let new_value = self.eval_expr(ast, env, call_history, &body);
                 let inner_value = new_value
                     .into_inner()
                     .expect("Element in list comprehensions should have definite types");
@@ -1891,7 +1917,7 @@ impl<T: UsableData> LocalEnv<T> {
         let (var, collection) = &vars_and_collections[0];
         let remaining_v_and_c = &vars_and_collections[1..];
 
-        let collection_value = self.eval_expr(ast, env, &collection);
+        let collection_value = self.eval_expr(ast, env, call_history, &collection);
 
         let (_typ, list) = match collection_value {
             AnnotatedValue::Regular(ExprValue::List(typ, list))
@@ -1906,6 +1932,7 @@ impl<T: UsableData> LocalEnv<T> {
             self.push_scope();
 
             output.extend(self.build_naked_list_for_list_comprehension(
+                call_history,
                 ast,
                 env,
                 body,
