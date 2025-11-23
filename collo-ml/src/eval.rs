@@ -507,6 +507,70 @@ impl CheckedAST {
         fn_name: &str,
         args: Vec<ExprValue<E::Object>>,
     ) -> Result<ExprValue<E::Object>, EvalError> {
+        self.eval_fn_internal(env, fn_name, args).map(|(r, _h)| r)
+    }
+
+    pub fn eval_fn_with_variables<E: EvalEnv>(
+        &self,
+        env: &E,
+        fn_name: &str,
+        args: Vec<ExprValue<E::Object>>,
+    ) -> Result<(ExprValue<E::Object>, VariableDefinitions<E::Object>), EvalError> {
+        let (r, history) = self.eval_fn_internal(env, fn_name, args)?;
+
+        let mut var_def = VariableDefinitions {
+            vars: BTreeMap::new(),
+            var_lists: BTreeMap::new(),
+        };
+
+        for ((v_name, v_args), fn_name) in history.vars {
+            let fn_call_result = history
+                .funcs
+                .get(&(fn_name.clone(), v_args.clone()))
+                .expect("Fn call should be valid");
+            let constraint = match fn_call_result {
+                ExprValue::Constraint(c) => c,
+                _ => panic!(
+                    "Fn call should have returned a constraint: {:?}",
+                    fn_call_result
+                ),
+            };
+            var_def.vars.insert((v_name, v_args), constraint.clone());
+        }
+
+        for ((vl_name, vl_args), fn_name) in history.var_lists {
+            let fn_call_result = history
+                .funcs
+                .get(&(fn_name.clone(), vl_args.clone()))
+                .expect("Fn call should be valid");
+            let constraints: BTreeSet<_> = match fn_call_result {
+                ExprValue::List(ExprType::Constraint, cs) => cs
+                    .iter()
+                    .map(|c| match c {
+                        ExprValue::Constraint(c) => c.clone(),
+                        _ => panic!(
+                            "Elements of the returned list should be constraints: {:?}",
+                            c
+                        ),
+                    })
+                    .collect(),
+                _ => panic!(
+                    "Fn call should have returned a constraint list: {:?}",
+                    fn_call_result
+                ),
+            };
+            var_def.var_lists.insert((vl_name, vl_args), constraints);
+        }
+
+        Ok((r, var_def))
+    }
+
+    fn eval_fn_internal<E: EvalEnv>(
+        &self,
+        env: &E,
+        fn_name: &str,
+        args: Vec<ExprValue<E::Object>>,
+    ) -> Result<(ExprValue<E::Object>, CallHistory<E::Object>), EvalError> {
         if !self.check_env(env) {
             return Err(EvalError::BadEnv);
         }
@@ -521,7 +585,16 @@ impl CheckedAST {
 
         let mut call_history = CallHistory::default();
 
-        self.add_fn_to_call_history(env, &mut call_history, fn_name, checked_args.clone(), false)
+        match self.add_fn_to_call_history(
+            env,
+            &mut call_history,
+            fn_name,
+            checked_args.clone(),
+            false,
+        ) {
+            Ok(r) => Ok((r, call_history)),
+            Err(e) => Err(e),
+        }
     }
 
     fn add_fn_to_call_history<E: EvalEnv>(
@@ -574,7 +647,6 @@ impl CheckedAST {
             .funcs
             .get(&(fn_name.to_string(), coerced_args.clone()))
         {
-            local_env.scrap_pending_scope();
             return Ok(r.clone());
         }
 
@@ -643,10 +715,6 @@ impl<T: UsableData> LocalEnv<T> {
         assert!(!self.scopes.is_empty());
 
         self.pending_scope = self.scopes.pop().unwrap();
-        self.pending_scope.clear();
-    }
-
-    fn scrap_pending_scope(&mut self) {
         self.pending_scope.clear();
     }
 
@@ -1975,9 +2043,9 @@ impl<T: UsableData> LocalEnv<T> {
 
 #[derive(Clone, Debug)]
 struct CallHistory<T: UsableData> {
-    pub funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
-    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
-    pub var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
+    funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
+    vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
+    var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
 }
 
 impl<T: UsableData> Default for CallHistory<T> {
@@ -1988,4 +2056,11 @@ impl<T: UsableData> Default for CallHistory<T> {
             var_lists: BTreeMap::new(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct VariableDefinitions<T: UsableData> {
+    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<ConstraintWithOrigin<T>>>,
+    pub var_lists:
+        BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<BTreeSet<ConstraintWithOrigin<T>>>>,
 }
