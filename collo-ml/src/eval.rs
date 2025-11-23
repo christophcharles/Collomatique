@@ -47,7 +47,7 @@ impl<T: Object> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     }
 }
 
-pub fn strip_origin<T: Object>(
+pub fn strip_origins<T: Object>(
     set: &BTreeSet<ConstraintWithOrigin<T>>,
 ) -> BTreeSet<Constraint<IlpVar<T>>> {
     set.iter().map(|x| x.constraint.clone()).collect()

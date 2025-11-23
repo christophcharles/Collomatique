@@ -570,7 +570,7 @@ fn forall_constraint_simple() {
             // Should have 2 constraints (for x=1 and x=2)
             assert_eq!(constraints.len(), 2);
 
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Check first constraint: $V(1) === 1
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
@@ -628,7 +628,7 @@ fn forall_constraint_with_inequality() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Check constraints are <= constraints
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
@@ -665,7 +665,7 @@ fn forall_constraint_with_filter() {
         ExprValue::Constraint(constraints) => {
             // Only even numbers: 2, 4
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V".into(),
@@ -721,7 +721,7 @@ fn forall_constraint_with_arithmetic() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // Check first constraint: 2*$V(1) + 5 === 15
             let constraint1 = (2 * LinExpr::var(IlpVar::Base(ExternVar {
@@ -760,7 +760,7 @@ fn forall_constraint_multiple_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             let constraint1 = (LinExpr::var(IlpVar::Base(ExternVar {
                 name: "V1".into(),
@@ -801,7 +801,7 @@ fn forall_constraint_with_param() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            let constraints = strip_origin(&constraints);
+            let constraints = strip_origins(&constraints);
 
             // All constraints should be === 42
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
