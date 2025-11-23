@@ -252,15 +252,13 @@ fn if_with_constraint() {
     match result_true {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let constraint = &constraints[0].constraint;
-            assert_eq!(
-                constraint,
-                &LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V1".into(),
-                    params: vec![]
-                }))
-                .eq(&LinExpr::constant(1.))
-            );
+            let constraints = strip_origin(&constraints);
+            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V1".into(),
+                params: vec![],
+            }))
+            .eq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint1));
         }
         _ => panic!("Expected Constraint"),
     }
