@@ -1351,7 +1351,7 @@ impl<T: Object> LocalEnv<T> {
                             _ => panic!("Expected boolean"),
                         };
 
-                        ExprValue::Int(num1 + num2).into()
+                        ExprValue::Int(num1 - num2).into()
                     }
                     AnnotatedType::Regular(ExprType::LinExpr) => {
                         let linexpr1_value = value1
@@ -1406,7 +1406,7 @@ impl<T: Object> LocalEnv<T> {
                             _ => panic!("Expected boolean"),
                         };
 
-                        ExprValue::Int(num1 + num2).into()
+                        ExprValue::Int(num1 * num2).into()
                     }
                     (ExprType::LinExpr, ExprType::Int) => {
                         let linexpr1_value = value1
