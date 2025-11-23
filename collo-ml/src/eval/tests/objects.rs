@@ -1,4 +1,4 @@
-use crate::eval::{CheckedAST, EvalEnv, ExprValue, Object};
+use crate::eval::{CheckedAST, EvalEnv, ExprValue};
 use crate::semantics::ExprType;
 use std::collections::{BTreeSet, HashMap};
 
@@ -10,46 +10,58 @@ enum SimpleObject {
     Room2,
 }
 
-impl Object for SimpleObject {
-    fn typ_name(&self) -> String {
-        match self {
-            Self::Student1 | Self::Student2 => "Student".into(),
-            Self::Room1 | Self::Room2 => "Room".into(),
+struct SimpleEnv {}
+
+impl EvalEnv for SimpleEnv {
+    type Object = SimpleObject;
+
+    fn objects_with_typ(&self, name: &str) -> BTreeSet<Self::Object> {
+        match name {
+            "Student" => BTreeSet::from([SimpleObject::Student1, SimpleObject::Student2]),
+            "Room" => BTreeSet::from([SimpleObject::Room1, SimpleObject::Room2]),
+            _ => BTreeSet::new(),
         }
     }
 
-    fn field_access(&self, field: &str) -> ExprValue<Self> {
-        match self {
-            Self::Student1 => match field {
-                "age" => ExprValue::Int(18),
-                "enrolled" => ExprValue::Bool(true),
-                _ => panic!("Invalid field for Student1"),
+    fn typ_name(&self, obj: &Self::Object) -> String {
+        match obj {
+            SimpleObject::Student1 | SimpleObject::Student2 => "Student".into(),
+            SimpleObject::Room1 | SimpleObject::Room2 => "Room".into(),
+        }
+    }
+
+    fn field_access(&self, obj: &Self::Object, field: &str) -> Option<ExprValue<Self::Object>> {
+        match obj {
+            SimpleObject::Student1 => match field {
+                "age" => Some(ExprValue::Int(18)),
+                "enrolled" => Some(ExprValue::Bool(true)),
+                _ => None,
             },
-            Self::Student2 => match field {
-                "age" => ExprValue::Int(20),
-                "enrolled" => ExprValue::Bool(false),
-                _ => panic!("Invalid field for Student2"),
+            SimpleObject::Student2 => match field {
+                "age" => Some(ExprValue::Int(20)),
+                "enrolled" => Some(ExprValue::Bool(false)),
+                _ => None,
             },
-            Self::Room1 => match field {
-                "num" => ExprValue::Int(406),
-                "students" => ExprValue::List(
+            SimpleObject::Room1 => match field {
+                "num" => Some(ExprValue::Int(406)),
+                "students" => Some(ExprValue::List(
                     ExprType::Object("Student".into()),
-                    BTreeSet::from([ExprValue::Object(Self::Student1)]),
-                ),
-                "first_student" => ExprValue::Object(Self::Student1),
-                _ => panic!("Invalid field for Room1"),
+                    BTreeSet::from([ExprValue::Object(SimpleObject::Student1)]),
+                )),
+                "first_student" => Some(ExprValue::Object(SimpleObject::Student1)),
+                _ => None,
             },
-            Self::Room2 => match field {
-                "num" => ExprValue::Int(406),
-                "students" => ExprValue::List(
+            SimpleObject::Room2 => match field {
+                "num" => Some(ExprValue::Int(406)),
+                "students" => Some(ExprValue::List(
                     ExprType::Object("Student".into()),
                     BTreeSet::from([
-                        ExprValue::Object(Self::Student1),
-                        ExprValue::Object(Self::Student2),
+                        ExprValue::Object(SimpleObject::Student1),
+                        ExprValue::Object(SimpleObject::Student2),
                     ]),
-                ),
-                "first_student" => ExprValue::Object(Self::Student2),
-                _ => panic!("Invalid field for Room2"),
+                )),
+                "first_student" => Some(ExprValue::Object(SimpleObject::Student2)),
+                _ => None,
             },
         }
     }
@@ -79,13 +91,7 @@ fn eval_with_simple_objects(
     let vars = HashMap::new();
 
     let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
-    let env = EvalEnv::from_objects([
-        SimpleObject::Student1,
-        SimpleObject::Student2,
-        SimpleObject::Room1,
-        SimpleObject::Room2,
-    ])
-    .expect("Types should be valid");
+    let env = SimpleEnv {};
 
     checked_ast
         .eval_fn(&env, fn_name, args)
