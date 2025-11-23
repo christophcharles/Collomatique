@@ -663,16 +663,26 @@ fn aggregation_with_filtering() {
         Student2,
     }
 
-    impl Object for Student {
-        fn typ_name(&self) -> String {
+    struct Env {}
+
+    impl EvalEnv for Env {
+        type Object = Student;
+
+        fn objects_with_typ(&self, name: &str) -> BTreeSet<Self::Object> {
+            match name {
+                "Student" => BTreeSet::from([Student::Student1, Student::Student2]),
+                _ => BTreeSet::new(),
+            }
+        }
+        fn typ_name(&self, _obj: &Self::Object) -> String {
             "Student".into()
         }
-        fn field_access(&self, field: &str) -> ExprValue<Self> {
+        fn field_access(&self, obj: &Self::Object, field: &str) -> Option<ExprValue<Self::Object>> {
             assert_eq!(field, "score");
-            match self {
-                Self::Student1 => ExprValue::Int(45),
-                Self::Student2 => ExprValue::Int(100),
-            }
+            Some(match obj {
+                Student::Student1 => ExprValue::Int(45),
+                Student::Student2 => ExprValue::Int(100),
+            })
         }
     }
 
@@ -688,8 +698,7 @@ fn aggregation_with_filtering() {
         BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
-    let env = EvalEnv::from_objects([Student::Student1, Student::Student2]).unwrap();
-
+    let env = Env {};
     let result = checked_ast
         .eval_fn(
             &env,

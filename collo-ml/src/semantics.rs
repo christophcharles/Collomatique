@@ -405,6 +405,10 @@ impl GlobalEnv {
         &self.variable_lists
     }
 
+    pub fn get_types(&self) -> &HashMap<String, ObjectFields> {
+        &self.defined_types
+    }
+
     fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
         let fn_desc = self.functions.get_mut(name)?;
         fn_desc.used = true;
