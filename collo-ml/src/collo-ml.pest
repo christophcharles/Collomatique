@@ -101,6 +101,7 @@ primary_expr = {
     fn_call |
     boolean |
     number |
+    neg |
     ident |
     "(" ~ expr ~ ")"
 }
@@ -117,6 +118,7 @@ var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }
 args = { arg ~ ("," ~ arg)* }
 arg = { expr }
+neg = { "-" ~ expr }
 
 // Operators
 add_op = { "+" }
