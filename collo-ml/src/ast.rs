@@ -139,6 +139,7 @@ pub enum Expr {
     Mul(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Div(Box<Spanned<Expr>>, Box<Spanned<Expr>>), // //
     Mod(Box<Spanned<Expr>>, Box<Spanned<Expr>>), // %
+    Neg(Box<Spanned<Expr>>),
 
     // Comparisons
     Eq(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -908,6 +909,7 @@ impl Expr {
             Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::boolean => Self::from_boolean(inner),
+            Rule::neg => Self::from_neg(inner),
             Rule::number => {
                 let num_str = inner.as_str();
                 let value = num_str
@@ -1012,6 +1014,19 @@ impl Expr {
         let collection = Box::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
 
         Ok(Expr::Cardinality(collection))
+    }
+
+    fn from_neg(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let neg_pair = pair
+            .into_inner()
+            .next()
+            .ok_or(AstError::MissingBody(span))?;
+
+        let neg_span = Span::from_pest(&neg_pair);
+        let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
+
+        Ok(Expr::Neg(term))
     }
 
     fn from_list_literal(pair: Pair<Rule>) -> Result<Self, AstError> {

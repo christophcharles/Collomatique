@@ -1387,6 +1387,42 @@ impl<T: Object> LocalEnv<T> {
                     _ => panic!("Expected Bool or Constraint"),
                 }
             }
+            Expr::Neg(term) => {
+                let target = ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let value = self.eval_expr(ast, env, &*term);
+
+                match target {
+                    AnnotatedType::Regular(ExprType::Int) => {
+                        let number_value = value
+                            .coerce_to(&ExprType::Int)
+                            .expect("Coercion should be valid");
+
+                        let num = match number_value {
+                            ExprValue::Int(val) => val,
+                            _ => panic!("Expected Int"),
+                        };
+
+                        ExprValue::Int(-num).into()
+                    }
+                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                        let linexpr_value = value
+                            .coerce_to(&ExprType::LinExpr)
+                            .expect("Coercion should be valid");
+
+                        let linexpr = match linexpr_value {
+                            ExprValue::LinExpr(val) => val,
+                            _ => panic!("Expected LinExpr"),
+                        };
+
+                        ExprValue::LinExpr(-linexpr).into()
+                    }
+                    _ => panic!("Expected Int or LinExpr: {:?} for node {:?}", target, expr),
+                }
+            }
             Expr::Mul(left, right) => {
                 let value1 = self.eval_expr(ast, env, &*left);
                 let value2 = self.eval_expr(ast, env, &*right);

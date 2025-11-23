@@ -862,6 +862,27 @@ impl LocalEnv {
                     (None, None) => None,
                 }
             }
+            // Unary negation - for LinExpr and Int
+            Expr::Neg(term) => {
+                let term_type = self.check_expr(
+                    global_env, &term.node, &term.span, type_info, expr_types, errors, warnings,
+                );
+
+                match term_type.clone() {
+                    Some(t) if t.is_arithmetic() => Some(t),
+                    Some(t) => {
+                        let span = term.span.clone();
+                        errors.push(SemError::TypeMismatch {
+                            span,
+                            expected: ExprType::Int.into(),
+                            found: t.clone(),
+                            context: "negation requires Int or LinExpr".to_string(),
+                        });
+                        None
+                    }
+                    None => None,
+                }
+            }
             // Multiplication: Int * Int -> Int, Int * LinExpr -> LinExpr, LinExpr * Int -> LinExpr
             // But NOT LinExpr * LinExpr (non-linear!)
             Expr::Mul(left, right) => {
