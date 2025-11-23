@@ -1086,11 +1086,7 @@ impl Expr {
         if vars.len() > collections.len() {
             return Err(AstError::MissingExpr(span.clone()));
         }
-        let vars_and_collections = vars
-            .into_iter()
-            .rev()
-            .zip(collections.into_iter().rev())
-            .collect();
+        let vars_and_collections = vars.into_iter().zip(collections.into_iter()).collect();
 
         Ok(Expr::ListComprehension {
             body: expr.ok_or(AstError::MissingBody(span.clone()))?,
