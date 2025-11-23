@@ -274,8 +274,8 @@ fn arithmetic_rejects_incomplete_expressions() {
 }
 
 #[test]
-fn arithmetic_rejects_double_operators() {
-    let cases = vec!["5 + + 3", "10 - - 5", "x * * y", "x // // y"];
+fn arithmetic_rejets_double_operators() {
+    let cases = vec!["5 + + 3", "x * * y", "x // // y"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
@@ -285,6 +285,30 @@ fn arithmetic_rejects_double_operators() {
             result
         );
     }
+}
+
+#[test]
+fn arithmetic_accepts_minus_after_sub() {
+    let case = "10 - - 5";
+    let result = ColloMLParser::parse(Rule::expr_complete, case);
+    assert!(
+        result.is_ok(),
+        "Should accept '{}' (minus after sub): {:?}",
+        case,
+        result
+    );
+}
+
+#[test]
+fn arithmetic_accepts_minus_before_ident() {
+    let case = "-x";
+    let result = ColloMLParser::parse(Rule::expr_complete, case);
+    assert!(
+        result.is_ok(),
+        "Should accept '{}' (minus before ident): {:?}",
+        case,
+        result
+    );
 }
 
 #[test]

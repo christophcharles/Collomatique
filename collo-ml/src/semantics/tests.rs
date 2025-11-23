@@ -8,6 +8,7 @@ mod basic_functions;
 mod coercion;
 mod collections;
 mod control_flow;
+mod let_expr;
 mod operators;
 mod scoping;
 mod statements;

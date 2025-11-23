@@ -23,6 +23,26 @@ fn addition_produces_linexpr() {
 }
 
 #[test]
+fn negation_int() {
+    let input = "pub let f(x: Int) -> Int = -x;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Addition should work: {:?}", errors);
+}
+
+#[test]
+fn negation_produces_linexpr() {
+    let input = "pub let f(x: Int) -> LinExpr = -x;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Addition should produce LinExpr: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn subtraction() {
     let input = "pub let f(x: Int, y: Int) -> LinExpr = x - y;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());

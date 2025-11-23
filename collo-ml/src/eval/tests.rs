@@ -1,6 +1,19 @@
 use super::*;
 
-mod fn_call;
+mod arithmetic;
+mod boolean_logic;
+mod coercion_and_casting;
+mod collections;
+mod comparisons;
+mod complex_combinations;
+mod constraints;
+mod eval_with_variables;
+mod functions;
+mod if_branches;
+mod let_expr;
+mod list_comprehensions;
 mod literals;
 mod objects;
-mod var_call;
+mod origins;
+mod quantifiers;
+mod variables;

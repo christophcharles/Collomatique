@@ -110,6 +110,13 @@ pub enum Expr {
         else_expr: Box<Spanned<Expr>>,
     },
 
+    // Expression Let
+    Let {
+        var: Spanned<String>,
+        value: Box<Spanned<Expr>>,
+        body: Box<Spanned<Expr>>,
+    },
+
     // Calls
     FnCall {
         name: Spanned<String>,
@@ -139,6 +146,7 @@ pub enum Expr {
     Mul(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Div(Box<Spanned<Expr>>, Box<Spanned<Expr>>), // //
     Mod(Box<Spanned<Expr>>, Box<Spanned<Expr>>), // %
+    Neg(Box<Spanned<Expr>>),
 
     // Comparisons
     Eq(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -176,7 +184,7 @@ pub enum Expr {
         end: Box<Spanned<Expr>>,
     },
     ListComprehension {
-        expr: Box<Spanned<Expr>>,
+        body: Box<Spanned<Expr>>,
         vars_and_collections: Vec<(Spanned<String>, Spanned<Expr>)>,
         filter: Option<Box<Spanned<Expr>>>,
     },
@@ -480,21 +488,42 @@ impl Expr {
             .into_inner()
             .next()
             .ok_or(AstError::MissingBody(span))?;
-        Self::from_and_expr(and_expr)
+        Self::from_or_expr(and_expr)
+    }
+
+    fn from_or_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().unwrap();
+        let mut result = Self::from_and_expr(first)?;
+
+        while let Some(_or_op) = inner.next() {
+            let right_pair = inner.next().unwrap();
+            let right = Self::from_and_expr(right_pair)?;
+
+            let result_span = span.clone();
+            result = Expr::Or(
+                Box::new(Spanned::new(result, result_span.clone())),
+                Box::new(Spanned::new(right, result_span)),
+            );
+        }
+
+        Ok(result)
     }
 
     fn from_and_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
-        // First forall_expr
+        // First not_expr
         let first = inner.next().unwrap();
-        let mut result = Self::from_forall_expr(first)?;
+        let mut result = Self::from_not_expr(first)?;
 
         // Chain together with 'and'
         while let Some(_and_op) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_forall_expr(right_pair)?;
+            let right = Self::from_not_expr(right_pair)?;
 
             let result_span = span.clone();
             result = Expr::And(
@@ -506,6 +535,28 @@ impl Expr {
         Ok(result)
     }
 
+    fn from_not_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().unwrap();
+
+        match first.as_rule() {
+            Rule::not_op => {
+                // It's a not expression
+                let expr_pair = inner.next().unwrap();
+                let expr_span = Span::from_pest(&expr_pair);
+                let expr = Self::from_not_expr(expr_pair)?;
+                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
+            }
+            Rule::forall_expr => Self::from_forall_expr(first),
+            _ => Err(AstError::UnexpectedRule {
+                expected: "not_expr or forall_expr",
+                found: first.as_rule(),
+                span: Span::from_pest(&first),
+            }),
+        }
+    }
+
     fn from_forall_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let inner = pair
@@ -515,9 +566,9 @@ impl Expr {
 
         match inner.as_rule() {
             Rule::forall => Self::from_forall(inner),
-            Rule::or_expr => Self::from_or_expr(inner),
+            Rule::comparison_expr => Self::from_comparison_expr(inner),
             _ => Err(AstError::UnexpectedRule {
-                expected: "forall or or_expr",
+                expected: "forall or comparison_expr",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
@@ -628,49 +679,6 @@ impl Expr {
         Ok(result)
     }
 
-    fn from_or_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
-        let mut inner = pair.into_inner();
-
-        let first = inner.next().unwrap();
-        let mut result = Self::from_not_expr(first)?;
-
-        while let Some(_or_op) = inner.next() {
-            let right_pair = inner.next().unwrap();
-            let right = Self::from_not_expr(right_pair)?;
-
-            let result_span = span.clone();
-            result = Expr::Or(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
-            );
-        }
-
-        Ok(result)
-    }
-
-    fn from_not_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let mut inner = pair.into_inner();
-
-        let first = inner.next().unwrap();
-
-        match first.as_rule() {
-            Rule::not_op => {
-                // It's a not expression
-                let expr_pair = inner.next().unwrap();
-                let expr_span = Span::from_pest(&expr_pair);
-                let expr = Self::from_not_expr(expr_pair)?;
-                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
-            }
-            Rule::comparison_expr => Self::from_comparison_expr(first),
-            _ => Err(AstError::UnexpectedRule {
-                expected: "not_expr or comparison_expr",
-                found: first.as_rule(),
-                span: Span::from_pest(&first),
-            }),
-        }
-    }
-
     fn from_comparison_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let mut inner = pair.into_inner();
 
@@ -680,7 +688,7 @@ impl Expr {
             Rule::in_expr => Self::from_in_expr(first),
             Rule::union_expr => Self::from_union_expr(first),
             _ => Err(AstError::UnexpectedRule {
-                expected: "in_expr or relational_expr",
+                expected: "in_expr or union_expr",
                 found: first.as_rule(),
                 span: Span::from_pest(&first),
             }),
@@ -704,20 +712,20 @@ impl Expr {
     }
 
     fn from_relational_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
         let left_pair = inner.next().unwrap();
+        let left_span = Span::from_pest(&left_pair);
         let left = Self::from_add_sub_expr(left_pair)?;
 
         // Check if there's a comparison operator
         if let Some(op_pair) = inner.next() {
             let right_pair = inner.next().unwrap();
+            let right_span = Span::from_pest(&right_pair);
             let right = Self::from_add_sub_expr(right_pair)?;
 
-            let result_span = span.clone();
-            let left_spanned = Box::new(Spanned::new(left, result_span.clone()));
-            let right_spanned = Box::new(Spanned::new(right, result_span));
+            let left_spanned = Box::new(Spanned::new(left, left_span));
+            let right_spanned = Box::new(Spanned::new(right, right_span));
 
             match op_pair.as_str() {
                 "===" => Ok(Expr::ConstraintEq(left_spanned, right_spanned)),
@@ -897,6 +905,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         match inner.as_rule() {
+            Rule::let_expr => Self::from_let_expr(inner),
             Rule::if_expr => Self::from_if_expr(inner),
             Rule::sum => Self::from_sum(inner),
             Rule::cardinality => Self::from_cardinality(inner),
@@ -908,6 +917,7 @@ impl Expr {
             Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::boolean => Self::from_boolean(inner),
+            Rule::neg => Self::from_neg(inner),
             Rule::number => {
                 let num_str = inner.as_str();
                 let value = num_str
@@ -1000,6 +1010,38 @@ impl Expr {
         })
     }
 
+    fn from_let_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut var = None;
+        let mut value = None;
+        let mut body = None;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let var_span = Span::from_pest(&inner);
+                    var = Some(Spanned::new(inner.as_str().to_string(), var_span));
+                }
+                Rule::expr => {
+                    let expr_span = Span::from_pest(&inner);
+                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    if value.is_none() {
+                        value = Some(expr);
+                    } else if body.is_none() {
+                        body = Some(expr);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Expr::Let {
+            var: var.ok_or(AstError::MissingName(span.clone()))?,
+            value: value.ok_or(AstError::MissingBody(span.clone()))?,
+            body: body.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
     fn from_cardinality(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         // cardinality = { "|" ~ expr ~ "|" }
@@ -1012,6 +1054,19 @@ impl Expr {
         let collection = Box::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
 
         Ok(Expr::Cardinality(collection))
+    }
+
+    fn from_neg(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let neg_pair = pair
+            .into_inner()
+            .next()
+            .ok_or(AstError::MissingBody(span))?;
+
+        let neg_span = Span::from_pest(&neg_pair);
+        let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
+
+        Ok(Expr::Neg(term))
     }
 
     fn from_list_literal(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -1086,14 +1141,10 @@ impl Expr {
         if vars.len() > collections.len() {
             return Err(AstError::MissingExpr(span.clone()));
         }
-        let vars_and_collections = vars
-            .into_iter()
-            .rev()
-            .zip(collections.into_iter().rev())
-            .collect();
+        let vars_and_collections = vars.into_iter().zip(collections.into_iter()).collect();
 
         Ok(Expr::ListComprehension {
-            expr: expr.ok_or(AstError::MissingBody(span.clone()))?,
+            body: expr.ok_or(AstError::MissingBody(span.clone()))?,
             vars_and_collections,
             filter,
         })
