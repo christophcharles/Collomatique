@@ -480,21 +480,42 @@ impl Expr {
             .into_inner()
             .next()
             .ok_or(AstError::MissingBody(span))?;
-        Self::from_and_expr(and_expr)
+        Self::from_or_expr(and_expr)
+    }
+
+    fn from_or_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().unwrap();
+        let mut result = Self::from_and_expr(first)?;
+
+        while let Some(_or_op) = inner.next() {
+            let right_pair = inner.next().unwrap();
+            let right = Self::from_and_expr(right_pair)?;
+
+            let result_span = span.clone();
+            result = Expr::Or(
+                Box::new(Spanned::new(result, result_span.clone())),
+                Box::new(Spanned::new(right, result_span)),
+            );
+        }
+
+        Ok(result)
     }
 
     fn from_and_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
-        // First forall_expr
+        // First not_expr
         let first = inner.next().unwrap();
-        let mut result = Self::from_forall_expr(first)?;
+        let mut result = Self::from_not_expr(first)?;
 
         // Chain together with 'and'
         while let Some(_and_op) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_forall_expr(right_pair)?;
+            let right = Self::from_not_expr(right_pair)?;
 
             let result_span = span.clone();
             result = Expr::And(
@@ -506,6 +527,28 @@ impl Expr {
         Ok(result)
     }
 
+    fn from_not_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().unwrap();
+
+        match first.as_rule() {
+            Rule::not_op => {
+                // It's a not expression
+                let expr_pair = inner.next().unwrap();
+                let expr_span = Span::from_pest(&expr_pair);
+                let expr = Self::from_not_expr(expr_pair)?;
+                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
+            }
+            Rule::forall_expr => Self::from_forall_expr(first),
+            _ => Err(AstError::UnexpectedRule {
+                expected: "not_expr or forall_expr",
+                found: first.as_rule(),
+                span: Span::from_pest(&first),
+            }),
+        }
+    }
+
     fn from_forall_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let inner = pair
@@ -515,9 +558,9 @@ impl Expr {
 
         match inner.as_rule() {
             Rule::forall => Self::from_forall(inner),
-            Rule::or_expr => Self::from_or_expr(inner),
+            Rule::comparison_expr => Self::from_comparison_expr(inner),
             _ => Err(AstError::UnexpectedRule {
-                expected: "forall or or_expr",
+                expected: "forall or comparison_expr",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
@@ -628,49 +671,6 @@ impl Expr {
         Ok(result)
     }
 
-    fn from_or_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
-        let mut inner = pair.into_inner();
-
-        let first = inner.next().unwrap();
-        let mut result = Self::from_not_expr(first)?;
-
-        while let Some(_or_op) = inner.next() {
-            let right_pair = inner.next().unwrap();
-            let right = Self::from_not_expr(right_pair)?;
-
-            let result_span = span.clone();
-            result = Expr::Or(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
-            );
-        }
-
-        Ok(result)
-    }
-
-    fn from_not_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let mut inner = pair.into_inner();
-
-        let first = inner.next().unwrap();
-
-        match first.as_rule() {
-            Rule::not_op => {
-                // It's a not expression
-                let expr_pair = inner.next().unwrap();
-                let expr_span = Span::from_pest(&expr_pair);
-                let expr = Self::from_not_expr(expr_pair)?;
-                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
-            }
-            Rule::comparison_expr => Self::from_comparison_expr(first),
-            _ => Err(AstError::UnexpectedRule {
-                expected: "not_expr or comparison_expr",
-                found: first.as_rule(),
-                span: Span::from_pest(&first),
-            }),
-        }
-    }
-
     fn from_comparison_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let mut inner = pair.into_inner();
 
@@ -680,7 +680,7 @@ impl Expr {
             Rule::in_expr => Self::from_in_expr(first),
             Rule::union_expr => Self::from_union_expr(first),
             _ => Err(AstError::UnexpectedRule {
-                expected: "in_expr or relational_expr",
+                expected: "in_expr or union_expr",
                 found: first.as_rule(),
                 span: Span::from_pest(&first),
             }),
@@ -704,20 +704,20 @@ impl Expr {
     }
 
     fn from_relational_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
         let left_pair = inner.next().unwrap();
+        let left_span = Span::from_pest(&left_pair);
         let left = Self::from_add_sub_expr(left_pair)?;
 
         // Check if there's a comparison operator
         if let Some(op_pair) = inner.next() {
             let right_pair = inner.next().unwrap();
+            let right_span = Span::from_pest(&right_pair);
             let right = Self::from_add_sub_expr(right_pair)?;
 
-            let result_span = span.clone();
-            let left_spanned = Box::new(Spanned::new(left, result_span.clone()));
-            let right_spanned = Box::new(Spanned::new(right, result_span));
+            let left_spanned = Box::new(Spanned::new(left, left_span));
+            let right_spanned = Box::new(Spanned::new(right, right_span));
 
             match op_pair.as_str() {
                 "===" => Ok(Expr::ConstraintEq(left_spanned, right_spanned)),
