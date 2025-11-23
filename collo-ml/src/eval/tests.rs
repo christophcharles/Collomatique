@@ -2,6 +2,7 @@ use super::*;
 
 mod arithmetic;
 mod boolean_logic;
+mod coercion_and_casting;
 mod collections;
 mod comparisons;
 mod constraints;
