@@ -45,6 +45,20 @@ fn add_int_params() {
 }
 
 #[test]
+fn negate_int_params() {
+    let input = "pub let f(x: Int) -> Int = -x;";
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(15)])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(-15));
+}
+
+#[test]
 fn add_linexpr_with_int_coercion() {
     let input = "pub let f() -> LinExpr = $V() + 5;";
     let types = HashMap::new();
@@ -126,6 +140,20 @@ fn add_two_linexprs() {
         }
         _ => panic!("Expected LinExpr"),
     }
+}
+
+#[test]
+fn negate_linexpr_params() {
+    let input = "pub let f(x: LinExpr) -> LinExpr = -x;";
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::LinExpr(LinExpr::constant(5.))])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::LinExpr(LinExpr::constant(-5.)));
 }
 
 #[test]

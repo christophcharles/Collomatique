@@ -300,6 +300,18 @@ fn arithmetic_accepts_minus_after_sub() {
 }
 
 #[test]
+fn arithmetic_accepts_minus_before_ident() {
+    let case = "-x";
+    let result = ColloMLParser::parse(Rule::expr_complete, case);
+    assert!(
+        result.is_ok(),
+        "Should accept '{}' (minus before ident): {:?}",
+        case,
+        result
+    );
+}
+
+#[test]
 fn arithmetic_rejects_invalid_operators() {
     let cases = vec!["x & y", "x | y", "x ^ y", "x ** y"];
     for case in cases {
