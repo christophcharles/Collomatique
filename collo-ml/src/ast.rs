@@ -110,6 +110,13 @@ pub enum Expr {
         else_expr: Box<Spanned<Expr>>,
     },
 
+    // Expression Let
+    Let {
+        var: Spanned<String>,
+        value: Box<Spanned<Expr>>,
+        body: Box<Spanned<Expr>>,
+    },
+
     // Calls
     FnCall {
         name: Spanned<String>,
@@ -898,6 +905,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         match inner.as_rule() {
+            Rule::let_expr => Self::from_let_expr(inner),
             Rule::if_expr => Self::from_if_expr(inner),
             Rule::sum => Self::from_sum(inner),
             Rule::cardinality => Self::from_cardinality(inner),
@@ -998,6 +1006,38 @@ impl Expr {
             var: var.ok_or(AstError::MissingName(span.clone()))?,
             collection: collection.ok_or(AstError::MissingBody(span.clone()))?,
             filter,
+            body: body.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
+    fn from_let_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut var = None;
+        let mut value = None;
+        let mut body = None;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let var_span = Span::from_pest(&inner);
+                    var = Some(Spanned::new(inner.as_str().to_string(), var_span));
+                }
+                Rule::expr => {
+                    let expr_span = Span::from_pest(&inner);
+                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    if value.is_none() {
+                        value = Some(expr);
+                    } else if body.is_none() {
+                        body = Some(expr);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Expr::Let {
+            var: var.ok_or(AstError::MissingName(span.clone()))?,
+            value: value.ok_or(AstError::MissingBody(span.clone()))?,
             body: body.ok_or(AstError::MissingBody(span))?,
         })
     }
