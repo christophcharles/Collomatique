@@ -290,9 +290,9 @@ fn list_comprehension_where_can_reference_all_for_variables() {
     let input = r#"
         pub let active_pairs(groups: [Group]) -> [Bool] =
             [p1.active and p2.active
-             for p2 in g.members
-             for p1 in g.members
              for g in groups
+             for p1 in g.members
+             for p2 in g.members
              where p1.id < p2.id and g.min_age > 18];
     "#;
 
