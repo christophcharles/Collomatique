@@ -47,12 +47,18 @@ impl<T: Object> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     }
 }
 
+pub fn strip_origin<T: Object>(
+    set: &BTreeSet<ConstraintWithOrigin<T>>,
+) -> BTreeSet<Constraint<IlpVar<T>>> {
+    set.iter().map(|x| x.constraint.clone()).collect()
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ExprValue<T: Object> {
     Int(i32),
     Bool(bool),
     LinExpr(LinExpr<IlpVar<T>>),
-    Constraint(Vec<ConstraintWithOrigin<T>>),
+    Constraint(BTreeSet<ConstraintWithOrigin<T>>),
     Object(T),
     List(ExprType, BTreeSet<ExprValue<T>>),
 }
@@ -77,16 +83,16 @@ impl<T: Object> From<LinExpr<IlpVar<T>>> for ExprValue<T> {
 
 impl<T: Object> From<Constraint<IlpVar<T>>> for ExprValue<T> {
     fn from(value: Constraint<IlpVar<T>>) -> Self {
-        ExprValue::Constraint(vec![ConstraintWithOrigin {
+        ExprValue::Constraint(BTreeSet::from([ConstraintWithOrigin {
             constraint: value,
             origin: None,
-        }])
+        }]))
     }
 }
 
 impl<T: Object> From<ConstraintWithOrigin<T>> for ExprValue<T> {
     fn from(value: ConstraintWithOrigin<T>) -> Self {
-        ExprValue::Constraint(vec![value])
+        ExprValue::Constraint(BTreeSet::from([value]))
     }
 }
 
@@ -1095,7 +1101,7 @@ impl<T: Object> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(vec![lin_expr1.eq(&lin_expr2).into()]).into()
+                ExprValue::Constraint(BTreeSet::from([lin_expr1.eq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintLe(expr1, expr2) => {
                 let value1 = self.eval_expr(ast, env, &*expr1);
@@ -1117,7 +1123,7 @@ impl<T: Object> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(vec![lin_expr1.leq(&lin_expr2).into()]).into()
+                ExprValue::Constraint(BTreeSet::from([lin_expr1.leq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintGe(expr1, expr2) => {
                 let value1 = self.eval_expr(ast, env, &*expr1);
@@ -1139,7 +1145,7 @@ impl<T: Object> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(vec![lin_expr1.geq(&lin_expr2).into()]).into()
+                ExprValue::Constraint(BTreeSet::from([lin_expr1.geq(&lin_expr2).into()])).into()
             }
             Expr::Eq(expr1, expr2) => {
                 let value1 = self.eval_expr(ast, env, &*expr1);
@@ -1671,7 +1677,7 @@ impl<T: Object> LocalEnv<T> {
                 };
 
                 if is_constraint {
-                    let mut output = vec![];
+                    let mut output = BTreeSet::new();
 
                     for elem in list {
                         self.register_identifier(&var.node, elem);

@@ -570,25 +570,23 @@ fn forall_constraint_simple() {
             // Should have 2 constraints (for x=1 and x=2)
             assert_eq!(constraints.len(), 2);
 
+            let constraints = strip_origin(&constraints);
+
             // Check first constraint: $V(1) === 1
-            assert_eq!(
-                constraints[0].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(1)]
-                }))
-                .eq(&LinExpr::constant(1.))
-            );
+            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(1)],
+            }))
+            .eq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint1));
 
             // Check second constraint: $V(2) === 1
-            assert_eq!(
-                constraints[1].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(2)]
-                }))
-                .eq(&LinExpr::constant(1.))
-            );
+            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(2)],
+            }))
+            .eq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -630,24 +628,22 @@ fn forall_constraint_with_inequality() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
+            let constraints = strip_origin(&constraints);
 
             // Check constraints are <= constraints
-            assert_eq!(
-                constraints[0].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(1)]
-                }))
-                .leq(&LinExpr::constant(10.))
-            );
-            assert_eq!(
-                constraints[1].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(2)]
-                }))
-                .leq(&LinExpr::constant(10.))
-            );
+            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(1)],
+            }))
+            .leq(&LinExpr::constant(10.));
+            assert!(constraints.contains(&constraint1));
+
+            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(2)],
+            }))
+            .leq(&LinExpr::constant(10.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -669,22 +665,21 @@ fn forall_constraint_with_filter() {
         ExprValue::Constraint(constraints) => {
             // Only even numbers: 2, 4
             assert_eq!(constraints.len(), 2);
-            assert_eq!(
-                constraints[0].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(2)]
-                }))
-                .eq(&LinExpr::constant(1.))
-            );
-            assert_eq!(
-                constraints[1].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(4)]
-                }))
-                .eq(&LinExpr::constant(1.))
-            );
+            let constraints = strip_origin(&constraints);
+
+            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(2)],
+            }))
+            .eq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint1));
+
+            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(4)],
+            }))
+            .eq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -726,24 +721,22 @@ fn forall_constraint_with_arithmetic() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
+            let constraints = strip_origin(&constraints);
 
             // Check first constraint: 2*$V(1) + 5 === 15
-            assert_eq!(
-                constraints[0].constraint,
-                (2 * LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(1)]
-                })) + LinExpr::constant(5.))
-                .eq(&LinExpr::constant(15.))
-            );
-            assert_eq!(
-                constraints[1].constraint,
-                (2 * LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(2)]
-                })) + LinExpr::constant(5.))
-                .eq(&LinExpr::constant(15.))
-            );
+            let constraint1 = (2 * LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(1)],
+            })) + LinExpr::constant(5.))
+            .eq(&LinExpr::constant(15.));
+            assert!(constraints.contains(&constraint1));
+
+            let constraint2 = (2 * LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(2)],
+            })) + LinExpr::constant(5.))
+            .eq(&LinExpr::constant(15.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -767,28 +760,27 @@ fn forall_constraint_multiple_vars() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
-            assert_eq!(
-                constraints[0].constraint,
-                (LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V1".into(),
-                    params: vec![ExprValue::Int(1)]
-                })) + LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V2".into(),
-                    params: vec![ExprValue::Int(1)]
-                })))
-                .eq(&LinExpr::constant(10.))
-            );
-            assert_eq!(
-                constraints[1].constraint,
-                (LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V1".into(),
-                    params: vec![ExprValue::Int(2)]
-                })) + LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V2".into(),
-                    params: vec![ExprValue::Int(2)]
-                })))
-                .eq(&LinExpr::constant(10.))
-            );
+            let constraints = strip_origin(&constraints);
+
+            let constraint1 = (LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V1".into(),
+                params: vec![ExprValue::Int(1)],
+            })) + LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V2".into(),
+                params: vec![ExprValue::Int(1)],
+            })))
+            .eq(&LinExpr::constant(10.));
+            assert!(constraints.contains(&constraint1));
+
+            let constraint2 = (LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V1".into(),
+                params: vec![ExprValue::Int(2)],
+            })) + LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V2".into(),
+                params: vec![ExprValue::Int(2)],
+            })))
+            .eq(&LinExpr::constant(10.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -809,24 +801,22 @@ fn forall_constraint_with_param() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 2);
+            let constraints = strip_origin(&constraints);
 
             // All constraints should be === 42
-            assert_eq!(
-                constraints[0].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(1)]
-                }))
-                .eq(&LinExpr::constant(42.))
-            );
-            assert_eq!(
-                constraints[1].constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(2)]
-                }))
-                .eq(&LinExpr::constant(42.))
-            );
+            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(1)],
+            }))
+            .eq(&LinExpr::constant(42.));
+            assert!(constraints.contains(&constraint1));
+
+            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar {
+                name: "V".into(),
+                params: vec![ExprValue::Int(2)],
+            }))
+            .eq(&LinExpr::constant(42.));
+            assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
     }
