@@ -518,15 +518,16 @@ impl CheckedAST {
             }
             checked_args.push(arg.into());
         }
-        let mut call_history = BTreeMap::new();
 
-        self.add_fn_to_eval_history(env, &mut call_history, fn_name, checked_args.clone(), false)
+        let mut call_history = CallHistory::default();
+
+        self.add_fn_to_call_history(env, &mut call_history, fn_name, checked_args.clone(), false)
     }
 
-    fn add_fn_to_eval_history<E: EvalEnv>(
+    fn add_fn_to_call_history<E: EvalEnv>(
         &self,
         env: &E,
-        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
+        call_history: &mut CallHistory<E::Object>,
         fn_name: &str,
         args: Vec<AnnotatedValue<E::Object>>,
         allow_private: bool,
@@ -541,10 +542,6 @@ impl CheckedAST {
             if !fn_desc.public {
                 return Err(EvalError::UnknownFunction(fn_name.to_string()));
             }
-        }
-
-        if let Some(r) = call_history.get(&(fn_name.to_string(), args.clone())) {
-            return Ok(r.clone());
         }
 
         if fn_desc.typ.args.len() != args.len() {
@@ -573,13 +570,21 @@ impl CheckedAST {
             local_env.register_identifier(arg_name, coerced_arg);
         }
 
+        if let Some(r) = call_history
+            .funcs
+            .get(&(fn_name.to_string(), coerced_args.clone()))
+        {
+            local_env.scrap_pending_scope();
+            return Ok(r.clone());
+        }
+
         local_env.push_scope();
         let annotated_result = local_env.eval_expr(self, env, call_history, &fn_desc.body);
         local_env.pop_scope();
 
         let origin = Origin {
             fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
-            args: coerced_args,
+            args: coerced_args.clone(),
         };
 
         let result = annotated_result
@@ -589,7 +594,9 @@ impl CheckedAST {
                 annotated_result, fn_desc.typ.output
             ))
             .with_origin(&origin);
-        call_history.insert((fn_name.to_string(), args), result.clone());
+        call_history
+            .funcs
+            .insert((fn_name.to_string(), coerced_args), result.clone());
 
         Ok(result)
     }
@@ -639,6 +646,10 @@ impl<T: UsableData> LocalEnv<T> {
         self.pending_scope.clear();
     }
 
+    fn scrap_pending_scope(&mut self) {
+        self.pending_scope.clear();
+    }
+
     fn register_identifier(&mut self, ident: &str, value: ExprValue<T>) {
         assert!(!self.pending_scope.contains_key(ident));
 
@@ -649,7 +660,7 @@ impl<T: UsableData> LocalEnv<T> {
         &mut self,
         ast: &CheckedAST,
         env: &E,
-        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
+        call_history: &mut CallHistory<E::Object>,
         expr: &Spanned<crate::ast::Expr>,
     ) -> AnnotatedValue<T> {
         use crate::ast::Expr;
@@ -784,7 +795,7 @@ impl<T: UsableData> LocalEnv<T> {
                     .iter()
                     .map(|x| self.eval_expr(ast, env, call_history, &x))
                     .collect();
-                ast.add_fn_to_eval_history(env, call_history, &name.node, args, true)
+                ast.add_fn_to_call_history(env, call_history, &name.node, args, true)
                     .expect("Function call should evaluate")
                     .into()
             }
@@ -807,13 +818,25 @@ impl<T: UsableData> LocalEnv<T> {
                     })))
                     .into()
                 } else if let Some(var_desc) = ast.global_env.get_vars().get(&name.node) {
-                    let params = args
-                        .into_iter()
+                    let params: Vec<_> = args
+                        .iter()
                         .zip(var_desc.args.iter())
                         .map(|(arg, arg_typ)| {
                             arg.coerce_to(env, arg_typ).expect("Coercion should work")
                         })
                         .collect();
+                    call_history.vars.insert(
+                        (name.node.clone(), params.clone()),
+                        var_desc.referenced_fn.clone(),
+                    );
+                    ast.add_fn_to_call_history(
+                        env,
+                        call_history,
+                        &var_desc.referenced_fn,
+                        params.iter().map(|x| x.clone().into()).collect(),
+                        true,
+                    )
+                    .expect("Call should be valid");
                     ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
                         name: name.node.clone(),
                         from_list: None,
@@ -1792,27 +1815,11 @@ impl<T: UsableData> LocalEnv<T> {
                     .iter()
                     .map(|x| self.eval_expr(ast, env, call_history, &x))
                     .collect();
-                let constraints = ast
-                    .add_fn_to_eval_history(
-                        env,
-                        call_history,
-                        var_list_fn,
-                        evaluated_args.clone(),
-                        true,
-                    )
-                    .expect("Evaluation should be valid");
-
-                let constraint_count = match constraints {
-                    ExprValue::List(ExprType::Constraint, list) => list.len(),
-                    _ => panic!("Expected [Constraint]"),
-                };
-
                 let fn_desc = ast
                     .global_env
                     .get_functions()
                     .get(var_list_fn)
                     .expect("Function should be valid");
-
                 let coerced_args: Vec<_> = evaluated_args
                     .into_iter()
                     .zip(fn_desc.typ.args.iter())
@@ -1821,6 +1828,25 @@ impl<T: UsableData> LocalEnv<T> {
                             .expect("Coercion should be valid")
                     })
                     .collect();
+
+                let constraints = ast
+                    .add_fn_to_call_history(
+                        env,
+                        call_history,
+                        var_list_fn,
+                        coerced_args.iter().map(|x| x.clone().into()).collect(),
+                        true,
+                    )
+                    .expect("Evaluation should be valid");
+                call_history.var_lists.insert(
+                    (name.node.clone(), coerced_args.clone()),
+                    var_list_fn.clone(),
+                );
+
+                let constraint_count = match constraints {
+                    ExprValue::List(ExprType::Constraint, list) => list.len(),
+                    _ => panic!("Expected [Constraint]"),
+                };
 
                 ExprValue::List(
                     ExprType::LinExpr,
@@ -1881,7 +1907,7 @@ impl<T: UsableData> LocalEnv<T> {
 
     fn build_naked_list_for_list_comprehension<E: EvalEnv<Object = T>>(
         &mut self,
-        call_history: &mut BTreeMap<(String, Vec<AnnotatedValue<E::Object>>), ExprValue<E::Object>>,
+        call_history: &mut CallHistory<E::Object>,
         ast: &CheckedAST,
         env: &E,
         body: &Spanned<crate::ast::Expr>,
@@ -1944,5 +1970,22 @@ impl<T: UsableData> LocalEnv<T> {
         }
 
         output
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CallHistory<T: UsableData> {
+    pub funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
+    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
+    pub var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
+}
+
+impl<T: UsableData> Default for CallHistory<T> {
+    fn default() -> Self {
+        CallHistory {
+            funcs: BTreeMap::new(),
+            vars: BTreeMap::new(),
+            var_lists: BTreeMap::new(),
+        }
     }
 }
