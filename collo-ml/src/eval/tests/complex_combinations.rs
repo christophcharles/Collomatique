@@ -914,6 +914,41 @@ fn mixed_coercion_in_complex_expression() {
 }
 
 #[test]
+fn let_expr_in_deeply_nested_structure() {
+    let input = r#"
+    let process(x: Int) -> Int = let doubled = x * 2 { doubled + 1 };
+    let transform(xs: [Int]) -> [Int] = [process(x) for x in xs];
+    let aggregate(lists: [[Int]]) -> Int = 
+        let processed = [transform(lst) for lst in lists] {
+            sum result_list in processed { 
+                sum val in result_list { val } 
+            }
+        };
+    pub let f() -> Int = 
+        let input_data = [[1, 2], [3, 4]] {
+            aggregate(input_data)
+        };
+    "#;
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    // [[1,2], [3,4]]
+    // process(1) = 3, process(2) = 5 -> [3, 5]
+    // process(3) = 7, process(4) = 9 -> [7, 9]
+    // processed = [[3, 5], [7, 9]]
+    // sum of first: 3 + 5 = 8
+    // sum of second: 7 + 9 = 16
+    // total: 24
+    assert_eq!(result, ExprValue::Int(24));
+}
+
+#[test]
 fn all_features_combined() {
     let input = r#"
     # Helper to check if value is in valid range
@@ -973,6 +1008,125 @@ fn all_features_combined() {
             }))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_1_3));
+
+            // Verify sum constraint exists
+            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
+            })) + LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(1), ExprValue::Int(4)],
+            })) + LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(2), ExprValue::Int(3)],
+            })) + LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(2), ExprValue::Int(4)],
+            })))
+            .leq(&LinExpr::constant(5.));
+            assert!(constraints.contains(&sum_constraint));
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
+
+#[test]
+fn all_features_combined_with_let() {
+    let input = r#"
+    # Helper to check if value is in valid range
+    let in_range(x: Int, min: Int, max: Int) -> Bool = 
+        let lower_check = x >= min {
+            let upper_check = x <= max {
+                lower_check and upper_check
+            }
+        };
+    
+    # Create base constraints
+    let base_constraint(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
+    reify base_constraint as $MyVar;
+    
+    # Filter valid pairs using let
+    let valid_pairs(xs: [Int], ys: [Int]) -> [Int] = 
+        let range_min = 1 {
+            let range_max = 10 {
+                [x + y for x in xs for y in ys where in_range(x + y, range_min, range_max)]
+            }
+        };
+    
+    # Compute a threshold using let
+    let compute_threshold(xs: [Int]) -> Int =
+        let base = |xs| {
+            let multiplier = 2 {
+                base + multiplier
+            }
+        };
+    
+    # Main constraint builder with let expressions
+    pub let f(xs: [Int], ys: [Int]) -> Constraint = 
+        let valid = valid_pairs(xs, ys) {
+            let threshold = compute_threshold(xs) {
+                if |valid| > 0 {
+                    let bound_value = 5 {
+                        forall x in xs {
+                            forall y in ys where in_range(x + y, 1, 10) {
+                                $MyVar(x, y) <== 1
+                            }
+                        } and (sum x in xs { sum y in ys { $MyVar(x, y) } } <== bound_value)
+                    }
+                } else {
+                    let zero_expr = 0 as LinExpr {
+                        zero_expr === zero_expr
+                    }
+                }
+            }
+        };
+    "#;
+    let types = HashMap::new();
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let xs = ExprValue::List(
+        ExprType::Int,
+        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+    );
+    let ys = ExprValue::List(
+        ExprType::Int,
+        BTreeSet::from([ExprValue::Int(3), ExprValue::Int(4)]),
+    );
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![xs, ys])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            // Should have multiple constraints from nested foralls + sum constraint
+            // (1,3):4, (1,4):5, (2,3):5, (2,4):6 all in range [1,10]
+            // 4 le constraints + 1 sum constraint = 5 total
+            assert_eq!(constraints.len(), 5);
+            let constraints = strip_origins(&constraints);
+
+            // Verify some constraints exist
+            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
+            }))
+            .leq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint_1_3));
+
+            let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar {
+                name: "MyVar".into(),
+                from_list: None,
+                params: vec![ExprValue::Int(2), ExprValue::Int(4)],
+            }))
+            .leq(&LinExpr::constant(1.));
+            assert!(constraints.contains(&constraint_2_4));
 
             // Verify sum constraint exists
             let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar {
