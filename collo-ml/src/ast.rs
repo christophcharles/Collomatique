@@ -176,7 +176,7 @@ pub enum Expr {
         end: Box<Spanned<Expr>>,
     },
     ListComprehension {
-        expr: Box<Spanned<Expr>>,
+        body: Box<Spanned<Expr>>,
         vars_and_collections: Vec<(Spanned<String>, Spanned<Expr>)>,
         filter: Option<Box<Spanned<Expr>>>,
     },
@@ -1093,7 +1093,7 @@ impl Expr {
             .collect();
 
         Ok(Expr::ListComprehension {
-            expr: expr.ok_or(AstError::MissingBody(span.clone()))?,
+            body: expr.ok_or(AstError::MissingBody(span.clone()))?,
             vars_and_collections,
             filter,
         })

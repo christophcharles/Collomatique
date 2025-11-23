@@ -1783,7 +1783,96 @@ impl<T: Object> LocalEnv<T> {
                 )
                 .into()
             }
-            _ => todo!("Node not implemented: {:?}", expr),
+            Expr::ListComprehension {
+                body,
+                vars_and_collections,
+                filter,
+            } => {
+                let target = ast
+                    .expr_types
+                    .get(&body.span)
+                    .expect("Semantic analysis should have given a target type");
+
+                let inner_typ = match target {
+                    AnnotatedType::Regular(ExprType::List(typ)) => typ.as_ref().clone(),
+                    _ => panic!("Expected type list: {:?}", target),
+                };
+
+                let list = self.build_naked_list_for_list_comprehension(
+                    ast,
+                    env,
+                    &body,
+                    &vars_and_collections[..],
+                    filter.as_ref().map(|x| x.as_ref()),
+                );
+
+                ExprValue::List(inner_typ, list).into()
+            }
         }
+    }
+
+    fn build_naked_list_for_list_comprehension(
+        &mut self,
+        ast: &CheckedAST,
+        env: &EvalEnv<T>,
+        body: &Spanned<crate::ast::Expr>,
+        vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
+        filter: Option<&Spanned<crate::ast::Expr>>,
+    ) -> BTreeSet<ExprValue<T>> {
+        if vars_and_collections.is_empty() {
+            let cond = match filter {
+                None => true,
+                Some(f) => {
+                    let filter_value = self.eval_expr(ast, env, &f);
+                    let coerced_filter = filter_value
+                        .coerce_to(&ExprType::Bool)
+                        .expect("Coercion should be valid");
+                    match coerced_filter {
+                        ExprValue::Bool(v) => v,
+                        _ => panic!("Expected bool"),
+                    }
+                }
+            };
+
+            return if cond {
+                let new_value = self.eval_expr(ast, env, &body);
+                let inner_value = new_value
+                    .into_inner()
+                    .expect("Element in list comprehensions should have definite types");
+                BTreeSet::from([inner_value])
+            } else {
+                BTreeSet::new()
+            };
+        }
+
+        let (var, collection) = &vars_and_collections[0];
+        let remaining_v_and_c = &vars_and_collections[1..];
+
+        let collection_value = self.eval_expr(ast, env, &collection);
+
+        let (_typ, list) = match collection_value {
+            AnnotatedValue::Regular(ExprValue::List(typ, list))
+            | AnnotatedValue::Forced(ExprValue::List(typ, list)) => (typ, list),
+            _ => panic!("Expected typed list"),
+        };
+
+        let mut output = BTreeSet::new();
+
+        for elem in list {
+            self.register_identifier(&var.node, elem);
+            self.push_scope();
+
+            output.extend(self.build_naked_list_for_list_comprehension(
+                ast,
+                env,
+                body,
+                remaining_v_and_c,
+                filter,
+            ));
+
+            self.pop_scope();
+        }
+
+        output
     }
 }

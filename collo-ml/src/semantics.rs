@@ -1966,7 +1966,7 @@ impl LocalEnv {
             }
 
             Expr::ListComprehension {
-                expr,
+                body: expr,
                 vars_and_collections,
                 filter,
             } => {
