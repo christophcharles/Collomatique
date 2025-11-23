@@ -5,6 +5,7 @@ mod boolean_logic;
 mod coercion_and_casting;
 mod collections;
 mod comparisons;
+mod complex_combinations;
 mod constraints;
 mod functions;
 mod if_branches;
