@@ -1856,6 +1856,19 @@ impl<T: Object> LocalEnv<T> {
 
                 ExprValue::List(inner_typ, list).into()
             }
+            Expr::Let { var, value, body } => {
+                let value_value = self.eval_expr(ast, env, &value);
+                let inner_value = value_value.into_inner().expect("Should have a known type");
+
+                self.register_identifier(&var.node, inner_value);
+                self.push_scope();
+
+                let body_value = self.eval_expr(ast, env, &body);
+
+                self.pop_scope();
+
+                body_value
+            }
         }
     }
 

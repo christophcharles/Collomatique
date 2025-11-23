@@ -89,6 +89,7 @@ path = { primary_expr ~ ("." ~ ident)* }
 
 // Primary expressions
 primary_expr = {
+    let_expr |
     if_expr |
     sum |
     cardinality |
@@ -106,6 +107,7 @@ primary_expr = {
     "(" ~ expr ~ ")"
 }
 
+let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
 sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 cardinality = { "|" ~ expr ~ "|" }
