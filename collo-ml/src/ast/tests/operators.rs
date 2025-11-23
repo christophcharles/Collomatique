@@ -23,6 +23,23 @@ fn parse_addition() {
 }
 
 #[test]
+fn parse_negation() {
+    let input = "let f(x: Int) -> Int = -x;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Neg(term) => {
+                assert!(matches!(term.node, Expr::Ident(_)));
+            }
+            _ => panic!("Expected Neg, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
 fn parse_subtraction() {
     let input = "let f() -> Int = 10 - 3;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
