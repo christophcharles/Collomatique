@@ -57,18 +57,16 @@ type_name = {
 }
 
 // ========== Unified Expressions ==========
-expr = { and_expr }
+expr = { or_expr }
 
-// Logical AND (lowest precedence for constraint-like operations)
-and_expr = { forall_expr ~ (and_op ~ forall_expr)* }
+// Logical ops
+or_expr = { and_expr ~ (or_op ~ and_expr)* }
+and_expr = { not_expr ~ (and_op ~ not_expr)* }
+not_expr = { not_op ~ not_expr | forall_expr }
 
 // Quantifiers
-forall_expr = { forall | or_expr }
+forall_expr = { forall | comparison_expr }
 forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
-
-// Logical OR
-or_expr = { not_expr ~ (or_op ~ not_expr)* }
-not_expr = { not_op ~ not_expr | comparison_expr }
 
 // Comparisons and membership
 comparison_expr = { in_expr | union_expr }

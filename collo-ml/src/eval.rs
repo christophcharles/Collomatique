@@ -247,9 +247,12 @@ impl<T: Object> AnnotatedValue<T> {
             {
                 Some(val.coerce_to(target).expect("Coercion should be valid"))
             }
-            AnnotatedValue::UntypedList if target.is_list() => {
-                Some(ExprValue::List(target.clone(), BTreeSet::new()))
-            }
+            AnnotatedValue::UntypedList if target.is_list() => match target {
+                ExprType::List(inner_typ) => {
+                    Some(ExprValue::List(*inner_typ.clone(), BTreeSet::new()))
+                }
+                _ => panic!("Expected list!"),
+            },
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
         }
     }
@@ -591,7 +594,10 @@ impl CheckedAST {
 
         Ok(annotated_result
             .coerce_to(&fn_desc.typ.output)
-            .expect("Coercion to output type should always work in a checked AST")
+            .expect(&format!(
+                "Coercion to output type should always work in a checked AST: {:?} -> {:?}",
+                annotated_result, fn_desc.typ.output
+            ))
             .with_origin(&origin))
     }
 }
@@ -1293,11 +1299,11 @@ impl<T: Object> LocalEnv<T> {
 
                         let num1 = match number_value1 {
                             ExprValue::Int(val) => val,
-                            _ => panic!("Expected boolean"),
+                            _ => panic!("Expected Int"),
                         };
                         let num2 = match number_value2 {
                             ExprValue::Int(val) => val,
-                            _ => panic!("Expected boolean"),
+                            _ => panic!("Expected Int"),
                         };
 
                         ExprValue::Int(num1 + num2).into()
@@ -1312,16 +1318,16 @@ impl<T: Object> LocalEnv<T> {
 
                         let linexpr1 = match linexpr1_value {
                             ExprValue::LinExpr(val) => val,
-                            _ => panic!("Expected boolean"),
+                            _ => panic!("Expected LinExpr"),
                         };
                         let linexpr2 = match linexpr2_value {
                             ExprValue::LinExpr(val) => val,
-                            _ => panic!("Expected boolean"),
+                            _ => panic!("Expected LinExpr"),
                         };
 
                         ExprValue::LinExpr(linexpr1 + linexpr2).into()
                     }
-                    _ => panic!("Expected Bool or Constraint"),
+                    _ => panic!("Expected Int or LinExpr: {:?} for node {:?}", target, expr),
                 }
             }
             Expr::Sub(left, right) => {

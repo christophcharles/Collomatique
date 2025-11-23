@@ -491,18 +491,18 @@ fn parse_complex_boolean_expression() {
 }
 
 #[test]
-fn parse_or_has_higher_precedence_than_and() {
+fn parse_and_has_higher_precedence_than_or() {
     let input = "let f() -> Bool = a or b and c;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            // Should parse as (a or b) and c since or has higher precedence
+            // Should parse as a or (b and c) since and has higher precedence
             match &body.node {
-                Expr::And(left, right) => {
-                    assert!(matches!(left.node, Expr::Or(_, _)));
-                    assert!(matches!(right.node, Expr::Ident(_)));
+                Expr::Or(left, right) => {
+                    assert!(matches!(left.node, Expr::Ident(_)));
+                    assert!(matches!(right.node, Expr::And(_, _)));
                 }
                 _ => panic!("Expected Or with And on right"),
             }
