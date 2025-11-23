@@ -6,7 +6,7 @@ mod coercion_and_casting;
 mod collections;
 mod comparisons;
 mod constraints;
-mod fn_call;
+mod functions;
 mod if_branches;
 mod list_comprehensions;
 mod literals;
