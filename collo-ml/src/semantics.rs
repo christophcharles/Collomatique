@@ -405,6 +405,10 @@ impl GlobalEnv {
         &self.variable_lists
     }
 
+    pub fn get_types(&self) -> &HashMap<String, ObjectFields> {
+        &self.defined_types
+    }
+
     fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
         let fn_desc = self.functions.get_mut(name)?;
         fn_desc.used = true;
@@ -860,6 +864,27 @@ impl LocalEnv {
                         None
                     }
                     (None, None) => None,
+                }
+            }
+            // Unary negation - for LinExpr and Int
+            Expr::Neg(term) => {
+                let term_type = self.check_expr(
+                    global_env, &term.node, &term.span, type_info, expr_types, errors, warnings,
+                );
+
+                match term_type.clone() {
+                    Some(t) if t.is_arithmetic() => Some(t),
+                    Some(t) => {
+                        let span = term.span.clone();
+                        errors.push(SemError::TypeMismatch {
+                            span,
+                            expected: ExprType::Int.into(),
+                            found: t.clone(),
+                            context: "negation requires Int or LinExpr".to_string(),
+                        });
+                        None
+                    }
+                    None => None,
                 }
             }
             // Multiplication: Int * Int -> Int, Int * LinExpr -> LinExpr, LinExpr * Int -> LinExpr
@@ -1966,7 +1991,7 @@ impl LocalEnv {
             }
 
             Expr::ListComprehension {
-                expr,
+                body: expr,
                 vars_and_collections,
                 filter,
             } => {
@@ -2117,6 +2142,65 @@ impl LocalEnv {
                     }
                 }
                 Some(ExprType::Int.into()) // Cardinality always gives an Int
+            }
+
+            // ========== Let construct ==========
+            Expr::Let { var, value, body } => {
+                let value_type = self.check_expr(
+                    global_env,
+                    &value.node,
+                    &value.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
+                );
+
+                // Check naming convention
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &var.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: var.node.clone(),
+                        span: var.span.clone(),
+                        suggestion,
+                    });
+                }
+
+                // Extract element type from collection
+                match value_type {
+                    Some(AnnotatedType::Forced(typ)) | Some(AnnotatedType::Regular(typ)) => {
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            typ,
+                            type_info,
+                            warnings,
+                        );
+                    }
+                    Some(AnnotatedType::UntypedList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: value.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)).into(), // placeholder
+                            found: AnnotatedType::UntypedList,
+                            context: "variable type must be known (use 'as' for explicit typing)"
+                                .to_string(),
+                        });
+                        return None;
+                    }
+                    None => return None,
+                }
+
+                self.push_scope();
+
+                let body_type = self.check_expr(
+                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                );
+
+                self.pop_scope(warnings);
+
+                body_type
             }
         }
     }

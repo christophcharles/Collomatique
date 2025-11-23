@@ -451,3 +451,362 @@ fn parse_explicit_type_with_list() {
         _ => panic!("Expected Let statement"),
     }
 }
+
+// ============= Let Expressions =============
+
+#[test]
+fn parse_simple_let_in_expression() {
+    let input = "let f() -> Int = let x = 5 { x + 1 };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "x");
+                assert!(matches!(value.node, Expr::Number(5)));
+                assert!(matches!(body.node, Expr::Add(_, _)));
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_variable_value() {
+    let input = "let f(n: Int) -> Int = let doubled = n * 2 { doubled };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "doubled");
+                assert!(matches!(value.node, Expr::Mul(_, _)));
+                match &body.node {
+                    Expr::Ident(name) => assert_eq!(name.node, "doubled"),
+                    _ => panic!("Expected Ident in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_nested_let_in_expressions() {
+    let input = "let f() -> Int = let x = 1 { let y = 2 { x + y } };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                // Outer let
+                assert_eq!(var.node, "x");
+                assert!(matches!(value.node, Expr::Number(1)));
+
+                // Inner let
+                match &body.node {
+                    Expr::Let { var, value, body } => {
+                        assert_eq!(var.node, "y");
+                        assert!(matches!(value.node, Expr::Number(2)));
+                        assert!(matches!(body.node, Expr::Add(_, _)));
+                    }
+                    _ => panic!("Expected nested LetIn expression"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_if_body() {
+    let input = "let f(x: Int) -> Int = let bound = 10 { if x > bound { 1 } else { 0 } };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "bound");
+                assert!(matches!(value.node, Expr::Number(10)));
+                match &body.node {
+                    Expr::If {
+                        condition,
+                        then_expr,
+                        else_expr,
+                    } => {
+                        assert!(matches!(condition.node, Expr::Gt(_, _)));
+                        assert!(matches!(then_expr.node, Expr::Number(1)));
+                        assert!(matches!(else_expr.node, Expr::Number(0)));
+                    }
+                    _ => panic!("Expected If expression in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_forall_body() {
+    let input = "let f(n: Int) -> Constraint = let bound = n * 2 { forall i in [0..bound] { $V(i) === 1 } };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "bound");
+                assert!(matches!(value.node, Expr::Mul(_, _)));
+                match &body.node {
+                    Expr::Forall {
+                        var,
+                        collection,
+                        filter,
+                        body: forall_body,
+                    } => {
+                        assert_eq!(var.node, "i");
+                        assert!(matches!(collection.node, Expr::ListRange { .. }));
+                        assert!(filter.is_none());
+                        assert!(matches!(forall_body.node, Expr::ConstraintEq(_, _)));
+                    }
+                    _ => panic!("Expected Forall expression in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_membership_test() {
+    let input = "let f(x: Int, list: [Int]) -> Bool = let is_member = x in list { is_member };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "is_member");
+                match &value.node {
+                    Expr::In { item, collection } => {
+                        match &item.node {
+                            Expr::Ident(name) => assert_eq!(name.node, "x"),
+                            _ => panic!("Expected Ident for item"),
+                        }
+                        match &collection.node {
+                            Expr::Ident(name) => assert_eq!(name.node, "list"),
+                            _ => panic!("Expected Ident for collection"),
+                        }
+                    }
+                    _ => panic!("Expected In expression"),
+                }
+                match &body.node {
+                    Expr::Ident(name) => assert_eq!(name.node, "is_member"),
+                    _ => panic!("Expected Ident in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_function_call_value() {
+    let input = "let f(x: Int) -> Int = let result = helper(x) { result + 1 };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "result");
+                match &value.node {
+                    Expr::FnCall { name, args } => {
+                        assert_eq!(name.node, "helper");
+                        assert_eq!(args.len(), 1);
+                    }
+                    _ => panic!("Expected FnCall"),
+                }
+                assert!(matches!(body.node, Expr::Add(_, _)));
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_list_literal() {
+    let input = "let f() -> [Int] = let items = [1, 2, 3] { items };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "items");
+                match &value.node {
+                    Expr::ListLiteral { elements } => {
+                        assert_eq!(elements.len(), 3);
+                    }
+                    _ => panic!("Expected ListLiteral"),
+                }
+                match &body.node {
+                    Expr::Ident(name) => assert_eq!(name.node, "items"),
+                    _ => panic!("Expected Ident in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_list_range() {
+    let input = "let f(n: Int) -> [Int] = let range = [0..n] { range };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "range");
+                assert!(matches!(value.node, Expr::ListRange { .. }));
+                match &body.node {
+                    Expr::Ident(name) => assert_eq!(name.node, "range"),
+                    _ => panic!("Expected Ident in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_arithmetic_value() {
+    let input =
+        "let f(a: Int, b: Int) -> Int = let sum_ = a + b { let prod = a * b { sum_ + prod } };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "sum_");
+                assert!(matches!(value.node, Expr::Add(_, _)));
+
+                match &body.node {
+                    Expr::Let { var, value, body } => {
+                        assert_eq!(var.node, "prod");
+                        assert!(matches!(value.node, Expr::Mul(_, _)));
+                        assert!(matches!(body.node, Expr::Add(_, _)));
+                    }
+                    _ => panic!("Expected nested LetIn"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_constraint_value() {
+    let input = "let f(x: Int) -> Constraint = let c = $V(x) === 1 { c };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "c");
+                assert!(matches!(value.node, Expr::ConstraintEq(_, _)));
+                match &body.node {
+                    Expr::Ident(name) => assert_eq!(name.node, "c"),
+                    _ => panic!("Expected Ident in body"),
+                }
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_let_in_with_path_value() {
+    let input = "let f(student: Student) -> Int = let age = student.age { age + 1 };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::Let { var, value, body } => {
+                assert_eq!(var.node, "age");
+                match &value.node {
+                    Expr::Path { object, segments } => {
+                        matches!(object.node, Expr::Ident(_));
+                        assert_eq!(segments.len(), 1);
+                        assert_eq!(segments[0].node, "age");
+                    }
+                    _ => panic!("Expected Path"),
+                }
+                assert!(matches!(body.node, Expr::Add(_, _)));
+            }
+            _ => panic!("Expected LetIn expression"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_deeply_nested_let_in() {
+    let input = "let f() -> Int = let a = 1 { let b = 2 { let c = 3 { a + b + c } } };";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => {
+            // First level
+            match &body.node {
+                Expr::Let { var, value, body } => {
+                    assert_eq!(var.node, "a");
+                    assert!(matches!(value.node, Expr::Number(1)));
+
+                    // Second level
+                    match &body.node {
+                        Expr::Let { var, value, body } => {
+                            assert_eq!(var.node, "b");
+                            assert!(matches!(value.node, Expr::Number(2)));
+
+                            // Third level
+                            match &body.node {
+                                Expr::Let { var, value, body } => {
+                                    assert_eq!(var.node, "c");
+                                    assert!(matches!(value.node, Expr::Number(3)));
+                                    // Body is a + b + c (nested Add expressions)
+                                    assert!(matches!(body.node, Expr::Add(_, _)));
+                                }
+                                _ => panic!("Expected third LetIn"),
+                            }
+                        }
+                        _ => panic!("Expected second LetIn"),
+                    }
+                }
+                _ => panic!("Expected first LetIn"),
+            }
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}

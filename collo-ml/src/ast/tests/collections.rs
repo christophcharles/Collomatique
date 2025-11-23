@@ -128,7 +128,7 @@ fn parse_simple_list_comprehension() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListComprehension {
-                expr,
+                body: expr,
                 vars_and_collections,
                 filter,
             } => {
@@ -153,7 +153,7 @@ fn parse_list_comprehension_with_expression() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, .. } => {
+            Expr::ListComprehension { body: expr, .. } => {
                 assert!(matches!(expr.node, Expr::Mul(_, _)));
             }
             _ => panic!("Expected ListComprehension"),
@@ -171,7 +171,7 @@ fn parse_list_comprehension_with_field_access() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListComprehension {
-                expr,
+                body: expr,
                 vars_and_collections,
                 ..
             } => {
@@ -239,7 +239,7 @@ fn parse_nested_list_comprehension() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, .. } => {
+            Expr::ListComprehension { body: expr, .. } => {
                 assert!(matches!(expr.node, Expr::ListComprehension { .. }));
             }
             _ => panic!("Expected ListComprehension"),
@@ -256,7 +256,7 @@ fn parse_list_comprehension_with_multiple_for() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, .. } => {
+            Expr::ListComprehension { body: expr, .. } => {
                 assert!(matches!(expr.node, Expr::Add { .. }));
             }
             _ => panic!("Expected ListComprehension"),
@@ -273,7 +273,7 @@ fn parse_list_comprehension_with_multiple_dependant_for() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, .. } => {
+            Expr::ListComprehension { body: expr, .. } => {
                 assert!(matches!(expr.node, Expr::Path { .. }));
             }
             _ => panic!("Expected ListComprehension"),
@@ -290,7 +290,9 @@ fn parse_list_comprehension_with_multiple_for_and_where_clause() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { expr, filter, .. } => {
+            Expr::ListComprehension {
+                body: expr, filter, ..
+            } => {
                 assert!(matches!(expr.node, Expr::Add { .. }));
                 assert!(filter.is_some());
             }
