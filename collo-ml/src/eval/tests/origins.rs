@@ -467,3 +467,35 @@ fn multiline_docstring_multiple_params() {
         _ => panic!("Expected Constraint"),
     }
 }
+
+/// Test that the same parameter can be substituted multiple times in one line
+#[test]
+fn repeated_parameter_substitution() {
+    let input = r#"
+    ## The value @{val} is compared to itself: @{val} === @{val}
+    let self_compare(val: Int) -> Constraint = val === val;
+    pub let test() -> Constraint = self_compare(42);
+    "#;
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("test", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            let constraint = constraints.iter().next().unwrap();
+            let origin = constraint.origin.as_ref().unwrap();
+
+            assert_eq!(origin.pretty_docstring.len(), 1);
+            assert_eq!(
+                origin.pretty_docstring[0],
+                "The value 42 is compared to itself: 42 === 42"
+            );
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
