@@ -1931,6 +1931,8 @@ impl<'a, E: EvalEnv> EvalHistory<'a, E> {
                     list.iter().map(|x| self.prettify_expr_value(x)).collect();
                 format!("[{}]", pretty_values.join(","))
             }
+            ExprValue::Bool(v) => format!("{}", v),
+            ExprValue::Int(v) => format!("{}", v),
             _ => format!("{:?}", value),
         }
     }
@@ -1953,7 +1955,7 @@ impl<'a, E: EvalEnv> EvalHistory<'a, E> {
             .docstring
             .iter()
             .map(|d| {
-                re.replace_all(d, |caps: &regex::Captures| {
+                re.replace_all(d.trim_start(), |caps: &regex::Captures| {
                     let name = &caps[1];
                     substitution_values
                         .get(name)
