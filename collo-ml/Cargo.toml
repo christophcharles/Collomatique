@@ -9,3 +9,4 @@ pest = "2.8"
 pest_derive = "2.8"
 thiserror.workspace = true
 collomatique-ilp = { path = "../ilp" }
+regex = "*"

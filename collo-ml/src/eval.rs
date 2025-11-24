@@ -30,6 +30,7 @@ pub enum IlpVar<T: UsableData> {
 pub struct Origin<T: UsableData> {
     fn_name: Spanned<String>,
     args: Vec<ExprValue<T>>,
+    pretty_docstring: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -1919,6 +1920,51 @@ impl<'a, E: EvalEnv> EvalHistory<'a, E> {
         })
     }
 
+    fn prettify_expr_value(&self, value: &ExprValue<E::Object>) -> String {
+        match value {
+            ExprValue::Object(obj) => match self.env.pretty_print(obj) {
+                Some(s) => s,
+                None => format!("{:?}", obj),
+            },
+            ExprValue::List(_typ, list) => {
+                let pretty_values: Vec<_> =
+                    list.iter().map(|x| self.prettify_expr_value(x)).collect();
+                format!("[{}]", pretty_values.join(","))
+            }
+            _ => format!("{:?}", value),
+        }
+    }
+
+    fn prettify_docstring(
+        &self,
+        fn_desc: &FunctionDesc,
+        args: &Vec<ExprValue<E::Object>>,
+    ) -> Vec<String> {
+        let mut substitution_values = HashMap::new();
+        for (arg_name, arg_value) in fn_desc.arg_names.iter().zip(args.iter()) {
+            let pretty_value = self.prettify_expr_value(arg_value);
+            substitution_values.insert(arg_name.clone(), pretty_value);
+        }
+
+        let re =
+            regex::Regex::new(r"@\{([a-zA-Z_][a-zA-Z0-9_]*)\}").expect("Should be a valid regex");
+
+        fn_desc
+            .docstring
+            .iter()
+            .map(|d| {
+                re.replace_all(d, |caps: &regex::Captures| {
+                    let name = &caps[1];
+                    substitution_values
+                        .get(name)
+                        .cloned()
+                        .unwrap_or(caps[0].to_string())
+                })
+                .to_string()
+            })
+            .collect()
+    }
+
     fn add_fn_to_call_history(
         &mut self,
         fn_name: &str,
@@ -1977,6 +2023,7 @@ impl<'a, E: EvalEnv> EvalHistory<'a, E> {
         let origin = Origin {
             fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
             args: coerced_args.clone(),
+            pretty_docstring: self.prettify_docstring(fn_desc, &coerced_args),
         };
 
         let result = annotated_result
