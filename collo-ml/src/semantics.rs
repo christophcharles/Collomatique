@@ -297,6 +297,7 @@ pub struct FunctionDesc {
     pub used: bool,
     pub arg_names: Vec<String>,
     pub body: Spanned<crate::ast::Expr>,
+    pub docstring: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -422,6 +423,7 @@ impl GlobalEnv {
         public: bool,
         arg_names: Vec<String>,
         body: Spanned<crate::ast::Expr>,
+        docstring: Vec<String>,
         type_info: &mut TypeInfo,
     ) {
         assert!(!self.functions.contains_key(name));
@@ -434,6 +436,7 @@ impl GlobalEnv {
                 used: should_be_used_by_default(name),
                 arg_names,
                 body: body.clone(),
+                docstring,
             },
         );
 
@@ -2417,7 +2420,7 @@ impl GlobalEnv {
     ) {
         match statement {
             crate::ast::Statement::Let {
-                docstring: _,
+                docstring,
                 public,
                 name,
                 params,
@@ -2429,6 +2432,7 @@ impl GlobalEnv {
                 params,
                 output_type,
                 body,
+                docstring,
                 type_info,
                 expr_types,
                 errors,
@@ -2457,6 +2461,7 @@ impl GlobalEnv {
         params: &Vec<Param>,
         output_type: &Spanned<crate::ast::TypeName>,
         body: &Spanned<Expr>,
+        docstring: &Vec<String>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, AnnotatedType>,
         errors: &mut Vec<SemError>,
@@ -2570,6 +2575,7 @@ impl GlobalEnv {
                         public,
                         params.iter().map(|x| x.name.node.clone()).collect(),
                         body.clone(),
+                        docstring.clone(),
                         type_info,
                     );
                 }
