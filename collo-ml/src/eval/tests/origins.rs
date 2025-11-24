@@ -426,3 +426,44 @@ fn docstring_substitution_with_args() {
         _ => panic!("Expected Constraint"),
     }
 }
+
+/// Test docstring substitution with multiple parameters and multi-line docstrings
+#[test]
+fn multiline_docstring_multiple_params() {
+    let input = r#"
+    ## Constraint on @{x} and @{y}:
+    ## - @{x} must be less than @{y}
+    ## - Their sum must be positive
+    let range_check(x: Int, y: Int) -> Constraint = 
+        (x <== y) and ((x + y) >== 0);
+    pub let test() -> Constraint = range_check(5, 10);
+    "#;
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("test", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            // Get any constraint to check the origin
+            let constraint = constraints.iter().next().unwrap();
+            assert!(constraint.origin.is_some());
+            let origin = constraint.origin.as_ref().unwrap();
+
+            assert_eq!(origin.fn_name.node, "range_check");
+            assert_eq!(origin.args.len(), 2);
+            assert_eq!(origin.args[0], ExprValue::Int(5));
+            assert_eq!(origin.args[1], ExprValue::Int(10));
+
+            assert_eq!(origin.pretty_docstring.len(), 3);
+            assert_eq!(origin.pretty_docstring[0], "Constraint on 5 and 10:");
+            assert_eq!(origin.pretty_docstring[1], "- 5 must be less than 10");
+            assert_eq!(origin.pretty_docstring[2], "- Their sum must be positive");
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
