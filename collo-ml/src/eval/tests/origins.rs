@@ -378,3 +378,51 @@ fn deeply_nested_function_origin() {
         _ => panic!("Expected Constraint"),
     }
 }
+
+/// Test that docstrings are correctly substituted with actual argument values
+#[test]
+fn docstring_substitution_with_args() {
+    let input = r#"
+    ## @{x} must be smaller than 1.
+    let h(x: Int) -> Constraint = x <== 1;
+    pub let f() -> Constraint = h(1) and h(2);
+    "#;
+    let types = HashMap::new();
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            assert_eq!(constraints.len(), 2);
+
+            let mut constraints_vec: Vec<_> = constraints.iter().collect();
+            constraints_vec.sort_by_key(|c| &c.origin.as_ref().unwrap().args[0]);
+
+            // First constraint: h(1)
+            let constraint1 = &constraints_vec[0];
+            assert!(constraint1.origin.is_some());
+            let origin1 = constraint1.origin.as_ref().unwrap();
+            assert_eq!(origin1.fn_name.node, "h");
+            assert_eq!(origin1.args.len(), 1);
+            assert_eq!(origin1.args[0], ExprValue::Int(1));
+            assert_eq!(origin1.pretty_docstring.len(), 1);
+            assert_eq!(origin1.pretty_docstring[0], "1 must be smaller than 1.");
+
+            // Second constraint: h(2)
+            let constraint2 = &constraints_vec[1];
+            assert!(constraint2.origin.is_some());
+            let origin2 = constraint2.origin.as_ref().unwrap();
+            assert_eq!(origin2.fn_name.node, "h");
+            assert_eq!(origin2.args.len(), 1);
+            assert_eq!(origin2.args[0], ExprValue::Int(2));
+            assert_eq!(origin2.pretty_docstring.len(), 1);
+            assert_eq!(origin2.pretty_docstring[0], "2 must be smaller than 1.");
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
