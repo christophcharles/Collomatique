@@ -12,7 +12,7 @@ fn new_rejects_slot_crossing_midnight() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -27,7 +27,7 @@ fn new_rejects_slot_crossing_midnight_by_one_minute() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(2).unwrap();
+    let duration = NonZeroMinutes::new(2).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -42,7 +42,7 @@ fn new_rejects_slot_crossing_midnight_variant() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(70).unwrap();
+    let duration = NonZeroMinutes::new(70).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -57,7 +57,7 @@ fn new_accepts_slot_ending_exactly_at_midnight() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -72,7 +72,7 @@ fn new_accepts_slot_ending_exactly_at_midnight_variant() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(88).unwrap();
+    let duration = NonZeroMinutes::new(88).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -87,7 +87,7 @@ fn new_accepts_full_24_hour_slot() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(60 * 24).unwrap();
+    let duration = NonZeroMinutes::new(60 * 24).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -102,7 +102,7 @@ fn new_rejects_slot_25_hours_long() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(60 * 24 + 60).unwrap();
+    let duration = NonZeroMinutes::new(60 * 24 + 60).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -121,7 +121,7 @@ fn new_accepts_normal_morning_slot() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -136,7 +136,7 @@ fn new_accepts_slot_with_odd_times() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration = NonZeroMinutes::new(94).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -151,7 +151,7 @@ fn new_accepts_very_short_slot() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(1).unwrap();
+    let duration = NonZeroMinutes::new(1).unwrap();
 
     let slot = SlotWithDuration::new(start, duration);
 
@@ -170,7 +170,7 @@ fn naive_end_time_calculates_correctly_for_morning_slot() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -188,7 +188,7 @@ fn naive_end_time_calculates_correctly_with_odd_duration() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration = NonZeroMinutes::new(94).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -206,7 +206,7 @@ fn naive_end_time_returns_midnight_when_slot_ends_at_midnight() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -224,7 +224,7 @@ fn naive_end_time_returns_midnight_variant() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(88).unwrap();
+    let duration = NonZeroMinutes::new(88).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -242,7 +242,7 @@ fn naive_end_time_for_full_day_slot() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(60 * 24).unwrap();
+    let duration = NonZeroMinutes::new(60 * 24).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -260,7 +260,7 @@ fn end_time_returns_whole_minute_time() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(90).unwrap();
+    let duration = NonZeroMinutes::new(90).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -283,7 +283,7 @@ fn start_returns_slot_start() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(45).unwrap();
+    let duration = NonZeroMinutes::new(45).unwrap();
 
     let slot = SlotWithDuration::new(start.clone(), duration).unwrap();
 
@@ -298,7 +298,7 @@ fn duration_returns_correct_duration() {
             .unwrap(),
     };
 
-    let duration = NonZeroDurationInMinutes::new(75).unwrap();
+    let duration = NonZeroMinutes::new(75).unwrap();
 
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
@@ -316,7 +316,7 @@ fn overlaps_with_returns_false_for_separate_slots() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -324,7 +324,7 @@ fn overlaps_with_returns_false_for_separate_slots() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(12, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
+    let duration2 = NonZeroMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(!slot1.overlaps_with(&slot2));
@@ -337,7 +337,7 @@ fn overlaps_with_returns_false_for_separate_slots_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -345,7 +345,7 @@ fn overlaps_with_returns_false_for_separate_slots_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(12, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
+    let duration2 = NonZeroMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(!slot2.overlaps_with(&slot1));
@@ -358,7 +358,7 @@ fn overlaps_with_returns_false_for_adjacent_slots() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -366,7 +366,7 @@ fn overlaps_with_returns_false_for_adjacent_slots() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 26, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
+    let duration2 = NonZeroMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(!slot1.overlaps_with(&slot2));
@@ -379,7 +379,7 @@ fn overlaps_with_returns_false_for_adjacent_slots_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(7, 34, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(52).unwrap();
+    let duration1 = NonZeroMinutes::new(52).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -387,7 +387,7 @@ fn overlaps_with_returns_false_for_adjacent_slots_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 26, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(68).unwrap();
+    let duration2 = NonZeroMinutes::new(68).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(!slot1.overlaps_with(&slot2));
@@ -400,7 +400,7 @@ fn overlaps_with_returns_false_for_different_weekdays() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration1 = NonZeroMinutes::new(120).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -408,7 +408,7 @@ fn overlaps_with_returns_false_for_different_weekdays() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration2 = NonZeroMinutes::new(120).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(!slot1.overlaps_with(&slot2));
@@ -425,7 +425,7 @@ fn overlaps_with_returns_true_for_partial_overlap() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -433,7 +433,7 @@ fn overlaps_with_returns_true_for_partial_overlap() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 12, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(95).unwrap();
+    let duration2 = NonZeroMinutes::new(95).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot1.overlaps_with(&slot2));
@@ -446,7 +446,7 @@ fn overlaps_with_returns_true_for_partial_overlap_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -454,7 +454,7 @@ fn overlaps_with_returns_true_for_partial_overlap_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 12, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(95).unwrap();
+    let duration2 = NonZeroMinutes::new(95).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot2.overlaps_with(&slot1));
@@ -467,7 +467,7 @@ fn overlaps_with_returns_true_when_one_contains_other() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -475,7 +475,7 @@ fn overlaps_with_returns_true_when_one_contains_other() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(7, 12, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot1.overlaps_with(&slot2));
@@ -488,7 +488,7 @@ fn overlaps_with_returns_true_when_one_contains_other_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -496,7 +496,7 @@ fn overlaps_with_returns_true_when_one_contains_other_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(7, 12, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot2.overlaps_with(&slot1));
@@ -509,7 +509,7 @@ fn overlaps_with_returns_true_for_one_minute_overlap() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -517,7 +517,7 @@ fn overlaps_with_returns_true_for_one_minute_overlap() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 25, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot1.overlaps_with(&slot2));
@@ -530,7 +530,7 @@ fn overlaps_with_returns_true_for_one_minute_overlap_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -538,7 +538,7 @@ fn overlaps_with_returns_true_for_one_minute_overlap_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 25, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot2.overlaps_with(&slot1));
@@ -551,7 +551,7 @@ fn overlaps_with_returns_true_when_slots_start_at_same_time() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -559,7 +559,7 @@ fn overlaps_with_returns_true_when_slots_start_at_same_time() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot1.overlaps_with(&slot2));
@@ -572,7 +572,7 @@ fn overlaps_with_returns_true_when_slots_start_at_same_time_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -580,7 +580,7 @@ fn overlaps_with_returns_true_when_slots_start_at_same_time_reversed_order() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot2.overlaps_with(&slot1));
@@ -593,7 +593,7 @@ fn overlaps_with_returns_true_when_second_slot_ends_at_first_slot_end() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -601,7 +601,7 @@ fn overlaps_with_returns_true_when_second_slot_ends_at_first_slot_end() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(7, 51, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot1.overlaps_with(&slot2));
@@ -614,7 +614,7 @@ fn overlaps_with_returns_true_when_second_slot_ends_at_first_slot_end_reversed_o
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap())
             .unwrap(),
     };
-    let duration1 = NonZeroDurationInMinutes::new(94).unwrap();
+    let duration1 = NonZeroMinutes::new(94).unwrap();
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
@@ -622,7 +622,7 @@ fn overlaps_with_returns_true_when_second_slot_ends_at_first_slot_end_reversed_o
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(7, 51, 0).unwrap())
             .unwrap(),
     };
-    let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
+    let duration2 = NonZeroMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
     assert!(slot2.overlaps_with(&slot1));
@@ -639,7 +639,7 @@ fn display_formatting() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(9, 30, 0).unwrap())
             .unwrap(),
     };
-    let duration = NonZeroDurationInMinutes::new(90).unwrap();
+    let duration = NonZeroMinutes::new(90).unwrap();
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
     assert_eq!(slot.to_string(), "lundi 09h30-11h00");
@@ -652,7 +652,7 @@ fn display_formatting_sunday() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap())
             .unwrap(),
     };
-    let duration = NonZeroDurationInMinutes::new(60).unwrap();
+    let duration = NonZeroMinutes::new(60).unwrap();
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
     assert_eq!(slot.to_string(), "Dimanche 14h00-15h00");
@@ -665,7 +665,7 @@ fn capitalize_formatting() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(10, 15, 0).unwrap())
             .unwrap(),
     };
-    let duration = NonZeroDurationInMinutes::new(45).unwrap();
+    let duration = NonZeroMinutes::new(45).unwrap();
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
     assert_eq!(slot.capitalize(), "Mercredi 10h15-11h00");
@@ -678,7 +678,7 @@ fn capitalize_vs_display() {
         start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap())
             .unwrap(),
     };
-    let duration = NonZeroDurationInMinutes::new(120).unwrap();
+    let duration = NonZeroMinutes::new(120).unwrap();
     let slot = SlotWithDuration::new(start, duration).unwrap();
 
     assert_eq!(slot.capitalize(), "Mardi 08h00-10h00");
@@ -697,7 +697,7 @@ fn ordering_by_weekday() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(60).unwrap(),
+        NonZeroMinutes::new(60).unwrap(),
     )
     .unwrap();
 
@@ -707,7 +707,7 @@ fn ordering_by_weekday() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(60).unwrap(),
+        NonZeroMinutes::new(60).unwrap(),
     )
     .unwrap();
 
@@ -722,7 +722,7 @@ fn ordering_by_time_same_weekday() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(120).unwrap(),
+        NonZeroMinutes::new(120).unwrap(),
     )
     .unwrap();
 
@@ -732,7 +732,7 @@ fn ordering_by_time_same_weekday() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(90).unwrap(),
+        NonZeroMinutes::new(90).unwrap(),
     )
     .unwrap();
 
@@ -747,7 +747,7 @@ fn equality() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(11, 30, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(75).unwrap(),
+        NonZeroMinutes::new(75).unwrap(),
     )
     .unwrap();
 
@@ -757,7 +757,7 @@ fn equality() {
             start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(11, 30, 0).unwrap())
                 .unwrap(),
         },
-        NonZeroDurationInMinutes::new(75).unwrap(),
+        NonZeroMinutes::new(75).unwrap(),
     )
     .unwrap();
 

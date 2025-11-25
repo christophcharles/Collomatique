@@ -58,7 +58,7 @@ pub enum DialogInput {
     Accept,
 
     UpdateName(String),
-    UpdateDuration(collomatique_time::NonZeroDurationInMinutes),
+    UpdateDuration(collomatique_time::NonZeroMinutes),
     UpdateDurationTakenIntoAccount(bool),
     UpdateHasInterrogations(bool),
     UpdateStudentsPerGroupMinimum(NonZeroU32),
@@ -368,7 +368,7 @@ impl SimpleComponent for Dialog {
                                 set_value: model.interrogation_params.duration.get().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let duration_u32 = widget.value() as u32;
-                                    let duration = collomatique_time::NonZeroDurationInMinutes::new(duration_u32).unwrap();
+                                    let duration = collomatique_time::NonZeroMinutes::new(duration_u32).unwrap();
                                     sender.input(DialogInput::UpdateDuration(duration));
                                 },
                             },

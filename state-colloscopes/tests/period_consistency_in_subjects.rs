@@ -43,7 +43,7 @@ fn add_subject_referencing_period_then_remove_period() {
                             ..=NonZeroU32::new(3).unwrap(),
                         groups_per_interrogation: NonZeroU32::new(1).unwrap()
                             ..=NonZeroU32::new(1).unwrap(),
-                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
                             periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
@@ -109,7 +109,7 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
                             ..=NonZeroU32::new(3).unwrap(),
                         groups_per_interrogation: NonZeroU32::new(1).unwrap()
                             ..=NonZeroU32::new(1).unwrap(),
-                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
                             periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
@@ -136,7 +136,7 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
                             ..=NonZeroU32::new(3).unwrap(),
                         groups_per_interrogation: NonZeroU32::new(1).unwrap()
                             ..=NonZeroU32::new(1).unwrap(),
-                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
                             periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
@@ -208,7 +208,7 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
                             ..=NonZeroU32::new(3).unwrap(),
                         groups_per_interrogation: NonZeroU32::new(1).unwrap()
                             ..=NonZeroU32::new(1).unwrap(),
-                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
                             minimum_week_separation: 1,

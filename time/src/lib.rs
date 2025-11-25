@@ -15,7 +15,7 @@
 //!
 //! # Core Types
 //!
-//! - [`NonZeroDurationInMinutes`]: A duration of at least one minute
+//! - [`NonZeroMinutes`]: A duration of at least one minute
 //! - [`Weekday`]: A weekday with Monday-first ordering
 //! - [`WholeMinuteTime`]: A time of day with minute precision (no seconds)
 //! - [`SlotStart`]: The beginning of a time slot (weekday + time)
@@ -36,7 +36,7 @@
 //!             NaiveTime::from_hms_opt(9, 0, 0).unwrap()
 //!         ).unwrap(),
 //!     },
-//!     NonZeroDurationInMinutes::new(120).unwrap(),
+//!     NonZeroMinutes::new(120).unwrap(),
 //! ).unwrap();
 //!
 //! // Create a Monday 10:30-12:30 slot
@@ -47,7 +47,7 @@
 //!             NaiveTime::from_hms_opt(10, 30, 0).unwrap()
 //!         ).unwrap(),
 //!     },
-//!     NonZeroDurationInMinutes::new(120).unwrap(),
+//!     NonZeroMinutes::new(120).unwrap(),
 //! ).unwrap();
 //!
 //! // Check if slots overlap
@@ -91,27 +91,27 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use collomatique_time::NonZeroDurationInMinutes;
+/// use collomatique_time::NonZeroMinutes;
 ///
 /// // Create a 90-minute duration
-/// let duration = NonZeroDurationInMinutes::new(90).unwrap();
+/// let duration = NonZeroMinutes::new(90).unwrap();
 /// assert_eq!(duration.to_string(), "1h30");
 ///
 /// // Convert to chrono::TimeDelta for calculations
 /// let time_delta = duration.time_delta();
 ///
 /// // Zero minutes is not allowed
-/// assert!(NonZeroDurationInMinutes::new(0).is_none());
+/// assert!(NonZeroMinutes::new(0).is_none());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct NonZeroDurationInMinutes(NonZeroU32);
+pub struct NonZeroMinutes(NonZeroU32);
 
-impl NonZeroDurationInMinutes {
-    /// Creates a new [NonZeroDurationInMinutes] from a number of minutes
+impl NonZeroMinutes {
+    /// Creates a new [NonZeroMinutes] from a number of minutes
     ///
     /// Returns `None` if the value is zero.
-    pub fn new(value: u32) -> Option<NonZeroDurationInMinutes> {
-        Some(NonZeroDurationInMinutes(NonZeroU32::new(value)?))
+    pub fn new(value: u32) -> Option<NonZeroMinutes> {
+        Some(NonZeroMinutes(NonZeroU32::new(value)?))
     }
 
     /// Returns the corresponding [chrono::TimeDelta].
@@ -124,9 +124,9 @@ impl NonZeroDurationInMinutes {
     /// # Example
     ///
     /// ```
-    /// use collomatique_time::NonZeroDurationInMinutes;
+    /// use collomatique_time::NonZeroMinutes;
     ///
-    /// let duration = NonZeroDurationInMinutes::new(90).unwrap();
+    /// let duration = NonZeroMinutes::new(90).unwrap();
     /// assert_eq!(duration.get().get(), 90);
     /// ```
     pub fn get(&self) -> NonZeroU32 {
@@ -134,21 +134,21 @@ impl NonZeroDurationInMinutes {
     }
 }
 
-impl From<NonZeroDurationInMinutes> for chrono::TimeDelta {
-    fn from(value: NonZeroDurationInMinutes) -> Self {
+impl From<NonZeroMinutes> for chrono::TimeDelta {
+    fn from(value: NonZeroMinutes) -> Self {
         value.time_delta()
     }
 }
 
-impl From<NonZeroU32> for NonZeroDurationInMinutes {
+impl From<NonZeroU32> for NonZeroMinutes {
     fn from(value: NonZeroU32) -> Self {
-        NonZeroDurationInMinutes(value)
+        NonZeroMinutes(value)
     }
 }
 
 const MINUTES_PER_HOUR: u32 = 60;
 
-impl std::fmt::Display for NonZeroDurationInMinutes {
+impl std::fmt::Display for NonZeroMinutes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -414,7 +414,7 @@ impl std::ops::Deref for WholeMinuteTime {
 /// Type representing the beginning of a slot in time
 ///
 /// A slot starts on a given weekday at a certain time. This type is typically
-/// paired with a [`NonZeroDurationInMinutes`] to create a [`SlotWithDuration`].
+/// paired with a [`NonZeroMinutes`] to create a [`SlotWithDuration`].
 ///
 /// # Example
 ///
@@ -469,7 +469,7 @@ impl std::fmt::Display for SlotStart {
 /// # Example
 ///
 /// ```
-/// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroDurationInMinutes};
+/// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroMinutes};
 /// use chrono::{Weekday as ChronoWeekday, NaiveTime};
 ///
 /// let start = SlotStart {
@@ -482,13 +482,13 @@ impl std::fmt::Display for SlotStart {
 /// // Valid: 2-hour slot ending at 16:00
 /// let slot = SlotWithDuration::new(
 ///     start.clone(),
-///     NonZeroDurationInMinutes::new(120).unwrap()
+///     NonZeroMinutes::new(120).unwrap()
 /// ).unwrap();
 ///
 /// // Invalid: would end at 02:00 the next day, crossing midnight
 /// let too_long = SlotWithDuration::new(
 ///     start,
-///     NonZeroDurationInMinutes::new(720).unwrap() // 12 hours
+///     NonZeroMinutes::new(720).unwrap() // 12 hours
 /// );
 /// assert!(too_long.is_none());
 /// ```
@@ -499,9 +499,9 @@ pub struct SlotWithDuration {
 
     /// duration of the slot
     ///
-    /// It is expressed in minutes using [NonZeroDurationInMinutes]
+    /// It is expressed in minutes using [NonZeroMinutes]
     /// and cannot be zero.
-    duration: NonZeroDurationInMinutes,
+    duration: NonZeroMinutes,
 }
 
 impl SlotWithDuration {
@@ -514,7 +514,7 @@ impl SlotWithDuration {
     /// # Examples
     ///
     /// ```
-    /// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroDurationInMinutes};
+    /// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroMinutes};
     /// use chrono::{Weekday as ChronoWeekday, NaiveTime};
     ///
     /// let start_morning = SlotStart {
@@ -527,7 +527,7 @@ impl SlotWithDuration {
     /// // Valid: 2-hour slot from 9:00 to 11:00
     /// let slot = SlotWithDuration::new(
     ///     start_morning,
-    ///     NonZeroDurationInMinutes::new(120).unwrap()
+    ///     NonZeroMinutes::new(120).unwrap()
     /// );
     /// assert!(slot.is_some());
     ///
@@ -540,7 +540,7 @@ impl SlotWithDuration {
     /// };
     /// let until_midnight = SlotWithDuration::new(
     ///     start_evening,
-    ///     NonZeroDurationInMinutes::new(120).unwrap() // 22:00 + 2h = 00:00
+    ///     NonZeroMinutes::new(120).unwrap() // 22:00 + 2h = 00:00
     /// );
     /// assert!(until_midnight.is_some());
     ///
@@ -553,11 +553,11 @@ impl SlotWithDuration {
     /// };
     /// let crosses_midnight = SlotWithDuration::new(
     ///     start_late,
-    ///     NonZeroDurationInMinutes::new(60).unwrap() // 23:30 + 1h = 00:30
+    ///     NonZeroMinutes::new(60).unwrap() // 23:30 + 1h = 00:30
     /// );
     /// assert!(crosses_midnight.is_none());
     /// ```
-    pub fn new(start: SlotStart, duration: NonZeroDurationInMinutes) -> Option<SlotWithDuration> {
+    pub fn new(start: SlotStart, duration: NonZeroMinutes) -> Option<SlotWithDuration> {
         let (end, ignored_seconds) = start.start_time.overflowing_add_signed(duration.into());
 
         // We might have overflowed
@@ -602,7 +602,7 @@ impl SlotWithDuration {
     }
 
     /// Returns the duration of a slot
-    pub fn duration(&self) -> NonZeroDurationInMinutes {
+    pub fn duration(&self) -> NonZeroMinutes {
         self.duration
     }
 
@@ -620,7 +620,7 @@ impl SlotWithDuration {
     /// # Examples
     ///
     /// ```
-    /// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroDurationInMinutes};
+    /// use collomatique_time::{SlotStart, SlotWithDuration, Weekday, WholeMinuteTime, NonZeroMinutes};
     /// use chrono::NaiveTime;
     ///
     /// let monday = Weekday(chrono::Weekday::Mon);
@@ -634,7 +634,7 @@ impl SlotWithDuration {
     ///             NaiveTime::from_hms_opt(9, 0, 0).unwrap()
     ///         ).unwrap(),
     ///     },
-    ///     NonZeroDurationInMinutes::new(120).unwrap(),
+    ///     NonZeroMinutes::new(120).unwrap(),
     /// ).unwrap();
     ///
     /// // Slot 2: Monday 10:00-12:00 - overlaps with slot1
@@ -645,7 +645,7 @@ impl SlotWithDuration {
     ///             NaiveTime::from_hms_opt(10, 0, 0).unwrap()
     ///         ).unwrap(),
     ///     },
-    ///     NonZeroDurationInMinutes::new(120).unwrap(),
+    ///     NonZeroMinutes::new(120).unwrap(),
     /// ).unwrap();
     /// assert!(slot1.overlaps_with(&slot2));
     ///
@@ -657,7 +657,7 @@ impl SlotWithDuration {
     ///             NaiveTime::from_hms_opt(11, 0, 0).unwrap()
     ///         ).unwrap(),
     ///     },
-    ///     NonZeroDurationInMinutes::new(120).unwrap(),
+    ///     NonZeroMinutes::new(120).unwrap(),
     /// ).unwrap();
     /// assert!(!slot1.overlaps_with(&slot3));
     ///
@@ -669,7 +669,7 @@ impl SlotWithDuration {
     ///             NaiveTime::from_hms_opt(9, 0, 0).unwrap()
     ///         ).unwrap(),
     ///     },
-    ///     NonZeroDurationInMinutes::new(120).unwrap(),
+    ///     NonZeroMinutes::new(120).unwrap(),
     /// ).unwrap();
     /// assert!(!slot1.overlaps_with(&slot4));
     /// ```
