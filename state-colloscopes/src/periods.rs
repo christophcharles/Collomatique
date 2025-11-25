@@ -13,7 +13,7 @@ pub struct Periods {
     ///
     /// The date might not be set but of course, this will hinder
     /// the eventual pretty output
-    pub first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub first_week: Option<collomatique_time::WeekStart>,
 
     /// Ordered list of periods
     ///

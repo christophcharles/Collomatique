@@ -445,7 +445,7 @@ impl Dialog {
             teacher_id,
             start_time: collomatique_time::SlotStart {
                 weekday: Self::day_selected_to_enum(self.day_selected),
-                start_time: collomatique_time::TimeOnMinutes::new(
+                start_time: collomatique_time::WholeMinuteTime::new(
                     chrono::NaiveTime::from_hms_opt(self.hour_selected, self.minute_selected, 0)
                         .unwrap(),
                 )

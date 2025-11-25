@@ -8,7 +8,7 @@ use pyo3::{exceptions::PyValueError, types::PyString};
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[pyclass]
 pub struct NaiveMondayDate {
-    internal: collomatique_time::NaiveMondayDate,
+    internal: collomatique_time::WeekStart,
 }
 
 #[pymethods]
@@ -24,7 +24,7 @@ impl NaiveMondayDate {
             return Err(PyValueError::new_err(format!("Invalid date")));
         };
 
-        let Some(internal) = collomatique_time::NaiveMondayDate::new(date) else {
+        let Some(internal) = collomatique_time::WeekStart::new(date) else {
             return Err(PyValueError::new_err(format!("Not a monday")));
         };
 
@@ -32,13 +32,13 @@ impl NaiveMondayDate {
     }
 }
 
-impl From<collomatique_time::NaiveMondayDate> for NaiveMondayDate {
-    fn from(value: collomatique_time::NaiveMondayDate) -> Self {
+impl From<collomatique_time::WeekStart> for NaiveMondayDate {
+    fn from(value: collomatique_time::WeekStart) -> Self {
         NaiveMondayDate { internal: value }
     }
 }
 
-impl From<NaiveMondayDate> for collomatique_time::NaiveMondayDate {
+impl From<NaiveMondayDate> for collomatique_time::WeekStart {
     fn from(value: NaiveMondayDate) -> Self {
         value.internal
     }
@@ -68,7 +68,7 @@ impl NaiveDate {
 
     fn round_to_week(self_: PyRef<'_, Self>) -> NaiveMondayDate {
         NaiveMondayDate {
-            internal: collomatique_time::NaiveMondayDate::round_from(self_.internal),
+            internal: collomatique_time::WeekStart::round_from(self_.internal),
         }
     }
 }
@@ -88,7 +88,7 @@ impl From<NaiveDate> for chrono::NaiveDate {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[pyclass]
 pub struct Time {
-    internal: collomatique_time::TimeOnMinutes,
+    internal: collomatique_time::WholeMinuteTime,
 }
 
 #[pymethods]
@@ -105,18 +105,18 @@ impl Time {
         };
 
         let internal =
-            collomatique_time::TimeOnMinutes::new(time).expect("Time should be on minute");
+            collomatique_time::WholeMinuteTime::new(time).expect("Time should be on minute");
         Ok(Time { internal })
     }
 }
 
-impl From<collomatique_time::TimeOnMinutes> for Time {
-    fn from(value: collomatique_time::TimeOnMinutes) -> Self {
+impl From<collomatique_time::WholeMinuteTime> for Time {
+    fn from(value: collomatique_time::WholeMinuteTime) -> Self {
         Time { internal: value }
     }
 }
 
-impl From<Time> for collomatique_time::TimeOnMinutes {
+impl From<Time> for collomatique_time::WholeMinuteTime {
     fn from(value: Time) -> Self {
         value.internal
     }

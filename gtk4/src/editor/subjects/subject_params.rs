@@ -16,7 +16,7 @@ pub struct Dialog {
     params: collomatique_state_colloscopes::SubjectParameters,
     has_interrogations: bool,
     interrogation_params: collomatique_state_colloscopes::SubjectInterrogationParameters,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     periodicity_panel: PeriodicityPanel,
     exactly_periodic_params: NonZeroU32,
     once_for_every_block_of_weeks_params: OnceForEveryBlockOfWeeksParams,
@@ -51,7 +51,7 @@ pub enum PeriodicityPanel {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        Option<collomatique_time::NaiveMondayDate>,
+        Option<collomatique_time::WeekStart>,
         collomatique_state_colloscopes::SubjectParameters,
     ),
     Cancel,
@@ -1011,7 +1011,7 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 pub struct BlockData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_available_week: u32,
     pub block_params: collomatique_state_colloscopes::subjects::WeekBlock,
 }

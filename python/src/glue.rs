@@ -370,7 +370,7 @@ impl CollomatiqueFile {
         let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
             collomatique_ops::UpdateOp::GeneralPlanning(match first_week {
                 Some(week) => collomatique_ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
-                    collomatique_time::NaiveMondayDate::from(week),
+                    collomatique_time::WeekStart::from(week),
                 ),
                 None => collomatique_ops::GeneralPlanningUpdateOp::DeleteFirstWeek,
             }),
