@@ -321,7 +321,7 @@ impl SimpleComponent for Dialog {
                             )
                             .unwrap(),
                         },
-                        collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        collomatique_time::NonZeroMinutes::new(60).unwrap(),
                     )
                     .unwrap(),
                 );
@@ -664,7 +664,7 @@ impl Slot {
                 )
                 .expect("Time should fall on a whole minute"),
             },
-            collomatique_time::NonZeroDurationInMinutes::new(self.duration_selected)
+            collomatique_time::NonZeroMinutes::new(self.duration_selected)
                 .expect("Duration should be in range"),
         )
         .unwrap()

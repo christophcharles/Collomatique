@@ -112,9 +112,8 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         start_time: collomatique_time::WholeMinuteTime::new(naive_time)
                             .expect("Time should be on a minute"),
                     };
-                    let duration =
-                        collomatique_time::NonZeroDurationInMinutes::new(time_resolution)
-                            .expect("Time resolution should be non-zero");
+                    let duration = collomatique_time::NonZeroMinutes::new(time_resolution)
+                        .expect("Time resolution should be non-zero");
                     let slot = collomatique_time::SlotWithDuration::new(start, duration)
                         .expect("Slot should not overlap next day");
 

@@ -2,7 +2,7 @@ use super::*;
 
 use std::num::NonZeroU32;
 
-use collomatique_time::NonZeroDurationInMinutes;
+use collomatique_time::NonZeroMinutes;
 use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -259,7 +259,7 @@ impl TryFrom<SlotWithDuration> for collomatique_time::SlotWithDuration {
             weekday: value.start_time.weekday.into(),
             start_time: value.start_time.start_time.into(),
         };
-        let duration = NonZeroDurationInMinutes::from(value.duration_in_minutes);
+        let duration = NonZeroMinutes::from(value.duration_in_minutes);
         value.duration_in_minutes;
         collomatique_time::SlotWithDuration::new(slot_start, duration)
             .ok_or(SlotWithDurationError::SlotOverlapsWithNextDay)
