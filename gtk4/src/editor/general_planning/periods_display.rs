@@ -6,7 +6,7 @@ use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_num: usize,
     pub desc: Vec<collomatique_state_colloscopes::periods::WeekDesc>,
     pub period_id: collomatique_state_colloscopes::PeriodId,
@@ -15,7 +15,7 @@ pub struct EntryData {
 #[derive(Debug)]
 pub struct Entry {
     index: DynamicIndex,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     period_id: collomatique_state_colloscopes::PeriodId,
     weeks: FactoryVecDeque<Week>,
@@ -61,7 +61,7 @@ impl Entry {
     }
 
     fn update_week(
-        global_first_week: Option<collomatique_time::NaiveMondayDate>,
+        global_first_week: Option<collomatique_time::WeekStart>,
         first_week_in_period: usize,
         week_num_in_period: usize,
         state: collomatique_state_colloscopes::periods::WeekDesc,
@@ -243,7 +243,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct WeekData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_in_period: usize,
     pub week_num_in_period: usize,
     pub state: collomatique_state_colloscopes::periods::WeekDesc,

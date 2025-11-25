@@ -109,7 +109,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 for weekday in collomatique_time::Weekday::iter() {
                     let start = collomatique_time::SlotStart {
                         weekday,
-                        start_time: collomatique_time::TimeOnMinutes::new(naive_time)
+                        start_time: collomatique_time::WholeMinuteTime::new(naive_time)
                             .expect("Time should be on a minute"),
                     };
                     let duration =

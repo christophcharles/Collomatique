@@ -259,7 +259,7 @@ impl SimpleComponent for Dialog {
                 let Some(global_first_week) = &self.periods.first_week else {
                     panic!("Even calendar weeks needs a first week data");
                 };
-                let first_week_number = global_first_week.inner().iso_week().week();
+                let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 0;
                 for status in &mut self.week_pattern.weeks {
@@ -273,7 +273,7 @@ impl SimpleComponent for Dialog {
                 let Some(global_first_week) = &self.periods.first_week else {
                     panic!("Odd calendar weeks needs a first week data");
                 };
-                let first_week_number = global_first_week.inner().iso_week().week();
+                let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 1;
                 for status in &mut self.week_pattern.weeks {
@@ -380,7 +380,7 @@ impl Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     period_desc: Vec<bool>,
     weeks_in_pattern: Vec<bool>,
@@ -523,7 +523,7 @@ impl PeriodEntry {
 
 #[derive(Debug, Clone)]
 struct WeekData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     status_in_period: bool,
     status_in_pattern: bool,

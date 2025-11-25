@@ -316,7 +316,7 @@ impl SimpleComponent for Dialog {
                     collomatique_time::SlotWithDuration::new(
                         collomatique_time::SlotStart {
                             weekday: chrono::Weekday::Mon.into(),
-                            start_time: collomatique_time::TimeOnMinutes::new(
+                            start_time: collomatique_time::WholeMinuteTime::new(
                                 chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
                             )
                             .unwrap(),
@@ -658,7 +658,7 @@ impl Slot {
         collomatique_time::SlotWithDuration::new(
             collomatique_time::SlotStart {
                 weekday: Self::day_selected_to_enum(self.day_selected),
-                start_time: collomatique_time::TimeOnMinutes::new(
+                start_time: collomatique_time::WholeMinuteTime::new(
                     chrono::NaiveTime::from_hms_opt(self.hour_selected, self.minute_selected, 0)
                         .expect("Time should be valid"),
                 )

@@ -1036,13 +1036,13 @@ impl EditorPanel {
 }
 
 fn generate_week_title(
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     week_number: usize,
 ) -> String {
     match global_first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
-                .inner()
+                .monday()
                 .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
                 .expect("Valid start date");
             let end_date = start_date
@@ -1062,7 +1062,7 @@ fn generate_week_title(
 }
 
 fn generate_period_title(
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     index: usize,
     first_week_num: usize,
     week_count: usize,
@@ -1078,7 +1078,7 @@ fn generate_period_title(
 
 fn generate_week_succession_title(
     name: &str,
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     index: usize,
     first_week_num: usize,
     week_count: usize,
@@ -1093,7 +1093,7 @@ fn generate_week_succession_title(
     match global_first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
-                .inner()
+                .monday()
                 .checked_add_days(chrono::Days::new(7 * (first_week_num as u64)))
                 .expect("Valid start date");
             let end_date = start_date

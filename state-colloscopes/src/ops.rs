@@ -65,7 +65,7 @@ pub enum StudentOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodOp {
     /// Set the start of periods on a specific week
-    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    ChangeStartDate(Option<collomatique_time::WeekStart>),
     /// Add a new period at the beginning
     AddFront(Vec<periods::WeekDesc>),
     /// Add a period after an existing period
@@ -355,7 +355,7 @@ pub enum AnnotatedStudentOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedPeriodOp {
     /// Set the start of periods on a specific week
-    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    ChangeStartDate(Option<collomatique_time::WeekStart>),
     /// Add a new period at the beginning
     AddFront(PeriodId, Vec<periods::WeekDesc>),
     /// Add a period after an existing period

@@ -13,7 +13,7 @@ pub struct PeriodData {
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub subject_params: collomatique_state_colloscopes::SubjectParameters,
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub periods: Vec<PeriodData>,
     pub subject_id: collomatique_state_colloscopes::SubjectId,
     pub subject_count: usize,
@@ -23,7 +23,7 @@ pub struct EntryData {
 pub struct Entry {
     index: DynamicIndex,
     subject_params: collomatique_state_colloscopes::SubjectParameters,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     periods: FactoryVecDeque<Period>,
     subject_id: collomatique_state_colloscopes::SubjectId,
     subject_count: usize,
@@ -155,7 +155,7 @@ impl Entry {
     }
 
     fn update_period(
-        global_first_week: Option<collomatique_time::NaiveMondayDate>,
+        global_first_week: Option<collomatique_time::WeekStart>,
         period_num: usize,
         first_week_in_period: usize,
         week_count: usize,
@@ -427,7 +427,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct PeriodSwitchData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub period_num: usize,
     pub first_week_in_period: usize,
     pub week_count: usize,

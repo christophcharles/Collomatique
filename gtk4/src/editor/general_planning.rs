@@ -19,7 +19,7 @@ pub enum GeneralPlanningInput {
 
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
-    FirstWeekChanged(collomatique_time::NaiveMondayDate),
+    FirstWeekChanged(collomatique_time::WeekStart),
 
     AddPeriodClicked,
     WeekCountSelected(usize),
@@ -59,7 +59,7 @@ impl GeneralPlanning {
             "<b><big>Début de la première semaine de colles :</big></b> {}",
             match &self.periods.first_week {
                 Some(date) => {
-                    date.inner().format("%d/%m/%Y").to_string()
+                    date.monday().format("%d/%m/%Y").to_string()
                 }
                 None => "non sélectionné".to_string(),
             }
@@ -270,7 +270,7 @@ impl Component for GeneralPlanning {
                     .send(select_start_date::DialogInput::Show(
                         match &self.periods.first_week {
                             Some(date) => date.clone(),
-                            None => collomatique_time::NaiveMondayDate::from_today(),
+                            None => collomatique_time::WeekStart::from_today(),
                         },
                     ))
                     .unwrap();

@@ -224,7 +224,7 @@ impl Component for Slots {
                     teacher_id,
                     start_time: collomatique_time::SlotStart {
                         weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
-                        start_time: collomatique_time::TimeOnMinutes::new(
+                        start_time: collomatique_time::WholeMinuteTime::new(
                             chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
                         )
                         .unwrap(),

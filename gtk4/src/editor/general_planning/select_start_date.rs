@@ -7,14 +7,14 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
-    start_date: collomatique_time::NaiveMondayDate,
+    start_date: collomatique_time::WeekStart,
     current_selected_date: chrono::NaiveDate,
     update_date: bool,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(collomatique_time::NaiveMondayDate),
+    Show(collomatique_time::WeekStart),
     Cancel,
     Accept,
     Select(chrono::NaiveDate),
@@ -22,7 +22,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_time::NaiveMondayDate),
+    Accepted(collomatique_time::WeekStart),
 }
 
 impl Dialog {
@@ -52,7 +52,7 @@ impl Dialog {
     fn generate_selected_date_text(&self) -> String {
         format!(
             "Date sélectionnée: {}",
-            self.start_date.inner().format("%d/%m/%Y")
+            self.start_date.monday().format("%d/%m/%Y")
         )
     }
 }
@@ -144,7 +144,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
-            start_date: collomatique_time::NaiveMondayDate::new(
+            start_date: collomatique_time::WeekStart::new(
                 chrono::NaiveDate::from_ymd_opt(2025, 09, 01).unwrap(),
             )
             .unwrap(),
@@ -163,7 +163,7 @@ impl SimpleComponent for Dialog {
             DialogInput::Show(date) => {
                 self.hidden = false;
                 self.start_date = date;
-                self.current_selected_date = self.start_date.inner().clone();
+                self.current_selected_date = self.start_date.monday().clone();
                 self.update_date = true;
             }
             DialogInput::Cancel => {
@@ -176,7 +176,7 @@ impl SimpleComponent for Dialog {
                     .unwrap();
             }
             DialogInput::Select(date) => {
-                self.start_date = collomatique_time::NaiveMondayDate::round_from(date.clone());
+                self.start_date = collomatique_time::WeekStart::round_from(date.clone());
                 self.current_selected_date = date;
             }
         }
@@ -184,8 +184,8 @@ impl SimpleComponent for Dialog {
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets.calendar.clear_marks();
-        if self.start_date.inner().month0() == self.current_selected_date.month0() {
-            widgets.calendar.mark_day(self.start_date.inner().day());
+        if self.start_date.monday().month0() == self.current_selected_date.month0() {
+            widgets.calendar.mark_day(self.start_date.monday().day());
         }
     }
 }

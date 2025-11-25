@@ -217,7 +217,7 @@ impl GeneralPlanningUpdateWarning {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GeneralPlanningUpdateOp {
     DeleteFirstWeek,
-    UpdateFirstWeek(collomatique_time::NaiveMondayDate),
+    UpdateFirstWeek(collomatique_time::WeekStart),
     AddNewPeriod(usize),
     UpdatePeriodWeekCount(collomatique_state_colloscopes::PeriodId, usize),
     DeletePeriod(collomatique_state_colloscopes::PeriodId),

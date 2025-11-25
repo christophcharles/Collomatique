@@ -279,7 +279,7 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     week_count: usize,
     enable: bool,
