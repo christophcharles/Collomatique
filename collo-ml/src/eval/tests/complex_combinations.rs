@@ -9,10 +9,10 @@ fn forall_with_reified_var_and_filter() {
     reify constraint_gen as $MyVar;
     pub let f(xs: [Int]) -> Constraint = forall x in xs where x > 0 { $MyVar(x) === 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -58,10 +58,10 @@ fn sum_with_var_list_and_comprehension() {
     reify h as $[MyVars];
     pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs union ys) { v };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -117,10 +117,10 @@ fn nested_quantifiers_with_filters() {
             }
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -149,10 +149,10 @@ fn list_comp_with_function_calls_and_filters() {
     let transform(x: Int) -> Int = x * x;
     pub let f(xs: [Int]) -> [Int] = [transform(x) for x in xs where is_valid(x)];
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -186,10 +186,10 @@ fn nested_list_comp_with_reified_vars() {
     pub let f(xs: [Int], ys: [Int]) -> [LinExpr] = 
         [$MyVar(x, y) for x in xs for y in ys where x != y];
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -239,10 +239,10 @@ fn list_comp_with_collection_ops_in_body() {
     pub let f(lists: [[Int]]) -> [Int] = 
         [|intersect_with_range(lst, 10)| for lst in lists];
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -281,10 +281,10 @@ fn if_with_quantifier_in_condition() {
             0 
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let all_positive = ExprValue::List(
         ExprType::Int,
@@ -315,10 +315,10 @@ fn if_with_collection_check() {
             false 
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let valid_set = ExprValue::List(
         ExprType::Int,
@@ -352,10 +352,10 @@ fn nested_if_with_variables() {
             x as LinExpr 
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_scaled = checked_ast
         .quick_eval_fn(
@@ -393,10 +393,10 @@ fn function_returning_constraint_system() {
     pub let f(xs: [Int], total: Int) -> Constraint = 
         var_sum_constraint(xs, total) and var_bound_constraints(xs);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -458,10 +458,10 @@ fn function_composition_with_reified_vars() {
     let constrain_sum(xs: [Int], y: Int, limit: Int) -> Constraint = sum_vars(xs, y) <== limit;
     pub let f(xs: [Int], y: Int) -> Constraint = constrain_sum(xs, y, 10);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -512,10 +512,10 @@ fn assignment_constraint_pattern() {
         forall student in students { exactly_one_slot(student, slots) } and
         forall slot in slots { slot_capacity(slot, students, capacity) };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("Assigned".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let students = ExprValue::List(
         ExprType::Int,
@@ -596,13 +596,13 @@ fn conditional_constraint_with_reification() {
     pub let f(student: Int, time: Int) -> Constraint = 
         $Assigned(student, time) <== $IsAvailable(student, time);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([
         ("Available".to_string(), vec![ExprType::Int, ExprType::Int]),
         ("Assigned".to_string(), vec![ExprType::Int, ExprType::Int]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(1), ExprValue::Int(5)])
@@ -643,10 +643,6 @@ fn aggregation_with_filtering() {
             count_valid_assignments(students, time, min_score) >== min_per_time 
         };
     "#;
-    let types = HashMap::from([(
-        "Student".to_string(),
-        HashMap::from([("score".to_string(), ExprType::Int)]),
-    )]);
     let vars = HashMap::from([
         ("Score".to_string(), vec![ExprType::Int]),
         (
@@ -654,8 +650,6 @@ fn aggregation_with_filtering() {
             vec![ExprType::Object("Student".into()), ExprType::Int],
         ),
     ]);
-
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
 
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     enum Student {
@@ -684,7 +678,15 @@ fn aggregation_with_filtering() {
                 Student::Student2 => ExprValue::Int(100),
             })
         }
+        fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+            HashMap::from([(
+                "Student".to_string(),
+                HashMap::from([("score".to_string(), ExprType::Int)]),
+            )])
+        }
     }
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let students = ExprValue::List(
         ExprType::Object("Student".into()),
@@ -730,10 +732,10 @@ fn dynamic_set_construction() {
     pub let f(xs: [Int], ys: [Int]) -> [Int] = 
         filter_evens(valid_pairs(xs, ys));
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -766,10 +768,10 @@ fn set_operations_with_comprehensions() {
     pub let f(xs: [Int]) -> [Int] = 
         positive_squares(xs) inter small_numbers(xs);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -800,10 +802,10 @@ fn union_of_var_lists() {
     pub let f(xs: [Int], ys: [Int]) -> LinExpr = 
         sum v in ($[Vars](xs) union $[Vars](ys)) { v };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -840,10 +842,10 @@ fn empty_list_propagation() {
             sum x in xs { x } 
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let empty = ExprValue::List(ExprType::Int, BTreeSet::new());
     let result_empty = checked_ast
@@ -869,10 +871,10 @@ fn deeply_nested_structure() {
     let outer(lists: [[Int]]) -> Int = sum lst in lists { sum x in middle(lst) { x } };
     pub let f() -> Int = outer([[1, 2], [3]]);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -892,10 +894,10 @@ fn mixed_coercion_in_complex_expression() {
     pub let f(xs: [Int]) -> LinExpr = 
         sum x in xs { get_coefficient(x) * $V(x) };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -938,10 +940,10 @@ fn let_expr_in_deeply_nested_structure() {
             aggregate(input_data)
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -983,10 +985,10 @@ fn all_features_combined() {
             (0 as LinExpr) === (0 as LinExpr)
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -1094,10 +1096,10 @@ fn all_features_combined_with_let() {
             }
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,

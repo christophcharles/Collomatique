@@ -65,6 +65,26 @@ impl EvalObject for SimpleObject {
             },
         }
     }
+
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+        let student_type = HashMap::from([
+            ("age".to_string(), ExprType::Int),
+            ("enrolled".to_string(), ExprType::Bool),
+        ]);
+        let room_type = HashMap::from([
+            ("num".to_string(), ExprType::Int),
+            (
+                "students".to_string(),
+                ExprType::List(Box::new(ExprType::Object("Student".into()))),
+            ),
+            (
+                "first_student".to_string(),
+                ExprType::Object("Student".into()),
+            ),
+        ]);
+
+        HashMap::from([("Student".into(), student_type), ("Room".into(), room_type)])
+    }
 }
 
 fn eval_with_simple_objects(
@@ -72,25 +92,9 @@ fn eval_with_simple_objects(
     fn_name: &str,
     args: Vec<ExprValue<SimpleObject>>,
 ) -> ExprValue<SimpleObject> {
-    let student_type = HashMap::from([
-        ("age".to_string(), ExprType::Int),
-        ("enrolled".to_string(), ExprType::Bool),
-    ]);
-    let room_type = HashMap::from([
-        ("num".to_string(), ExprType::Int),
-        (
-            "students".to_string(),
-            ExprType::List(Box::new(ExprType::Object("Student".into()))),
-        ),
-        (
-            "first_student".to_string(),
-            ExprType::Object("Student".into()),
-        ),
-    ]);
-    let types = HashMap::from([("Student".into(), student_type), ("Room".into(), room_type)]);
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = SimpleEnv {};
 
     checked_ast

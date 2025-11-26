@@ -5,10 +5,10 @@ use super::*;
 #[test]
 fn constraint_eq_two_ints() {
     let input = "pub let f() -> Constraint = 5 === 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -30,10 +30,10 @@ fn constraint_eq_two_ints() {
 #[test]
 fn constraint_eq_var_with_int() {
     let input = "pub let f() -> Constraint = $V() === 42;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -58,10 +58,10 @@ fn constraint_eq_var_with_int() {
 #[test]
 fn constraint_eq_two_vars() {
     let input = "pub let f() -> Constraint = $V1() === $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -88,10 +88,10 @@ fn constraint_eq_two_vars() {
 #[test]
 fn constraint_eq_with_arithmetic() {
     let input = "pub let f() -> Constraint = 2 * $V() + 3 === 10;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -116,10 +116,10 @@ fn constraint_eq_with_arithmetic() {
 #[test]
 fn constraint_eq_with_params() {
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 1;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -146,10 +146,10 @@ fn constraint_eq_with_params() {
 #[test]
 fn constraint_le_two_ints() {
     let input = "pub let f() -> Constraint = 5 <== 10;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -170,10 +170,10 @@ fn constraint_le_two_ints() {
 #[test]
 fn constraint_le_var_with_int() {
     let input = "pub let f() -> Constraint = $V() <== 100;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -198,10 +198,10 @@ fn constraint_le_var_with_int() {
 #[test]
 fn constraint_le_with_arithmetic() {
     let input = "pub let f() -> Constraint = 3 * $V1() + 2 * $V2() <== 50;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -230,10 +230,10 @@ fn constraint_le_with_arithmetic() {
 #[test]
 fn constraint_le_two_vars() {
     let input = "pub let f() -> Constraint = $V1() <== $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -263,10 +263,10 @@ fn constraint_le_two_vars() {
 #[test]
 fn constraint_ge_two_ints() {
     let input = "pub let f() -> Constraint = 10 >== 5;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -287,10 +287,10 @@ fn constraint_ge_two_ints() {
 #[test]
 fn constraint_ge_var_with_int() {
     let input = "pub let f() -> Constraint = $V() >== 0;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -315,10 +315,10 @@ fn constraint_ge_var_with_int() {
 #[test]
 fn constraint_ge_with_arithmetic() {
     let input = "pub let f() -> Constraint = $V1() + $V2() >== 10;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -346,10 +346,10 @@ fn constraint_ge_with_arithmetic() {
 #[test]
 fn constraint_ge_two_vars() {
     let input = "pub let f() -> Constraint = $V1() >== $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -379,10 +379,10 @@ fn constraint_ge_two_vars() {
 #[test]
 fn and_two_constraints() {
     let input = "pub let f() -> Constraint = $V1() === 1 and $V2() === 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -400,14 +400,14 @@ fn and_two_constraints() {
 #[test]
 fn and_constraint_chain() {
     let input = "pub let f() -> Constraint = $V1() === 1 and $V2() === 2 and $V3() === 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([
         ("V1".to_string(), vec![]),
         ("V2".to_string(), vec![]),
         ("V3".to_string(), vec![]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -424,14 +424,14 @@ fn and_constraint_chain() {
 #[test]
 fn and_mixed_constraint_types() {
     let input = "pub let f() -> Constraint = $V1() === 1 and $V2() <== 5 and $V3() >== 0;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([
         ("V1".to_string(), vec![]),
         ("V2".to_string(), vec![]),
         ("V3".to_string(), vec![]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])

@@ -5,10 +5,10 @@ use super::*;
 #[test]
 fn in_element_present() {
     let input = "pub let f() -> Bool = 5 in [1, 5, 10];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -19,10 +19,10 @@ fn in_element_present() {
 #[test]
 fn in_element_absent() {
     let input = "pub let f() -> Bool = 7 in [1, 5, 10];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -33,10 +33,10 @@ fn in_element_absent() {
 #[test]
 fn in_empty_list() {
     let input = "pub let f() -> Bool = 5 in [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -47,10 +47,10 @@ fn in_empty_list() {
 #[test]
 fn in_with_param_element() {
     let input = "pub let f(x: Int) -> Bool = x in [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(2)])
@@ -66,10 +66,10 @@ fn in_with_param_element() {
 #[test]
 fn in_with_param_list() {
     let input = "pub let f(list: [Int]) -> Bool = 5 in list;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list_with = ExprValue::List(
         ExprType::Int,
@@ -93,10 +93,10 @@ fn in_with_param_list() {
 #[test]
 fn in_with_both_params() {
     let input = "pub let f(x: Int, list: [Int]) -> Bool = x in list;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -117,10 +117,10 @@ fn in_with_both_params() {
 #[test]
 fn in_with_range() {
     let input = "pub let f(x: Int) -> Bool = x in [0..10];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -136,10 +136,10 @@ fn in_with_range() {
 #[test]
 fn in_bool_list() {
     let input = "pub let f() -> Bool = true in [true, false];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -150,10 +150,10 @@ fn in_bool_list() {
 #[test]
 fn in_nested_usage() {
     let input = "pub let f(x: Int) -> Bool = (x in [1, 2, 3]) and (x in [2, 3, 4]);";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(2)])
@@ -171,10 +171,10 @@ fn in_nested_usage() {
 #[test]
 fn union_two_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] union [4, 5, 6];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -198,10 +198,10 @@ fn union_two_lists() {
 #[test]
 fn union_overlapping_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] union [2, 3, 4];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -224,10 +224,10 @@ fn union_overlapping_lists() {
 #[test]
 fn union_with_empty_list_left() {
     let input = "pub let f() -> [Int] = [] union [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -244,10 +244,10 @@ fn union_with_empty_list_left() {
 #[test]
 fn union_with_empty_list_right() {
     let input = "pub let f() -> [Int] = [1, 2, 3] union [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -264,10 +264,10 @@ fn union_with_empty_list_right() {
 #[test]
 fn union_two_empty_lists() {
     let input = "pub let f() -> [Int] = [] union [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -278,10 +278,10 @@ fn union_two_empty_lists() {
 #[test]
 fn union_with_params() {
     let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 union list2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -312,10 +312,10 @@ fn union_with_params() {
 #[test]
 fn union_chain() {
     let input = "pub let f() -> [Int] = [1] union [2] union [3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -332,10 +332,10 @@ fn union_chain() {
 #[test]
 fn union_with_ranges() {
     let input = "pub let f() -> [Int] = [1..3] union [5..7];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -357,10 +357,10 @@ fn union_with_ranges() {
 #[test]
 fn union_bool_lists() {
     let input = "pub let f() -> [Bool] = [true] union [false];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -379,10 +379,10 @@ fn union_bool_lists() {
 #[test]
 fn inter_overlapping_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3, 4] inter [2, 3, 4, 5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -399,10 +399,10 @@ fn inter_overlapping_lists() {
 #[test]
 fn inter_disjoint_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] inter [4, 5, 6];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -413,10 +413,10 @@ fn inter_disjoint_lists() {
 #[test]
 fn inter_identical_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] inter [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -433,10 +433,10 @@ fn inter_identical_lists() {
 #[test]
 fn inter_with_empty_list_left() {
     let input = "pub let f() -> [Int] = [] inter [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -447,10 +447,10 @@ fn inter_with_empty_list_left() {
 #[test]
 fn inter_with_empty_list_right() {
     let input = "pub let f() -> [Int] = [1, 2, 3] inter [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -461,10 +461,10 @@ fn inter_with_empty_list_right() {
 #[test]
 fn inter_two_empty_lists() {
     let input = "pub let f() -> [Int] = [] inter [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -475,10 +475,10 @@ fn inter_two_empty_lists() {
 #[test]
 fn inter_with_params() {
     let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 inter list2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -504,10 +504,10 @@ fn inter_with_params() {
 #[test]
 fn inter_chain() {
     let input = "pub let f() -> [Int] = [1, 2, 3, 4] inter [2, 3, 4, 5] inter [3, 4, 5, 6];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -524,10 +524,10 @@ fn inter_chain() {
 #[test]
 fn inter_with_ranges() {
     let input = "pub let f() -> [Int] = [1..5] inter [3..7];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -544,10 +544,10 @@ fn inter_with_ranges() {
 #[test]
 fn inter_single_element_overlap() {
     let input = "pub let f() -> [Int] = [1, 2, 3] inter [3, 4, 5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -563,10 +563,10 @@ fn inter_single_element_overlap() {
 #[test]
 fn diff_disjoint_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] \\ [4, 5, 6];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -583,10 +583,10 @@ fn diff_disjoint_lists() {
 #[test]
 fn diff_overlapping_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3, 4] \\ [2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -603,10 +603,10 @@ fn diff_overlapping_lists() {
 #[test]
 fn diff_identical_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] \\ [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -617,10 +617,10 @@ fn diff_identical_lists() {
 #[test]
 fn diff_with_empty_list_left() {
     let input = "pub let f() -> [Int] = [] \\ [1, 2, 3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -631,10 +631,10 @@ fn diff_with_empty_list_left() {
 #[test]
 fn diff_with_empty_list_right() {
     let input = "pub let f() -> [Int] = [1, 2, 3] \\ [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -651,10 +651,10 @@ fn diff_with_empty_list_right() {
 #[test]
 fn diff_two_empty_lists() {
     let input = "pub let f() -> [Int] = [] \\ [];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -665,10 +665,10 @@ fn diff_two_empty_lists() {
 #[test]
 fn diff_with_params() {
     let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 \\ list2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -699,10 +699,10 @@ fn diff_with_params() {
 #[test]
 fn diff_partial_overlap() {
     let input = "pub let f() -> [Int] = [1, 2, 3, 4, 5] \\ [3, 4, 5, 6, 7];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -719,10 +719,10 @@ fn diff_partial_overlap() {
 #[test]
 fn diff_with_ranges() {
     let input = "pub let f() -> [Int] = [1..6] \\ [3..5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -739,10 +739,10 @@ fn diff_with_ranges() {
 #[test]
 fn diff_removing_single_element() {
     let input = "pub let f() -> [Int] = [1, 2, 3] \\ [2];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -761,10 +761,10 @@ fn diff_removing_single_element() {
 #[test]
 fn union_then_inter() {
     let input = "pub let f() -> [Int] = ([1, 2] union [3, 4]) inter [2, 3, 5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -782,10 +782,10 @@ fn union_then_inter() {
 #[test]
 fn inter_then_diff() {
     let input = "pub let f() -> [Int] = ([1, 2, 3, 4] inter [2, 3, 4, 5]) \\ [3];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -803,10 +803,10 @@ fn inter_then_diff() {
 #[test]
 fn union_diff_inter_combination() {
     let input = "pub let f() -> [Int] = ([1, 2, 3] union [4, 5]) \\ [2, 4] inter [1, 3, 5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -825,10 +825,10 @@ fn union_diff_inter_combination() {
 #[test]
 fn in_with_union_result() {
     let input = "pub let f(x: Int) -> Bool = x in ([1, 2] union [3, 4]);";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(3)])
@@ -844,10 +844,10 @@ fn in_with_union_result() {
 #[test]
 fn in_with_inter_result() {
     let input = "pub let f(x: Int) -> Bool = x in ([1, 2, 3] inter [2, 3, 4]);";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(2)])
@@ -863,10 +863,10 @@ fn in_with_inter_result() {
 #[test]
 fn in_with_diff_result() {
     let input = "pub let f(x: Int) -> Bool = x in ([1, 2, 3, 4] \\ [2, 4]);";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(1)])
@@ -882,10 +882,10 @@ fn in_with_diff_result() {
 #[test]
 fn cardinality_of_union() {
     let input = "pub let f() -> Int = |[1, 2] union [2, 3]|;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -897,10 +897,10 @@ fn cardinality_of_union() {
 #[test]
 fn cardinality_of_inter() {
     let input = "pub let f() -> Int = |[1, 2, 3] inter [2, 3, 4]|;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -912,10 +912,10 @@ fn cardinality_of_inter() {
 #[test]
 fn cardinality_of_diff() {
     let input = "pub let f() -> Int = |[1, 2, 3, 4, 5] \\ [2, 4]|;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -928,10 +928,10 @@ fn cardinality_of_diff() {
 fn collection_operations_with_if() {
     let input =
         "pub let f(x: Int) -> [Int] = if x > 0 { [1, 2] union [3] } else { [4, 5] \\ [5] };";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])

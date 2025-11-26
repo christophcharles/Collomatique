@@ -5,10 +5,10 @@ use super::*;
 #[test]
 fn add_two_ints() {
     let input = "pub let f() -> Int = 5 + 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -19,10 +19,10 @@ fn add_two_ints() {
 #[test]
 fn add_negative_ints() {
     let input = "pub let f() -> Int = -10 + 7;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -33,10 +33,10 @@ fn add_negative_ints() {
 #[test]
 fn add_int_params() {
     let input = "pub let f(x: Int, y: Int) -> Int = x + y;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(15), ExprValue::Int(27)])
@@ -47,10 +47,10 @@ fn add_int_params() {
 #[test]
 fn negate_int_params() {
     let input = "pub let f(x: Int) -> Int = -x;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(15)])
@@ -61,10 +61,10 @@ fn negate_int_params() {
 #[test]
 fn add_linexpr_with_int_coercion() {
     let input = "pub let f() -> LinExpr = $V() + 5;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -88,10 +88,10 @@ fn add_linexpr_with_int_coercion() {
 #[test]
 fn add_int_to_linexpr_coercion() {
     let input = "pub let f() -> LinExpr = 10 + $V();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -115,10 +115,10 @@ fn add_int_to_linexpr_coercion() {
 #[test]
 fn add_two_linexprs() {
     let input = "pub let f() -> LinExpr = $V1() + $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -145,10 +145,10 @@ fn add_two_linexprs() {
 #[test]
 fn negate_linexpr_params() {
     let input = "pub let f(x: LinExpr) -> LinExpr = -x;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::LinExpr(LinExpr::constant(5.))])
@@ -159,10 +159,10 @@ fn negate_linexpr_params() {
 #[test]
 fn add_chain() {
     let input = "pub let f() -> Int = 1 + 2 + 3 + 4;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -175,10 +175,10 @@ fn add_chain() {
 #[test]
 fn sub_two_ints() {
     let input = "pub let f() -> Int = 10 - 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -189,10 +189,10 @@ fn sub_two_ints() {
 #[test]
 fn sub_negative_result() {
     let input = "pub let f() -> Int = 5 - 12;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -203,10 +203,10 @@ fn sub_negative_result() {
 #[test]
 fn sub_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Int = x - y;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(50), ExprValue::Int(8)])
@@ -217,10 +217,10 @@ fn sub_with_params() {
 #[test]
 fn sub_linexpr_with_int() {
     let input = "pub let f() -> LinExpr = $V() - 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -243,10 +243,10 @@ fn sub_linexpr_with_int() {
 #[test]
 fn sub_two_linexprs() {
     let input = "pub let f() -> LinExpr = $V1() - $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -274,10 +274,10 @@ fn sub_two_linexprs() {
 #[test]
 fn mul_two_ints() {
     let input = "pub let f() -> Int = 6 * 7;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -288,10 +288,10 @@ fn mul_two_ints() {
 #[test]
 fn mul_with_zero() {
     let input = "pub let f() -> Int = 42 * 0;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -302,10 +302,10 @@ fn mul_with_zero() {
 #[test]
 fn mul_with_negative() {
     let input = "pub let f() -> Int = -5 * 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -316,10 +316,10 @@ fn mul_with_negative() {
 #[test]
 fn mul_int_with_linexpr() {
     let input = "pub let f() -> LinExpr = 5 * $V();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -342,10 +342,10 @@ fn mul_int_with_linexpr() {
 #[test]
 fn mul_linexpr_with_int() {
     let input = "pub let f() -> LinExpr = $V() * 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -368,10 +368,10 @@ fn mul_linexpr_with_int() {
 #[test]
 fn mul_with_param() {
     let input = "pub let f(x: Int) -> LinExpr = x * $V();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10)])
@@ -394,10 +394,10 @@ fn mul_with_param() {
 #[test]
 fn mul_chain() {
     let input = "pub let f() -> Int = 2 * 3 * 7;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -410,10 +410,10 @@ fn mul_chain() {
 #[test]
 fn div_two_ints() {
     let input = "pub let f() -> Int = 10 // 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -424,10 +424,10 @@ fn div_two_ints() {
 #[test]
 fn div_integer_division() {
     let input = "pub let f() -> Int = 7 // 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -438,10 +438,10 @@ fn div_integer_division() {
 #[test]
 fn div_exact() {
     let input = "pub let f() -> Int = 42 // 6;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -452,10 +452,10 @@ fn div_exact() {
 #[test]
 fn div_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Int = x // y;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(100), ExprValue::Int(4)])
@@ -466,10 +466,10 @@ fn div_with_params() {
 #[test]
 fn div_negative_numerator() {
     let input = "pub let f() -> Int = -10 // 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -482,10 +482,10 @@ fn div_negative_numerator() {
 #[test]
 fn mod_two_ints() {
     let input = "pub let f() -> Int = 10 % 3;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -496,10 +496,10 @@ fn mod_two_ints() {
 #[test]
 fn mod_exact_division() {
     let input = "pub let f() -> Int = 12 % 4;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -510,10 +510,10 @@ fn mod_exact_division() {
 #[test]
 fn mod_larger_than_divisor() {
     let input = "pub let f() -> Int = 5 % 10;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -524,10 +524,10 @@ fn mod_larger_than_divisor() {
 #[test]
 fn mod_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Int = x % y;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(17), ExprValue::Int(5)])
@@ -538,10 +538,10 @@ fn mod_with_params() {
 #[test]
 fn mod_check_even() {
     let input = "pub let f(x: Int) -> Bool = x % 2 == 0;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_even = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(4)])
@@ -559,10 +559,10 @@ fn mod_check_even() {
 #[test]
 fn mixed_add_mul_precedence() {
     let input = "pub let f() -> Int = 2 + 3 * 4;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -574,10 +574,10 @@ fn mixed_add_mul_precedence() {
 #[test]
 fn mixed_sub_div_precedence() {
     let input = "pub let f() -> Int = 20 - 10 // 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -589,10 +589,10 @@ fn mixed_sub_div_precedence() {
 #[test]
 fn mixed_operations_with_parentheses() {
     let input = "pub let f() -> Int = (5 + 3) * 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -603,10 +603,10 @@ fn mixed_operations_with_parentheses() {
 #[test]
 fn complex_arithmetic_expression() {
     let input = "pub let f() -> Int = (10 + 5) * 2 - 8 // 4 + 3 % 2;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -618,10 +618,10 @@ fn complex_arithmetic_expression() {
 #[test]
 fn linexpr_arithmetic_combination() {
     let input = "pub let f() -> LinExpr = 2 * $V1() + 3 * $V2() - 5;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
