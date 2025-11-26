@@ -665,7 +665,7 @@ fn aggregation_with_filtering() {
 
     struct Env {}
 
-    impl Object for Student {
+    impl EvalObject for Student {
         type Env = Env;
 
         fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
