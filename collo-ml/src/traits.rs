@@ -14,3 +14,20 @@ pub trait EvalObject: UsableData {
         None
     }
 }
+
+pub trait ViewObject {
+    type ObjectId: EvalObject;
+
+    fn field_schema() -> HashMap<String, ExprType>;
+    fn get_field(&self, field: &str) -> Option<ExprValue<Self::ObjectId>>;
+    fn pretty_print(&self) -> Option<String> {
+        None
+    }
+}
+
+pub trait ViewBuilder<Env, Id> {
+    type Object: ViewObject;
+
+    fn build(env: &Env, id: &Id) -> Option<Self::Object>;
+    fn enumerate(env: &Env) -> BTreeSet<Id>;
+}
