@@ -7,10 +7,10 @@ fn simple_constraint_gets_origin() {
     let input = r#"
     pub let make_constraint(x: Int) -> Constraint = $V(x) === 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("make_constraint", vec![ExprValue::Int(42)])
@@ -45,10 +45,10 @@ fn nested_function_origin_is_inner() {
     let inner(x: Int) -> Constraint = $V(x) === 0;
     pub let outer(y: Int) -> Constraint = inner(y + 1);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("outer", vec![ExprValue::Int(10)])
@@ -81,10 +81,10 @@ fn multiple_constraints_same_origin() {
     pub let make_two(x: Int) -> Constraint = 
         ($V(x) === 1) and ($V(x + 1) === 2);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("make_two", vec![ExprValue::Int(5)])
@@ -114,10 +114,10 @@ fn origin_with_multiple_params() {
     pub let complex(x: Int, y: Int, z: Int) -> Constraint = 
         $V(x) === y + z;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -151,10 +151,10 @@ fn reified_constraint_origin() {
     reify base as $BaseVar;
     pub let use_reified(y: Int) -> Constraint = $BaseVar(y) <== 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("use_reified", vec![ExprValue::Int(7)])
@@ -190,10 +190,10 @@ fn forall_constraint_origin() {
     pub let forall_constraints(n: Int) -> Constraint = 
         forall i in [0..n] { $V(i) === 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("forall_constraints", vec![ExprValue::Int(3)])
@@ -225,10 +225,10 @@ fn combined_constraints_preserve_separate_origins() {
     let c2(x: Int) -> Constraint = $V(x) === 1;
     pub let combined(x: Int) -> Constraint = c1(x) and c2(x);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("combined", vec![ExprValue::Int(5)])
@@ -274,10 +274,10 @@ fn origin_with_list_param() {
     pub let list_constraint(items: [Int]) -> Constraint = 
         forall x in items { $V(x) === 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let mut list_items = BTreeSet::new();
     list_items.insert(ExprValue::Int(1));
@@ -313,10 +313,10 @@ fn inner_function_origin_preserved() {
     let helper(x: Int) -> Constraint = $V(x) === 0;
     pub let wrapper(y: Int) -> Constraint = helper(y * 2);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("wrapper", vec![ExprValue::Int(3)])
@@ -351,10 +351,10 @@ fn deeply_nested_function_origin() {
     let middle(x: Int) -> Constraint = innermost(x + 10);
     pub let outer(x: Int) -> Constraint = middle(x + 5);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("outer", vec![ExprValue::Int(1)])
@@ -387,10 +387,10 @@ fn docstring_substitution_with_args() {
     let h(x: Int) -> Constraint = x <== 1;
     pub let f() -> Constraint = h(1) and h(2);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -438,10 +438,10 @@ fn multiline_docstring_multiple_params() {
         (x <== y) and ((x + y) >== 0);
     pub let test() -> Constraint = range_check(5, 10);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("test", vec![])
@@ -476,10 +476,10 @@ fn repeated_parameter_substitution() {
     let self_compare(val: Int) -> Constraint = val === val;
     pub let test() -> Constraint = self_compare(42);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("test", vec![])

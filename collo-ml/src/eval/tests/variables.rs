@@ -5,10 +5,10 @@ use super::*;
 #[test]
 fn base_var_simple() {
     let input = "pub let f() -> LinExpr = $V();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -26,10 +26,10 @@ fn base_var_simple() {
 #[test]
 fn base_var_with_int_param() {
     let input = "pub let f() -> LinExpr = $V(42);";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -47,10 +47,10 @@ fn base_var_with_int_param() {
 #[test]
 fn base_var_with_bool_param() {
     let input = "pub let f() -> LinExpr = $V(true);";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Bool])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -68,13 +68,13 @@ fn base_var_with_bool_param() {
 #[test]
 fn base_var_with_multiple_params() {
     let input = "pub let f() -> LinExpr = $V(1, 2, 3);";
-    let types = HashMap::new();
+
     let vars = HashMap::from([(
         "V".to_string(),
         vec![ExprType::Int, ExprType::Int, ExprType::Int],
     )]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -92,10 +92,10 @@ fn base_var_with_multiple_params() {
 #[test]
 fn base_var_with_function_param() {
     let input = "pub let f(x: Int) -> LinExpr = $V(x);";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(42)])
@@ -113,10 +113,10 @@ fn base_var_with_function_param() {
 #[test]
 fn base_var_with_expression_param() {
     let input = "pub let f(x: Int) -> LinExpr = $V(x + 5);";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10)])
@@ -134,10 +134,10 @@ fn base_var_with_expression_param() {
 #[test]
 fn base_var_in_constraint() {
     let input = "pub let f() -> Constraint = $V() === 1;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -162,10 +162,10 @@ fn base_var_in_constraint() {
 #[test]
 fn base_var_in_arithmetic() {
     let input = "pub let f() -> LinExpr = 3 * $V() + 5;";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -186,10 +186,10 @@ fn base_var_in_arithmetic() {
 #[test]
 fn multiple_base_vars() {
     let input = "pub let f() -> LinExpr = $V1() + $V2();";
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -219,10 +219,10 @@ fn script_var_simple_reify() {
     reify f as $MyVar;
     pub let g(x: Int) -> LinExpr = $MyVar(x);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(5)])
@@ -250,10 +250,10 @@ fn script_var_in_constraint() {
     reify f as $MyVar;
     pub let g(x: Int) -> Constraint = $MyVar(x) === 0;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(10)])
@@ -283,10 +283,10 @@ fn script_var_with_sum() {
     reify f as $MyVar;
     pub let g(xs: [Int]) -> LinExpr = sum x in xs { $MyVar(x) };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -325,10 +325,10 @@ fn script_var_with_forall() {
     reify f as $MyVar;
     pub let g(xs: [Int]) -> Constraint = forall x in xs { $MyVar(x) <== 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -354,10 +354,10 @@ fn script_var_multiple_params() {
     reify f as $MyVar;
     pub let g(a: Int, b: Int) -> LinExpr = $MyVar(a, b);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(3), ExprValue::Int(7)])
@@ -385,10 +385,10 @@ fn script_var_no_params() {
     reify f as $MyVar;
     pub let g() -> LinExpr = $MyVar();
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![])
@@ -416,10 +416,10 @@ fn script_var_with_arithmetic() {
     reify f as $MyVar;
     pub let g(x: Int) -> LinExpr = 2 * $MyVar(x) + 5;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(10)])
@@ -447,13 +447,13 @@ fn multiple_script_vars() {
     reify f2 as $MyVar2;
     pub let g(x: Int) -> LinExpr = $MyVar1(x) + $MyVar2(x);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([
         ("V1".to_string(), vec![ExprType::Int]),
         ("V2".to_string(), vec![ExprType::Int]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(5)])
@@ -483,10 +483,10 @@ fn script_var_and_base_var_mixed() {
     reify f as $MyVar;
     pub let g(x: Int) -> LinExpr = $MyVar(x) + $BaseV(x);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("BaseV".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(10)])
@@ -517,10 +517,10 @@ fn var_list_simple_reify() {
     reify h as $[MyVars];
     pub let i(xs: [Int]) -> [LinExpr] = $[MyVars](xs);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -563,10 +563,10 @@ fn var_list_in_sum() {
     reify f as $[MyVars];
     pub let g(xs: [Int]) -> LinExpr = sum v in $[MyVars](xs) { v };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -603,10 +603,10 @@ fn var_list_in_constraint() {
     reify f as $[MyVars];
     pub let g(xs: [Int]) -> Constraint = sum v in $[MyVars](xs) { v } <== 10;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -650,10 +650,10 @@ fn var_list_with_forall() {
     reify h as $[MyVars];
     pub let i(xs: [Int]) -> Constraint = forall v in $[MyVars](xs) { v <== 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -696,10 +696,10 @@ fn var_list_cardinality() {
     reify h as $[MyVars];
     pub let i(xs: [Int]) -> Int = |$[MyVars](xs)|;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -720,10 +720,9 @@ fn var_list_with_multiple_params() {
     reify h as $[MyVars];
     pub let i(xs: [Int], y: Int) -> [LinExpr] = $[MyVars](xs, y);
     "#;
-    let types = HashMap::new();
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -761,10 +760,10 @@ fn var_list_empty_input() {
     reify h as $[MyVars];
     pub let i(xs: [Int]) -> [LinExpr] = $[MyVars](xs);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let empty_list = ExprValue::List(ExprType::Int, BTreeSet::new());
 
@@ -787,10 +786,10 @@ fn var_list_in_list_comprehension() {
     reify h as $[MyVars];
     pub let i(xs: [Int]) -> [LinExpr] = [v * 2 for v in $[MyVars](xs)];
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -816,10 +815,10 @@ fn var_list_with_collection_ops() {
     reify h as $[MyVars];
     pub let i(xs: [Int], ys: [Int]) -> [LinExpr] = $[MyVars](xs) union $[MyVars](ys);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(1)]));
     let list2 = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(2)]));
@@ -848,10 +847,10 @@ fn nested_reification_usage() {
     reify outer as $O;
     pub let final(xs: [Int]) -> LinExpr = $O(xs);
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(1)]));
 
@@ -872,10 +871,10 @@ fn var_in_if_expression() {
     reify f as $MyVar;
     pub let g(x: Int, use_var: Bool) -> LinExpr = if use_var { $MyVar(x) } else { 0 as LinExpr };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("g", vec![ExprValue::Int(5), ExprValue::Bool(true)])

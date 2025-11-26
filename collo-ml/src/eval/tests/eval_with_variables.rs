@@ -7,10 +7,10 @@ fn eval_with_variables_simple_reified_var() {
     reify base as $MyVar;
     pub let f(n: Int) -> Constraint = $MyVar(n) <== 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -52,10 +52,10 @@ fn eval_with_variables_multiple_calls_same_var() {
     reify base as $MyVar;
     pub let f() -> Constraint = $MyVar(3) <== 1 and $MyVar(7) <== 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::<NoObject>::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject>::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -108,10 +108,10 @@ fn eval_with_variables_in_forall() {
     reify base as $MyVar;
     pub let f(n: Int) -> Constraint = forall i in [0..n] { $MyVar(i) <== 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -161,13 +161,13 @@ fn eval_with_variables_multiple_vars() {
     reify base2 as $Var2;
     pub let f(a: Int, b: Int) -> Constraint = $Var1(a) <== 1 and $Var2(b) <== 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([
         ("V1".to_string(), vec![ExprType::Int]),
         ("V2".to_string(), vec![ExprType::Int]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -223,10 +223,10 @@ fn eval_with_variables_var_with_multiple_params() {
     reify base as $MyVar;
     pub let f(a: Int, b: Int) -> Constraint = $MyVar(a, b) <== 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -272,10 +272,10 @@ fn eval_with_variables_simple_var_list() {
     reify base as $[MyVarList];
     pub let f(a: Int, b: Int) -> Constraint = forall v in $[MyVarList](a, b) { v <== 1 };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -346,10 +346,10 @@ fn eval_with_variables_var_list_in_nested_forall() {
             }
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
@@ -419,10 +419,10 @@ fn eval_with_variables_with_let_expr() {
             $MyVar(bound) <== 1
         };
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -458,10 +458,10 @@ fn eval_with_variables_no_reified_vars() {
     let input = r#"
     pub let f(x: Int) -> Constraint = $V(x) === 1;
     "#;
-    let types = HashMap::new();
+
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast

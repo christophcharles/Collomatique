@@ -305,6 +305,10 @@ impl EvalObject for NoObject {
     fn field_access(&self, _env: &Self::Env, _field: &str) -> Option<ExprValue<Self>> {
         None
     }
+
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+        HashMap::new()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -374,7 +378,6 @@ impl CheckedAST<NoObject> {
 impl<T: EvalObject> CheckedAST<T> {
     pub fn new(
         input: &str,
-        types: HashMap<String, HashMap<String, ExprType>>,
         vars: HashMap<String, ArgsType>,
     ) -> Result<CheckedAST<T>, CompileError> {
         use crate::parser::ColloMLParser;
@@ -388,7 +391,7 @@ impl<T: EvalObject> CheckedAST<T> {
         };
 
         let (global_env, type_info, expr_types, errors, warnings) =
-            GlobalEnv::new(types, vars, &file)?;
+            GlobalEnv::new(T::type_schemas(), vars, &file)?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
