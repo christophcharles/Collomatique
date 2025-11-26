@@ -476,13 +476,20 @@ impl<T: EvalObject> CheckedAST<T> {
             .collect()
     }
 
+    pub fn start_eval_history<'a>(
+        &'a self,
+        env: &'a T::Env,
+    ) -> Result<EvalHistory<'a, T>, EvalError> {
+        EvalHistory::new(self, env)
+    }
+
     pub fn eval_fn(
         &self,
         env: &T::Env,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<ExprValue<T>, EvalError> {
-        let mut eval_history = EvalHistory::new(self, env)?;
+        let mut eval_history = self.start_eval_history(env)?;
         eval_history.eval_fn(fn_name, args)
     }
 
@@ -492,7 +499,7 @@ impl<T: EvalObject> CheckedAST<T> {
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<(ExprValue<T>, VariableDefinitions<T>), EvalError> {
-        let mut eval_history = EvalHistory::new(self, env)?;
+        let mut eval_history = self.start_eval_history(env)?;
         let r = eval_history.eval_fn(fn_name, args)?;
         Ok((r, eval_history.into_var_def()))
     }
