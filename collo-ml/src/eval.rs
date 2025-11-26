@@ -8,38 +8,38 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 mod tests;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ScriptVar<T: Object> {
+pub struct ScriptVar<T: EvalObject> {
     pub name: String,
     pub from_list: Option<usize>,
     pub params: Vec<ExprValue<T>>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ExternVar<T: Object> {
+pub struct ExternVar<T: EvalObject> {
     pub name: String,
     pub params: Vec<ExprValue<T>>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum IlpVar<T: Object> {
+pub enum IlpVar<T: EvalObject> {
     Base(ExternVar<T>),
     Script(ScriptVar<T>),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Origin<T: Object> {
+pub struct Origin<T: EvalObject> {
     fn_name: Spanned<String>,
     args: Vec<ExprValue<T>>,
     pretty_docstring: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ConstraintWithOrigin<T: Object> {
+pub struct ConstraintWithOrigin<T: EvalObject> {
     constraint: Constraint<IlpVar<T>>,
     origin: Option<Origin<T>>,
 }
 
-impl<T: Object> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
+impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     fn from(value: Constraint<IlpVar<T>>) -> Self {
         ConstraintWithOrigin {
             constraint: value,
@@ -48,14 +48,14 @@ impl<T: Object> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     }
 }
 
-pub fn strip_origins<T: Object>(
+pub fn strip_origins<T: EvalObject>(
     set: &BTreeSet<ConstraintWithOrigin<T>>,
 ) -> BTreeSet<Constraint<IlpVar<T>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum ExprValue<T: Object> {
+pub enum ExprValue<T: EvalObject> {
     Int(i32),
     Bool(bool),
     LinExpr(LinExpr<IlpVar<T>>),
@@ -64,25 +64,25 @@ pub enum ExprValue<T: Object> {
     List(ExprType, BTreeSet<ExprValue<T>>),
 }
 
-impl<T: Object> From<i32> for ExprValue<T> {
+impl<T: EvalObject> From<i32> for ExprValue<T> {
     fn from(value: i32) -> Self {
         ExprValue::Int(value)
     }
 }
 
-impl<T: Object> From<bool> for ExprValue<T> {
+impl<T: EvalObject> From<bool> for ExprValue<T> {
     fn from(value: bool) -> Self {
         ExprValue::Bool(value)
     }
 }
 
-impl<T: Object> From<LinExpr<IlpVar<T>>> for ExprValue<T> {
+impl<T: EvalObject> From<LinExpr<IlpVar<T>>> for ExprValue<T> {
     fn from(value: LinExpr<IlpVar<T>>) -> Self {
         ExprValue::LinExpr(value)
     }
 }
 
-impl<T: Object> From<Constraint<IlpVar<T>>> for ExprValue<T> {
+impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ExprValue<T> {
     fn from(value: Constraint<IlpVar<T>>) -> Self {
         ExprValue::Constraint(BTreeSet::from([ConstraintWithOrigin {
             constraint: value,
@@ -91,13 +91,13 @@ impl<T: Object> From<Constraint<IlpVar<T>>> for ExprValue<T> {
     }
 }
 
-impl<T: Object> From<ConstraintWithOrigin<T>> for ExprValue<T> {
+impl<T: EvalObject> From<ConstraintWithOrigin<T>> for ExprValue<T> {
     fn from(value: ConstraintWithOrigin<T>) -> Self {
         ExprValue::Constraint(BTreeSet::from([value]))
     }
 }
 
-impl<T: Object> ExprValue<T> {
+impl<T: EvalObject> ExprValue<T> {
     pub fn from_obj(obj: T) -> Self {
         ExprValue::Object(obj)
     }
@@ -182,19 +182,19 @@ impl<T: Object> ExprValue<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum AnnotatedValue<T: Object> {
+pub enum AnnotatedValue<T: EvalObject> {
     Forced(ExprValue<T>),
     Regular(ExprValue<T>),
     UntypedList,
 }
 
-impl<T: Object> From<ExprValue<T>> for AnnotatedValue<T> {
+impl<T: EvalObject> From<ExprValue<T>> for AnnotatedValue<T> {
     fn from(value: ExprValue<T>) -> Self {
         AnnotatedValue::Regular(value)
     }
 }
 
-impl<T: Object> AnnotatedValue<T> {
+impl<T: EvalObject> AnnotatedValue<T> {
     pub fn get_type(&self, env: &T::Env) -> AnnotatedType {
         match self {
             AnnotatedValue::Forced(value) => AnnotatedType::Forced(value.get_type(env)),
@@ -287,7 +287,7 @@ impl<T: Object> AnnotatedValue<T> {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoObject {}
 
-pub trait Object: UsableData {
+pub trait EvalObject: UsableData {
     type Env;
 
     fn objects_with_typ(env: &Self::Env, name: &str) -> BTreeSet<Self>;
@@ -301,7 +301,7 @@ pub trait Object: UsableData {
 #[derive(Debug, Clone)]
 pub struct NoObjectEnv {}
 
-impl Object for NoObject {
+impl EvalObject for NoObject {
     type Env = NoObjectEnv;
 
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
@@ -400,7 +400,7 @@ impl CheckedAST {
         })
     }
 
-    fn check_env<T: Object>(&self, env: &T::Env) -> bool {
+    fn check_env<T: EvalObject>(&self, env: &T::Env) -> bool {
         for (typ, fields) in self.global_env.get_types() {
             let objects = T::objects_with_typ(env, typ.as_str());
 
@@ -472,7 +472,7 @@ impl CheckedAST {
         self.eval_fn(&env, fn_name, args)
     }
 
-    pub fn eval_fn<T: Object>(
+    pub fn eval_fn<T: EvalObject>(
         &self,
         env: &T::Env,
         fn_name: &str,
@@ -482,7 +482,7 @@ impl CheckedAST {
         eval_history.eval_fn(fn_name, args)
     }
 
-    pub fn eval_fn_with_variables<T: Object>(
+    pub fn eval_fn_with_variables<T: EvalObject>(
         &self,
         env: &T::Env,
         fn_name: &str,
@@ -495,12 +495,12 @@ impl CheckedAST {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct LocalEnv<T: Object> {
+struct LocalEnv<T: EvalObject> {
     scopes: Vec<HashMap<String, ExprValue<T>>>,
     pending_scope: HashMap<String, ExprValue<T>>,
 }
 
-impl<T: Object> Default for LocalEnv<T> {
+impl<T: EvalObject> Default for LocalEnv<T> {
     fn default() -> Self {
         LocalEnv {
             scopes: vec![],
@@ -509,7 +509,7 @@ impl<T: Object> Default for LocalEnv<T> {
     }
 }
 
-impl<T: Object> LocalEnv<T> {
+impl<T: EvalObject> LocalEnv<T> {
     fn new() -> Self {
         LocalEnv::default()
     }
@@ -1888,7 +1888,7 @@ impl<T: Object> LocalEnv<T> {
 }
 
 #[derive(Debug)]
-pub struct EvalHistory<'a, T: Object> {
+pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST,
     env: &'a T::Env,
     funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
@@ -1896,7 +1896,7 @@ pub struct EvalHistory<'a, T: Object> {
     var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
 }
 
-impl<'a, T: Object> EvalHistory<'a, T> {
+impl<'a, T: EvalObject> EvalHistory<'a, T> {
     fn new(ast: &'a CheckedAST, env: &'a T::Env) -> Result<Self, EvalError> {
         if !ast.check_env::<T>(env) {
             return Err(EvalError::BadEnv);
@@ -2029,7 +2029,7 @@ impl<'a, T: Object> EvalHistory<'a, T> {
     }
 }
 
-impl<'a, T: Object> EvalHistory<'a, T> {
+impl<'a, T: EvalObject> EvalHistory<'a, T> {
     pub fn validate_value(&self, val: &ExprValue<T>) -> bool {
         match val {
             ExprValue::Int(_) => true,
@@ -2118,7 +2118,7 @@ impl<'a, T: Object> EvalHistory<'a, T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VariableDefinitions<T: Object> {
+pub struct VariableDefinitions<T: EvalObject> {
     pub vars: BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<ConstraintWithOrigin<T>>>,
     pub var_lists:
         BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<BTreeSet<ConstraintWithOrigin<T>>>>,

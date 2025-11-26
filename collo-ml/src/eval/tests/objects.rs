@@ -1,4 +1,4 @@
-use crate::eval::{CheckedAST, ExprValue, Object};
+use crate::eval::{CheckedAST, EvalObject, ExprValue};
 use crate::semantics::ExprType;
 use std::collections::{BTreeSet, HashMap};
 
@@ -12,7 +12,7 @@ enum SimpleObject {
 
 struct SimpleEnv {}
 
-impl Object for SimpleObject {
+impl EvalObject for SimpleObject {
     type Env = SimpleEnv;
 
     fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
