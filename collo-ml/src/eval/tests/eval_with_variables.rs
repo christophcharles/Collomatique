@@ -55,11 +55,11 @@ fn eval_with_variables_multiple_calls_same_var() {
     let types = HashMap::new();
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject>::new(input, types, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables::<NoObject>(&env, "f", vec![])
+        .eval_fn_with_variables(&env, "f", vec![])
         .expect("Should evaluate");
 
     // Check result
