@@ -1,7 +1,7 @@
 use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
-use crate::EvalObject;
+use crate::traits::EvalObject;
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 

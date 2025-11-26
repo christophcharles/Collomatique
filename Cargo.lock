@@ -361,11 +361,21 @@ dependencies = [
 name = "collo-ml"
 version = "0.1.0"
 dependencies = [
+ "collo-ml-derive",
  "collomatique-ilp",
  "pest",
  "pest_derive",
  "regex",
  "thiserror",
+]
+
+[[package]]
+name = "collo-ml-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]
