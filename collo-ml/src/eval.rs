@@ -1,7 +1,8 @@
 use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
-use collomatique_ilp::{Constraint, LinExpr, UsableData};
+use crate::EvalObject;
+use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[cfg(test)]
@@ -287,17 +288,6 @@ impl<T: EvalObject> AnnotatedValue<T> {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoObject {}
 
-pub trait EvalObject: UsableData {
-    type Env;
-
-    fn objects_with_typ(env: &Self::Env, name: &str) -> BTreeSet<Self>;
-    fn typ_name(&self, env: &Self::Env) -> String;
-    fn field_access(&self, env: &Self::Env, field: &str) -> Option<ExprValue<Self>>;
-    fn pretty_print(&self, _env: &Self::Env) -> Option<String> {
-        None
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct NoObjectEnv {}
 
@@ -343,7 +333,7 @@ pub enum CompileError {
 }
 
 #[derive(Clone, Debug, Error)]
-pub enum EnvError<T: UsableData> {
+pub enum EnvError<T: EvalObject> {
     #[error("Typename {typ_name} used for object {obj:?} has bad format")]
     BadTypeName { typ_name: String, obj: T },
 }
