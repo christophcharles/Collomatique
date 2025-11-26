@@ -1,4 +1,4 @@
-use crate::eval::{CheckedAST, EvalEnv, ExprValue};
+use crate::eval::{CheckedAST, ExprValue, Object};
 use crate::semantics::ExprType;
 use std::collections::{BTreeSet, HashMap};
 
@@ -12,10 +12,10 @@ enum SimpleObject {
 
 struct SimpleEnv {}
 
-impl EvalEnv for SimpleEnv {
-    type Object = SimpleObject;
+impl Object for SimpleObject {
+    type Env = SimpleEnv;
 
-    fn objects_with_typ(&self, name: &str) -> BTreeSet<Self::Object> {
+    fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
         match name {
             "Student" => BTreeSet::from([SimpleObject::Student1, SimpleObject::Student2]),
             "Room" => BTreeSet::from([SimpleObject::Room1, SimpleObject::Room2]),
@@ -23,15 +23,15 @@ impl EvalEnv for SimpleEnv {
         }
     }
 
-    fn typ_name(&self, obj: &Self::Object) -> String {
-        match obj {
+    fn typ_name(&self, _env: &Self::Env) -> String {
+        match self {
             SimpleObject::Student1 | SimpleObject::Student2 => "Student".into(),
             SimpleObject::Room1 | SimpleObject::Room2 => "Room".into(),
         }
     }
 
-    fn field_access(&self, obj: &Self::Object, field: &str) -> Option<ExprValue<Self::Object>> {
-        match obj {
+    fn field_access(&self, _env: &Self::Env, field: &str) -> Option<ExprValue<Self>> {
+        match self {
             SimpleObject::Student1 => match field {
                 "age" => Some(ExprValue::Int(18)),
                 "enrolled" => Some(ExprValue::Bool(true)),

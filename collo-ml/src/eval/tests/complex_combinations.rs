@@ -665,21 +665,21 @@ fn aggregation_with_filtering() {
 
     struct Env {}
 
-    impl EvalEnv for Env {
-        type Object = Student;
+    impl Object for Student {
+        type Env = Env;
 
-        fn objects_with_typ(&self, name: &str) -> BTreeSet<Self::Object> {
+        fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
             match name {
                 "Student" => BTreeSet::from([Student::Student1, Student::Student2]),
                 _ => BTreeSet::new(),
             }
         }
-        fn typ_name(&self, _obj: &Self::Object) -> String {
+        fn typ_name(&self, _env: &Self::Env) -> String {
             "Student".into()
         }
-        fn field_access(&self, obj: &Self::Object, field: &str) -> Option<ExprValue<Self::Object>> {
+        fn field_access(&self, _env: &Self::Env, field: &str) -> Option<ExprValue<Self>> {
             assert_eq!(field, "score");
-            Some(match obj {
+            Some(match self {
                 Student::Student1 => ExprValue::Int(45),
                 Student::Student2 => ExprValue::Int(100),
             })
