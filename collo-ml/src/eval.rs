@@ -318,11 +318,12 @@ impl EvalObject for NoObject {
 }
 
 #[derive(Clone, Debug)]
-pub struct CheckedAST {
+pub struct CheckedAST<T: EvalObject = NoObject> {
     global_env: GlobalEnv,
     type_info: TypeInfo,
     expr_types: HashMap<crate::ast::Span, AnnotatedType>,
     warnings: Vec<SemWarning>,
+    _phantom: std::marker::PhantomData<T>,
 }
 
 use thiserror::Error;
@@ -369,12 +370,23 @@ pub enum EvalError {
     InvalidExprValue { param: usize },
 }
 
-impl CheckedAST {
+impl CheckedAST<NoObject> {
+    pub fn quick_eval_fn(
+        &self,
+        fn_name: &str,
+        args: Vec<ExprValue<NoObject>>,
+    ) -> Result<ExprValue<NoObject>, EvalError> {
+        let env = NoObjectEnv {};
+        self.eval_fn(&env, fn_name, args)
+    }
+}
+
+impl<T: EvalObject> CheckedAST<T> {
     pub fn new(
         input: &str,
         types: HashMap<String, HashMap<String, ExprType>>,
         vars: HashMap<String, ArgsType>,
-    ) -> Result<CheckedAST, CompileError> {
+    ) -> Result<CheckedAST<T>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
@@ -397,10 +409,11 @@ impl CheckedAST {
             type_info,
             expr_types,
             warnings,
+            _phantom: std::marker::PhantomData,
         })
     }
 
-    fn check_env<T: EvalObject>(&self, env: &T::Env) -> bool {
+    fn check_env(&self, env: &T::Env) -> bool {
         for (typ, fields) in self.global_env.get_types() {
             let objects = T::objects_with_typ(env, typ.as_str());
 
@@ -463,16 +476,7 @@ impl CheckedAST {
             .collect()
     }
 
-    pub fn quick_eval_fn(
-        &self,
-        fn_name: &str,
-        args: Vec<ExprValue<NoObject>>,
-    ) -> Result<ExprValue<NoObject>, EvalError> {
-        let env = NoObjectEnv {};
-        self.eval_fn(&env, fn_name, args)
-    }
-
-    pub fn eval_fn<T: EvalObject>(
+    pub fn eval_fn(
         &self,
         env: &T::Env,
         fn_name: &str,
@@ -482,7 +486,7 @@ impl CheckedAST {
         eval_history.eval_fn(fn_name, args)
     }
 
-    pub fn eval_fn_with_variables<T: EvalObject>(
+    pub fn eval_fn_with_variables(
         &self,
         env: &T::Env,
         fn_name: &str,
@@ -1889,7 +1893,7 @@ impl<T: EvalObject> LocalEnv<T> {
 
 #[derive(Debug)]
 pub struct EvalHistory<'a, T: EvalObject> {
-    ast: &'a CheckedAST,
+    ast: &'a CheckedAST<T>,
     env: &'a T::Env,
     funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
     vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
@@ -1897,8 +1901,8 @@ pub struct EvalHistory<'a, T: EvalObject> {
 }
 
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
-    fn new(ast: &'a CheckedAST, env: &'a T::Env) -> Result<Self, EvalError> {
-        if !ast.check_env::<T>(env) {
+    fn new(ast: &'a CheckedAST<T>, env: &'a T::Env) -> Result<Self, EvalError> {
+        if !ast.check_env(env) {
             return Err(EvalError::BadEnv);
         }
 
