@@ -49,8 +49,15 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
         });
 
         // Generate field access arm
-        let accessor = generate_field_accessor(field_name, &field_name_str, field_type);
-        field_access_arms.push(accessor);
+        let field_value = generate_field_value(
+            &quote! {
+                self.#field_name
+            },
+            field_type,
+        );
+        field_access_arms.push(quote! {
+            #field_name_str => Some(#field_value),
+        });
     }
 
     // Generate the implementation
@@ -64,7 +71,7 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
                 schema
             }
 
-            fn get_field(&self, field: &str) -> Option<ExprValue<Self::EvalObject>> {
+            fn get_field(&self, field: &str) -> Option<FieldValue<Self::EvalObject>> {
                 match field {
                     #(#field_access_arms)*
                     _ => None,
@@ -131,9 +138,10 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
         Type::Path(type_path) => {
             // Get the last segment of the path (e.g., "i32" from "std::i32")
             let segment = type_path.path.segments.last().unwrap();
-            let type_name = segment.ident.to_string();
+            let type_name = &segment.ident;
+            let type_name_str = type_name.to_string();
 
-            match type_name.as_str() {
+            match type_name_str.as_str() {
                 "i32" => quote! { FieldType::Int },
                 "bool" => quote! { FieldType::Bool },
                 "BTreeSet" => {
@@ -150,7 +158,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                 }
                 _ => {
                     // Assume this is an object
-                    quote! { FieldType::Object(#type_name.to_string()) }
+                    quote! { FieldType::Object(std::any::TypeId::of::<#type_name>()) }
                 }
             }
         }
@@ -158,9 +166,8 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
-fn generate_field_accessor(
-    field_name: &syn::Ident,
-    field_name_str: &str,
+fn generate_field_value(
+    field_name: &proc_macro2::TokenStream,
     field_type: &Type,
 ) -> proc_macro2::TokenStream {
     match field_type {
@@ -170,20 +177,28 @@ fn generate_field_accessor(
 
             match type_name.as_str() {
                 "i32" => quote! {
-                    #field_name_str => Some(ExprValue::Int(self.#field_name)),
+                    FieldValue::Int(#field_name),
                 },
                 "bool" => quote! {
-                    #field_name_str => Some(ExprValue::Bool(self.#field_name)),
+                    FieldValue::Bool(#field_name),
                 },
                 "BTreeSet" => {
                     // Need to convert collection elements
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            return generate_collection_accessor(
-                                field_name,
-                                field_name_str,
+                            let field_type = type_to_field_type(inner_ty);
+                            let inner = generate_field_value(
+                                &quote! {
+                                    x
+                                },
                                 inner_ty,
                             );
+                            return quote! {
+                                FieldValue::List(
+                                    #field_type,
+                                    #field_name.iter().map(|&x| #inner).collect(),
+                                )
+                            };
                         }
                     }
                     panic!("BTreeSet must have type parameter");
@@ -191,47 +206,12 @@ fn generate_field_accessor(
                 _ => {
                     // It's an object ID - convert using Into
                     quote! {
-                        #field_name_str => Some(ExprValue::Object(self.#field_name.into())),
+                        FieldValue::Object(#field_name.into()),
                     }
                 }
             }
         }
         _ => panic!("Unsupported field type"),
-    }
-}
-
-fn generate_collection_accessor(
-    field_name: &syn::Ident,
-    field_name_str: &str,
-    inner_type: &Type,
-) -> proc_macro2::TokenStream {
-    match inner_type {
-        Type::Path(type_path) => {
-            let segment = type_path.path.segments.last().unwrap();
-            let type_name = segment.ident.to_string();
-
-            match type_name.as_str() {
-                "i32" => quote! {
-                    #field_name_str => Some(ExprValue::List(
-                        self.#field_name.iter().map(|&x| ExprValue::Int(x)).collect()
-                    )),
-                },
-                "bool" => quote! {
-                    #field_name_str => Some(ExprValue::List(
-                        self.#field_name.iter().map(|&x| ExprValue::Bool(x)).collect()
-                    )),
-                },
-                _ => {
-                    // Object IDs
-                    quote! {
-                        #field_name_str => Some(ExprValue::List(
-                            self.#field_name.iter().map(|&id| ExprValue::Object(id.into())).collect()
-                        )),
-                    }
-                }
-            }
-        }
-        _ => panic!("Unsupported collection element type"),
     }
 }
 
@@ -247,13 +227,13 @@ fn generate_pretty_print_from_format(
 
     // Parse the format string to find {field_name} placeholders
     // We'll use a simple regex-like approach
-    let mut format_args = Vec::new();
+    let mut format_args = std::collections::BTreeMap::new();
     let mut current_pos = 0;
 
     // Simple parser for {field_name}
     while let Some(start) = format_str[current_pos..].find('{') {
         let start = current_pos + start;
-        if let Some(end) = format_str[start..].find('}') {
+        if let Some(end) = format_str[start..].find(|c| c == '}' || c == ':') {
             let end = start + end;
             let field_name = &format_str[start + 1..end];
 
@@ -263,7 +243,10 @@ fn generate_pretty_print_from_format(
             }
 
             let field_ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
-            format_args.push(quote! { self.#field_ident });
+            format_args.insert(
+                field_name.to_string(),
+                quote! { let #field_ident = &self.#field_ident; },
+            );
 
             current_pos = end + 1;
         } else {
@@ -280,9 +263,11 @@ fn generate_pretty_print_from_format(
             }
         }
     } else {
+        let format_args = format_args.into_iter().map(|x| x.1);
         quote! {
             fn pretty_print(&self) -> Option<String> {
-                Some(format!(#format_str, #(#format_args),*))
+                #(#format_args)*
+                Some(format!(#format_str))
             }
         }
     }

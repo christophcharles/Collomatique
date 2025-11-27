@@ -15,19 +15,27 @@ pub trait EvalObject: UsableData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FieldType {
     Int,
     Bool,
-    ObjectRef(String), // ID type name (e.g., "RoomId")
+    Object(std::any::TypeId),
     List(Box<FieldType>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FieldValue<T: EvalObject> {
+    Int(i32),
+    Bool(bool),
+    Object(T),
+    List(FieldType, BTreeSet<FieldValue<T>>),
 }
 
 pub trait ViewObject {
     type EvalObject: EvalObject;
 
     fn field_schema() -> HashMap<String, FieldType>;
-    fn get_field(&self, field: &str) -> Option<ExprValue<Self::EvalObject>>;
+    fn get_field(&self, field: &str) -> Option<FieldValue<Self::EvalObject>>;
     fn pretty_print(&self) -> Option<String> {
         None
     }
