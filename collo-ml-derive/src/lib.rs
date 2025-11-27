@@ -177,10 +177,10 @@ fn generate_field_value(
 
             match type_name.as_str() {
                 "i32" => quote! {
-                    FieldValue::Int(#field_name),
+                    FieldValue::Int(#field_name.clone()),
                 },
                 "bool" => quote! {
-                    FieldValue::Bool(#field_name),
+                    FieldValue::Bool(#field_name.clone()),
                 },
                 "BTreeSet" => {
                     // Need to convert collection elements
@@ -196,7 +196,7 @@ fn generate_field_value(
                             return quote! {
                                 FieldValue::List(
                                     #field_type,
-                                    #field_name.iter().map(|&x| #inner).collect(),
+                                    #field_name.iter().map(|x| #inner).collect(),
                                 )
                             };
                         }
@@ -206,7 +206,7 @@ fn generate_field_value(
                 _ => {
                     // It's an object ID - convert using Into
                     quote! {
-                        FieldValue::Object(#field_name.into()),
+                        FieldValue::Object(#field_name.clone().into()),
                     }
                 }
             }

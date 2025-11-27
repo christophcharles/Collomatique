@@ -403,3 +403,62 @@ fn test_pretty_print_with_debug_output() {
     let schema = StudentWithHiddenName::field_schema();
     assert!(!schema.contains_key("name"));
 }
+
+// Test 13: Recursive BTreeSet
+#[test]
+fn test_schemas_for_recursive_btreeset() {
+    #[derive(ViewObject)]
+    #[eval_object(TestObjectId)]
+    struct ComplexStudent {
+        ages: BTreeSet<BTreeSet<i32>>,
+        courses: BTreeSet<BTreeSet<CourseId>>,
+    }
+
+    let schema = ComplexStudent::field_schema();
+
+    // Should have 5 visible fields
+    assert_eq!(schema.len(), 2);
+    assert_eq!(
+        schema.get("ages"),
+        Some(&FieldType::List(Box::new(FieldType::List(Box::new(
+            FieldType::Int
+        )))))
+    );
+    assert_eq!(
+        schema.get("courses"),
+        Some(&FieldType::List(Box::new(FieldType::List(Box::new(
+            FieldType::Object(TypeId::of::<CourseId>())
+        )))))
+    );
+}
+
+// Test 14: Recursive BTreeSet
+#[test]
+fn test_get_field_for_recursive_btreeset() {
+    #[derive(ViewObject)]
+    #[eval_object(TestObjectId)]
+    struct ComplexStudent {
+        ages: BTreeSet<BTreeSet<i32>>,
+        courses: BTreeSet<BTreeSet<CourseId>>,
+    }
+
+    let mut courses = BTreeSet::new();
+    courses.insert(BTreeSet::from([CourseId(101), CourseId(201)]));
+    courses.insert(BTreeSet::from([CourseId(102), CourseId(202)]));
+
+    let mut ages = BTreeSet::new();
+    ages.insert(BTreeSet::from([20, 35]));
+    ages.insert(BTreeSet::from([50, 75]));
+
+    let student = ComplexStudent { ages, courses };
+
+    if let Some(FieldValue::List(_, values)) = student.get_field("courses") {
+        assert_eq!(values.len(), 1);
+        assert!(values.contains(&FieldValue::List(
+            FieldType::Object(TypeId::of::<CourseId>()),
+            BTreeSet::from([FieldValue::Object(TestObjectId)]),
+        )));
+    } else {
+        panic!("Expected List of Objects");
+    }
+}
