@@ -8,7 +8,7 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
     view_object::derive(input)
 }
 
-#[proc_macro_derive(EvalObject, attributes(env, name))]
+#[proc_macro_derive(EvalObject, attributes(env, cached, name))]
 pub fn derive_eval_object(input: TokenStream) -> TokenStream {
     eval_object::derive(input)
 }
