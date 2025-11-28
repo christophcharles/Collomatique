@@ -128,7 +128,7 @@ mod view_object;
 /// - `i32` - Integer values
 /// - `bool` - Boolean values
 /// - `IdType` - Object references (must implement `Into<EvalObject>`)
-/// - `BTreeSet<T>` - Collections of any supported type (including nested collections)
+/// - `Vec<T>` - Collections of any supported type (including nested collections)
 ///
 /// # Requirements
 ///
@@ -183,8 +183,8 @@ mod view_object;
 /// #[eval_object(ObjectId)]
 /// struct Teacher {
 ///     name: String,
-///     students: BTreeSet<StudentId>,
-///     grades: BTreeSet<i32>,
+///     students: Vec<StudentId>,
+///     grades: Vec<i32>,
 /// }
 /// ```
 ///
@@ -194,7 +194,7 @@ mod view_object;
 /// #[derive(ViewObject)]
 /// #[eval_object(ObjectId)]
 /// struct Course {
-///     student_groups: BTreeSet<BTreeSet<StudentId>>,
+///     student_groups: Vec<Vec<StudentId>>,
 /// }
 /// ```
 ///
