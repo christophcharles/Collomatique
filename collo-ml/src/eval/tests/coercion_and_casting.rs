@@ -538,7 +538,7 @@ fn mixed_implicit_and_explicit() {
 
 #[test]
 fn cast_with_collection_operations() {
-    let input = "pub let f() -> [LinExpr] = ([1, 2] as [LinExpr]) union ([3, 4] as [LinExpr]);";
+    let input = "pub let f() -> [LinExpr] = ([1, 2] as [LinExpr]) + ([3, 4] as [LinExpr]);";
 
     let vars = HashMap::new();
 

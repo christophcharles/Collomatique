@@ -187,7 +187,7 @@ fn collection_comprehension_precedence_with_where() {
     // The where clause should bind to the comprehension, not be outside
     let cases = vec![
         "[x + 1 for x in list where x > 0]", // where applies to comprehension
-        "([x for x in list where x > 0]) union other", // comprehension is complete unit
+        "([x for x in list where x > 0]) + other", // comprehension is complete unit
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -293,7 +293,7 @@ fn collection_accepts_global_collections() {
 
 #[test]
 fn collection_accepts_global_collections_in_parentheses() {
-    let cases = vec!["(@[Student])", "((@[Week]))", "(@[Int] union @[Bool])"];
+    let cases = vec!["(@[Student])", "((@[Week]))", "(@[Int] + @[Bool])"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
@@ -353,10 +353,10 @@ fn collection_accepts_global_collections_of_lists() {
 #[test]
 fn collection_accepts_union() {
     let cases = vec![
-        "a union b",
-        "@[Student] union @[Teacher]",
-        "morning_slots union afternoon_slots",
-        "group1 union group2 union group3",
+        "a + b",
+        "@[Student] + @[Teacher]",
+        "morning_slots + afternoon_slots",
+        "group1 + group2 + group3",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -367,11 +367,11 @@ fn collection_accepts_union() {
 #[test]
 fn collection_accepts_set_difference() {
     let cases = vec![
-        "a \\ b",
-        "@[Subject] \\ pairing",
-        "all_slots \\ occupied_slots",
-        "@[Week] \\ holidays",
-        "subject.slots \\ morning_slots",
+        "a - b",
+        "@[Subject] - pairing",
+        "all_slots - occupied_slots",
+        "@[Week] - holidays",
+        "subject.slots - morning_slots",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -382,9 +382,9 @@ fn collection_accepts_set_difference() {
 #[test]
 fn collection_accepts_chained_union() {
     let cases = vec![
-        "a union b union c",
-        "@[Student] union @[Teacher] union @[Admin]",
-        "group1 union group2 union group3 union group4",
+        "a + b + c",
+        "@[Student] + @[Teacher] + @[Admin]",
+        "group1 + group2 + group3 + group4",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -393,14 +393,13 @@ fn collection_accepts_chained_union() {
 }
 
 #[test]
-fn collection_rejects_chained_difference() {
-    // Set difference is not associative, so chaining is rejected
-    let cases = vec!["a \\ b \\ c", "@[Subject] \\ pairing1 \\ pairing2"];
+fn collection_accepts_chained_difference() {
+    let cases = vec!["a - b - c", "@[Subject] - pairing1 - pairing2"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (chained difference): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (chained difference): {:?}",
             case,
             result
         );
@@ -410,10 +409,10 @@ fn collection_rejects_chained_difference() {
 #[test]
 fn collection_accepts_combined_set_operations() {
     let cases = vec![
-        "(a union b) \\ c",
-        "a union (b \\ c)",
-        "(@[Subject] \\ pairing) union extra_subjects",
-        "all_slots \\ (morning_slots union evening_slots)",
+        "(a + b) - c",
+        "a + (b - c)",
+        "(@[Subject] - pairing) + extra_subjects",
+        "all_slots - (morning_slots + evening_slots)",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -424,9 +423,9 @@ fn collection_accepts_combined_set_operations() {
 #[test]
 fn collection_accepts_deeply_nested_operations() {
     let cases = vec![
-        "(a union (b union c))",
-        "@[Student] \\ (excluded union suspended)",
-        "((@[All] \\ @[Excluded]) union @[Special]) \\ @[Active]",
+        "(a + (b + c))",
+        "@[Student] - (excluded + suspended)",
+        "((@[All] - @[Excluded]) + @[Special]) - @[Active]",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -439,8 +438,8 @@ fn collection_with_function_calls() {
     let cases = vec![
         "get_eligible_students()",
         "compute_available_slots(week)",
-        "get_group_a() union get_group_b()",
-        "@[Student] \\ get_excluded()",
+        "get_group_a() + get_group_b()",
+        "@[Student] - get_excluded()",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -469,9 +468,9 @@ fn collection_accepts_membership_tests() {
 #[test]
 fn collection_accepts_membership_with_complex_collections() {
     let cases = vec![
-        "item in (@[Type] \\ excluded)",
-        "slot in (morning_slots union afternoon_slots)",
-        "student in (all_students \\ suspended)",
+        "item in (@[Type] - excluded)",
+        "slot in (morning_slots + afternoon_slots)",
+        "student in (all_students - suspended)",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -500,10 +499,10 @@ fn collection_accepts_membership_in_logical_expressions() {
 #[test]
 fn collection_accepts_collections_in_aggregations() {
     let cases = vec![
-        "sum s in @[Student] union @[Teacher] { $V(s) }",
-        "forall s in @[Student] union @[Teacher] { $V(s) >= 0 }",
-        "forall x in (group_a \\ excluded) { $V(x) == 1 }",
-        "sum x in (a union b) { $V(x) }",
+        "sum s in @[Student] + @[Teacher] { $V(s) }",
+        "forall s in @[Student] + @[Teacher] { $V(s) >= 0 }",
+        "forall x in (group_a - excluded) { $V(x) == 1 }",
+        "sum x in (a + b) { $V(x) }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -514,8 +513,8 @@ fn collection_accepts_collections_in_aggregations() {
 #[test]
 fn collection_accepts_collections_in_comprehensions() {
     let cases = vec![
-        "[x for x in @[Student] union @[Teacher]]",
-        "[s for s in (all \\ excluded) where s.active]",
+        "[x for x in @[Student] + @[Teacher]]",
+        "[s for s in (all - excluded) where s.active]",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

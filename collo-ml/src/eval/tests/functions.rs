@@ -552,7 +552,7 @@ fn fn_with_list_comprehension() {
 fn fn_with_collection_operations() {
     let input = r#"
     let filter_evens(xs: [Int]) -> [Int] = [x for x in xs where x % 2 == 0];
-    let combine(xs: [Int], ys: [Int]) -> [Int] = filter_evens(xs) union filter_evens(ys);
+    let combine(xs: [Int], ys: [Int]) -> [Int] = filter_evens(xs) + filter_evens(ys);
     pub let f() -> [Int] = combine([1, 2, 3], [4, 5, 6]);
     "#;
 

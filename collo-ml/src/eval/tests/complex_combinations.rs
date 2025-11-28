@@ -56,7 +56,7 @@ fn sum_with_var_list_and_comprehension() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
-    pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs union ys) { v };
+    pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs + ys) { v };
     "#;
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
@@ -235,7 +235,7 @@ fn nested_list_comp_with_reified_vars() {
 #[test]
 fn list_comp_with_collection_ops_in_body() {
     let input = r#"
-    let diff_with_range(xs: [Int], n: Int) -> [Int] = xs \ [1..n];
+    let diff_with_range(xs: [Int], n: Int) -> [Int] = xs - [1..n];
     pub let f(lists: [[Int]]) -> [Int] = 
         [|diff_with_range(lst, 10)| for lst in lists];
     "#;
@@ -261,8 +261,8 @@ fn list_comp_with_collection_ops_in_body() {
         .quick_eval_fn("f", vec![lists])
         .expect("Should evaluate");
 
-    // list1 \\ [1..10]: [15] → |1|
-    // list2 \\ [1..10]: [] → |0|
+    // list1 - [1..10]: [15] → |1|
+    // list2 - [1..10]: [] → |0|
     assert_eq!(
         result,
         ExprValue::List(
@@ -775,7 +775,7 @@ fn set_operations_with_comprehensions() {
         [x for x in xs where x < 20];
     
     pub let f(xs: [Int]) -> [Int] = 
-        positive_squares(xs) \ small_numbers(xs);
+        positive_squares(xs) - small_numbers(xs);
     "#;
 
     let vars = HashMap::new();
@@ -816,7 +816,7 @@ fn union_of_var_lists() {
     reify vars_for_set as $[Vars];
     
     pub let f(xs: [Int], ys: [Int]) -> LinExpr = 
-        sum v in ($[Vars](xs) union $[Vars](ys)) { v };
+        sum v in ($[Vars](xs) + $[Vars](ys)) { v };
     "#;
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);

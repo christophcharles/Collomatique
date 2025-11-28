@@ -426,7 +426,7 @@ fn global_collection_in_sum() {
 
 #[test]
 fn union_of_lists() {
-    let input = "pub let f() -> [Int] = [1, 2] union [3, 4];";
+    let input = "pub let f() -> [Int] = [1, 2] + [3, 4];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(errors.is_empty(), "Union should work: {:?}", errors);
@@ -434,7 +434,7 @@ fn union_of_lists() {
 
 #[test]
 fn difference_of_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] \\ [2];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] - [2];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(errors.is_empty(), "Difference should work: {:?}", errors);
@@ -442,7 +442,7 @@ fn difference_of_lists() {
 
 #[test]
 fn union_with_coercion() {
-    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs union ys;";
+    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -454,7 +454,7 @@ fn union_with_coercion() {
 
 #[test]
 fn chained_collection_operations() {
-    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b \\ c;";
+    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a + b - c;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -467,7 +467,7 @@ fn chained_collection_operations() {
 #[test]
 fn collection_operation_with_objects() {
     let types = simple_object("Student");
-    let input = "pub let f(a: [Student], b: [Student]) -> [Student] = a union b;";
+    let input = "pub let f(a: [Student], b: [Student]) -> [Student] = a + b;";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(
@@ -616,12 +616,12 @@ fn list_of_list_comprehensions() {
 
 #[test]
 fn comprehension_over_union() {
-    let input = "pub let f(a: [Int], b: [Int]) -> [Int] = [x * 2 for x in a union b];";
+    let input = "pub let f(a: [Int], b: [Int]) -> [Int] = [x * 2 for x in a + b];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Comprehension over union should work: {:?}",
+        "Comprehension over + should work: {:?}",
         errors
     );
 }

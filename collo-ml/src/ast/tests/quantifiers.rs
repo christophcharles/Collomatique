@@ -172,14 +172,14 @@ fn parse_forall_with_complex_body() {
 
 #[test]
 fn parse_forall_with_set_operation_collection() {
-    let input = "let f() -> Constraint = forall x in @[Student] union @[Teacher] { x.active };";
+    let input = "let f() -> Constraint = forall x in @[Student] + @[Teacher] { x.active };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Forall { collection, .. } => {
-                assert!(matches!(collection.node, Expr::Union(_, _)));
+                assert!(matches!(collection.node, Expr::Add(_, _)));
             }
             _ => panic!("Expected Forall"),
         },

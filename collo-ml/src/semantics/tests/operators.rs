@@ -338,19 +338,15 @@ fn chained_logical_operations() {
 
 #[test]
 fn collection_union() {
-    let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs union ys;";
+    let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
-    assert!(
-        errors.is_empty(),
-        "Collection union should work: {:?}",
-        errors
-    );
+    assert!(errors.is_empty(), "Collection + should work: {:?}", errors);
 }
 
 #[test]
 fn collection_difference() {
-    let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs \\ ys;";
+    let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs - ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -362,7 +358,7 @@ fn collection_difference() {
 
 #[test]
 fn collection_ops_must_have_same_element_type() {
-    let input = "pub let f(xs: [Int], ys: [Bool]) -> [Int] = xs union ys;";
+    let input = "pub let f(xs: [Int], ys: [Bool]) -> [Int] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -373,7 +369,7 @@ fn collection_ops_must_have_same_element_type() {
 
 #[test]
 fn collection_ops_unify_int_linexpr() {
-    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs union ys;";
+    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -385,7 +381,7 @@ fn collection_ops_unify_int_linexpr() {
 
 #[test]
 fn chained_collection_operations() {
-    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b \\ c;";
+    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a + b - c;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

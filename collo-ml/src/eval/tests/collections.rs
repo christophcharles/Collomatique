@@ -170,7 +170,7 @@ fn in_nested_usage() {
 
 #[test]
 fn union_two_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] union [4, 5, 6];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] + [4, 5, 6];";
 
     let vars = HashMap::new();
 
@@ -197,7 +197,7 @@ fn union_two_lists() {
 
 #[test]
 fn union_overlapping_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] union [2, 3, 4];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] + [2, 3, 4];";
 
     let vars = HashMap::new();
 
@@ -223,7 +223,7 @@ fn union_overlapping_lists() {
 
 #[test]
 fn union_with_empty_list_left() {
-    let input = "pub let f() -> [Int] = [] union [1, 2, 3];";
+    let input = "pub let f() -> [Int] = [] + [1, 2, 3];";
 
     let vars = HashMap::new();
 
@@ -243,7 +243,7 @@ fn union_with_empty_list_left() {
 
 #[test]
 fn union_with_empty_list_right() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] union [];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] + [];";
 
     let vars = HashMap::new();
 
@@ -263,7 +263,7 @@ fn union_with_empty_list_right() {
 
 #[test]
 fn union_two_empty_lists() {
-    let input = "pub let f() -> [Int] = [] union [];";
+    let input = "pub let f() -> [Int] = [] + [];";
 
     let vars = HashMap::new();
 
@@ -277,7 +277,7 @@ fn union_two_empty_lists() {
 
 #[test]
 fn union_with_params() {
-    let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 union list2;";
+    let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 + list2;";
 
     let vars = HashMap::new();
 
@@ -311,7 +311,7 @@ fn union_with_params() {
 
 #[test]
 fn union_chain() {
-    let input = "pub let f() -> [Int] = [1] union [2] union [3];";
+    let input = "pub let f() -> [Int] = [1] + [2] + [3];";
 
     let vars = HashMap::new();
 
@@ -331,7 +331,7 @@ fn union_chain() {
 
 #[test]
 fn union_with_ranges() {
-    let input = "pub let f() -> [Int] = [1..3] union [5..7];";
+    let input = "pub let f() -> [Int] = [1..3] + [5..7];";
 
     let vars = HashMap::new();
 
@@ -356,7 +356,7 @@ fn union_with_ranges() {
 
 #[test]
 fn union_bool_lists() {
-    let input = "pub let f() -> [Bool] = [true] union [false];";
+    let input = "pub let f() -> [Bool] = [true] + [false];";
 
     let vars = HashMap::new();
 
@@ -378,7 +378,7 @@ fn union_bool_lists() {
 
 #[test]
 fn diff_disjoint_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] \\ [4, 5, 6];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] - [4, 5, 6];";
 
     let vars = HashMap::new();
 
@@ -398,7 +398,7 @@ fn diff_disjoint_lists() {
 
 #[test]
 fn diff_overlapping_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3, 4] \\ [2, 3];";
+    let input = "pub let f() -> [Int] = [1, 2, 3, 4] - [2, 3];";
 
     let vars = HashMap::new();
 
@@ -418,7 +418,7 @@ fn diff_overlapping_lists() {
 
 #[test]
 fn diff_identical_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] \\ [1, 2, 3];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] - [1, 2, 3];";
 
     let vars = HashMap::new();
 
@@ -432,7 +432,7 @@ fn diff_identical_lists() {
 
 #[test]
 fn diff_with_empty_list_left() {
-    let input = "pub let f() -> [Int] = [] \\ [1, 2, 3];";
+    let input = "pub let f() -> [Int] = [] - [1, 2, 3];";
 
     let vars = HashMap::new();
 
@@ -446,7 +446,7 @@ fn diff_with_empty_list_left() {
 
 #[test]
 fn diff_with_empty_list_right() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] \\ [];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] - [];";
 
     let vars = HashMap::new();
 
@@ -466,7 +466,7 @@ fn diff_with_empty_list_right() {
 
 #[test]
 fn diff_two_empty_lists() {
-    let input = "pub let f() -> [Int] = [] \\ [];";
+    let input = "pub let f() -> [Int] = [] - [];";
 
     let vars = HashMap::new();
 
@@ -480,7 +480,7 @@ fn diff_two_empty_lists() {
 
 #[test]
 fn diff_with_params() {
-    let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 \\ list2;";
+    let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 - list2;";
 
     let vars = HashMap::new();
 
@@ -514,7 +514,7 @@ fn diff_with_params() {
 
 #[test]
 fn diff_partial_overlap() {
-    let input = "pub let f() -> [Int] = [1, 2, 3, 4, 5] \\ [3, 4, 5, 6, 7];";
+    let input = "pub let f() -> [Int] = [1, 2, 3, 4, 5] - [3, 4, 5, 6, 7];";
 
     let vars = HashMap::new();
 
@@ -534,7 +534,7 @@ fn diff_partial_overlap() {
 
 #[test]
 fn diff_with_ranges() {
-    let input = "pub let f() -> [Int] = [1..6] \\ [3..5];";
+    let input = "pub let f() -> [Int] = [1..6] - [3..5];";
 
     let vars = HashMap::new();
 
@@ -554,7 +554,7 @@ fn diff_with_ranges() {
 
 #[test]
 fn diff_removing_single_element() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] \\ [2];";
+    let input = "pub let f() -> [Int] = [1, 2, 3] - [2];";
 
     let vars = HashMap::new();
 
@@ -576,7 +576,7 @@ fn diff_removing_single_element() {
 
 #[test]
 fn union_then_diff() {
-    let input = "pub let f() -> [Int] = ([1, 2] union [3, 4]) \\ [2, 3, 5];";
+    let input = "pub let f() -> [Int] = ([1, 2] + [3, 4]) - [2, 3, 5];";
 
     let vars = HashMap::new();
 
@@ -585,7 +585,7 @@ fn union_then_diff() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // [1, 2, 3, 4] \\ [2, 3, 5] = [1, 4]
+    // [1, 2, 3, 4] - [2, 3, 5] = [1, 4]
     assert_eq!(
         result,
         ExprValue::List(
@@ -597,7 +597,7 @@ fn union_then_diff() {
 
 #[test]
 fn union_diff_combination() {
-    let input = "pub let f() -> [Int] = ([1, 2, 3] union [4, 5]) \\ [2, 4] union [1, 3, 5];";
+    let input = "pub let f() -> [Int] = ([1, 2, 3] + [4, 5]) - [2, 4] + [1, 3, 5];";
 
     let vars = HashMap::new();
 
@@ -606,8 +606,8 @@ fn union_diff_combination() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // [1, 2, 3, 4, 5] \\ [2, 4] = [1, 3, 5]
-    // [1, 3, 5] union [1, 3, 5] = [1, 3, 5]
+    // [1, 2, 3, 4, 5] - [2, 4] = [1, 3, 5]
+    // [1, 3, 5] + [1, 3, 5] = [1, 3, 5]
     assert_eq!(
         result,
         ExprValue::List(
@@ -619,7 +619,7 @@ fn union_diff_combination() {
 
 #[test]
 fn in_with_union_result() {
-    let input = "pub let f(x: Int) -> Bool = x in ([1, 2] union [3, 4]);";
+    let input = "pub let f(x: Int) -> Bool = x in ([1, 2] + [3, 4]);";
 
     let vars = HashMap::new();
 
@@ -638,7 +638,7 @@ fn in_with_union_result() {
 
 #[test]
 fn in_with_diff_result() {
-    let input = "pub let f(x: Int) -> Bool = x in ([1, 2, 3, 4] \\ [2, 4]);";
+    let input = "pub let f(x: Int) -> Bool = x in ([1, 2, 3, 4] - [2, 4]);";
 
     let vars = HashMap::new();
 
@@ -657,7 +657,7 @@ fn in_with_diff_result() {
 
 #[test]
 fn cardinality_of_union() {
-    let input = "pub let f() -> Int = |[1, 2] union [2, 3]|;";
+    let input = "pub let f() -> Int = |[1, 2] + [2, 3]|;";
 
     let vars = HashMap::new();
 
@@ -666,13 +666,13 @@ fn cardinality_of_union() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // union removes duplicates, so [1, 2, 3] has cardinality 3
+    // + removes duplicates, so [1, 2, 3] has cardinality 3
     assert_eq!(result, ExprValue::Int(3));
 }
 
 #[test]
 fn cardinality_of_diff() {
-    let input = "pub let f() -> Int = |[1, 2, 3, 4, 5] \\ [2, 4]|;";
+    let input = "pub let f() -> Int = |[1, 2, 3, 4, 5] - [2, 4]|;";
 
     let vars = HashMap::new();
 
@@ -687,8 +687,7 @@ fn cardinality_of_diff() {
 
 #[test]
 fn collection_operations_with_if() {
-    let input =
-        "pub let f(x: Int) -> [Int] = if x > 0 { [1, 2] union [3] } else { [4, 5] \\ [5] };";
+    let input = "pub let f(x: Int) -> [Int] = if x > 0 { [1, 2] + [3] } else { [4, 5] - [5] };";
 
     let vars = HashMap::new();
 

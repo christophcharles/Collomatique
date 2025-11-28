@@ -813,7 +813,7 @@ fn var_list_with_collection_ops() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
-    pub let i(xs: [Int], ys: [Int]) -> [LinExpr] = $[MyVars](xs) union $[MyVars](ys);
+    pub let i(xs: [Int], ys: [Int]) -> [LinExpr] = $[MyVars](xs) + $[MyVars](ys);
     "#;
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);

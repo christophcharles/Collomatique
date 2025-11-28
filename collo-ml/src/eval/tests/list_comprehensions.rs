@@ -538,7 +538,7 @@ fn list_comp_with_dependent_limit() {
 
 #[test]
 fn list_comp_over_union() {
-    let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2] union [3, 4]];";
+    let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2] + [3, 4]];";
 
     let vars = HashMap::new();
 
@@ -563,7 +563,7 @@ fn list_comp_over_union() {
 
 #[test]
 fn list_comp_over_difference() {
-    let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3, 4] \\ [2, 4]];";
+    let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3, 4] - [2, 4]];";
 
     let vars = HashMap::new();
 
