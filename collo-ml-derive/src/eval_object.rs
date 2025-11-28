@@ -257,6 +257,7 @@ fn generate_eval_object_impl(
     quote! {
         impl ::collo_ml::EvalObject for #enum_name {
             type Env = #env_type;
+            type Cache = ();
 
             fn objects_with_typ(env: &Self::Env, name: &str) -> std::collections::BTreeSet<Self> {
                 match name {
@@ -271,7 +272,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn field_access(&self, env: &Self::Env, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
+            fn field_access(&self, env: &Self::Env, _cache: &mut Self::Cache, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
                 match self {
                     #(#field_access_arms,)*
                 }
@@ -283,7 +284,7 @@ fn generate_eval_object_impl(
                 map
             }
 
-            fn pretty_print(&self, env: &Self::Env) -> Option<String> {
+            fn pretty_print(&self, env: &Self::Env, _cache: &mut Self::Cache) -> Option<String> {
                 match self {
                     #(#pretty_print_arms,)*
                 }

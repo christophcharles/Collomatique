@@ -14,6 +14,7 @@ struct SimpleEnv {}
 
 impl EvalObject for SimpleObject {
     type Env = SimpleEnv;
+    type Cache = ();
 
     fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
         match name {
@@ -30,7 +31,12 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn field_access(&self, _env: &Self::Env, field: &str) -> Option<ExprValue<Self>> {
+    fn field_access(
+        &self,
+        _env: &Self::Env,
+        _cache: &mut Self::Cache,
+        field: &str,
+    ) -> Option<ExprValue<Self>> {
         match self {
             SimpleObject::Student1 => match field {
                 "age" => Some(ExprValue::Int(18)),

@@ -122,17 +122,21 @@ fn test_pretty_print_through_eval_object() {
     );
 
     let env = TestEnv { students, teachers };
+    let mut cache = <PrettyObjectId as EvalObject>::Cache::default();
 
     // Test student pretty print
     let student = PrettyObjectId::Student(StudentId(1));
     assert_eq!(
-        student.pretty_print(&env),
+        student.pretty_print(&env, &mut cache),
         Some("Alice (age 20)".to_string())
     );
 
     // Test teacher pretty print
     let teacher = PrettyObjectId::Teacher(TeacherId(10));
-    assert_eq!(teacher.pretty_print(&env), Some("Prof. Smith".to_string()));
+    assert_eq!(
+        teacher.pretty_print(&env, &mut cache),
+        Some("Prof. Smith".to_string())
+    );
 }
 
 #[test]
@@ -141,10 +145,11 @@ fn test_pretty_print_with_nonexistent_object() {
         students: HashMap::new(),
         teachers: HashMap::new(),
     };
+    let mut cache = <PrettyObjectId as EvalObject>::Cache::default();
 
     // Object doesn't exist, so ViewBuilder::build returns None
     let student = PrettyObjectId::Student(StudentId(999));
-    assert_eq!(student.pretty_print(&env), None);
+    assert_eq!(student.pretty_print(&env, &mut cache), None);
 }
 
 #[test]
@@ -178,9 +183,13 @@ fn test_pretty_print_with_multiple_hidden_fields() {
         students: HashMap::new(),
         teachers,
     };
+    let mut cache = <PrettyObjectId as EvalObject>::Cache::default();
 
     let teacher = PrettyObjectId::Teacher(TeacherId(10));
-    assert_eq!(teacher.pretty_print(&env), Some("Dr. Jones".to_string()));
+    assert_eq!(
+        teacher.pretty_print(&env, &mut cache),
+        Some("Dr. Jones".to_string())
+    );
 }
 
 #[test]
