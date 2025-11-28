@@ -1804,7 +1804,7 @@ impl LocalEnv {
                 }
             }
 
-            Expr::Union(left, right) | Expr::Inter(left, right) | Expr::Diff(left, right) => {
+            Expr::Union(left, right) | Expr::Diff(left, right) => {
                 let left_type = self.check_expr(
                     global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
                 );

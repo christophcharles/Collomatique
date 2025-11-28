@@ -428,7 +428,6 @@ fn let_statement_with_global_collections() {
 fn let_statement_with_collection_operations() {
     let cases = vec![
         "let f() -> [Int] = [1, 2] union [3, 4];",
-        "let g() -> [Int] = [1, 2, 3] inter [2, 3, 4];",
         "let h() -> [Int] = [1, 2, 3] \\ [2];",
         "let i() -> Bool = 5 in [1, 2, 3, 4, 5];",
     ];

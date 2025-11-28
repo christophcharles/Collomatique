@@ -349,18 +349,6 @@ fn collection_union() {
 }
 
 #[test]
-fn collection_intersection() {
-    let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs inter ys;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        errors.is_empty(),
-        "Collection intersection should work: {:?}",
-        errors
-    );
-}
-
-#[test]
 fn collection_difference() {
     let input = "pub let f(xs: [Int], ys: [Int]) -> [Int] = xs \\ ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -397,7 +385,7 @@ fn collection_ops_unify_int_linexpr() {
 
 #[test]
 fn chained_collection_operations() {
-    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b inter c;";
+    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b \\ c;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

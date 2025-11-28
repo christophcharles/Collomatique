@@ -377,36 +377,6 @@ fn let_expr_with_collection_union() {
 }
 
 #[test]
-fn let_expr_with_collection_intersection() {
-    let input = "pub let f(a: [Int], b: [Int]) -> [Int] = let common = a inter b { common };";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let list_a = ExprValue::List(
-        ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
-    let list_b = ExprValue::List(
-        ExprType::Int,
-        BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
-    );
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![list_a, list_b])
-        .expect("Should evaluate");
-
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3)])
-        )
-    );
-}
-
-#[test]
 fn let_expr_shadowing_parameter() {
     let input = "pub let f(x: Int) -> Int = let x = 10 { x };";
 

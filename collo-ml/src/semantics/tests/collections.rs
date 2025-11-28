@@ -433,14 +433,6 @@ fn union_of_lists() {
 }
 
 #[test]
-fn intersection_of_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] inter [2, 3, 4];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(errors.is_empty(), "Intersection should work: {:?}", errors);
-}
-
-#[test]
 fn difference_of_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] \\ [2];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -461,20 +453,8 @@ fn union_with_coercion() {
 }
 
 #[test]
-fn intersection_with_empty() {
-    let input = "pub let f(xs: [Int]) -> [Int] = xs inter [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        errors.is_empty(),
-        "Intersection with empty should work: {:?}",
-        errors
-    );
-}
-
-#[test]
 fn chained_collection_operations() {
-    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b inter c;";
+    let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a union b \\ c;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

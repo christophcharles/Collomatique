@@ -64,7 +64,7 @@ fn complex_deeply_nested_expressions() {
         "forall x in @[X] { forall y in @[Y] { $V(x, y) <== 1 } }",
 
         // Nested collections
-        "((a union b) \\ c) inter d",
+        "((a union b) \\ c) union d",
         "@[Student] \\ (excluded union suspended)",
 
         // Nested if expressions

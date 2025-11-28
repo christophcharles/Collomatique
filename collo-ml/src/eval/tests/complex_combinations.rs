@@ -235,9 +235,9 @@ fn nested_list_comp_with_reified_vars() {
 #[test]
 fn list_comp_with_collection_ops_in_body() {
     let input = r#"
-    let intersect_with_range(xs: [Int], n: Int) -> [Int] = xs inter [1..n];
+    let diff_with_range(xs: [Int], n: Int) -> [Int] = xs \ [1..n];
     pub let f(lists: [[Int]]) -> [Int] = 
-        [|intersect_with_range(lst, 10)| for lst in lists];
+        [|diff_with_range(lst, 10)| for lst in lists];
     "#;
 
     let vars = HashMap::new();
@@ -261,11 +261,14 @@ fn list_comp_with_collection_ops_in_body() {
         .quick_eval_fn("f", vec![lists])
         .expect("Should evaluate");
 
-    // list1 inter [1..10]: [1, 5] → |2|
-    // list2 inter [1..10]: [3, 8] → |2|
+    // list1 \\ [1..10]: [15] → |1|
+    // list2 \\ [1..10]: [] → |0|
     assert_eq!(
         result,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(2)]))
+        ExprValue::List(
+            ExprType::Int,
+            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(0)])
+        )
     );
 }
 
@@ -772,7 +775,7 @@ fn set_operations_with_comprehensions() {
         [x for x in xs where x < 20];
     
     pub let f(xs: [Int]) -> [Int] = 
-        positive_squares(xs) inter small_numbers(xs);
+        positive_squares(xs) \ small_numbers(xs);
     "#;
 
     let vars = HashMap::new();
@@ -783,6 +786,7 @@ fn set_operations_with_comprehensions() {
         ExprType::Int,
         BTreeSet::from([
             ExprValue::Int(-2),
+            ExprValue::Int(1),
             ExprValue::Int(3),
             ExprValue::Int(5),
             ExprValue::Int(10),
@@ -793,10 +797,16 @@ fn set_operations_with_comprehensions() {
         .quick_eval_fn("f", vec![list])
         .expect("Should evaluate");
 
-    // positive_squares: [9, 25, 100]
-    // small_numbers: [3, 5, 10]
-    // intersection: [] (no overlap)
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    // positive_squares: [1, 9, 25, 100]
+    // small_numbers: [1, 3, 5, 10]
+    // diff: [9,25,100]
+    assert_eq!(
+        result,
+        ExprValue::List(
+            ExprType::Int,
+            BTreeSet::from([ExprValue::Int(9), ExprValue::Int(25), ExprValue::Int(100),])
+        )
+    );
 }
 
 #[test]

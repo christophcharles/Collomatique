@@ -253,19 +253,6 @@ fn collection_union_unifies_types() {
 }
 
 #[test]
-fn collection_inter_unifies_types() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] inter [$V(x)];";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
-
-    assert!(
-        errors.is_empty(),
-        "Inter should unify [Int] and [LinExpr]: {:?}",
-        errors
-    );
-}
-
-#[test]
 fn collection_diff_unifies_types() {
     let vars = var_with_args("V", vec![ExprType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] \\ [$V(x)];";
