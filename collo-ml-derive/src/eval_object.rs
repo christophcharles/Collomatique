@@ -12,6 +12,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let env_type =
         extract_env_type(&input.attrs).expect("EvalObject requires #[env(YourEnvType)] attribute");
 
+    // Extract cache configuration from #[cached] or #[cached(Name)]
+    let cache_config = extract_cache_attribute(&input.attrs, enum_name);
+
     // Make sure it's an enum
     let variants = match &input.data {
         Data::Enum(data_enum) => &data_enum.variants,
@@ -28,15 +31,24 @@ pub fn derive(input: TokenStream) -> TokenStream {
     // Generate From<IdType> implementations
     let from_impls = generate_from_impls(enum_name, &variant_info);
 
+    // Generate cache struct if needed
+    let cache_struct = if let Some(ref config) = cache_config {
+        generate_cache_struct(config, &variant_info, &env_type, enum_name)
+    } else {
+        quote! {}
+    };
+
     // Generate helper functions
     let helper_functions = generate_helper_functions(enum_name, &variant_info);
 
     // Generate EvalObject implementation
-    let eval_object_impl = generate_eval_object_impl(enum_name, &env_type, &variant_info);
+    let eval_object_impl =
+        generate_eval_object_impl(enum_name, &env_type, &variant_info, &cache_config);
 
     // Combine everything
     let expanded = quote! {
         #from_impls
+        #cache_struct
         #helper_functions
         #eval_object_impl
     };
@@ -51,6 +63,11 @@ struct VariantInfo {
     dsl_type_name: String,    // e.g., "Student" or custom from #[name("...")]
 }
 
+// Cache configuration
+struct CacheConfig {
+    cache_name: syn::Ident,
+}
+
 fn extract_env_type(attrs: &[Attribute]) -> Option<syn::Type> {
     for attr in attrs {
         if attr.path().is_ident("env") {
@@ -58,6 +75,27 @@ fn extract_env_type(attrs: &[Attribute]) -> Option<syn::Type> {
                 if let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone()) {
                     return Some(ty);
                 }
+            }
+        }
+    }
+    None
+}
+
+fn extract_cache_attribute(attrs: &[Attribute], enum_name: &syn::Ident) -> Option<CacheConfig> {
+    for attr in attrs {
+        if attr.path().is_ident("cached") {
+            // Check if it has a parameter: #[cached(Name)]
+            if let Meta::List(meta_list) = &attr.meta {
+                if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
+                    return Some(CacheConfig { cache_name: ident });
+                }
+            } else {
+                // No parameter: #[cached], auto-generate name
+                let cache_name = syn::Ident::new(
+                    &format!("{}Cache", enum_name),
+                    proc_macro2::Span::call_site(),
+                );
+                return Some(CacheConfig { cache_name });
             }
         }
     }
@@ -184,7 +222,16 @@ fn generate_eval_object_impl(
     enum_name: &syn::Ident,
     env_type: &syn::Type,
     variants: &[VariantInfo],
+    cache_config: &Option<CacheConfig>,
 ) -> proc_macro2::TokenStream {
+    // Determine cache type
+    let cache_type = if let Some(config) = cache_config {
+        let cache_name = &config.cache_name;
+        quote! { #cache_name }
+    } else {
+        quote! { () }
+    };
+
     // Generate objects_with_typ implementation
     let objects_with_typ_arms = variants.iter().map(|info| {
         let dsl_name = &info.dsl_type_name;
@@ -211,19 +258,12 @@ fn generate_eval_object_impl(
         }
     });
 
-    // Generate field_access implementation
-    let field_access_arms = variants.iter().map(|info| {
-        let variant_name = &info.variant_name;
-        let id_type = &info.id_type;
-
-        quote! {
-            #enum_name::#variant_name(id) => {
-                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
-                let field_value = obj.get_field(field)?;
-                Some(Self::__collo_ml_convert_field_value(field_value))
-            }
-        }
-    });
+    // Generate field_access implementation (with or without caching)
+    let field_access_arms = if cache_config.is_some() {
+        generate_cached_field_access_arms(enum_name, env_type, variants)
+    } else {
+        generate_uncached_field_access_arms(enum_name, env_type, variants)
+    };
 
     // Generate type_schemas implementation
     let type_schemas_entries = variants.iter().map(|info| {
@@ -241,23 +281,17 @@ fn generate_eval_object_impl(
         }
     });
 
-    // Generate pretty_print implementation
-    let pretty_print_arms = variants.iter().map(|info| {
-        let variant_name = &info.variant_name;
-        let id_type = &info.id_type;
-
-        quote! {
-            #enum_name::#variant_name(id) => {
-                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
-                obj.pretty_print()
-            }
-        }
-    });
+    // Generate pretty_print implementation (with or without caching)
+    let pretty_print_arms = if cache_config.is_some() {
+        generate_cached_pretty_print_arms(enum_name, env_type, variants)
+    } else {
+        generate_uncached_pretty_print_arms(enum_name, env_type, variants)
+    };
 
     quote! {
         impl ::collo_ml::EvalObject for #enum_name {
             type Env = #env_type;
-            type Cache = ();
+            type Cache = #cache_type;
 
             fn objects_with_typ(env: &Self::Env, name: &str) -> std::collections::BTreeSet<Self> {
                 match name {
@@ -272,7 +306,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn field_access(&self, env: &Self::Env, _cache: &mut Self::Cache, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
+            fn field_access(&self, env: &Self::Env, cache: &mut Self::Cache, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
                 match self {
                     #(#field_access_arms,)*
                 }
@@ -284,11 +318,173 @@ fn generate_eval_object_impl(
                 map
             }
 
-            fn pretty_print(&self, env: &Self::Env, _cache: &mut Self::Cache) -> Option<String> {
+            fn pretty_print(&self, env: &Self::Env, cache: &mut Self::Cache) -> Option<String> {
                 match self {
                     #(#pretty_print_arms,)*
                 }
             }
         }
     }
+}
+
+fn generate_cache_struct(
+    config: &CacheConfig,
+    variants: &[VariantInfo],
+    env_type: &syn::Type,
+    enum_name: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    let cache_name = &config.cache_name;
+
+    // Generate cache fields for each variant
+    let cache_field_defs = variants.iter().map(|info| {
+        let variant_name_lower = info.variant_name.to_string().to_lowercase();
+        let field_name = syn::Ident::new(
+            &format!("{}_cache", variant_name_lower),
+            proc_macro2::Span::call_site(),
+        );
+        let id_type = &info.id_type;
+
+        quote! {
+            #field_name: std::collections::BTreeMap
+                #id_type,
+                <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object
+            >
+        }
+    });
+
+    let cache_field_defaults = variants.iter().map(|info| {
+        let variant_name_lower = info.variant_name.to_string().to_lowercase();
+        let field_name = syn::Ident::new(
+            &format!("{}_cache", variant_name_lower),
+            proc_macro2::Span::call_site(),
+        );
+
+        quote! {
+            #field_name: std::collections::BTreeMap::new()
+        }
+    });
+
+    quote! {
+        pub struct #cache_name {
+            #(#cache_field_defs,)*
+        }
+
+        impl Default for #cache_name {
+            fn default() -> Self {
+                Self {
+                    #(#cache_field_defaults,)*
+                }
+            }
+        }
+    }
+}
+
+fn generate_uncached_field_access_arms(
+    enum_name: &syn::Ident,
+    env_type: &syn::Type,
+    variants: &[VariantInfo],
+) -> Vec<proc_macro2::TokenStream> {
+    variants.iter().map(|info| {
+        let variant_name = &info.variant_name;
+        let id_type = &info.id_type;
+
+        quote! {
+            #enum_name::#variant_name(id) => {
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+                let field_value = obj.get_field(field)?;
+                Some(Self::__collo_ml_convert_field_value(field_value))
+            }
+        }
+    }).collect()
+}
+
+fn generate_cached_field_access_arms(
+    enum_name: &syn::Ident,
+    env_type: &syn::Type,
+    variants: &[VariantInfo],
+) -> Vec<proc_macro2::TokenStream> {
+    variants.iter().map(|info| {
+        let variant_name = &info.variant_name;
+        let id_type = &info.id_type;
+        let variant_name_lower = info.variant_name.to_string().to_lowercase();
+        let cache_field = syn::Ident::new(
+            &format!("{}_cache", variant_name_lower),
+            proc_macro2::Span::call_site()
+        );
+
+        quote! {
+            #enum_name::#variant_name(id) => {
+                // Check cache first
+                if let Some(cached_obj) = cache.#cache_field.get(id) {
+                    let field_value = cached_obj.get_field(field)?;
+                    return Some(Self::__collo_ml_convert_field_value(field_value));
+                }
+
+                // Not in cache, build it
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+
+                // Get field value before moving obj into cache
+                let field_value = obj.get_field(field)?;
+
+                // Store in cache (requires Clone)
+                cache.#cache_field.insert(*id, obj.clone());
+
+                Some(Self::__collo_ml_convert_field_value(field_value))
+            }
+        }
+    }).collect()
+}
+
+fn generate_uncached_pretty_print_arms(
+    enum_name: &syn::Ident,
+    env_type: &syn::Type,
+    variants: &[VariantInfo],
+) -> Vec<proc_macro2::TokenStream> {
+    variants.iter().map(|info| {
+        let variant_name = &info.variant_name;
+        let id_type = &info.id_type;
+
+        quote! {
+            #enum_name::#variant_name(id) => {
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+                obj.pretty_print()
+            }
+        }
+    }).collect()
+}
+
+fn generate_cached_pretty_print_arms(
+    enum_name: &syn::Ident,
+    env_type: &syn::Type,
+    variants: &[VariantInfo],
+) -> Vec<proc_macro2::TokenStream> {
+    variants.iter().map(|info| {
+        let variant_name = &info.variant_name;
+        let id_type = &info.id_type;
+        let variant_name_lower = info.variant_name.to_string().to_lowercase();
+        let cache_field = syn::Ident::new(
+            &format!("{}_cache", variant_name_lower),
+            proc_macro2::Span::call_site()
+        );
+
+        quote! {
+            #enum_name::#variant_name(id) => {
+                // Check cache first
+                if let Some(cached_obj) = cache.#cache_field.get(id) {
+                    return cached_obj.pretty_print();
+                }
+
+                // Not in cache, build it
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+
+                // Get pretty print before moving obj into cache
+                let result = obj.pretty_print();
+
+                // Store in cache (requires Clone)
+                cache.#cache_field.insert(*id, obj.clone());
+
+                result
+            }
+        }
+    }).collect()
 }
