@@ -920,7 +920,7 @@ fn quantifiers_with_collection_ops() {
 
 #[test]
 fn forall_with_collection_ops() {
-    let input = "pub let f() -> Bool = forall x in ([1..5] inter [3..7]) { x >= 3 };";
+    let input = "pub let f() -> Bool = forall x in ([1..5] union [3..7]) { x >= 3 };";
 
     let vars = HashMap::new();
 
@@ -929,8 +929,8 @@ fn forall_with_collection_ops() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // Intersection is [3, 4], all >= 3
-    assert_eq!(result, ExprValue::Bool(true));
+    // Intersection is [1..7], 1 and 2 are less than 3
+    assert_eq!(result, ExprValue::Bool(false));
 }
 
 #[test]

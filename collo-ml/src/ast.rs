@@ -172,7 +172,6 @@ pub enum Expr {
         collection: Box<Spanned<Expr>>,
     },
     Union(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
-    Inter(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Diff(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
     GlobalList(Spanned<TypeName>),
@@ -620,35 +619,14 @@ impl Expr {
         let mut inner = pair.into_inner();
 
         let first = inner.next().unwrap();
-        let mut result = Self::from_inter_expr(first)?;
-
-        while let Some(_union_op) = inner.next() {
-            let right_pair = inner.next().unwrap();
-            let right = Self::from_inter_expr(right_pair)?;
-
-            let result_span = span.clone();
-            result = Expr::Union(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
-            );
-        }
-
-        Ok(result)
-    }
-
-    fn from_inter_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
-        let mut inner = pair.into_inner();
-
-        let first = inner.next().unwrap();
         let mut result = Self::from_diff_expr(first)?;
 
-        while let Some(_inter_op) = inner.next() {
+        while let Some(_union_op) = inner.next() {
             let right_pair = inner.next().unwrap();
             let right = Self::from_diff_expr(right_pair)?;
 
             let result_span = span.clone();
-            result = Expr::Inter(
+            result = Expr::Union(
                 Box::new(Spanned::new(result, result_span.clone())),
                 Box::new(Spanned::new(right, result_span)),
             );

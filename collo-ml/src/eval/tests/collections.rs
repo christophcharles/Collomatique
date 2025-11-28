@@ -374,190 +374,6 @@ fn union_bool_lists() {
     );
 }
 
-// ========== INTER (Intersection) Operator Tests ==========
-
-#[test]
-fn inter_overlapping_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3, 4] inter [2, 3, 4, 5];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)])
-        )
-    );
-}
-
-#[test]
-fn inter_disjoint_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] inter [4, 5, 6];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
-}
-
-#[test]
-fn inter_identical_lists() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] inter [1, 2, 3];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
-    );
-}
-
-#[test]
-fn inter_with_empty_list_left() {
-    let input = "pub let f() -> [Int] = [] inter [1, 2, 3];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
-}
-
-#[test]
-fn inter_with_empty_list_right() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] inter [];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
-}
-
-#[test]
-fn inter_two_empty_lists() {
-    let input = "pub let f() -> [Int] = [] inter [];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
-}
-
-#[test]
-fn inter_with_params() {
-    let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 inter list2;";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let list1 = ExprValue::List(
-        ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
-    let list2 = ExprValue::List(
-        ExprType::Int,
-        BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
-    );
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![list1, list2])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3)])
-        )
-    );
-}
-
-#[test]
-fn inter_chain() {
-    let input = "pub let f() -> [Int] = [1, 2, 3, 4] inter [2, 3, 4, 5] inter [3, 4, 5, 6];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(3), ExprValue::Int(4)])
-        )
-    );
-}
-
-#[test]
-fn inter_with_ranges() {
-    let input = "pub let f() -> [Int] = [1..5] inter [3..7];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(3), ExprValue::Int(4)])
-        )
-    );
-}
-
-#[test]
-fn inter_single_element_overlap() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] inter [3, 4, 5];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(3)]))
-    );
-}
-
 // ========== DIFF (Difference) Operator Tests ==========
 
 #[test]
@@ -759,8 +575,8 @@ fn diff_removing_single_element() {
 // ========== Combined Operations Tests ==========
 
 #[test]
-fn union_then_inter() {
-    let input = "pub let f() -> [Int] = ([1, 2] union [3, 4]) inter [2, 3, 5];";
+fn union_then_diff() {
+    let input = "pub let f() -> [Int] = ([1, 2] union [3, 4]) \\ [2, 3, 5];";
 
     let vars = HashMap::new();
 
@@ -769,40 +585,19 @@ fn union_then_inter() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // [1, 2, 3, 4] inter [2, 3, 5] = [2, 3]
+    // [1, 2, 3, 4] \\ [2, 3, 5] = [1, 4]
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3)])
+            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(4)])
         )
     );
 }
 
 #[test]
-fn inter_then_diff() {
-    let input = "pub let f() -> [Int] = ([1, 2, 3, 4] inter [2, 3, 4, 5]) \\ [3];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    // [2, 3, 4] \\ [3] = [2, 4]
-    assert_eq!(
-        result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(4)])
-        )
-    );
-}
-
-#[test]
-fn union_diff_inter_combination() {
-    let input = "pub let f() -> [Int] = ([1, 2, 3] union [4, 5]) \\ [2, 4] inter [1, 3, 5];";
+fn union_diff_combination() {
+    let input = "pub let f() -> [Int] = ([1, 2, 3] union [4, 5]) \\ [2, 4] union [1, 3, 5];";
 
     let vars = HashMap::new();
 
@@ -812,7 +607,7 @@ fn union_diff_inter_combination() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
     // [1, 2, 3, 4, 5] \\ [2, 4] = [1, 3, 5]
-    // [1, 3, 5] inter [1, 3, 5] = [1, 3, 5]
+    // [1, 3, 5] union [1, 3, 5] = [1, 3, 5]
     assert_eq!(
         result,
         ExprValue::List(
@@ -837,25 +632,6 @@ fn in_with_union_result() {
 
     let result_false = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
-        .expect("Should evaluate");
-    assert_eq!(result_false, ExprValue::Bool(false));
-}
-
-#[test]
-fn in_with_inter_result() {
-    let input = "pub let f(x: Int) -> Bool = x in ([1, 2, 3] inter [2, 3, 4]);";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(2)])
-        .expect("Should evaluate");
-    assert_eq!(result_true, ExprValue::Bool(true));
-
-    let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -892,21 +668,6 @@ fn cardinality_of_union() {
         .expect("Should evaluate");
     // union removes duplicates, so [1, 2, 3] has cardinality 3
     assert_eq!(result, ExprValue::Int(3));
-}
-
-#[test]
-fn cardinality_of_inter() {
-    let input = "pub let f() -> Int = |[1, 2, 3] inter [2, 3, 4]|;";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    // intersection gives [2, 3], cardinality is 2
-    assert_eq!(result, ExprValue::Int(2));
 }
 
 #[test]

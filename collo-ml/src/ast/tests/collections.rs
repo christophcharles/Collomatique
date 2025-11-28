@@ -376,20 +376,6 @@ fn parse_union_operation() {
 }
 
 #[test]
-fn parse_intersection_operation() {
-    let input = "let f() -> [Student] = @[Student] inter @[Athlete];";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => {
-            assert!(matches!(body.node, Expr::Inter(_, _)));
-        }
-        _ => panic!("Expected Let statement"),
-    }
-}
-
-#[test]
 fn parse_difference_operation() {
     let input = "let f() -> [Student] = @[Student] \\ excluded;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
@@ -423,35 +409,14 @@ fn parse_chained_union() {
 }
 
 #[test]
-fn parse_chained_intersection() {
-    let input = "let f() -> [Int] = a inter b inter c;";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => {
-            // Should parse as (a inter b) inter c (left-associative)
-            match &body.node {
-                Expr::Inter(left, right) => {
-                    assert!(matches!(left.node, Expr::Inter(_, _)));
-                    assert!(matches!(right.node, Expr::Ident(_)));
-                }
-                _ => panic!("Expected Inter expr"),
-            }
-        }
-        _ => panic!("Expected Let statement"),
-    }
-}
-
-#[test]
 fn parse_mixed_set_operations() {
-    let input = "let f() -> [Int] = a union b inter c;";
+    let input = "let f() -> [Int] = a union b \\ c;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            // union has precedence over inter
+            // union has precedence over \\
             assert!(matches!(body.node, Expr::Union(_, _)));
         }
         _ => panic!("Expected Let statement"),

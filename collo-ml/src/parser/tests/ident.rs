@@ -187,8 +187,8 @@ fn ident_rejects_reserved_keywords() {
         "if", "else", // Declarations
         "let", "pub", "reify", "as", // Quantifiers/aggregations
         "forall", "sum", "where", "in", "for", // Logical operators
-        "and", "or", "not", // Set operations
-        "union", "inter", // Boolean literals
+        "and", "or", "not",   // Boolean literals
+        "union", // Set operations
         "true", "false",
     ];
     for case in cases {

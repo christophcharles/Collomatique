@@ -42,7 +42,6 @@ fn cardinality_accepts_set_operations() {
     let cases = vec![
         "|@[Student] \\ excluded|",
         "|a union b|",
-        "|group1 inter group2|",
         "|(a union b) \\ c|",
     ];
     for case in cases {
