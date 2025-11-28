@@ -174,7 +174,7 @@ fn generate_helper_functions(
         let dsl_name = &info.dsl_type_name;
 
         quote! {
-            id if id == std::any::TypeId::of::<#id_type>() => {
+            id if id == ::std::any::TypeId::of::<#id_type>() => {
                 ::collo_ml::ExprType::Object(#dsl_name.to_string())
             }
         }
@@ -293,10 +293,10 @@ fn generate_eval_object_impl(
             type Env = #env_type;
             type Cache = #cache_type;
 
-            fn objects_with_typ(env: &Self::Env, name: &str) -> std::collections::BTreeSet<Self> {
+            fn objects_with_typ(env: &Self::Env, name: &str) -> ::std::collections::BTreeSet<Self> {
                 match name {
                     #(#objects_with_typ_arms,)*
-                    _ => std::collections::BTreeSet::new(),
+                    _ => ::std::collections::BTreeSet::new(),
                 }
             }
 
@@ -312,8 +312,8 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn type_schemas() -> std::collections::HashMap<String, std::collections::HashMap<String, ::collo_ml::ExprType>> {
-                let mut map = std::collections::HashMap::new();
+            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::ExprType>> {
+                let mut map = ::std::collections::HashMap::new();
                 #(#type_schemas_entries)*
                 map
             }
@@ -345,7 +345,7 @@ fn generate_cache_struct(
         let id_type = &info.id_type;
 
         quote! {
-            #field_name: std::collections::BTreeMap<
+            #field_name: ::std::collections::BTreeMap<
                 #id_type,
                 <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object
             >
@@ -360,7 +360,7 @@ fn generate_cache_struct(
         );
 
         quote! {
-            #field_name: std::collections::BTreeMap::new()
+            #field_name: ::std::collections::BTreeMap::new()
         }
     });
 
