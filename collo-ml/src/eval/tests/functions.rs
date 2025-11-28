@@ -106,7 +106,7 @@ fn fn_multi_call() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42)])
+            Vec::from([ExprValue::Int(0), ExprValue::Int(42)])
         )
     );
 }
@@ -228,7 +228,7 @@ fn fn_returning_list() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(3),
@@ -543,7 +543,7 @@ fn fn_with_list_comprehension() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(4), ExprValue::Int(9)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(4), ExprValue::Int(9)])
         )
     );
 }
@@ -567,7 +567,7 @@ fn fn_with_collection_operations() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
+            Vec::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
         )
     );
 }
@@ -702,7 +702,7 @@ fn helper_fn_for_transformation() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(3), ExprValue::Int(5), ExprValue::Int(7)])
+            Vec::from([ExprValue::Int(3), ExprValue::Int(5), ExprValue::Int(7)])
         )
     );
 }
@@ -830,7 +830,7 @@ fn fn_call_in_quantifier() {
 
     let all_valid = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(5), ExprValue::Int(9)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(5), ExprValue::Int(9)]),
     );
     let result_true = checked_ast
         .quick_eval_fn("f", vec![all_valid])
@@ -839,7 +839,7 @@ fn fn_call_in_quantifier() {
 
     let has_invalid = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(15)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(15)]),
     );
     let result_false = checked_ast
         .quick_eval_fn("f", vec![has_invalid])
@@ -860,7 +860,7 @@ fn fn_call_in_list_comprehension() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
+        Vec::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
     );
     let result = checked_ast
         .quick_eval_fn("f", vec![list])
@@ -869,7 +869,7 @@ fn fn_call_in_list_comprehension() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(4), ExprValue::Int(9), ExprValue::Int(16)])
+            Vec::from([ExprValue::Int(4), ExprValue::Int(9), ExprValue::Int(16)])
         )
     );
 }

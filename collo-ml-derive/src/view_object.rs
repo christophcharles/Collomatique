@@ -143,8 +143,8 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
             match type_name_str.as_str() {
                 "i32" => quote! { ::collo_ml::traits::FieldType::Int },
                 "bool" => quote! { ::collo_ml::traits::FieldType::Bool },
-                "BTreeSet" => {
-                    // Extract the inner type from BTreeSet<T>
+                "Vec" => {
+                    // Extract the inner type from Vec<T>
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
                             let inner_expr_type = type_to_field_type(inner_ty);
@@ -153,7 +153,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                             };
                         }
                     }
-                    panic!("BTreeSet must have a type parameter");
+                    panic!("Vec must have a type parameter");
                 }
                 _ => {
                     // Assume this is an object
@@ -181,7 +181,7 @@ fn generate_field_value(
                 "bool" => quote! {
                     ::collo_ml::traits::FieldValue::Bool(#field_name.clone()),
                 },
-                "BTreeSet" => {
+                "Vec" => {
                     // Need to convert collection elements
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
@@ -200,7 +200,7 @@ fn generate_field_value(
                             };
                         }
                     }
-                    panic!("BTreeSet must have type parameter");
+                    panic!("Vec must have type parameter");
                 }
                 _ => {
                     // It's an object ID - convert using Into

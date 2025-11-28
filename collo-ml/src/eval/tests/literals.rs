@@ -71,7 +71,7 @@ fn boolean_list() {
         result,
         ExprValue::List(
             ExprType::Bool,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Bool(true),
                 ExprValue::Bool(false),
                 ExprValue::Bool(true),
@@ -95,7 +95,7 @@ fn number_list() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)])
+            Vec::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)])
         )
     );
 }
@@ -127,7 +127,7 @@ fn cardinality_of_list_in_param() {
             "f",
             vec![ExprValue::List(
                 ExprType::Int,
-                BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)]),
+                Vec::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)]),
             )],
         )
         .expect("Should evaluate");
@@ -149,7 +149,7 @@ fn range() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(-3),
                 ExprValue::Int(-2),
                 ExprValue::Int(-1),
@@ -171,7 +171,7 @@ fn empty_range() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn empty_range_with_end_below_start() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -201,6 +201,6 @@ fn range_with_one_element() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(4)]))
+        ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(4)]))
     );
 }

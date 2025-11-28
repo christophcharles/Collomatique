@@ -145,7 +145,7 @@ fn test_collections_of_ints() {
     #[eval_object(TestObjectId)]
     struct StudentWithGrades {
         name_length: i32,
-        grades: BTreeSet<i32>,
+        grades: Vec<i32>,
     }
 
     let schema = StudentWithGrades::field_schema();
@@ -155,10 +155,10 @@ fn test_collections_of_ints() {
         Some(&FieldType::List(Box::new(FieldType::Int)))
     );
 
-    let mut grades = BTreeSet::new();
-    grades.insert(85);
-    grades.insert(90);
-    grades.insert(78);
+    let mut grades = Vec::new();
+    grades.push(85);
+    grades.push(90);
+    grades.push(78);
 
     let student = StudentWithGrades {
         name_length: 5,
@@ -180,7 +180,7 @@ fn test_collections_of_bools() {
     #[derive(ViewObject)]
     #[eval_object(TestObjectId)]
     struct StudentWithFlags {
-        flags: BTreeSet<bool>,
+        flags: Vec<bool>,
     }
 
     let schema = StudentWithFlags::field_schema();
@@ -189,9 +189,9 @@ fn test_collections_of_bools() {
         Some(&FieldType::List(Box::new(FieldType::Bool)))
     );
 
-    let mut flags = BTreeSet::new();
-    flags.insert(true);
-    flags.insert(false);
+    let mut flags = Vec::new();
+    flags.push(true);
+    flags.push(false);
 
     let student = StudentWithFlags { flags };
 
@@ -211,7 +211,7 @@ fn test_collections_of_objects() {
     #[eval_object(TestObjectId)]
     struct StudentWithCourses {
         age: i32,
-        courses: BTreeSet<CourseId>,
+        courses: Vec<CourseId>,
     }
 
     let schema = StudentWithCourses::field_schema();
@@ -223,16 +223,16 @@ fn test_collections_of_objects() {
         >()))))
     );
 
-    let mut courses = BTreeSet::new();
-    courses.insert(CourseId(101));
-    courses.insert(CourseId(102));
+    let mut courses = Vec::new();
+    courses.push(CourseId(101));
+    courses.push(CourseId(102));
 
     let student = StudentWithCourses { age: 20, courses };
 
     if let Some(FieldValue::List(_, values)) = student.get_field("courses") {
-        assert_eq!(values.len(), 1); // All types fuse into one possible object in this simple test
-                                     // All should be converted to TestObjectId
-        assert!(values.contains(&FieldValue::Object(TestObjectId)));
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0], FieldValue::Object(TestObjectId));
+        assert_eq!(values[1], FieldValue::Object(TestObjectId));
     } else {
         panic!("Expected List of Objects");
     }
@@ -310,8 +310,8 @@ fn test_complex_structure() {
         age: i32,
         enrolled: bool,
         room: RoomId,
-        courses: BTreeSet<CourseId>,
-        grades: BTreeSet<i32>,
+        courses: Vec<CourseId>,
+        grades: Vec<i32>,
         #[hidden]
         _internal_id: usize,
     }
@@ -411,14 +411,14 @@ fn test_pretty_print_with_debug_output() {
     assert!(!schema.contains_key("name"));
 }
 
-// Test 13: Recursive BTreeSet
+// Test 13: Recursive Vec
 #[test]
-fn test_schemas_for_recursive_btreeset() {
+fn test_schemas_for_recursive_vecs() {
     #[derive(ViewObject)]
     #[eval_object(TestObjectId)]
     struct ComplexStudent {
-        ages: BTreeSet<BTreeSet<i32>>,
-        courses: BTreeSet<BTreeSet<CourseId>>,
+        ages: Vec<Vec<i32>>,
+        courses: Vec<Vec<CourseId>>,
     }
 
     let schema = ComplexStudent::field_schema();
@@ -439,32 +439,48 @@ fn test_schemas_for_recursive_btreeset() {
     );
 }
 
-// Test 14: Recursive BTreeSet
+// Test 14: Recursive Vec
 #[test]
-fn test_get_field_for_recursive_btreeset() {
+fn test_get_field_for_recursive_vecs() {
     #[derive(ViewObject)]
     #[eval_object(TestObjectId)]
     struct ComplexStudent {
-        ages: BTreeSet<BTreeSet<i32>>,
-        courses: BTreeSet<BTreeSet<CourseId>>,
+        ages: Vec<Vec<i32>>,
+        courses: Vec<Vec<CourseId>>,
     }
 
-    let mut courses = BTreeSet::new();
-    courses.insert(BTreeSet::from([CourseId(101), CourseId(201)]));
-    courses.insert(BTreeSet::from([CourseId(102), CourseId(202)]));
+    let mut courses = Vec::new();
+    courses.push(Vec::from([CourseId(101), CourseId(201)]));
+    courses.push(Vec::from([CourseId(102), CourseId(202)]));
 
-    let mut ages = BTreeSet::new();
-    ages.insert(BTreeSet::from([20, 35]));
-    ages.insert(BTreeSet::from([50, 75]));
+    let mut ages = Vec::new();
+    ages.push(Vec::from([20, 35]));
+    ages.push(Vec::from([50, 75]));
 
     let student = ComplexStudent { ages, courses };
 
     if let Some(FieldValue::List(_, values)) = student.get_field("courses") {
-        assert_eq!(values.len(), 1);
-        assert!(values.contains(&FieldValue::List(
-            FieldType::Object(TypeId::of::<CourseId>()),
-            BTreeSet::from([FieldValue::Object(TestObjectId)]),
-        )));
+        assert_eq!(values.len(), 2);
+        assert_eq!(
+            values[0],
+            FieldValue::List(
+                FieldType::Object(TypeId::of::<CourseId>()),
+                Vec::from([
+                    FieldValue::Object(TestObjectId),
+                    FieldValue::Object(TestObjectId)
+                ]),
+            )
+        );
+        assert_eq!(
+            values[1],
+            FieldValue::List(
+                FieldType::Object(TypeId::of::<CourseId>()),
+                Vec::from([
+                    FieldValue::Object(TestObjectId),
+                    FieldValue::Object(TestObjectId)
+                ]),
+            )
+        );
     } else {
         panic!("Expected List of Objects");
     }

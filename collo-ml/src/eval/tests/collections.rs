@@ -73,7 +73,7 @@ fn in_with_param_list() {
 
     let list_with = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(5), ExprValue::Int(10)]),
+        Vec::from([ExprValue::Int(5), ExprValue::Int(10)]),
     );
     let result_true = checked_ast
         .quick_eval_fn("f", vec![list_with])
@@ -82,7 +82,7 @@ fn in_with_param_list() {
 
     let list_without = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(10)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(10)]),
     );
     let result_false = checked_ast
         .quick_eval_fn("f", vec![list_without])
@@ -100,7 +100,7 @@ fn in_with_both_params() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result_true = checked_ast
@@ -183,7 +183,7 @@ fn union_two_lists() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(3),
@@ -206,13 +206,14 @@ fn union_overlapping_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // Since lists are sets, duplicates are removed
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
+                ExprValue::Int(2),
+                ExprValue::Int(3),
                 ExprValue::Int(2),
                 ExprValue::Int(3),
                 ExprValue::Int(4),
@@ -236,7 +237,7 @@ fn union_with_empty_list_left() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -256,7 +257,7 @@ fn union_with_empty_list_right() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -272,7 +273,7 @@ fn union_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -285,11 +286,11 @@ fn union_with_params() {
 
     let list1 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list2 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(3), ExprValue::Int(4)]),
+        Vec::from([ExprValue::Int(3), ExprValue::Int(4)]),
     );
 
     let result = checked_ast
@@ -299,7 +300,7 @@ fn union_with_params() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(3),
@@ -324,7 +325,7 @@ fn union_chain() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -344,7 +345,7 @@ fn union_with_ranges() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(5),
@@ -369,7 +370,7 @@ fn union_bool_lists() {
         result,
         ExprValue::List(
             ExprType::Bool,
-            BTreeSet::from([ExprValue::Bool(true), ExprValue::Bool(false)])
+            Vec::from([ExprValue::Bool(true), ExprValue::Bool(false)])
         )
     );
 }
@@ -391,7 +392,7 @@ fn diff_disjoint_lists() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -411,7 +412,7 @@ fn diff_overlapping_lists() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(4)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
         )
     );
 }
@@ -427,7 +428,7 @@ fn diff_identical_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -441,7 +442,7 @@ fn diff_with_empty_list_left() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -459,7 +460,7 @@ fn diff_with_empty_list_right() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -475,7 +476,7 @@ fn diff_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -488,7 +489,7 @@ fn diff_with_params() {
 
     let list1 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([
+        Vec::from([
             ExprValue::Int(1),
             ExprValue::Int(2),
             ExprValue::Int(3),
@@ -497,7 +498,7 @@ fn diff_with_params() {
     );
     let list2 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(2), ExprValue::Int(4)]),
+        Vec::from([ExprValue::Int(2), ExprValue::Int(4)]),
     );
 
     let result = checked_ast
@@ -507,7 +508,7 @@ fn diff_with_params() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
         )
     );
 }
@@ -527,7 +528,7 @@ fn diff_partial_overlap() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2)])
         )
     );
 }
@@ -547,7 +548,7 @@ fn diff_with_ranges() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(5)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(5)])
         )
     );
 }
@@ -567,7 +568,7 @@ fn diff_removing_single_element() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
         )
     );
 }
@@ -590,7 +591,7 @@ fn union_then_diff() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(4)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
         )
     );
 }
@@ -607,12 +608,19 @@ fn union_diff_combination() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
     // [1, 2, 3, 4, 5] - [2, 4] = [1, 3, 5]
-    // [1, 3, 5] + [1, 3, 5] = [1, 3, 5]
+    // [1, 3, 5] + [1, 3, 5] = [1, 3, 5, 1, 3, 5]
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(3), ExprValue::Int(5)])
+            Vec::from([
+                ExprValue::Int(1),
+                ExprValue::Int(3),
+                ExprValue::Int(5),
+                ExprValue::Int(1),
+                ExprValue::Int(3),
+                ExprValue::Int(5)
+            ])
         )
     );
 }
@@ -666,8 +674,7 @@ fn cardinality_of_union() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // + removes duplicates, so [1, 2, 3] has cardinality 3
-    assert_eq!(result, ExprValue::Int(3));
+    assert_eq!(result, ExprValue::Int(4));
 }
 
 #[test]
@@ -700,7 +707,7 @@ fn collection_operations_with_if() {
         result_true,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 
@@ -709,6 +716,6 @@ fn collection_operations_with_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(4)]))
+        ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(4)]))
     );
 }

@@ -52,7 +52,7 @@ impl EvalObject for SimpleObject {
                 "num" => Some(ExprValue::Int(406)),
                 "students" => Some(ExprValue::List(
                     ExprType::Object("Student".into()),
-                    BTreeSet::from([ExprValue::Object(SimpleObject::Student1)]),
+                    Vec::from([ExprValue::Object(SimpleObject::Student1)]),
                 )),
                 "first_student" => Some(ExprValue::Object(SimpleObject::Student1)),
                 _ => None,
@@ -61,7 +61,7 @@ impl EvalObject for SimpleObject {
                 "num" => Some(ExprValue::Int(406)),
                 "students" => Some(ExprValue::List(
                     ExprType::Object("Student".into()),
-                    BTreeSet::from([
+                    Vec::from([
                         ExprValue::Object(SimpleObject::Student1),
                         ExprValue::Object(SimpleObject::Student2),
                     ]),
@@ -162,7 +162,7 @@ fn global_list() {
         result,
         ExprValue::List(
             ExprType::Object("Student".into()),
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Object(SimpleObject::Student1),
                 ExprValue::Object(SimpleObject::Student2),
             ])

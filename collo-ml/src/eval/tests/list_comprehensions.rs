@@ -17,7 +17,7 @@ fn list_comp_simple_identity() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -37,7 +37,7 @@ fn list_comp_with_arithmetic() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
+            Vec::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
         )
     );
 }
@@ -57,7 +57,7 @@ fn list_comp_with_addition() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(11), ExprValue::Int(12), ExprValue::Int(13)])
+            Vec::from([ExprValue::Int(11), ExprValue::Int(12), ExprValue::Int(13)])
         )
     );
 }
@@ -78,7 +78,7 @@ fn list_comp_with_range() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(4),
                 ExprValue::Int(9),
@@ -98,7 +98,7 @@ fn list_comp_with_param() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(5), ExprValue::Int(10)]),
+        Vec::from([ExprValue::Int(5), ExprValue::Int(10)]),
     );
 
     let result = checked_ast
@@ -108,7 +108,7 @@ fn list_comp_with_param() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(10), ExprValue::Int(20)])
+            Vec::from([ExprValue::Int(10), ExprValue::Int(20)])
         )
     );
 }
@@ -128,7 +128,12 @@ fn list_comp_boolean_expression() {
         result,
         ExprValue::List(
             ExprType::Bool,
-            BTreeSet::from([ExprValue::Bool(false), ExprValue::Bool(true)])
+            Vec::from([
+                ExprValue::Bool(false),
+                ExprValue::Bool(false),
+                ExprValue::Bool(true),
+                ExprValue::Bool(true)
+            ])
         )
     );
 }
@@ -144,10 +149,13 @@ fn list_comp_constant_body() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // All elements are 42, set deduplicates
+    // All elements are 42
     assert_eq!(
         result,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(42)]))
+        ExprValue::List(
+            ExprType::Int,
+            Vec::from([ExprValue::Int(42), ExprValue::Int(42), ExprValue::Int(42)])
+        )
     );
 }
 
@@ -168,7 +176,7 @@ fn list_comp_with_simple_filter() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(4), ExprValue::Int(5)])
+            Vec::from([ExprValue::Int(4), ExprValue::Int(5)])
         )
     );
 }
@@ -188,7 +196,7 @@ fn list_comp_filter_even_numbers() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(2),
                 ExprValue::Int(4),
                 ExprValue::Int(6),
@@ -214,7 +222,7 @@ fn list_comp_filter_with_transformation() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(2),
                 ExprValue::Int(6),
                 ExprValue::Int(10),
@@ -236,7 +244,7 @@ fn list_comp_filter_no_matches() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -254,7 +262,7 @@ fn list_comp_filter_all_match() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -274,7 +282,7 @@ fn list_comp_filter_complex_condition() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(4), ExprValue::Int(5), ExprValue::Int(6),])
+            Vec::from([ExprValue::Int(4), ExprValue::Int(5), ExprValue::Int(6),])
         )
     );
 }
@@ -294,7 +302,7 @@ fn list_comp_filter_with_param() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(6),
                 ExprValue::Int(7),
                 ExprValue::Int(8),
@@ -322,7 +330,7 @@ fn list_comp_two_vars_simple() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(11),
                 ExprValue::Int(21),
                 ExprValue::Int(12),
@@ -348,7 +356,7 @@ fn list_comp_two_vars_multiplication() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(8),
                 ExprValue::Int(10),
                 ExprValue::Int(12),
@@ -369,12 +377,17 @@ fn list_comp_two_vars_with_ranges() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // (1+10), (1+11), (2+10), (2+11) = 11, 12, 12, 13 -> deduplicated: 11, 12, 13
+    // (1+10), (1+11), (2+10), (2+11) = 11, 12, 12, 13
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(11), ExprValue::Int(12), ExprValue::Int(13)])
+            Vec::from([
+                ExprValue::Int(11),
+                ExprValue::Int(12),
+                ExprValue::Int(12),
+                ExprValue::Int(13)
+            ])
         )
     );
 }
@@ -391,15 +404,23 @@ fn list_comp_two_vars_with_filter() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
     // Pairs where x+y < 6: many combinations, results are 2, 3, 4, 5
+    // But order matters now! It gives:
+    // 2, 3, 4, 5, 3, 4, 5, 4, 5, 5
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(2),
                 ExprValue::Int(3),
                 ExprValue::Int(4),
                 ExprValue::Int(5),
+                ExprValue::Int(3),
+                ExprValue::Int(4),
+                ExprValue::Int(5),
+                ExprValue::Int(4),
+                ExprValue::Int(5),
+                ExprValue::Int(5)
             ])
         )
     );
@@ -422,7 +443,7 @@ fn list_comp_two_vars_filter_on_first() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(3),
                 ExprValue::Int(6),
                 ExprValue::Int(4),
@@ -449,7 +470,7 @@ fn list_comp_two_vars_filter_on_second() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(3),
                 ExprValue::Int(5),
                 ExprValue::Int(4),
@@ -477,7 +498,7 @@ fn list_comp_two_vars_filter_on_both() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(3),
                 ExprValue::Int(6),
                 ExprValue::Int(4),
@@ -499,12 +520,17 @@ fn list_comp_cartesian_product() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
     // Body only uses x, but iterates over y too
-    // Results: 1 (twice), 2 (twice) -> deduplicated to 1, 2
+    // Results: 1 (twice), 2 (twice)
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)])
+            Vec::from([
+                ExprValue::Int(1),
+                ExprValue::Int(1),
+                ExprValue::Int(2),
+                ExprValue::Int(2)
+            ])
         )
     );
 }
@@ -524,7 +550,7 @@ fn list_comp_with_dependent_limit() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(2),
                 ExprValue::Int(3),
                 ExprValue::Int(4),
@@ -551,7 +577,7 @@ fn list_comp_over_union() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(2),
                 ExprValue::Int(4),
                 ExprValue::Int(6),
@@ -577,7 +603,7 @@ fn list_comp_over_difference() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(2), ExprValue::Int(6)])
+            Vec::from([ExprValue::Int(2), ExprValue::Int(6)])
         )
     );
 }
@@ -698,7 +724,7 @@ fn list_comp_with_if_expression_body() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(6),
@@ -734,12 +760,19 @@ fn list_comp_two_vars_one_used() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    // Creates 6 copies (2*3) but set deduplicates to [1, 2]
+    // Creates 6 copies (2*3)
     assert_eq!(
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)])
+            Vec::from([
+                ExprValue::Int(1),
+                ExprValue::Int(1),
+                ExprValue::Int(1),
+                ExprValue::Int(2),
+                ExprValue::Int(2),
+                ExprValue::Int(2)
+            ])
         )
     );
 }
@@ -762,7 +795,7 @@ fn list_comp_with_multiple_operations() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(8), ExprValue::Int(10)])
+            Vec::from([ExprValue::Int(8), ExprValue::Int(10), ExprValue::Int(10)])
         )
     );
 }

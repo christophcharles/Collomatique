@@ -324,7 +324,7 @@ fn explicit_cast_list_type() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
 }
 
 #[test]
@@ -693,7 +693,7 @@ fn cast_empty_list_typed() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(ExprType::LinExpr, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(ExprType::LinExpr, Vec::new()));
 }
 
 #[test]
