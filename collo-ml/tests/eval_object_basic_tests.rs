@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprType, ExprValue, FieldType, FieldValue, ViewBuilder, ViewObject};
+use collo_ml::{EvalObject, ExprType, ExprValue, ViewBuilder, ViewObject};
 
 // ============================================================================
 // Setup: Define our environment and ID types

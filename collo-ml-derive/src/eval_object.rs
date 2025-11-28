@@ -137,7 +137,7 @@ fn generate_helper_functions(
 
         quote! {
             id if id == std::any::TypeId::of::<#id_type>() => {
-                ExprType::Object(#dsl_name.to_string())
+                ::collo_ml::ExprType::Object(#dsl_name.to_string())
             }
         }
     });
@@ -145,34 +145,34 @@ fn generate_helper_functions(
     quote! {
         impl #enum_name {
             #[doc(hidden)]
-            fn __collo_ml_convert_field_type(field_type: FieldType) -> ExprType {
+            fn __collo_ml_convert_field_type(field_type: ::collo_ml::traits::FieldType) -> ::collo_ml::ExprType {
                 match field_type {
-                    FieldType::Int => ExprType::Int,
-                    FieldType::Bool => ExprType::Bool,
-                    FieldType::Object(type_id) => {
+                    ::collo_ml::traits::FieldType::Int => ::collo_ml::ExprType::Int,
+                    ::collo_ml::traits::FieldType::Bool => ::collo_ml::ExprType::Bool,
+                    ::collo_ml::traits::FieldType::Object(type_id) => {
                         match type_id {
                             #(#type_id_to_name_arms,)*
                             _ => panic!("Unknown object type: {:?}", type_id),
                         }
                     }
-                    FieldType::List(inner) => {
-                        ExprType::List(Box::new(Self::__collo_ml_convert_field_type(*inner)))
+                    ::collo_ml::traits::FieldType::List(inner) => {
+                        ::collo_ml::ExprType::List(Box::new(Self::__collo_ml_convert_field_type(*inner)))
                     }
                 }
             }
 
             #[doc(hidden)]
-            fn __collo_ml_convert_field_value(value: FieldValue<Self>) -> ExprValue<Self> {
+            fn __collo_ml_convert_field_value(value: ::collo_ml::traits::FieldValue<Self>) -> ::collo_ml::ExprValue<Self> {
                 match value {
-                    FieldValue::Int(i) => ExprValue::Int(i),
-                    FieldValue::Bool(b) => ExprValue::Bool(b),
-                    FieldValue::Object(obj) => ExprValue::Object(obj),
-                    FieldValue::List(field_type, items) => {
+                    ::collo_ml::traits::FieldValue::Int(i) => ::collo_ml::ExprValue::Int(i),
+                    ::collo_ml::traits::FieldValue::Bool(b) => ::collo_ml::ExprValue::Bool(b),
+                    ::collo_ml::traits::FieldValue::Object(obj) => ::collo_ml::ExprValue::Object(obj),
+                    ::collo_ml::traits::FieldValue::List(field_type, items) => {
                         let expr_type = Self::__collo_ml_convert_field_type(field_type);
                         let converted_items = items.into_iter()
                             .map(Self::__collo_ml_convert_field_value)
                             .collect();
-                        ExprValue::List(expr_type, converted_items)
+                        ::collo_ml::ExprValue::List(expr_type, converted_items)
                     }
                 }
             }
@@ -193,7 +193,7 @@ fn generate_eval_object_impl(
 
         quote! {
             #dsl_name => {
-                <#enum_name as ViewBuilder<#env_type, #id_type>>::enumerate(env)
+                <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::enumerate(env)
                     .into_iter()
                     .map(#enum_name::#variant_name)
                     .collect()
@@ -218,7 +218,7 @@ fn generate_eval_object_impl(
 
         quote! {
             #enum_name::#variant_name(id) => {
-                let obj = <#enum_name as ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
                 let field_value = obj.get_field(field)?;
                 Some(Self::__collo_ml_convert_field_value(field_value))
             }
@@ -232,7 +232,7 @@ fn generate_eval_object_impl(
 
         quote! {
             {
-                let field_schema = <<#enum_name as ViewBuilder<#env_type, #id_type>>::Object as ViewObject>::field_schema();
+                let field_schema = <<#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object as ::collo_ml::ViewObject>::field_schema();
                 let expr_schema = field_schema.into_iter()
                     .map(|(k, v)| (k, #enum_name::__collo_ml_convert_field_type(v)))
                     .collect();
@@ -248,14 +248,14 @@ fn generate_eval_object_impl(
 
         quote! {
             #enum_name::#variant_name(id) => {
-                let obj = <#enum_name as ViewBuilder<#env_type, #id_type>>::build(env, id)?;
+                let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
                 obj.pretty_print()
             }
         }
     });
 
     quote! {
-        impl EvalObject for #enum_name {
+        impl ::collo_ml::EvalObject for #enum_name {
             type Env = #env_type;
 
             fn objects_with_typ(env: &Self::Env, name: &str) -> std::collections::BTreeSet<Self> {
@@ -271,13 +271,13 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn field_access(&self, env: &Self::Env, field: &str) -> Option<ExprValue<Self>> {
+            fn field_access(&self, env: &Self::Env, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
                 match self {
                     #(#field_access_arms,)*
                 }
             }
 
-            fn type_schemas() -> std::collections::HashMap<String, std::collections::HashMap<String, ExprType>> {
+            fn type_schemas() -> std::collections::HashMap<String, std::collections::HashMap<String, ::collo_ml::ExprType>> {
                 let mut map = std::collections::HashMap::new();
                 #(#type_schemas_entries)*
                 map

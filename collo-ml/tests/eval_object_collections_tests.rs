@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprType, ExprValue, FieldType, FieldValue, ViewBuilder, ViewObject};
+use collo_ml::{EvalObject, ExprType, ExprValue, ViewBuilder, ViewObject};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -285,8 +285,8 @@ fn test_collection_of_primitives() {
     let schema = TeacherWithGrades::field_schema();
     assert_eq!(
         schema.get("grades"),
-        Some(&collo_ml::FieldType::List(Box::new(
-            collo_ml::FieldType::Int
+        Some(&collo_ml::traits::FieldType::List(Box::new(
+            collo_ml::traits::FieldType::Int
         )))
     );
 }
