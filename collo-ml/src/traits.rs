@@ -3,53 +3,359 @@ use crate::semantics::ExprType;
 use collomatique_ilp::UsableData;
 use std::collections::{BTreeSet, HashMap};
 
+/// The main trait for objects in the DSL evaluation system.
+///
+/// This trait represents objects that can be accessed and manipulated by the DSL interpreter.
+/// Objects are identified by IDs and provide access to their fields through an environment reference.
+///
+/// # Design Philosophy
+///
+/// `EvalObject` is designed to work with existing data structures without requiring ownership.
+/// It acts as a bridge between your application's data model and the DSL interpreter, using
+/// a view pattern where objects are constructed on-demand from an environment.
+///
+/// # Associated Types
+///
+/// - `Env`: The environment type that holds the actual data. This is typically a reference
+///   to your application's data structures.
+/// - `Cache`: An optional cache type for storing constructed view objects. Use `()` for no caching,
+///   or a custom cache struct for performance optimization.
+///
+/// # Implementation
+///
+/// This trait is typically implemented via the `#[derive(EvalObject)]` macro on an enum of object IDs:
+///
+/// ```ignore
+/// #[derive(EvalObject)]
+/// #[env(MyEnv)]
+/// enum ObjectId {
+///     Student(StudentId),
+///     Room(RoomId),
+/// }
+/// ```
+///
+/// With optional caching:
+///
+/// ```ignore
+/// #[derive(EvalObject)]
+/// #[env(MyEnv)]
+/// #[cached]  // or #[cached(CustomCacheName)]
+/// enum ObjectId {
+///     Student(StudentId),
+///     Room(RoomId),
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```ignore
+/// // Get all objects of a specific type
+/// let students = ObjectId::objects_with_typ(&env, "Student");
+///
+/// // Access a field on an object
+/// let mut cache = MyCache::default();
+/// let age = student_obj.field_access(&env, &mut cache, "age");
+///
+/// // Get the type name of an object
+/// let type_name = student_obj.typ_name(&env);
+/// ```
 pub trait EvalObject: UsableData {
+    /// The environment type that provides access to the underlying data.
     type Env;
+
+    /// The cache type for storing constructed view objects.
+    ///
+    /// Use `()` for no caching, or a custom struct implementing `Default` for caching.
+    /// The cache is automatically managed by the interpreter and passed to methods that need it.
     type Cache: Default;
 
+    /// Returns all objects of a given type name.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment containing the data
+    /// * `name` - The DSL type name (e.g., "Student", "Room")
+    ///
+    /// # Returns
+    ///
+    /// A set of all object IDs that match the given type name. Returns an empty set
+    /// if the type name is not recognized.
     fn objects_with_typ(env: &Self::Env, name: &str) -> BTreeSet<Self>;
+
+    /// Returns the DSL type name of this object.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment (may not be needed but provided for consistency)
+    ///
+    /// # Returns
+    ///
+    /// The type name as it appears in the DSL (e.g., "Student", "Room").
     fn typ_name(&self, env: &Self::Env) -> String;
+
+    /// Accesses a field on this object and returns its value.
+    ///
+    /// This method constructs a view object from the environment (or retrieves it from cache),
+    /// then accesses the requested field.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment containing the data
+    /// * `cache` - Mutable reference to the cache for storing/retrieving view objects
+    /// * `field` - The name of the field to access
+    ///
+    /// # Returns
+    ///
+    /// `Some(ExprValue)` if the object and field exist, `None` otherwise.
     fn field_access(
         &self,
         env: &Self::Env,
         cache: &mut Self::Cache,
         field: &str,
     ) -> Option<ExprValue<Self>>;
+
+    /// Returns the schema for all object types in the DSL.
+    ///
+    /// This provides type information for semantic analysis and validation before execution.
+    ///
+    /// # Returns
+    ///
+    /// A nested map where:
+    /// - Outer keys are DSL type names (e.g., "Student")
+    /// - Inner maps associate field names with their types
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>>;
+
+    /// Returns a human-readable string representation of this object.
+    ///
+    /// This is used for debugging, logging, and user-facing output. The default implementation
+    /// returns `None`, indicating no pretty printing is available.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment (may be needed to access additional data)
+    /// * `cache` - Mutable reference to the cache (view object may be cached during pretty printing)
+    ///
+    /// # Returns
+    ///
+    /// `Some(String)` with a formatted representation, or `None` if not implemented.
     fn pretty_print(&self, _env: &Self::Env, _cache: &mut Self::Cache) -> Option<String> {
         None
     }
 }
 
+/// Represents the type of a field in a view object.
+///
+/// This is an intermediate representation used between view objects and the final DSL type system.
+/// It captures field types without requiring knowledge of the DSL type names for object references
+/// (those are resolved later using `TypeId`).
+///
+/// # Variants
+///
+/// - `Int`: An integer field (`i32`)
+/// - `Bool`: A boolean field
+/// - `Object(TypeId)`: A reference to another object, identified by its Rust type's `TypeId`
+/// - `List(Box<FieldType>)`: A collection (typically `BTreeSet`) of values of the inner type
+///
+/// # Type Resolution
+///
+/// `Object` variants store a `TypeId` which is later mapped to DSL type names in a [super::ExprType] by the
+/// [EvalObject] implementation. This allows view objects to be defined without knowledge
+/// of the complete object hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FieldType {
+    /// An integer field
     Int,
+    /// A boolean field
     Bool,
+    /// A reference to another object, identified by the Rust type's TypeId
     Object(std::any::TypeId),
+    /// A collection of values of the specified type
     List(Box<FieldType>),
 }
 
+/// Represents the value of a field from a view object.
+///
+/// This is an intermediate representation between view objects and the final `ExprValue` type.
+/// Unlike `ExprValue`, `FieldValue` includes type information for lists, which is necessary
+/// to handle empty collections correctly.
+///
+/// # Type Parameters
+///
+/// * `T` - The `EvalObject` type that this value belongs to
+///
+/// # Variants
+///
+/// - `Int(i32)`: An integer value
+/// - `Bool(bool)`: A boolean value
+/// - `Object(T)`: A reference to another object
+/// - `List(FieldType, BTreeSet<FieldValue<T>>)`: A collection with its element type
+///
+/// # Conversion to ExprValue
+///
+/// `FieldValue` is converted to [super::ExprValue] by the [EvalObject] implementation, which resolves
+/// `FieldType::Object(TypeId)` to `ExprType::Object(String)` using the type name mapping.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FieldValue<T: EvalObject> {
+    /// An integer value
     Int(i32),
+    /// A boolean value
     Bool(bool),
+    /// A reference to another object
     Object(T),
+    /// A collection of values with type information
+    ///
+    /// The `FieldType` describes the type of elements in the collection, which is essential
+    /// for handling empty collections where the type cannot be inferred from the elements.
     List(FieldType, BTreeSet<FieldValue<T>>),
 }
 
+/// Represents a view of an object that can be accessed by the DSL.
+///
+/// View objects are ephemeral representations of data from the environment. They don't own
+/// the data but provide a structured interface for accessing it. View objects are typically
+/// constructed on-demand by `ViewBuilder` and may be cached for performance.
+///
+/// # Design
+///
+/// View objects serve as an adapter layer between your application's data model and the DSL.
+/// They:
+/// - Define which fields are accessible from the DSL
+/// - Specify the type of each field
+/// - Provide field access without exposing the underlying data structure
+///
+/// # Implementation
+///
+/// This trait is typically implemented via the `#[derive(ViewObject)]` macro:
+///
+/// ```ignore
+/// #[derive(ViewObject)]
+/// #[eval_object(ObjectId)]
+/// struct Student {
+///     age: i32,
+///     enrolled: bool,
+///     room: RoomId,
+///     #[hidden]
+///     internal_data: String,  // Not accessible from DSL
+/// }
+/// ```
+///
+/// With pretty printing:
+///
+/// ```ignore
+/// #[derive(ViewObject)]
+/// #[eval_object(ObjectId)]
+/// #[pretty("{name} (age {age})")]
+/// struct Student {
+///     age: i32,
+///     #[hidden]
+///     name: String,
+/// }
+/// ```
+///
+/// # Requirements for Caching
+///
+/// If the corresponding `EvalObject` uses caching (via `#[cached]`), the view object
+/// must implement `Clone`. This is automatically checked by the compiler.
 pub trait ViewObject {
+    /// The `EvalObject` type this view belongs to.
     type EvalObject: EvalObject;
 
+    /// Returns the schema describing all fields in this view object.
+    ///
+    /// Fields marked with `#[hidden]` are excluded from the schema.
+    ///
+    /// # Returns
+    ///
+    /// A map from field names to their types.
     fn field_schema() -> HashMap<String, FieldType>;
+
+    /// Accesses a field by name and returns its value.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The name of the field to access
+    ///
+    /// # Returns
+    ///
+    /// `Some(FieldValue)` if the field exists, `None` otherwise.
+    /// Fields marked with `#[hidden]` return `None` when accessed.
     fn get_field(&self, field: &str) -> Option<FieldValue<Self::EvalObject>>;
+
+    /// Returns a human-readable string representation of this view object.
+    ///
+    /// This can be customized using the `#[pretty("...")]` attribute on the struct.
+    /// The default implementation returns `None`.
+    ///
+    /// # Returns
+    ///
+    /// `Some(String)` with a formatted representation, or `None` if not implemented.
     fn pretty_print(&self) -> Option<String> {
         None
     }
 }
 
+/// Builds view objects from an environment and object IDs.
+///
+/// This trait connects the `EvalObject` enum to specific view object types, defining how
+/// to construct view objects from the underlying data.
+///
+/// # Type Parameters
+///
+/// * `Env` - The environment type containing the data
+/// * `Id` - The ID type for this specific object kind (e.g., `StudentId`, `RoomId`)
+///
+/// # Implementation
+///
+/// You must manually implement this trait for each object type in your system:
+///
+/// ```ignore
+/// impl ViewBuilder<MyEnv, StudentId> for ObjectId {
+///     type Object = Student;
+///
+///     fn enumerate(env: &MyEnv) -> BTreeSet<StudentId> {
+///         env.students.keys().copied().collect()
+///     }
+///
+///     fn build(env: &MyEnv, id: &StudentId) -> Option<Self::Object> {
+///         let data = env.students.get(&id.0)?;
+///         Some(Student {
+///             age: data.age,
+///             enrolled: data.enrolled,
+///             room: RoomId(data.room_id),
+///         })
+///     }
+/// }
+/// ```
+///
+/// # Relationship to Other Traits
+///
+/// - The `EvalObject` derive macro generates code that calls these methods
+/// - `build()` is called on-demand when fields are accessed
+/// - `enumerate()` is called when getting all objects of a type
 pub trait ViewBuilder<Env, Id> {
+    /// The view object type constructed by this builder.
     type Object: ViewObject;
 
+    /// Constructs a view object for the given ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment containing the data
+    /// * `id` - The ID of the object to construct
+    ///
+    /// # Returns
+    ///
+    /// `Some(Object)` if the object exists in the environment, `None` otherwise.
     fn build(env: &Env, id: &Id) -> Option<Self::Object>;
+
+    /// Returns all IDs of this object type that exist in the environment.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment containing the data
+    ///
+    /// # Returns
+    ///
+    /// A set of all IDs for this object type.
     fn enumerate(env: &Env) -> BTreeSet<Id>;
 }
