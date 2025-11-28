@@ -153,8 +153,8 @@ fn eq_lists_different_length() {
 }
 
 #[test]
-fn eq_lists_order_independent() {
-    // Lists are BTreeSets, so order shouldn't matter
+fn eq_lists_order_dependent() {
+    // Lists are Vec, so order should matter
     let input = "pub let f() -> Bool = [3, 1, 2] == [1, 2, 3];";
 
     let vars = HashMap::new();
@@ -164,7 +164,7 @@ fn eq_lists_order_independent() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::Bool(true));
+    assert_eq!(result, ExprValue::Bool(false));
 }
 
 #[test]
@@ -177,11 +177,11 @@ fn eq_lists_with_params() {
 
     let list1 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list2 = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast

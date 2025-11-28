@@ -60,13 +60,13 @@ struct CollectionStudent {
 #[eval_object(CollectionObjectId)]
 struct CollectionTeacher {
     age: i32,
-    students: BTreeSet<StudentId>,
+    students: Vec<StudentId>,
 }
 
 #[derive(ViewObject)]
 #[eval_object(CollectionObjectId)]
 struct CollectionCourse {
-    student_groups: BTreeSet<BTreeSet<StudentId>>,
+    student_groups: Vec<Vec<StudentId>>,
 }
 
 // ============================================================================
@@ -280,7 +280,7 @@ fn test_collection_of_primitives() {
     #[derive(ViewObject)]
     #[eval_object(CollectionObjectId)]
     struct TeacherWithGrades {
-        grades: BTreeSet<i32>,
+        grades: Vec<i32>,
     }
 
     // This would require adding a variant and implementing ViewBuilder

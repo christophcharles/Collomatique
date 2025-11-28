@@ -290,7 +290,7 @@ fn script_var_with_sum() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -332,7 +332,7 @@ fn script_var_with_forall() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast
@@ -524,7 +524,7 @@ fn var_list_simple_reify() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -570,7 +570,7 @@ fn var_list_in_sum() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast
@@ -610,7 +610,7 @@ fn var_list_in_constraint() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -657,7 +657,7 @@ fn var_list_with_forall() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast
@@ -703,7 +703,7 @@ fn var_list_cardinality() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -726,7 +726,7 @@ fn var_list_with_multiple_params() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast
@@ -765,7 +765,7 @@ fn var_list_empty_input() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let empty_list = ExprValue::List(ExprType::Int, BTreeSet::new());
+    let empty_list = ExprValue::List(ExprType::Int, Vec::new());
 
     let result = checked_ast
         .quick_eval_fn("i", vec![empty_list])
@@ -793,7 +793,7 @@ fn var_list_in_list_comprehension() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
     let result = checked_ast
@@ -820,8 +820,8 @@ fn var_list_with_collection_ops() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list1 = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(1)]));
-    let list2 = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(2)]));
+    let list1 = ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(1)]));
+    let list2 = ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list1, list2])
@@ -852,7 +852,7 @@ fn nested_reification_usage() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(1)]));
+    let list = ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(1)]));
 
     let result = checked_ast
         .quick_eval_fn("final", vec![list])

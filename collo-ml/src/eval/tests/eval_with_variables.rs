@@ -354,11 +354,11 @@ fn eval_with_variables_var_list_in_nested_forall() {
 
     let xs = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::<NoObject>::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::<NoObject>::Int(1), ExprValue::Int(2)]),
     );
     let ys = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::<NoObject>::Int(10), ExprValue::Int(20)]),
+        Vec::from([ExprValue::<NoObject>::Int(10), ExprValue::Int(20)]),
     );
 
     let (result, var_defs) = checked_ast

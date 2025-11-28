@@ -116,7 +116,7 @@ fn sum_with_param_list() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(10), ExprValue::Int(20), ExprValue::Int(30)]),
+        Vec::from([ExprValue::Int(10), ExprValue::Int(20), ExprValue::Int(30)]),
     );
 
     let result = checked_ast
@@ -487,7 +487,7 @@ fn forall_bool_with_param_list() {
 
     let all_positive = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
     let result_true = checked_ast
         .quick_eval_fn("f", vec![all_positive])
@@ -496,7 +496,7 @@ fn forall_bool_with_param_list() {
 
     let has_negative = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(-2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(-2), ExprValue::Int(3)]),
     );
     let result_false = checked_ast
         .quick_eval_fn("f", vec![has_negative])

@@ -50,8 +50,8 @@ impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
 }
 
 pub fn strip_origins<T: EvalObject>(
-    set: &BTreeSet<ConstraintWithOrigin<T>>,
-) -> BTreeSet<Constraint<IlpVar<T>>> {
+    set: &Vec<ConstraintWithOrigin<T>>,
+) -> Vec<Constraint<IlpVar<T>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }
 
@@ -60,9 +60,9 @@ pub enum ExprValue<T: EvalObject> {
     Int(i32),
     Bool(bool),
     LinExpr(LinExpr<IlpVar<T>>),
-    Constraint(BTreeSet<ConstraintWithOrigin<T>>),
+    Constraint(Vec<ConstraintWithOrigin<T>>),
     Object(T),
-    List(ExprType, BTreeSet<ExprValue<T>>),
+    List(ExprType, Vec<ExprValue<T>>),
 }
 
 impl<T: EvalObject> From<i32> for ExprValue<T> {
@@ -85,7 +85,7 @@ impl<T: EvalObject> From<LinExpr<IlpVar<T>>> for ExprValue<T> {
 
 impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ExprValue<T> {
     fn from(value: Constraint<IlpVar<T>>) -> Self {
-        ExprValue::Constraint(BTreeSet::from([ConstraintWithOrigin {
+        ExprValue::Constraint(Vec::from([ConstraintWithOrigin {
             constraint: value,
             origin: None,
         }]))
@@ -94,7 +94,7 @@ impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ExprValue<T> {
 
 impl<T: EvalObject> From<ConstraintWithOrigin<T>> for ExprValue<T> {
     fn from(value: ConstraintWithOrigin<T>) -> Self {
-        ExprValue::Constraint(BTreeSet::from([value]))
+        ExprValue::Constraint(Vec::from([value]))
     }
 }
 
@@ -259,9 +259,7 @@ impl<T: EvalObject> AnnotatedValue<T> {
                 )
             }
             AnnotatedValue::UntypedList if target.is_list() => match target {
-                ExprType::List(inner_typ) => {
-                    Some(ExprValue::List(*inner_typ.clone(), BTreeSet::new()))
-                }
+                ExprType::List(inner_typ) => Some(ExprValue::List(*inner_typ.clone(), Vec::new())),
                 _ => panic!("Expected list!"),
             },
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
@@ -633,7 +631,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     .into_inner()
                     .expect("Type should be determined");
 
-                let coerced_elements: BTreeSet<_> = element_values
+                let coerced_elements: Vec<_> = element_values
                     .iter()
                     .map(|x| {
                         x.coerce_to(eval_history.env, &target_type)
@@ -889,7 +887,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(BTreeSet::from([lin_expr1.eq(&lin_expr2).into()])).into()
+                ExprValue::Constraint(Vec::from([lin_expr1.eq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintLe(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
@@ -911,7 +909,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(BTreeSet::from([lin_expr1.leq(&lin_expr2).into()])).into()
+                ExprValue::Constraint(Vec::from([lin_expr1.leq(&lin_expr2).into()])).into()
             }
             Expr::ConstraintGe(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
@@ -933,7 +931,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     _ => panic!("Expected boolean"),
                 };
 
-                ExprValue::Constraint(BTreeSet::from([lin_expr1.geq(&lin_expr2).into()])).into()
+                ExprValue::Constraint(Vec::from([lin_expr1.geq(&lin_expr2).into()])).into()
             }
             Expr::Eq(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
@@ -1126,13 +1124,13 @@ impl<T: EvalObject> LocalEnv<T> {
                         let list1 = match value1 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            AnnotatedValue::UntypedList => Vec::new(),
                             _ => panic!("List expected"),
                         };
                         let list2 = match value2 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            AnnotatedValue::UntypedList => Vec::new(),
                             _ => panic!("List expected"),
                         };
                         let list = list1
@@ -1206,13 +1204,13 @@ impl<T: EvalObject> LocalEnv<T> {
                         let list1 = match value1 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            AnnotatedValue::UntypedList => Vec::new(),
                             _ => panic!("List expected"),
                         };
                         let list2 = match value2 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            AnnotatedValue::UntypedList => Vec::new(),
                             _ => panic!("List expected"),
                         };
 
@@ -1223,15 +1221,19 @@ impl<T: EvalObject> LocalEnv<T> {
                                     .expect("Coercion should be valid")
                             })
                             .collect();
-                        let coerced_list1: BTreeSet<_> = list1
+                        let collection: Vec<_> = list1
                             .into_iter()
-                            .map(|e| {
-                                e.coerce_to(eval_history.env, &elem_t)
-                                    .expect("Coercion should be valid")
+                            .filter_map(|e| {
+                                let coerced_elem = e
+                                    .coerce_to(eval_history.env, &elem_t)
+                                    .expect("Coercion should be valid");
+
+                                if coerced_list2.contains(&&coerced_elem) {
+                                    return None;
+                                }
+                                Some(coerced_elem)
                             })
                             .collect();
-                        let collection =
-                            coerced_list1.difference(&coerced_list2).cloned().collect();
                         AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), collection))
                     }
                     _ => panic!("Expected Int or LinExpr or List"),
@@ -1567,7 +1569,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 };
 
                 if is_constraint {
-                    let mut output = BTreeSet::new();
+                    let mut output = Vec::new();
 
                     for elem in list {
                         self.register_identifier(&var.node, elem);
@@ -1743,7 +1745,7 @@ impl<T: EvalObject> LocalEnv<T> {
         body: &Spanned<crate::ast::Expr>,
         vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
         filter: Option<&Spanned<crate::ast::Expr>>,
-    ) -> Result<BTreeSet<ExprValue<T>>, EvalError> {
+    ) -> Result<Vec<ExprValue<T>>, EvalError> {
         if vars_and_collections.is_empty() {
             let cond = match filter {
                 None => true,
@@ -1764,9 +1766,9 @@ impl<T: EvalObject> LocalEnv<T> {
                 let inner_value = new_value
                     .into_inner()
                     .expect("Element in list comprehensions should have definite types");
-                BTreeSet::from([inner_value])
+                Vec::from([inner_value])
             } else {
-                BTreeSet::new()
+                Vec::new()
             });
         }
 
@@ -1781,7 +1783,7 @@ impl<T: EvalObject> LocalEnv<T> {
             _ => panic!("Expected typed list"),
         };
 
-        let mut output = BTreeSet::new();
+        let mut output = Vec::new();
 
         for elem in list {
             self.register_identifier(&var.node, elem);
@@ -2012,7 +2014,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 .funcs
                 .get(&(fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
-            let constraints: BTreeSet<_> = match fn_call_result {
+            let constraints: Vec<_> = match fn_call_result {
                 ExprValue::List(ExprType::Constraint, cs) => cs
                     .iter()
                     .map(|c| match c {
@@ -2037,7 +2039,6 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
 #[derive(Clone, Debug)]
 pub struct VariableDefinitions<T: EvalObject> {
-    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<ConstraintWithOrigin<T>>>,
-    pub var_lists:
-        BTreeMap<(String, Vec<ExprValue<T>>), BTreeSet<BTreeSet<ConstraintWithOrigin<T>>>>,
+    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), Vec<ConstraintWithOrigin<T>>>,
+    pub var_lists: BTreeMap<(String, Vec<ExprValue<T>>), Vec<Vec<ConstraintWithOrigin<T>>>>,
 }

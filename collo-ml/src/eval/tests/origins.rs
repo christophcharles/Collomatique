@@ -1,5 +1,5 @@
 use super::*;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 /// Test that a simple constraint gets an origin when returned from a function
 #[test]
@@ -267,7 +267,7 @@ fn combined_constraints_preserve_separate_origins() {
     }
 }
 
-/// Test origin with list parameters - using BTreeSet for List
+/// Test origin with list parameters - using Vec for List
 #[test]
 fn origin_with_list_param() {
     let input = r#"
@@ -279,10 +279,10 @@ fn origin_with_list_param() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let mut list_items = BTreeSet::new();
-    list_items.insert(ExprValue::Int(1));
-    list_items.insert(ExprValue::Int(2));
-    list_items.insert(ExprValue::Int(3));
+    let mut list_items = Vec::new();
+    list_items.push(ExprValue::Int(1));
+    list_items.push(ExprValue::Int(2));
+    list_items.push(ExprValue::Int(3));
 
     let list_arg = ExprValue::List(ExprType::Int, list_items.clone());
 

@@ -81,7 +81,7 @@ fn let_expr_with_list_value() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 }
@@ -102,7 +102,7 @@ fn let_expr_with_list_range() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(0),
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -123,7 +123,7 @@ fn let_expr_with_membership_test() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result_true = checked_ast
@@ -316,7 +316,7 @@ fn let_expr_with_list_comprehension() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([
+            Vec::from([
                 ExprValue::Int(0),
                 ExprValue::Int(2),
                 ExprValue::Int(4),
@@ -336,7 +336,7 @@ fn let_expr_with_cardinality() {
 
     let list = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -356,11 +356,11 @@ fn let_expr_with_collection_union() {
 
     let list_a = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2)]),
+        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list_b = ExprValue::List(
         ExprType::Int,
-        BTreeSet::from([ExprValue::Int(2), ExprValue::Int(3)]),
+        Vec::from([ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
     let result = checked_ast
@@ -371,7 +371,12 @@ fn let_expr_with_collection_union() {
         result,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([
+                ExprValue::Int(1),
+                ExprValue::Int(2),
+                ExprValue::Int(2),
+                ExprValue::Int(3)
+            ])
         )
     );
 }
@@ -476,7 +481,7 @@ fn let_expr_returning_list_from_if() {
         result_true,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
+            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
 
@@ -487,7 +492,7 @@ fn let_expr_returning_list_from_if() {
         result_false,
         ExprValue::List(
             ExprType::Int,
-            BTreeSet::from([ExprValue::Int(4), ExprValue::Int(5)])
+            Vec::from([ExprValue::Int(4), ExprValue::Int(5)])
         )
     );
 }

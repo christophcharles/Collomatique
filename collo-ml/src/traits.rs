@@ -81,7 +81,7 @@
 //! #[eval_object(ObjectId)]
 //! struct Room {
 //!     number: i32,
-//!     students: BTreeSet<StudentId>,
+//!     students: Vec<StudentId>,
 //! }
 //! ```
 //!
@@ -358,7 +358,7 @@ pub trait EvalObject: UsableData {
 /// - `Int`: An integer field (`i32`)
 /// - `Bool`: A boolean field
 /// - `Object(TypeId)`: A reference to another object, identified by its Rust type's `TypeId`
-/// - `List(Box<FieldType>)`: A collection (typically `BTreeSet`) of values of the inner type
+/// - `List(Box<FieldType>)`: A collection (typically `Vec`) of values of the inner type
 ///
 /// # Type Resolution
 ///
@@ -392,7 +392,7 @@ pub enum FieldType {
 /// - `Int(i32)`: An integer value
 /// - `Bool(bool)`: A boolean value
 /// - `Object(T)`: A reference to another object
-/// - `List(FieldType, BTreeSet<FieldValue<T>>)`: A collection with its element type
+/// - `List(FieldType, Vec<FieldValue<T>>)`: A collection with its element type
 ///
 /// # Conversion to ExprValue
 ///
@@ -410,7 +410,7 @@ pub enum FieldValue<T: EvalObject> {
     ///
     /// The `FieldType` describes the type of elements in the collection, which is essential
     /// for handling empty collections where the type cannot be inferred from the elements.
-    List(FieldType, BTreeSet<FieldValue<T>>),
+    List(FieldType, Vec<FieldValue<T>>),
 }
 
 /// Represents a view of an object that can be accessed by the DSL.
