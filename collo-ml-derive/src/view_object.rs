@@ -64,8 +64,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl ::collo_ml::ViewObject for #name {
             type EvalObject = #eval_object_type;
 
-            fn field_schema() -> std::collections::HashMap<String, ::collo_ml::traits::FieldType> {
-                let mut schema = std::collections::HashMap::new();
+            fn field_schema() -> ::std::collections::HashMap<String, ::collo_ml::traits::FieldType> {
+                let mut schema = ::std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
             }
@@ -157,7 +157,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                 }
                 _ => {
                     // Assume this is an object
-                    quote! { ::collo_ml::traits::FieldType::Object(std::any::TypeId::of::<#type_name>()) }
+                    quote! { ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#type_name>()) }
                 }
             }
         }
@@ -226,7 +226,7 @@ fn generate_pretty_print_from_format(
 
     // Parse the format string to find {field_name} placeholders
     // We'll use a simple regex-like approach
-    let mut format_args = std::collections::BTreeMap::new();
+    let mut format_args = ::std::collections::BTreeMap::new();
     let mut current_pos = 0;
 
     // Simple parser for {field_name}
