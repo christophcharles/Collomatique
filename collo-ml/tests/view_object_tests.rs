@@ -1,7 +1,8 @@
 use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprType, ExprValue, FieldType, FieldValue, ViewObject};
+use collo_ml::traits::{FieldType, FieldValue};
+use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;

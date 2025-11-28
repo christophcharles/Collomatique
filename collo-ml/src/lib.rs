@@ -6,4 +6,4 @@ pub mod traits;
 pub use collo_ml_derive::{EvalObject, ViewObject};
 pub use eval::{CheckedAST, ExprValue};
 pub use semantics::ExprType;
-pub use traits::{EvalObject, FieldType, FieldValue, ViewBuilder, ViewObject};
+pub use traits::{EvalObject, ViewBuilder, ViewObject};

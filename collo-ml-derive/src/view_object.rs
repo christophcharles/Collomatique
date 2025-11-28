@@ -61,16 +61,16 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     // Generate the implementation
     let expanded = quote! {
-        impl ViewObject for #name {
+        impl ::collo_ml::ViewObject for #name {
             type EvalObject = #eval_object_type;
 
-            fn field_schema() -> std::collections::HashMap<String, FieldType> {
+            fn field_schema() -> std::collections::HashMap<String, ::collo_ml::traits::FieldType> {
                 let mut schema = std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
             }
 
-            fn get_field(&self, field: &str) -> Option<FieldValue<Self::EvalObject>> {
+            fn get_field(&self, field: &str) -> Option<::collo_ml::traits::FieldValue<Self::EvalObject>> {
                 match field {
                     #(#field_access_arms)*
                     _ => None,
@@ -141,15 +141,15 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
             let type_name_str = type_name.to_string();
 
             match type_name_str.as_str() {
-                "i32" => quote! { FieldType::Int },
-                "bool" => quote! { FieldType::Bool },
+                "i32" => quote! { ::collo_ml::traits::FieldType::Int },
+                "bool" => quote! { ::collo_ml::traits::FieldType::Bool },
                 "BTreeSet" => {
                     // Extract the inner type from BTreeSet<T>
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
                             let inner_expr_type = type_to_field_type(inner_ty);
                             return quote! {
-                                FieldType::List(Box::new(#inner_expr_type))
+                                ::collo_ml::traits::FieldType::List(Box::new(#inner_expr_type))
                             };
                         }
                     }
@@ -157,7 +157,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                 }
                 _ => {
                     // Assume this is an object
-                    quote! { FieldType::Object(std::any::TypeId::of::<#type_name>()) }
+                    quote! { ::collo_ml::traits::FieldType::Object(std::any::TypeId::of::<#type_name>()) }
                 }
             }
         }
@@ -176,10 +176,10 @@ fn generate_field_value(
 
             match type_name.as_str() {
                 "i32" => quote! {
-                    FieldValue::Int(#field_name.clone()),
+                    ::collo_ml::traits::FieldValue::Int(#field_name.clone()),
                 },
                 "bool" => quote! {
-                    FieldValue::Bool(#field_name.clone()),
+                    ::collo_ml::traits::FieldValue::Bool(#field_name.clone()),
                 },
                 "BTreeSet" => {
                     // Need to convert collection elements
@@ -193,7 +193,7 @@ fn generate_field_value(
                                 inner_ty,
                             );
                             return quote! {
-                                FieldValue::List(
+                                ::collo_ml::traits::FieldValue::List(
                                     #field_type,
                                     #field_name.iter().map(|x| #inner).collect(),
                                 )
@@ -205,7 +205,7 @@ fn generate_field_value(
                 _ => {
                     // It's an object ID - convert using Into
                     quote! {
-                        FieldValue::Object(#field_name.clone().into()),
+                        ::collo_ml::traits::FieldValue::Object(#field_name.clone().into()),
                     }
                 }
             }
