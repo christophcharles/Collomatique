@@ -345,7 +345,7 @@ fn generate_cache_struct(
         let id_type = &info.id_type;
 
         quote! {
-            #field_name: std::collections::BTreeMap
+            #field_name: std::collections::BTreeMap<
                 #id_type,
                 <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object
             >
