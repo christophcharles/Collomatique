@@ -563,3 +563,11 @@ pub trait ViewBuilder<Env, Id> {
     /// A set of all IDs for this object type.
     fn enumerate(env: &Env) -> BTreeSet<Id>;
 }
+
+use thiserror::Error;
+
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum TypeConversionError {
+    #[error("Cannot convert value: it does not have the right type")]
+    BadType,
+}

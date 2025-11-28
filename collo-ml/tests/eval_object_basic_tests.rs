@@ -107,6 +107,24 @@ fn test_from_impls() {
 }
 
 #[test]
+fn test_try_from_impls() {
+    // Test that TryFrom<ObjectId> are implemented
+    let student_obj = ObjectId::Student(StudentId(1));
+    assert_eq!(student_obj.try_into(), Ok(StudentId(1)));
+    assert_eq!(
+        student_obj.try_into(),
+        Result::<RoomId, _>::Err(collo_ml::traits::TypeConversionError::BadType)
+    );
+
+    let room_obj = ObjectId::Room(RoomId(42));
+    assert_eq!(room_obj.try_into(), Ok(RoomId(42)));
+    assert_eq!(
+        room_obj.try_into(),
+        Result::<StudentId, _>::Err(collo_ml::traits::TypeConversionError::BadType)
+    );
+}
+
+#[test]
 fn test_typ_name() {
     let env = TestEnv {
         students: HashMap::new(),
