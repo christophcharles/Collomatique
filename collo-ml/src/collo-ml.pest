@@ -20,7 +20,6 @@ ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char*
 reserved_keyword = { 
     "forall" |  // before "for"
     "false" |
-    "union" |
     "reify" |
     "where" |
     "else" |
@@ -68,12 +67,8 @@ forall_expr = { forall | comparison_expr }
 forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 
 // Comparisons and membership
-comparison_expr = { in_expr | union_expr }
-in_expr = { union_expr ~ in_op ~ union_expr }
-
-// Collection operations
-union_expr = { diff_expr ~ (union_op ~ diff_expr)* }
-diff_expr = { relational_expr ~ (diff_op ~ relational_expr)? }
+comparison_expr = { in_expr | relational_expr }
+in_expr = { relational_expr ~ in_op ~ relational_expr }
 
 relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 
@@ -128,8 +123,6 @@ div_op = { "//" }
 mod_op = { "%" }
 comp_op = { "===" | "<==" | ">==" | "==" | "!=" | "<=" | ">=" | "<" | ">" }
 in_op = @{ "in" ~ !ident_char }
-union_op = @{ "union" ~ !ident_char }
-diff_op = { "\\" }
 or_op = @{ "||" | "or" ~ !ident_char }
 and_op = @{ "&&" | "and" ~ !ident_char }
 not_op = @{ "!" | "not" ~ !ident_char }

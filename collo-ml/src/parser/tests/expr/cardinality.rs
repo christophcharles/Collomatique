@@ -39,11 +39,7 @@ fn cardinality_accepts_list_literals() {
 
 #[test]
 fn cardinality_accepts_set_operations() {
-    let cases = vec![
-        "|@[Student] \\ excluded|",
-        "|a union b|",
-        "|(a union b) \\ c|",
-    ];
+    let cases = vec!["|@[Student] - excluded|", "|a + b|", "|(a + b) - c|"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);

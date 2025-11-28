@@ -837,21 +837,25 @@ impl LocalEnv {
 
                 match (left_type.clone(), right_type) {
                     (Some(l), Some(r)) => match AnnotatedType::unify(&l, &r) {
-                        Some(unified) if unified.is_arithmetic() => Some(unified),
+                        Some(unified) if unified.is_arithmetic() || unified.is_list() => {
+                            Some(unified)
+                        }
                         _ => {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: l.clone(),
                                 found: r.clone(),
                                 context: format!(
-                                    "addition/subtraction requires Int or LinExpr, got {} and {}",
+                                    "addition/subtraction/concatenation requires Int, LinExpr or List, got {} and {}",
                                     l, r
                                 ),
                             });
                             None
                         }
                     },
-                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
+                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() || t.is_list() => {
+                        Some(t)
+                    }
                     (Some(t), None) | (None, Some(t)) => {
                         let span = if left_type.is_some() {
                             left.span.clone()
@@ -862,7 +866,9 @@ impl LocalEnv {
                             span,
                             expected: ExprType::Int.into(),
                             found: t.clone(),
-                            context: "addition/subtraction requires Int or LinExpr".to_string(),
+                            context:
+                                "addition/subtraction/concatenation requires Int or LinExpr or List"
+                                    .to_string(),
                         });
                         None
                     }
@@ -1801,76 +1807,6 @@ impl LocalEnv {
                     None
                 } else {
                     Some(ExprType::List(Box::new(typ)).into())
-                }
-            }
-
-            Expr::Union(left, right) | Expr::Diff(left, right) => {
-                let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
-                );
-                let right_type = self.check_expr(
-                    global_env,
-                    &right.node,
-                    &left.span,
-                    type_info,
-                    expr_types,
-                    errors,
-                    warnings,
-                );
-
-                match (left_type, right_type) {
-                    (Some(l), Some(r)) => {
-                        // Try to unify - handles List, EmptyList, and coercion automatically
-                        match AnnotatedType::unify(&l, &r) {
-                            Some(unified) if unified.is_list() => Some(unified),
-                            Some(non_list) => {
-                                // Unified but not to a list type
-                                errors.push(SemError::TypeMismatch {
-                                    span: left.span.clone(),
-                                    expected: ExprType::List(Box::new(
-                                        non_list
-                                            .into_inner()
-                                            .expect("UntypedList case already handled"),
-                                    ))
-                                    .into(), // placeholder
-                                    found: l,
-                                    context: "collection operation requires List types".to_string(),
-                                });
-                                None
-                            }
-                            None => {
-                                // Can't unify - incompatible types
-                                errors.push(SemError::TypeMismatch {
-                                    span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
-                                    context:
-                                        "collection operation requires compatible element types"
-                                            .to_string(),
-                                });
-                                // Return left type as fallback if it's a list
-                                if l.is_list() {
-                                    Some(l)
-                                } else {
-                                    None
-                                }
-                            }
-                        }
-                    }
-                    (Some(t), None) | (None, Some(t)) if t.is_list() => Some(t),
-                    (Some(t), None) | (None, Some(t)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::List(Box::new(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            ))
-                            .into(), // placeholder
-                            found: t,
-                            context: "collection operation requires List types".to_string(),
-                        });
-                        None
-                    }
-                    (None, None) => None,
                 }
             }
 

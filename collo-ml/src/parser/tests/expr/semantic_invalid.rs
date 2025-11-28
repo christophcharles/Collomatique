@@ -14,14 +14,14 @@ fn semantic_invalid_type_mismatches() {
     // Parser accepts these; semantics will reject them
     let cases = vec![
         // Operations on incompatible types (no coercion)
-        "true + false",     // Bool + Bool
-        "[1, 2] * [3, 4]",  // List * List
-        "true union false", // Bool union Bool (not sets)
+        "true + false",    // Bool + Bool
+        "[1, 2] * [3, 4]", // List * List
+        "true + false",    // Bool + Bool (not sets)
         // Wrong types in aggregations
         "sum x in 5 { x }",       // 5 is not a collection
         "forall x in true { x }", // true is not a collection
         // Type mismatches with variables
-        "$V() union [1, 2]", // LinExpr union List
+        "$V() + [1, 2]",     // LinExpr + List
         "[1, 2] === [3, 4]", // List === List (not LinExpr)
     ];
     for case in cases {

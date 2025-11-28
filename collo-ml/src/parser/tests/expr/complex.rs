@@ -64,14 +64,14 @@ fn complex_deeply_nested_expressions() {
         "forall x in @[X] { forall y in @[Y] { $V(x, y) <== 1 } }",
 
         // Nested collections
-        "((a union b) \\ c) union d",
-        "@[Student] \\ (excluded union suspended)",
+        "((a + b) - c) + d",
+        "@[Student] - (excluded - suspended)",
 
         // Nested if expressions
         "if x { if y { 1 } else { 2 } } else { 3 }",
 
         // Complex combination
-        "forall s in (@[Student] \\ excluded) where s.active { sum w in @[Week] where w.number > 10 { if s.priority > 5 { 2 * $V(s, w) } else { $V(s, w) } } <== s.max_load }",
+        "forall s in (@[Student] - excluded) where s.active { sum w in @[Week] where w.number > 10 { if s.priority > 5 { 2 * $V(s, w) } else { $V(s, w) } } <== s.max_load }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -105,7 +105,7 @@ fn complex_function_and_variable_calls() {
         // Function calls with complex arguments
         "compute($V1(x) + $V2(y))",
         "check($V(x) <== 10)",
-        "process(@[Student] union @[Teacher])",
+        "process(@[Student] + @[Teacher])",
         "func([x for x in @[S]])",
         "nested(outer(inner(x)))",
         // Variable calls with complex arguments
@@ -128,10 +128,10 @@ fn complex_function_and_variable_calls() {
 fn complex_with_all_features() {
     let cases = vec![
         // Kitchen sink expression
-        "if flag { forall x in (@[X] \\ excluded) where x > 0 { sum y in @[Y] { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |@[Y]| } } else { sum x in @[X] { $V2(x) } >= 1 }",
+        "if flag { forall x in (@[X] - excluded) where x > 0 { sum y in @[Y] { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |@[Y]| } } else { sum x in @[X] { $V2(x) } >= 1 }",
 
         // Another complex one
-        "forall s in @[Student] union @[Teacher] where s.active { (if s.type == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
+        "forall s in @[Student] + @[Teacher] where s.active { (if s.type == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -174,8 +174,8 @@ fn complex_with_parentheses() {
         "(sum x in @[X] { $V(x) })",
         "(forall x in @[X] { $V(x) >= 0 })",
         // With collections
-        "(@[Subject] \\ pairing)",
-        "(group1 union group2)",
+        "(@[Subject] - pairing)",
+        "(group1 + group2)",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

@@ -114,9 +114,9 @@ fn aggregation_accepts_forall_with_and() {
 #[test]
 fn aggregation_with_collections() {
     let cases = vec![
-        "forall s in @[Student] union @[Teacher] { $V(s) >== 0 }",
-        "sum s in group_a union group_b { $V(s) }",
-        "forall x in (group_a \\ excluded) { $V(x) === 1 }",
+        "forall s in @[Student] + @[Teacher] { $V(s) >== 0 }",
+        "sum s in group_a + group_b { $V(s) }",
+        "forall x in (group_a - excluded) { $V(x) === 1 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

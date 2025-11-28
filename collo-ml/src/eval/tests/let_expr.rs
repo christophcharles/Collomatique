@@ -348,7 +348,7 @@ fn let_expr_with_cardinality() {
 
 #[test]
 fn let_expr_with_collection_union() {
-    let input = "pub let f(a: [Int], b: [Int]) -> [Int] = let combined = a union b { combined };";
+    let input = "pub let f(a: [Int], b: [Int]) -> [Int] = let combined = a + b { combined };";
 
     let vars = HashMap::new();
 

@@ -427,8 +427,8 @@ fn let_statement_with_global_collections() {
 #[test]
 fn let_statement_with_collection_operations() {
     let cases = vec![
-        "let f() -> [Int] = [1, 2] union [3, 4];",
-        "let h() -> [Int] = [1, 2, 3] \\ [2];",
+        "let f() -> [Int] = [1, 2] + [3, 4];",
+        "let h() -> [Int] = [1, 2, 3] - [2];",
         "let i() -> Bool = 5 in [1, 2, 3, 4, 5];",
     ];
     for case in cases {
@@ -577,7 +577,7 @@ fn let_statement_accepts_type_mismatches() {
         "let k() -> Int = undefined_function();", // function doesn't exist
         // Type mismatches in operations
         "let l() -> Int = 5 + true;",               // Int + Bool
-        "let m() -> LinExpr = $V() union [1, 2];",  // LinExpr union List
+        "let m() -> LinExpr = $V() + [1, 2];",      // LinExpr + List
         "let n() -> Bool = if 5 { x } else { y };", // Int as condition
     ];
     for case in cases {

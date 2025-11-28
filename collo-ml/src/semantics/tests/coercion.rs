@@ -242,7 +242,7 @@ fn list_literal_with_emptylist() {
 #[test]
 fn collection_union_unifies_types() {
     let vars = var_with_args("V", vec![ExprType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5] union [$V(x)];";
+    let input = "pub let f(x: Int) -> [LinExpr] = [5] + [$V(x)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
@@ -255,7 +255,7 @@ fn collection_union_unifies_types() {
 #[test]
 fn collection_diff_unifies_types() {
     let vars = var_with_args("V", vec![ExprType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] \\ [$V(x)];";
+    let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] - [$V(x)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(

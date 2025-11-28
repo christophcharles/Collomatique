@@ -359,13 +359,13 @@ fn parse_global_collection_in_expression() {
 
 #[test]
 fn parse_union_operation() {
-    let input = "let f() -> [Student] = @[Student] union @[Teacher];";
+    let input = "let f() -> [Student] = @[Student] + @[Teacher];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Union(left, right) => {
+            Expr::Add(left, right) => {
                 assert!(matches!(left.node, Expr::GlobalList(_)));
                 assert!(matches!(right.node, Expr::GlobalList(_)));
             }
@@ -377,13 +377,13 @@ fn parse_union_operation() {
 
 #[test]
 fn parse_difference_operation() {
-    let input = "let f() -> [Student] = @[Student] \\ excluded;";
+    let input = "let f() -> [Student] = @[Student] - excluded;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Diff(left, right) => {
+            Expr::Sub(left, right) => {
                 assert!(matches!(left.node, Expr::GlobalList(_)));
                 assert!(matches!(right.node, Expr::Ident(_)));
             }
@@ -395,14 +395,14 @@ fn parse_difference_operation() {
 
 #[test]
 fn parse_chained_union() {
-    let input = "let f() -> [Int] = a union b union c;";
+    let input = "let f() -> [Int] = a + b + c;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            // Should parse as (a union b) union c (left-associative)
-            assert!(matches!(body.node, Expr::Union(_, _)));
+            // Should parse as (a + b) + c (left-associative)
+            assert!(matches!(body.node, Expr::Add(_, _)));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -410,14 +410,14 @@ fn parse_chained_union() {
 
 #[test]
 fn parse_mixed_set_operations() {
-    let input = "let f() -> [Int] = a union b \\ c;";
+    let input = "let f() -> [Int] = a + b - c;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
-            // union has precedence over \\
-            assert!(matches!(body.node, Expr::Union(_, _)));
+            // Left associative
+            assert!(matches!(body.node, Expr::Sub(_, _)));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -463,14 +463,14 @@ fn parse_in_with_list_literal() {
 
 #[test]
 fn parse_in_with_complex_collection() {
-    let input = "let f() -> Bool = x in @[Student] union @[Teacher];";
+    let input = "let f() -> Bool = x in @[Student] + @[Teacher];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::In { collection, .. } => {
-                assert!(matches!(collection.node, Expr::Union(_, _)));
+                assert!(matches!(collection.node, Expr::Add(_, _)));
             }
             _ => panic!("Expected In"),
         },
@@ -516,14 +516,14 @@ fn parse_cardinality_of_list_literal() {
 
 #[test]
 fn parse_cardinality_of_difference() {
-    let input = "let f() -> Int = |@[Student] \\ excluded|;";
+    let input = "let f() -> Int = |@[Student] - excluded|;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Cardinality(coll) => {
-                assert!(matches!(coll.node, Expr::Diff(_, _)));
+                assert!(matches!(coll.node, Expr::Sub(_, _)));
             }
             _ => panic!("Expected Cardinality"),
         },

@@ -775,104 +775,6 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
                 ExprValue::Bool(false).into()
             }
-            Expr::Union(collection1, collection2) => {
-                let collection1_value = self.eval_expr(eval_history, &*collection1)?;
-                let list1 = match collection1_value {
-                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
-                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                    AnnotatedValue::UntypedList => {
-                        // The list is empty - so "in" must return false
-                        BTreeSet::new()
-                    }
-                    _ => panic!("List expected"),
-                };
-
-                let collection2_value = self.eval_expr(eval_history, &*collection2)?;
-                let list2 = match collection2_value {
-                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
-                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                    AnnotatedValue::UntypedList => {
-                        // The list is empty - so "in" must return false
-                        BTreeSet::new()
-                    }
-                    _ => panic!("List expected"),
-                };
-
-                let target = eval_history
-                    .ast
-                    .expr_types
-                    .get(&expr.span)
-                    .expect("Semantic analysis should have given a target type");
-
-                match target {
-                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
-                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
-                        let list = list1
-                            .into_iter()
-                            .chain(list2.into_iter())
-                            .map(|e| {
-                                e.coerce_to(eval_history.env, &elem_t)
-                                    .expect("Coercion should be valid")
-                            })
-                            .collect();
-                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), list))
-                    }
-                    _ => panic!("Expected list as target type: {}", target),
-                }
-            }
-            Expr::Diff(collection1, collection2) => {
-                let collection1_value = self.eval_expr(eval_history, &*collection1)?;
-                let list1 = match collection1_value {
-                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
-                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                    AnnotatedValue::UntypedList => {
-                        // The list is empty - so "in" must return false
-                        BTreeSet::new()
-                    }
-                    _ => panic!("List expected"),
-                };
-
-                let collection2_value = self.eval_expr(eval_history, &*collection2)?;
-                let list2 = match collection2_value {
-                    AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
-                    | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
-                    AnnotatedValue::UntypedList => {
-                        // The list is empty - so "in" must return false
-                        BTreeSet::new()
-                    }
-                    _ => panic!("List expected"),
-                };
-
-                let target = eval_history
-                    .ast
-                    .expr_types
-                    .get(&expr.span)
-                    .expect("Semantic analysis should have given a target type");
-
-                match target {
-                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
-                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
-                        let coerced_list2: BTreeSet<_> = list2
-                            .into_iter()
-                            .map(|e| {
-                                e.coerce_to(eval_history.env, &elem_t)
-                                    .expect("Coercion should be valid")
-                            })
-                            .collect();
-                        let coerced_list1: BTreeSet<_> = list1
-                            .into_iter()
-                            .map(|e| {
-                                e.coerce_to(eval_history.env, &elem_t)
-                                    .expect("Coercion should be valid")
-                            })
-                            .collect();
-                        let collection =
-                            coerced_list1.difference(&coerced_list2).cloned().collect();
-                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), collection))
-                    }
-                    _ => panic!("Expected list as target type: {}", target),
-                }
-            }
             Expr::And(expr1, expr2) => {
                 let target = eval_history
                     .ast
@@ -1220,7 +1122,34 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::LinExpr(linexpr1 + linexpr2).into()
                     }
-                    _ => panic!("Expected Int or LinExpr: {:?} for node {:?}", target, expr),
+                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                        let list1 = match value1 {
+                            AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                            | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            _ => panic!("List expected"),
+                        };
+                        let list2 = match value2 {
+                            AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                            | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            _ => panic!("List expected"),
+                        };
+                        let list = list1
+                            .into_iter()
+                            .chain(list2.into_iter())
+                            .map(|e| {
+                                e.coerce_to(eval_history.env, &elem_t)
+                                    .expect("Coercion should be valid")
+                            })
+                            .collect();
+                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), list))
+                    }
+                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
+                    _ => panic!(
+                        "Expected Int or LinExpr or List: {:?} for node {:?}",
+                        target, expr
+                    ),
                 }
             }
             Expr::Sub(left, right) => {
@@ -1272,7 +1201,40 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::LinExpr(linexpr1 - linexpr2).into()
                     }
-                    _ => panic!("Expected Bool or Constraint"),
+                    AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
+                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                        let list1 = match value1 {
+                            AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                            | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            _ => panic!("List expected"),
+                        };
+                        let list2 = match value2 {
+                            AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
+                            | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
+                            AnnotatedValue::UntypedList => BTreeSet::new(),
+                            _ => panic!("List expected"),
+                        };
+
+                        let coerced_list2: BTreeSet<_> = list2
+                            .into_iter()
+                            .map(|e| {
+                                e.coerce_to(eval_history.env, &elem_t)
+                                    .expect("Coercion should be valid")
+                            })
+                            .collect();
+                        let coerced_list1: BTreeSet<_> = list1
+                            .into_iter()
+                            .map(|e| {
+                                e.coerce_to(eval_history.env, &elem_t)
+                                    .expect("Coercion should be valid")
+                            })
+                            .collect();
+                        let collection =
+                            coerced_list1.difference(&coerced_list2).cloned().collect();
+                        AnnotatedValue::Regular(ExprValue::List(*elem_t.clone(), collection))
+                    }
+                    _ => panic!("Expected Int or LinExpr or List"),
                 }
             }
             Expr::Neg(term) => {
