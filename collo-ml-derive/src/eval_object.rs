@@ -156,6 +156,18 @@ fn generate_from_impls(
                     #enum_name::#variant_name(id)
                 }
             }
+
+            impl TryFrom<#enum_name> for #id_type {
+                type Error = ::collo_ml::traits::TypeConversionError;
+
+                fn try_from(value: #enum_name) -> Result<Self, Self::Error> {
+                    use ::collo_ml::traits::TypeConversionError;
+                    match value {
+                        #enum_name::#variant_name(id) => Ok(id),
+                        _ => Err(TypeConversionError::BadType),
+                    }
+                }
+            }
         }
     });
 
