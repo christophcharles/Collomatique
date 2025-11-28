@@ -293,6 +293,7 @@ pub struct NoObjectEnv {}
 
 impl EvalObject for NoObject {
     type Env = NoObjectEnv;
+    type Cache = ();
 
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
         BTreeSet::new()
@@ -302,7 +303,12 @@ impl EvalObject for NoObject {
         panic!("No object is defined for NoObject")
     }
 
-    fn field_access(&self, _env: &Self::Env, _field: &str) -> Option<ExprValue<Self>> {
+    fn field_access(
+        &self,
+        _env: &Self::Env,
+        _cache: &mut Self::Cache,
+        _field: &str,
+    ) -> Option<ExprValue<Self>> {
         None
     }
 
@@ -407,14 +413,14 @@ impl<T: EvalObject> CheckedAST<T> {
     }
 
     fn check_env(&self, env: &T::Env) -> bool {
-        for (typ, fields) in self.global_env.get_types() {
+        for (typ, _fields) in self.global_env.get_types() {
             let objects = T::objects_with_typ(env, typ.as_str());
 
             for object in &objects {
                 if object.typ_name(&env) != *typ {
                     return false;
                 }
-                for (field, typ_name) in fields {
+                /*for (field, typ_name) in fields {
                     match object.field_access(env, field) {
                         Some(field_value) => {
                             if field_value.get_type(env) != *typ_name {
@@ -423,7 +429,7 @@ impl<T: EvalObject> CheckedAST<T> {
                         }
                         None => return false,
                     }
-                }
+                }*/
             }
         }
         true
@@ -473,7 +479,8 @@ impl<T: EvalObject> CheckedAST<T> {
         &'a self,
         env: &'a T::Env,
     ) -> Result<EvalHistory<'a, T>, EvalError> {
-        EvalHistory::new(self, env)
+        let cache = T::Cache::default();
+        EvalHistory::new(self, env, cache)
     }
 
     pub fn eval_fn(
@@ -573,7 +580,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         _ => panic!("Object expected"),
                     };
                     current_value = obj
-                        .field_access(&eval_history.env, &field.node)
+                        .field_access(&eval_history.env, &mut eval_history.cache, &field.node)
                         .expect("Object should have the required field");
                 }
 
@@ -1895,13 +1902,14 @@ impl<T: EvalObject> LocalEnv<T> {
 pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST<T>,
     env: &'a T::Env,
+    cache: T::Cache,
     funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
     vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
     var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
 }
 
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
-    fn new(ast: &'a CheckedAST<T>, env: &'a T::Env) -> Result<Self, EvalError> {
+    fn new(ast: &'a CheckedAST<T>, env: &'a T::Env, cache: T::Cache) -> Result<Self, EvalError> {
         if !ast.check_env(env) {
             return Err(EvalError::BadEnv);
         }
@@ -1909,15 +1917,16 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         Ok(EvalHistory {
             ast,
             env,
+            cache,
             funcs: BTreeMap::new(),
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
         })
     }
 
-    fn prettify_expr_value(&self, value: &ExprValue<T>) -> String {
+    fn prettify_expr_value(&mut self, value: &ExprValue<T>) -> String {
         match value {
-            ExprValue::Object(obj) => match obj.pretty_print(&self.env) {
+            ExprValue::Object(obj) => match obj.pretty_print(self.env, &mut self.cache) {
                 Some(s) => s,
                 None => format!("{:?}", obj),
             },
@@ -1932,7 +1941,11 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         }
     }
 
-    fn prettify_docstring(&self, fn_desc: &FunctionDesc, args: &Vec<ExprValue<T>>) -> Vec<String> {
+    fn prettify_docstring(
+        &mut self,
+        fn_desc: &FunctionDesc,
+        args: &Vec<ExprValue<T>>,
+    ) -> Vec<String> {
         let mut substitution_values = HashMap::new();
         for (arg_name, arg_value) in fn_desc.arg_names.iter().zip(args.iter()) {
             let pretty_value = self.prettify_expr_value(arg_value);

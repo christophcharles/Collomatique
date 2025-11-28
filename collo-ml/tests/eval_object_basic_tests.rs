@@ -197,26 +197,30 @@ fn test_field_access() {
     let rooms = HashMap::new();
 
     let env = TestEnv { students, rooms };
+    let mut cache = <ObjectId as EvalObject>::Cache::default();
 
     let student = ObjectId::Student(StudentId(1));
 
     // Access age field
-    assert_eq!(student.field_access(&env, "age"), Some(ExprValue::Int(20)));
+    assert_eq!(
+        student.field_access(&env, &mut cache, "age"),
+        Some(ExprValue::Int(20))
+    );
 
     // Access enrolled field
     assert_eq!(
-        student.field_access(&env, "enrolled"),
+        student.field_access(&env, &mut cache, "enrolled"),
         Some(ExprValue::Bool(true))
     );
 
     // Access room field (should be converted to ObjectId)
     assert_eq!(
-        student.field_access(&env, "room"),
+        student.field_access(&env, &mut cache, "room"),
         Some(ExprValue::Object(ObjectId::Room(RoomId(101))))
     );
 
     // Non-existent field
-    assert_eq!(student.field_access(&env, "nonexistent"), None);
+    assert_eq!(student.field_access(&env, &mut cache, "nonexistent"), None);
 }
 
 #[test]
@@ -225,10 +229,11 @@ fn test_field_access_with_nonexistent_object() {
         students: HashMap::new(),
         rooms: HashMap::new(),
     };
+    let mut cache = <ObjectId as EvalObject>::Cache::default();
 
     // Student ID 999 doesn't exist
     let student = ObjectId::Student(StudentId(999));
 
     // Should return None because the object can't be built
-    assert_eq!(student.field_access(&env, "age"), None);
+    assert_eq!(student.field_access(&env, &mut cache, "age"), None);
 }

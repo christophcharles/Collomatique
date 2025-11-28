@@ -10,8 +10,14 @@ struct TestObjectId;
 // Dummy implementation for testing
 impl EvalObject for TestObjectId {
     type Env = ();
+    type Cache = ();
 
-    fn field_access(&self, _env: &Self::Env, _field: &str) -> Option<ExprValue<Self>> {
+    fn field_access(
+        &self,
+        _env: &Self::Env,
+        _cache: &mut Self::Cache,
+        _field: &str,
+    ) -> Option<ExprValue<Self>> {
         None
     }
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {

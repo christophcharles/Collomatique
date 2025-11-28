@@ -661,6 +661,7 @@ fn aggregation_with_filtering() {
 
     impl EvalObject for Student {
         type Env = Env;
+        type Cache = ();
 
         fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
             match name {
@@ -671,7 +672,12 @@ fn aggregation_with_filtering() {
         fn typ_name(&self, _env: &Self::Env) -> String {
             "Student".into()
         }
-        fn field_access(&self, _env: &Self::Env, field: &str) -> Option<ExprValue<Self>> {
+        fn field_access(
+            &self,
+            _env: &Self::Env,
+            _cache: &mut Self::Cache,
+            field: &str,
+        ) -> Option<ExprValue<Self>> {
             assert_eq!(field, "score");
             Some(match self {
                 Student::Student1 => ExprValue::Int(45),
