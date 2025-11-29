@@ -1,7 +1,7 @@
 use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
-use crate::traits::{EvalObject, EvalVar, FieldConversionError};
+use crate::traits::{EvalObject, FieldConversionError};
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -319,23 +319,13 @@ impl EvalObject for NoObject {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NoVar {}
-
-impl EvalVar for NoVar {
-    fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-        HashMap::new()
-    }
-}
-
 #[derive(Clone, Debug)]
-pub struct CheckedAST<T: EvalObject = NoObject, V: EvalVar = NoVar> {
+pub struct CheckedAST<T: EvalObject = NoObject> {
     global_env: GlobalEnv,
     type_info: TypeInfo,
     expr_types: HashMap<crate::ast::Span, AnnotatedType>,
     warnings: Vec<SemWarning>,
-    _phantom_obj: std::marker::PhantomData<T>,
-    _phantom_var: std::marker::PhantomData<V>,
+    _phantom: std::marker::PhantomData<T>,
 }
 
 use thiserror::Error;
@@ -352,8 +342,6 @@ pub enum CompileError {
         errors: Vec<SemError>,
         warnings: Vec<SemWarning>,
     },
-    #[error("TypeId {0:?} that appears in EvalVar cannot be represented by the EvalObject")]
-    IncompatibleEvalObjectAndEvalVar(std::any::TypeId),
 }
 
 #[derive(Clone, Debug, Error)]
@@ -390,7 +378,7 @@ pub enum EvalError {
     InvalidExprValue { param: usize },
 }
 
-impl CheckedAST<NoObject, NoVar> {
+impl CheckedAST<NoObject> {
     pub fn quick_eval_fn(
         &self,
         fn_name: &str,
@@ -401,22 +389,11 @@ impl CheckedAST<NoObject, NoVar> {
     }
 }
 
-impl<T: EvalObject, V: EvalVar> CheckedAST<T, V> {
-    fn vars() -> Result<HashMap<String, Vec<ExprType>>, FieldConversionError> {
-        V::field_schema()
-            .into_iter()
-            .map(|(name, typ)| {
-                Ok((
-                    name,
-                    typ.into_iter()
-                        .map(|x| x.convert_to_expr_type::<T>())
-                        .collect::<Result<_, _>>()?,
-                ))
-            })
-            .collect::<Result<_, _>>()
-    }
-
-    pub fn new(input: &str) -> Result<CheckedAST<T, V>, CompileError> {
+impl<T: EvalObject> CheckedAST<T> {
+    pub fn new(
+        input: &str,
+        vars: HashMap<String, ArgsType>,
+    ) -> Result<CheckedAST<T>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
@@ -426,12 +403,6 @@ impl<T: EvalObject, V: EvalVar> CheckedAST<T, V> {
             Some(first_pair) => crate::ast::File::from_pest(first_pair)?,
             None => crate::ast::File::new(),
         };
-
-        let vars = Self::vars().map_err(|e| match e {
-            FieldConversionError::UnknownTypeId(type_id) => {
-                CompileError::IncompatibleEvalObjectAndEvalVar(type_id)
-            }
-        })?;
 
         let (global_env, type_info, expr_types, errors, warnings) =
             GlobalEnv::new(T::type_schemas(), vars, &file)?;
@@ -445,8 +416,7 @@ impl<T: EvalObject, V: EvalVar> CheckedAST<T, V> {
             type_info,
             expr_types,
             warnings,
-            _phantom_obj: std::marker::PhantomData,
-            _phantom_var: std::marker::PhantomData,
+            _phantom: std::marker::PhantomData,
         })
     }
 
@@ -507,7 +477,7 @@ impl<T: EvalObject, V: EvalVar> CheckedAST<T, V> {
     pub fn start_eval_history<'a>(
         &'a self,
         env: &'a T::Env,
-    ) -> Result<EvalHistory<'a, T, V>, EvalError> {
+    ) -> Result<EvalHistory<'a, T>, EvalError> {
         let cache = T::Cache::default();
         EvalHistory::new(self, env, cache)
     }
@@ -535,23 +505,21 @@ impl<T: EvalObject, V: EvalVar> CheckedAST<T, V> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct LocalEnv<T: EvalObject, V: EvalVar> {
+struct LocalEnv<T: EvalObject> {
     scopes: Vec<HashMap<String, ExprValue<T>>>,
     pending_scope: HashMap<String, ExprValue<T>>,
-    _phantom_var: std::marker::PhantomData<V>,
 }
 
-impl<T: EvalObject, V: EvalVar> Default for LocalEnv<T, V> {
+impl<T: EvalObject> Default for LocalEnv<T> {
     fn default() -> Self {
         LocalEnv {
             scopes: vec![],
             pending_scope: HashMap::new(),
-            _phantom_var: std::marker::PhantomData,
         }
     }
 }
 
-impl<T: EvalObject, V: EvalVar> LocalEnv<T, V> {
+impl<T: EvalObject> LocalEnv<T> {
     fn new() -> Self {
         LocalEnv::default()
     }
@@ -588,7 +556,7 @@ impl<T: EvalObject, V: EvalVar> LocalEnv<T, V> {
 
     fn eval_expr(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T, V>,
+        eval_history: &mut EvalHistory<'_, T>,
         expr: &Spanned<crate::ast::Expr>,
     ) -> Result<AnnotatedValue<T>, EvalError> {
         use crate::ast::Expr;
@@ -1777,7 +1745,7 @@ impl<T: EvalObject, V: EvalVar> LocalEnv<T, V> {
 
     fn build_naked_list_for_list_comprehension(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T, V>,
+        eval_history: &mut EvalHistory<'_, T>,
         body: &Spanned<crate::ast::Expr>,
         vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
         filter: Option<&Spanned<crate::ast::Expr>>,
@@ -1840,8 +1808,8 @@ impl<T: EvalObject, V: EvalVar> LocalEnv<T, V> {
 }
 
 #[derive(Debug)]
-pub struct EvalHistory<'a, T: EvalObject, V: EvalVar> {
-    ast: &'a CheckedAST<T, V>,
+pub struct EvalHistory<'a, T: EvalObject> {
+    ast: &'a CheckedAST<T>,
     env: &'a T::Env,
     cache: T::Cache,
     funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
@@ -1849,8 +1817,8 @@ pub struct EvalHistory<'a, T: EvalObject, V: EvalVar> {
     var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
 }
 
-impl<'a, T: EvalObject, V: EvalVar> EvalHistory<'a, T, V> {
-    fn new(ast: &'a CheckedAST<T, V>, env: &'a T::Env, cache: T::Cache) -> Result<Self, EvalError> {
+impl<'a, T: EvalObject> EvalHistory<'a, T> {
+    fn new(ast: &'a CheckedAST<T>, env: &'a T::Env, cache: T::Cache) -> Result<Self, EvalError> {
         ast.check_env(env)?;
 
         Ok(EvalHistory {
@@ -1985,7 +1953,7 @@ impl<'a, T: EvalObject, V: EvalVar> EvalHistory<'a, T, V> {
     }
 }
 
-impl<'a, T: EvalObject, V: EvalVar> EvalHistory<'a, T, V> {
+impl<'a, T: EvalObject> EvalHistory<'a, T> {
     pub fn validate_value(&self, val: &ExprValue<T>) -> bool {
         match val {
             ExprValue::Int(_) => true,

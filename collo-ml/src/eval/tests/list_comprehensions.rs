@@ -1,5 +1,4 @@
 use super::*;
-use crate::traits::FieldType;
 
 // ========== Simple List Comprehensions ==========
 
@@ -7,7 +6,9 @@ use crate::traits::FieldType;
 fn list_comp_simple_identity() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -25,7 +26,9 @@ fn list_comp_simple_identity() {
 fn list_comp_with_arithmetic() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -43,7 +46,9 @@ fn list_comp_with_arithmetic() {
 fn list_comp_with_addition() {
     let input = "pub let f() -> [Int] = [x + 10 for x in [1, 2, 3]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -61,7 +66,9 @@ fn list_comp_with_addition() {
 fn list_comp_with_range() {
     let input = "pub let f() -> [Int] = [x * x for x in [1..5]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -85,7 +92,9 @@ fn list_comp_with_range() {
 fn list_comp_with_param() {
     let input = "pub let f(list: [Int]) -> [Int] = [x * 2 for x in list];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -108,7 +117,9 @@ fn list_comp_with_param() {
 fn list_comp_boolean_expression() {
     let input = "pub let f() -> [Bool] = [x > 2 for x in [1, 2, 3, 4]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -131,7 +142,9 @@ fn list_comp_boolean_expression() {
 fn list_comp_constant_body() {
     let input = "pub let f() -> [Int] = [42 for x in [1, 2, 3]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -152,7 +165,9 @@ fn list_comp_constant_body() {
 fn list_comp_with_simple_filter() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3, 4, 5] where x > 3];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -170,7 +185,9 @@ fn list_comp_with_simple_filter() {
 fn list_comp_filter_even_numbers() {
     let input = "pub let f() -> [Int] = [x for x in [1..10] where x % 2 == 0];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -193,7 +210,9 @@ fn list_comp_filter_even_numbers() {
 fn list_comp_filter_with_transformation() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1..10] where x % 2 == 1];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -218,7 +237,9 @@ fn list_comp_filter_with_transformation() {
 fn list_comp_filter_no_matches() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3] where x > 10];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -230,7 +251,9 @@ fn list_comp_filter_no_matches() {
 fn list_comp_filter_all_match() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3] where x > 0];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -248,7 +271,9 @@ fn list_comp_filter_all_match() {
 fn list_comp_filter_complex_condition() {
     let input = "pub let f() -> [Int] = [x for x in [1..10] where x > 3 and x < 7];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -266,7 +291,9 @@ fn list_comp_filter_complex_condition() {
 fn list_comp_filter_with_param() {
     let input = "pub let f(threshold: Int) -> [Int] = [x for x in [1..10] where x > threshold];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -291,7 +318,9 @@ fn list_comp_filter_with_param() {
 fn list_comp_two_vars_simple() {
     let input = "pub let f() -> [Int] = [x + y for x in [1, 2] for y in [10, 20]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -315,7 +344,9 @@ fn list_comp_two_vars_simple() {
 fn list_comp_two_vars_multiplication() {
     let input = "pub let f() -> [Int] = [x * y for x in [2, 3] for y in [4, 5]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -339,7 +370,9 @@ fn list_comp_two_vars_multiplication() {
 fn list_comp_two_vars_with_ranges() {
     let input = "pub let f() -> [Int] = [x + y for x in [1..3] for y in [10..12]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -363,7 +396,9 @@ fn list_comp_two_vars_with_ranges() {
 fn list_comp_two_vars_with_filter() {
     let input = "pub let f() -> [Int] = [x + y for x in [1..5] for y in [1..5] where x + y < 6];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -395,7 +430,9 @@ fn list_comp_two_vars_with_filter() {
 fn list_comp_two_vars_filter_on_first() {
     let input = "pub let f() -> [Int] = [x * y for x in [1..5] for y in [1..3] where x > 2];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -420,7 +457,9 @@ fn list_comp_two_vars_filter_on_first() {
 fn list_comp_two_vars_filter_on_second() {
     let input = "pub let f() -> [Int] = [x + y for x in [1..3] for y in [1..5] where y % 2 == 0];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -446,7 +485,9 @@ fn list_comp_two_vars_filter_on_both() {
     let input =
         "pub let f() -> [Int] = [x * y for x in [1..5] for y in [1..5] where x > 2 and y < 3];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -471,7 +512,9 @@ fn list_comp_two_vars_filter_on_both() {
 fn list_comp_cartesian_product() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2] for y in [3, 4]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -496,7 +539,9 @@ fn list_comp_cartesian_product() {
 fn list_comp_with_dependent_limit() {
     let input = "pub let f() -> [Int] = [y for x in [1, 2] for y in [2*x, 2*x+1]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -521,7 +566,9 @@ fn list_comp_with_dependent_limit() {
 fn list_comp_over_union() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2] + [3, 4]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -544,7 +591,9 @@ fn list_comp_over_union() {
 fn list_comp_over_difference() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3, 4] - [2, 4]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -565,23 +614,12 @@ fn list_comp_over_difference() {
 fn list_comp_linexpr_simple() {
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1, 2, 3]];";
 
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    enum Vars {
-        V(i32),
-    }
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    impl EvalVar for Vars {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([("V".to_string(), vec![FieldType::Int])])
-        }
-    }
-
-    let env = NoObjectEnv {};
-
-    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .eval_fn(&env, "f", vec![])
+        .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -596,23 +634,12 @@ fn list_comp_linexpr_simple() {
 fn list_comp_linexpr_with_coefficient() {
     let input = "pub let f() -> [LinExpr] = [x * $V() for x in [1, 2, 3]];";
 
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    enum Vars {
-        V,
-    }
+    let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    impl EvalVar for Vars {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([("V".to_string(), vec![])])
-        }
-    }
-
-    let env = NoObjectEnv {};
-
-    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .eval_fn(&env, "f", vec![])
+        .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -628,23 +655,12 @@ fn list_comp_linexpr_with_coefficient() {
 fn list_comp_linexpr_with_filter() {
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1..6] where x % 2 == 0];";
 
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    enum Vars {
-        V(i32),
-    }
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
 
-    impl EvalVar for Vars {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([("V".to_string(), vec![FieldType::Int])])
-        }
-    }
-
-    let env = NoObjectEnv {};
-
-    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .eval_fn(&env, "f", vec![])
+        .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -662,7 +678,9 @@ fn list_comp_linexpr_with_filter() {
 fn list_comp_nested_in_sum() {
     let input = "pub let f() -> Int = sum x in [x * 2 for x in [1, 2, 3]] { x };";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -675,7 +693,9 @@ fn list_comp_nested_in_sum() {
 fn list_comp_in_if_condition() {
     let input = "pub let f(x: Int) -> Bool = x in [y * 2 for y in [1, 2, 3]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(4)])
@@ -692,7 +712,9 @@ fn list_comp_in_if_condition() {
 fn list_comp_with_if_expression_body() {
     let input = "pub let f() -> [Int] = [if x > 2 { x * 2 } else { x } for x in [1, 2, 3, 4]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -716,7 +738,9 @@ fn list_comp_with_if_expression_body() {
 fn list_comp_cardinality() {
     let input = "pub let f() -> Int = |[x * 2 for x in [1..5]]|;";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -729,7 +753,9 @@ fn list_comp_cardinality() {
 fn list_comp_two_vars_one_used() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2] for y in [10, 20, 30]];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -756,7 +782,9 @@ fn list_comp_with_multiple_operations() {
     let input =
         "pub let f() -> [Int] = [(x + y) * 2 for x in [1, 2] for y in [3, 4] where x + y < 6];";
 
-    let checked_ast = CheckedAST::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])

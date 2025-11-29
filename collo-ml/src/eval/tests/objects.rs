@@ -1,4 +1,4 @@
-use crate::eval::{CheckedAST, EvalObject, ExprValue, NoVar};
+use crate::eval::{CheckedAST, EvalObject, ExprValue};
 use crate::semantics::ExprType;
 use crate::traits::FieldConversionError;
 use std::collections::{BTreeSet, HashMap};
@@ -103,7 +103,9 @@ fn eval_with_simple_objects(
     fn_name: &str,
     args: Vec<ExprValue<SimpleObject>>,
 ) -> ExprValue<SimpleObject> {
-    let checked_ast = CheckedAST::<SimpleObject, NoVar>::new(input).expect("Should compile");
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = SimpleEnv {};
 
     checked_ast
