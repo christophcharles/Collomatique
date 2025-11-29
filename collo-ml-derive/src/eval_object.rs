@@ -180,30 +180,13 @@ fn generate_helper_functions(enum_name: &syn::Ident) -> proc_macro2::TokenStream
     quote! {
         impl #enum_name {
             #[doc(hidden)]
-            fn __collo_ml_convert_field_type(field_type: ::collo_ml::traits::FieldType) -> ::collo_ml::ExprType {
-                match field_type {
-                    ::collo_ml::traits::FieldType::Int => ::collo_ml::ExprType::Int,
-                    ::collo_ml::traits::FieldType::Bool => ::collo_ml::ExprType::Bool,
-                    ::collo_ml::traits::FieldType::Object(type_id) => {
-                        match #enum_name::type_id_to_name(type_id) {
-                            Some(name) => ::collo_ml::ExprType::Object(name),
-                            None => panic!("Unknown object type: {:?}", type_id),
-                        }
-                    }
-                    ::collo_ml::traits::FieldType::List(inner) => {
-                        ::collo_ml::ExprType::List(Box::new(Self::__collo_ml_convert_field_type(*inner)))
-                    }
-                }
-            }
-
-            #[doc(hidden)]
             fn __collo_ml_convert_field_value(value: ::collo_ml::traits::FieldValue<Self>) -> ::collo_ml::ExprValue<Self> {
                 match value {
                     ::collo_ml::traits::FieldValue::Int(i) => ::collo_ml::ExprValue::Int(i),
                     ::collo_ml::traits::FieldValue::Bool(b) => ::collo_ml::ExprValue::Bool(b),
                     ::collo_ml::traits::FieldValue::Object(obj) => ::collo_ml::ExprValue::Object(obj),
                     ::collo_ml::traits::FieldValue::List(field_type, items) => {
-                        let expr_type = Self::__collo_ml_convert_field_type(field_type);
+                        let expr_type = field_type.convert_to_expr_type::<Self>().expect("Object type should be known");
                         let converted_items = items.into_iter()
                             .map(Self::__collo_ml_convert_field_value)
                             .collect();
@@ -262,7 +245,7 @@ fn generate_eval_object_impl(
 
         quote! {
             id if id == ::std::any::TypeId::of::<#id_type>() => {
-                Some(#dsl_name.to_string())
+                Ok(#dsl_name.to_string())
             }
         }
     });
@@ -283,7 +266,7 @@ fn generate_eval_object_impl(
             {
                 let field_schema = <<#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object as ::collo_ml::ViewObject>::field_schema();
                 let expr_schema = field_schema.into_iter()
-                    .map(|(k, v)| (k, #enum_name::__collo_ml_convert_field_type(v)))
+                    .map(|(k, v)| (k, v.convert_to_expr_type::<#enum_name>().expect("Object type should be known")))
                     .collect();
                 map.insert(#dsl_name.to_string(), expr_schema);
             }
@@ -315,10 +298,10 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn type_id_to_name(type_id: ::std::any::TypeId) -> Option<String> {
+            fn type_id_to_name(type_id: ::std::any::TypeId) -> Result<String, ::collo_ml::traits::FieldConversionError> {
                 match type_id {
                     #(#type_id_to_name_arms,)*
-                    _ => None,
+                    _ => Err(::collo_ml::traits::FieldConversionError::UnknownTypeId(type_id)),
                 }
             }
 

@@ -1,5 +1,6 @@
 use crate::eval::{CheckedAST, EvalObject, ExprValue};
 use crate::semantics::ExprType;
+use crate::traits::FieldConversionError;
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -31,7 +32,7 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_id_to_name(_type_id: std::any::TypeId) -> Option<String> {
+    fn type_id_to_name(_type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
         panic!("Not implemented for the test")
     }
 

@@ -1,7 +1,7 @@
 use crate::ast::{Spanned, TypeName};
 use crate::parser::Rule;
 use crate::semantics::*;
-use crate::traits::EvalObject;
+use crate::traits::{EvalObject, FieldConversionError};
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -301,8 +301,8 @@ impl EvalObject for NoObject {
         panic!("No object is defined for NoObject")
     }
 
-    fn type_id_to_name(_type_id: std::any::TypeId) -> Option<String> {
-        None
+    fn type_id_to_name(type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
+        Err(FieldConversionError::UnknownTypeId(type_id))
     }
 
     fn field_access(
