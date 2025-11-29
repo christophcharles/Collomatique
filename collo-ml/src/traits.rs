@@ -578,6 +578,7 @@ pub trait ViewBuilder<Env, Id> {
 
 use thiserror::Error;
 
+/// Error used in TryFrom auto-impl for converting between types
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum TypeConversionError {
     #[error("Cannot convert value: it does not have the right type")]
