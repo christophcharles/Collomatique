@@ -389,6 +389,19 @@ pub enum FieldType {
     List(Box<FieldType>),
 }
 
+impl FieldType {
+    pub fn convert_to_expr_type<T: EvalObject>(self) -> Option<ExprType> {
+        match self {
+            FieldType::Bool => Some(ExprType::Bool),
+            FieldType::Int => Some(ExprType::Int),
+            FieldType::List(typ) => {
+                Some(ExprType::List(Box::new(typ.convert_to_expr_type::<T>()?)))
+            }
+            FieldType::Object(type_id) => Some(ExprType::Object(T::type_id_to_name(type_id)?)),
+        }
+    }
+}
+
 /// Represents the value of a field from a view object.
 ///
 /// This is an intermediate representation between view objects and the final [`ExprValue`] type.
@@ -583,4 +596,28 @@ use thiserror::Error;
 pub enum TypeConversionError {
     #[error("Cannot convert value: it does not have the right type")]
     BadType,
+}
+
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum VarConversionError {
+    #[error("Cannot convert variable: unknown name \"{0}\"")]
+    Unknown(String),
+}
+
+pub trait EvalVar: UsableData {
+    fn field_schema() -> HashMap<String, Vec<FieldType>>;
+
+    fn vars<T: EvalObject>() -> Option<HashMap<String, Vec<ExprType>>> {
+        Self::field_schema()
+            .into_iter()
+            .map(|(name, typ)| {
+                Some((
+                    name,
+                    typ.into_iter()
+                        .map(|x| x.convert_to_expr_type::<T>())
+                        .collect::<Option<_>>()?,
+                ))
+            })
+            .collect::<Option<_>>()
+    }
 }
