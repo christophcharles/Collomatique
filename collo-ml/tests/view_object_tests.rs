@@ -20,6 +20,9 @@ impl EvalObject for TestObjectId {
     ) -> Option<ExprValue<Self>> {
         None
     }
+    fn type_id_to_name(_field_typ: std::any::TypeId) -> Option<String> {
+        panic!("Not implemented for test")
+    }
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
         BTreeSet::new()
     }

@@ -301,6 +301,10 @@ impl EvalObject for NoObject {
         panic!("No object is defined for NoObject")
     }
 
+    fn type_id_to_name(_type_id: std::any::TypeId) -> Option<String> {
+        None
+    }
+
     fn field_access(
         &self,
         _env: &Self::Env,

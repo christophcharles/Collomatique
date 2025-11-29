@@ -31,6 +31,10 @@ impl EvalObject for SimpleObject {
         }
     }
 
+    fn type_id_to_name(_type_id: std::any::TypeId) -> Option<String> {
+        panic!("Not implemented for the test")
+    }
+
     fn field_access(
         &self,
         _env: &Self::Env,
