@@ -699,7 +699,7 @@ fn aggregation_with_filtering() {
                 _ => BTreeSet::new(),
             }
         }
-        fn type_id_to_name(_type_id: std::any::TypeId) -> Option<String> {
+        fn type_id_to_name(_type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
             panic!("Not implemented for the test")
         }
         fn typ_name(&self, _env: &Self::Env) -> String {

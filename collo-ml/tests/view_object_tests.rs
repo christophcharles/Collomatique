@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::traits::{FieldType, FieldValue};
+use collo_ml::traits::{FieldConversionError, FieldType, FieldValue};
 use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -20,7 +20,7 @@ impl EvalObject for TestObjectId {
     ) -> Option<ExprValue<Self>> {
         None
     }
-    fn type_id_to_name(_field_typ: std::any::TypeId) -> Option<String> {
+    fn type_id_to_name(_field_typ: std::any::TypeId) -> Result<String, FieldConversionError> {
         panic!("Not implemented for test")
     }
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {

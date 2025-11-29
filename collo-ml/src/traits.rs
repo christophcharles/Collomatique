@@ -296,7 +296,7 @@ pub trait EvalObject: UsableData {
     ///
     /// The corresponding object name if the `EvalObject`` is used for evaluation.
     /// Returns `None` if `type_id` is an object that cannot be represented with this `EvalObject`.
-    fn type_id_to_name(field_typ: std::any::TypeId) -> Option<String>;
+    fn type_id_to_name(field_typ: std::any::TypeId) -> Result<String, FieldConversionError>;
 
     /// Returns the DSL type name of this object.
     ///
@@ -390,14 +390,12 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    pub fn convert_to_expr_type<T: EvalObject>(self) -> Option<ExprType> {
+    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<ExprType, FieldConversionError> {
         match self {
-            FieldType::Bool => Some(ExprType::Bool),
-            FieldType::Int => Some(ExprType::Int),
-            FieldType::List(typ) => {
-                Some(ExprType::List(Box::new(typ.convert_to_expr_type::<T>()?)))
-            }
-            FieldType::Object(type_id) => Some(ExprType::Object(T::type_id_to_name(type_id)?)),
+            FieldType::Bool => Ok(ExprType::Bool),
+            FieldType::Int => Ok(ExprType::Int),
+            FieldType::List(typ) => Ok(ExprType::List(Box::new(typ.convert_to_expr_type::<T>()?))),
+            FieldType::Object(type_id) => Ok(ExprType::Object(T::type_id_to_name(type_id)?)),
         }
     }
 }
@@ -591,10 +589,16 @@ pub trait ViewBuilder<Env, Id> {
 
 use thiserror::Error;
 
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum FieldConversionError {
+    #[error("Cannot convert value: unknown TypeId")]
+    UnknownTypeId(std::any::TypeId),
+}
+
 /// Error used in TryFrom auto-impl for converting between types
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum TypeConversionError {
-    #[error("Cannot convert value: it does not have the right type")]
+    #[error("Cannot convert value: type not compatible with eval object")]
     BadType,
 }
 
@@ -607,17 +611,17 @@ pub enum VarConversionError {
 pub trait EvalVar: UsableData {
     fn field_schema() -> HashMap<String, Vec<FieldType>>;
 
-    fn vars<T: EvalObject>() -> Option<HashMap<String, Vec<ExprType>>> {
+    fn vars<T: EvalObject>() -> Result<HashMap<String, Vec<ExprType>>, FieldConversionError> {
         Self::field_schema()
             .into_iter()
             .map(|(name, typ)| {
-                Some((
+                Ok((
                     name,
                     typ.into_iter()
                         .map(|x| x.convert_to_expr_type::<T>())
-                        .collect::<Option<_>>()?,
+                        .collect::<Result<_, _>>()?,
                 ))
             })
-            .collect::<Option<_>>()
+            .collect::<Result<_, _>>()
     }
 }
