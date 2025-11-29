@@ -1,4 +1,5 @@
 use super::*;
+use crate::traits::FieldType;
 
 // ========== Basic Function Calls ==========
 
@@ -9,9 +10,7 @@ fn simple_fn_call() {
     pub let f() -> Int = g();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -26,9 +25,7 @@ fn fn_call_with_single_param() {
     pub let f() -> Int = double(21);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -43,9 +40,7 @@ fn fn_call_with_multiple_params() {
     pub let f() -> Int = add(10, 32);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -60,9 +55,7 @@ fn fn_call_passing_param_through() {
     pub let f(y: Int) -> Int = identity(y);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(100)])
@@ -77,9 +70,7 @@ fn fn_call_should_shadow_params() {
     pub let f(x: Int) -> Int = g(43);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(42)])
@@ -95,9 +86,7 @@ fn fn_multi_call() {
     pub let f() -> [Int] = [g(), h(42)];
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -120,9 +109,7 @@ fn fn_call_with_bool_param() {
     pub let f() -> Bool = negate(true);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -137,9 +124,7 @@ fn fn_call_with_list_param() {
     pub let f() -> Int = sum_list([1, 2, 3]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -154,9 +139,7 @@ fn fn_call_with_mixed_param_types() {
     pub let f() -> Int = conditional_add(true, 10, 32);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -171,12 +154,23 @@ fn fn_call_with_linexpr_param() {
     pub let f() -> LinExpr = scale($V(), 5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -200,9 +194,7 @@ fn fn_returning_bool() {
     pub let f() -> Bool = is_positive(5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -217,9 +209,7 @@ fn fn_returning_list() {
     pub let f() -> [Int] = make_range(5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -245,12 +235,23 @@ fn fn_returning_linexpr() {
     pub let f() -> LinExpr = get_var(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -274,12 +275,23 @@ fn fn_returning_constraint() {
     pub let f() -> Constraint = make_constraint(5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -297,12 +309,23 @@ fn fn_returning_list_of_linexpr() {
     pub let f() -> [LinExpr] = get_vars([1, 2, 3]);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -322,9 +345,7 @@ fn fn_call_int_to_linexpr_coercion() {
     pub let f() -> LinExpr = get_int();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -345,12 +366,23 @@ fn fn_call_int_coerced_in_addition() {
     pub let f() -> LinExpr = get_int() + $V();
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -373,9 +405,7 @@ fn fn_call_int_coerced_in_constraint() {
     pub let f() -> Constraint = get_value() === 10;
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -403,9 +433,7 @@ fn nested_fn_call_two_levels() {
     pub let f() -> Int = outer(5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -423,9 +451,7 @@ fn nested_fn_call_three_levels() {
     pub let f() -> Int = level3(5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -442,9 +468,7 @@ fn fn_call_as_argument() {
     pub let f() -> Int = add(double(3), double(4));
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -460,9 +484,7 @@ fn fn_call_nested_in_expression() {
     pub let f() -> Int = get_value() * 2 + get_value();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -480,9 +502,7 @@ fn fn_with_if_expression() {
     pub let f() -> Int = abs(-5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -497,9 +517,7 @@ fn fn_with_sum() {
     pub let f() -> Int = sum_range(4);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -515,9 +533,7 @@ fn fn_with_forall() {
     pub let f() -> Bool = all_positive([1, 2, 3]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -532,9 +548,7 @@ fn fn_with_list_comprehension() {
     pub let f() -> [Int] = squares([1, 2, 3]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -556,9 +570,7 @@ fn fn_with_collection_operations() {
     pub let f() -> [Int] = combine([1, 2, 3], [4, 5, 6]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -581,12 +593,23 @@ fn fn_using_base_var() {
     pub let f() -> LinExpr = make_linexpr(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -610,12 +633,23 @@ fn fn_using_reified_var() {
     pub let f() -> LinExpr = use_var(5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -641,12 +675,23 @@ fn fn_calling_fn_with_reified_var() {
     pub let f() -> LinExpr = user(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -672,9 +717,7 @@ fn helper_fn_for_repeated_logic() {
     pub let f() -> Int = count_evens([1, 2, 3, 4, 5, 6]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -691,9 +734,7 @@ fn helper_fn_for_transformation() {
     pub let f() -> [Int] = apply_to_list([1, 2, 3]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -716,9 +757,7 @@ fn multiple_helper_fns() {
     pub let f() -> Int = process(5);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -736,9 +775,7 @@ fn private_fn_cannot_be_called_externally() {
     pub let f() -> Int = private_helper();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     // Can call public function f
     let result_f = checked_ast
@@ -758,9 +795,7 @@ fn public_fn_can_be_called() {
     pub let f() -> Int = g();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     // Both public functions can be called
     let result_f = checked_ast
@@ -782,9 +817,7 @@ fn private_fn_calls_private_fn() {
     pub let f() -> Int = helper2() + 5;
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -802,9 +835,7 @@ fn fn_call_in_if_condition() {
     pub let f(x: Int) -> Int = if check(x) { 100 } else { 0 };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(15)])
@@ -824,9 +855,7 @@ fn fn_call_in_quantifier() {
     pub let f(xs: [Int]) -> Bool = forall x in xs { is_valid(x) };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let all_valid = ExprValue::List(
         ExprType::Int,
@@ -854,9 +883,7 @@ fn fn_call_in_list_comprehension() {
     pub let f(xs: [Int]) -> [Int] = [process(x) for x in xs];
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,

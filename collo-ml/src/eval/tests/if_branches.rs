@@ -6,9 +6,7 @@ use super::*;
 fn if_simple_true_branch() {
     let input = "pub let f() -> Int = if true { 42 } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -20,9 +18,7 @@ fn if_simple_true_branch() {
 fn if_simple_false_branch() {
     let input = "pub let f() -> Int = if false { 42 } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -34,9 +30,7 @@ fn if_simple_false_branch() {
 fn if_with_comparison() {
     let input = "pub let f(x: Int) -> Int = if x > 10 { 100 } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(15)])
@@ -53,9 +47,7 @@ fn if_with_comparison() {
 fn if_with_param() {
     let input = "pub let f(cond: Bool, a: Int, b: Int) -> Int = if cond { a } else { b };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn(
@@ -86,9 +78,7 @@ fn if_with_param() {
 fn if_returning_bool() {
     let input = "pub let f(x: Int) -> Bool = if x == 0 { true } else { false };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(0)])
@@ -105,9 +95,7 @@ fn if_returning_bool() {
 fn if_returning_list() {
     let input = "pub let f(x: Int) -> [Int] = if x > 0 { [1, 2, 3] } else { [4, 5] };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -136,9 +124,7 @@ fn if_returning_list() {
 fn if_nested() {
     let input = "pub let f(x: Int) -> Int = if x > 10 { if x > 20 { 2 } else { 1 } } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_0 = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -160,9 +146,7 @@ fn if_nested() {
 fn if_with_complex_condition() {
     let input = "pub let f(x: Int, y: Int) -> Int = if x > 0 and y > 0 { 1 } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5), ExprValue::Int(3)])
@@ -179,9 +163,7 @@ fn if_with_complex_condition() {
 fn if_with_arithmetic_in_branches() {
     let input = "pub let f(x: Int) -> Int = if x > 0 { x * 2 } else { x + 10 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -198,12 +180,24 @@ fn if_with_arithmetic_in_branches() {
 fn if_with_linexpr() {
     let input = "pub let f(x: Int) -> LinExpr = if x > 0 { $V1() } else { $V2() };";
 
-    let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V1,
+        V2,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .eval_fn(&env, "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result_true {
@@ -220,7 +214,7 @@ fn if_with_linexpr() {
     }
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .eval_fn(&env, "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
 
     match result_false {
@@ -241,12 +235,23 @@ fn if_with_linexpr() {
 fn if_with_constraint() {
     let input = "pub let f(x: Int) -> Constraint = if x > 0 { $V1() === 1 } else { $V1() === 0 };";
 
-    let vars = HashMap::from([("V1".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V1,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V1".to_string(), vec![])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .eval_fn(&env, "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result_true {
@@ -268,9 +273,7 @@ fn if_with_constraint() {
 fn if_with_empty_list() {
     let input = "pub let f(x: Int) -> [Int] = if x > 0 { [1, 2] } else { [] };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])

@@ -1,4 +1,5 @@
 use super::*;
+use crate::traits::FieldType;
 
 // ========== Quantifiers with Variables and Collection Operations ==========
 
@@ -10,9 +11,20 @@ fn forall_with_reified_var_and_filter() {
     pub let f(xs: [Int]) -> Constraint = forall x in xs where x > 0 { $MyVar(x) === 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -20,7 +32,7 @@ fn forall_with_reified_var_and_filter() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .eval_fn(&env, "f", vec![list])
         .expect("Should evaluate");
 
     match result {
@@ -59,9 +71,20 @@ fn sum_with_var_list_and_comprehension() {
     pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs + ys) { v };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -73,7 +96,7 @@ fn sum_with_var_list_and_comprehension() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .eval_fn(&env, "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -145,9 +168,7 @@ fn nested_quantifiers_with_filters() {
         };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -177,9 +198,7 @@ fn list_comp_with_function_calls_and_filters() {
     pub let f(xs: [Int]) -> [Int] = [transform(x) for x in xs where is_valid(x)];
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -214,9 +233,18 @@ fn nested_list_comp_with_reified_vars() {
         [$MyVar(x, y) for x in xs for y in ys where x != y];
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int, FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -227,8 +255,9 @@ fn nested_list_comp_with_reified_vars() {
         Vec::from([ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .eval_fn(&env, "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -267,9 +296,7 @@ fn list_comp_with_collection_ops_in_body() {
         [|diff_with_range(lst, 10)| for lst in lists];
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -312,9 +339,7 @@ fn if_with_quantifier_in_condition() {
         };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let all_positive = ExprValue::List(
         ExprType::Int,
@@ -346,9 +371,7 @@ fn if_with_collection_check() {
         };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let valid_set = ExprValue::List(
         ExprType::Int,
@@ -383,12 +406,24 @@ fn nested_if_with_variables() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let result_scaled = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
+            &env,
             "f",
             vec![
                 ExprValue::Int(5),
@@ -424,9 +459,20 @@ fn function_returning_constraint_system() {
         var_sum_constraint(xs, total) and var_bound_constraints(xs);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -434,7 +480,7 @@ fn function_returning_constraint_system() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list, ExprValue::Int(2)])
+        .eval_fn(&env, "f", vec![list, ExprValue::Int(2)])
         .expect("Should evaluate");
 
     match result {
@@ -489,17 +535,27 @@ fn function_composition_with_reified_vars() {
     pub let f(xs: [Int], y: Int) -> Constraint = constrain_sum(xs, y, 10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int, FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![list, ExprValue::Int(5)])
+        .eval_fn(&env, "f", vec![list, ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -543,9 +599,18 @@ fn assignment_constraint_pattern() {
         forall slot in slots { slot_capacity(slot, students, capacity) };
     "#;
 
-    let vars = HashMap::from([("Assigned".to_string(), vec![ExprType::Int, ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        Assigned(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("Assigned".to_string(), vec![FieldType::Int, FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let students = ExprValue::List(
         ExprType::Int,
@@ -556,8 +621,9 @@ fn assignment_constraint_pattern() {
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![students, slots, ExprValue::Int(1)])
+        .eval_fn(&env, "f", vec![students, slots, ExprValue::Int(1)])
         .expect("Should evaluate");
 
     match result {
@@ -627,15 +693,29 @@ fn conditional_constraint_with_reification() {
         $Assigned(student, time) <== $IsAvailable(student, time);
     "#;
 
-    let vars = HashMap::from([
-        ("Available".to_string(), vec![ExprType::Int, ExprType::Int]),
-        ("Assigned".to_string(), vec![ExprType::Int, ExprType::Int]),
-    ]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        Available(i32, i32),
+        Assigned(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([
+                (
+                    "Available".to_string(),
+                    vec![FieldType::Int, FieldType::Int],
+                ),
+                ("Assigned".to_string(), vec![FieldType::Int, FieldType::Int]),
+            ])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1), ExprValue::Int(5)])
+        .eval_fn(&env, "f", vec![ExprValue::Int(1), ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -673,13 +753,6 @@ fn aggregation_with_filtering() {
             count_valid_assignments(students, time, min_score) >== min_per_time 
         };
     "#;
-    let vars = HashMap::from([
-        ("Score".to_string(), vec![ExprType::Int]),
-        (
-            "Assigned".to_string(),
-            vec![ExprType::Object("Student".into()), ExprType::Int],
-        ),
-    ]);
 
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     enum Student {
@@ -688,6 +761,27 @@ fn aggregation_with_filtering() {
     }
 
     struct Env {}
+
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    enum Vars {
+        Score(i32),
+        Assigned(Student, i32),
+    }
+
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([
+                ("Score".to_string(), vec![FieldType::Int]),
+                (
+                    "Assigned".to_string(),
+                    vec![
+                        FieldType::Object(std::any::TypeId::of::<Student>()),
+                        FieldType::Int,
+                    ],
+                ),
+            ])
+        }
+    }
 
     impl EvalObject for Student {
         type Env = Env;
@@ -700,7 +794,7 @@ fn aggregation_with_filtering() {
             }
         }
         fn type_id_to_name(_type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
-            panic!("Not implemented for the test")
+            Ok("Student".into())
         }
         fn typ_name(&self, _env: &Self::Env) -> String {
             "Student".into()
@@ -725,7 +819,7 @@ fn aggregation_with_filtering() {
         }
     }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::<Student, Vars>::new(input).expect("Should compile");
 
     let students = ExprValue::List(
         ExprType::Object("Student".into()),
@@ -772,9 +866,7 @@ fn dynamic_set_construction() {
         filter_evens(valid_pairs(xs, ys));
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -808,9 +900,7 @@ fn set_operations_with_comprehensions() {
         positive_squares(xs) - small_numbers(xs);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -849,9 +939,20 @@ fn union_of_var_lists() {
         sum v in ($[Vars](xs) + $[Vars](ys)) { v };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -863,7 +964,7 @@ fn union_of_var_lists() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .eval_fn(&env, "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -889,9 +990,7 @@ fn empty_list_propagation() {
         };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let empty = ExprValue::List(ExprType::Int, Vec::new());
     let result_empty = checked_ast
@@ -918,9 +1017,7 @@ fn deeply_nested_structure() {
     pub let f() -> Int = outer([[1, 2], [3]]);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -941,9 +1038,20 @@ fn mixed_coercion_in_complex_expression() {
         sum x in xs { get_coefficient(x) * $V(x) };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let list = ExprValue::List(
         ExprType::Int,
@@ -951,7 +1059,7 @@ fn mixed_coercion_in_complex_expression() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .eval_fn(&env, "f", vec![list])
         .expect("Should evaluate");
 
     match result {
@@ -987,9 +1095,7 @@ fn let_expr_in_deeply_nested_structure() {
         };
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -1032,9 +1138,20 @@ fn all_features_combined() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int, FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -1046,7 +1163,7 @@ fn all_features_combined() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .eval_fn(&env, "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -1143,9 +1260,20 @@ fn all_features_combined_with_let() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int, ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32, i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int, FieldType::Int])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
         ExprType::Int,
@@ -1157,7 +1285,7 @@ fn all_features_combined_with_let() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .eval_fn(&env, "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {

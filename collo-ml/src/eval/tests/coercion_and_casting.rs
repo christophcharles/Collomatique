@@ -1,3 +1,5 @@
+use crate::traits::FieldType;
+
 use super::*;
 
 // ========== Implicit Type Coercion: Int → LinExpr ==========
@@ -6,12 +8,22 @@ use super::*;
 fn coercion_int_to_linexpr_in_addition() {
     let input = "pub let f() -> LinExpr = $V() + 5;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -30,12 +42,22 @@ fn coercion_int_to_linexpr_in_addition() {
 fn coercion_int_to_linexpr_in_subtraction() {
     let input = "pub let f() -> LinExpr = $V() - 10;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -54,12 +76,22 @@ fn coercion_int_to_linexpr_in_subtraction() {
 fn coercion_int_to_linexpr_both_sides() {
     let input = "pub let f() -> LinExpr = 5 + $V() - 3;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -72,9 +104,7 @@ fn coercion_int_to_linexpr_both_sides() {
 fn coercion_int_to_linexpr_in_constraint() {
     let input = "pub let f() -> Constraint = 5 === 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -96,9 +126,7 @@ fn coercion_int_to_linexpr_in_constraint() {
 fn coercion_int_to_linexpr_constraint_le() {
     let input = "pub let f() -> Constraint = 3 <== 7;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -120,9 +148,7 @@ fn coercion_int_to_linexpr_constraint_le() {
 fn coercion_int_to_linexpr_constraint_ge() {
     let input = "pub let f() -> Constraint = 10 >== 5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -144,12 +170,22 @@ fn coercion_int_to_linexpr_constraint_ge() {
 fn coercion_int_to_linexpr_with_var() {
     let input = "pub let f() -> Constraint = $V() + 5 === 10;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -170,12 +206,23 @@ fn coercion_int_to_linexpr_with_var() {
 fn coercion_int_param_to_linexpr() {
     let input = "pub let f(x: Int) -> LinExpr = $V() + x;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .eval_fn(&env, "f", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     match result {
@@ -196,12 +243,22 @@ fn coercion_int_param_to_linexpr() {
 fn coercion_in_list_unification() {
     let input = "pub let f() -> [LinExpr] = [$V(), 5];";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -216,9 +273,7 @@ fn coercion_in_list_unification() {
 fn coercion_in_list_comprehension() {
     let input = "pub let f() -> [LinExpr] = [x for x in [1, 2, 3]] as [LinExpr];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -236,12 +291,22 @@ fn coercion_in_list_comprehension() {
 fn coercion_in_sum_body() {
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) + x };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -256,9 +321,7 @@ fn coercion_in_sum_body() {
 fn explicit_cast_int_to_linexpr() {
     let input = "pub let f() -> LinExpr = 42 as LinExpr;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -276,9 +339,7 @@ fn explicit_cast_int_to_linexpr() {
 fn explicit_cast_in_expression() {
     let input = "pub let f() -> LinExpr = (5 as LinExpr) + (10 as LinExpr);";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -296,9 +357,7 @@ fn explicit_cast_in_expression() {
 fn explicit_cast_param() {
     let input = "pub let f(x: Int) -> LinExpr = x as LinExpr;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(100)])
@@ -316,9 +375,7 @@ fn explicit_cast_param() {
 fn explicit_cast_list_type() {
     let input = "pub let f() -> [Int] = [] as [Int];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -331,9 +388,7 @@ fn explicit_cast_list_type() {
 fn explicit_cast_list_of_linexpr() {
     let input = "pub let f() -> [LinExpr] = [1, 2, 3] as [LinExpr];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -351,9 +406,7 @@ fn explicit_cast_list_of_linexpr() {
 fn explicit_cast_in_sum() {
     let input = "pub let f() -> LinExpr = sum x in ([1, 2, 3] as [Int]) { x as LinExpr };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -372,9 +425,7 @@ fn explicit_cast_in_sum() {
 fn explicit_cast_in_forall() {
     let input = "pub let f() -> Constraint = forall x in ([1, 2] as [Int]) { (x as LinExpr) === (1 as LinExpr) };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -392,9 +443,7 @@ fn explicit_cast_in_forall() {
 fn explicit_cast_complex_expression() {
     let input = "pub let f(x: Int) -> LinExpr = ((x + 5) * 2) as LinExpr;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10)])
@@ -413,9 +462,7 @@ fn explicit_cast_complex_expression() {
 fn explicit_cast_in_if_branches() {
     let input = "pub let f(x: Int) -> LinExpr = if x > 0 { x as LinExpr } else { 0 as LinExpr };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -449,9 +496,7 @@ fn coercion_return_type_int_to_linexpr() {
     pub let f() -> LinExpr = helper();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -472,9 +517,7 @@ fn coercion_return_type_with_arithmetic() {
     pub let f() -> LinExpr = helper() + helper();
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -492,9 +535,7 @@ fn coercion_return_type_with_arithmetic() {
 fn coercion_param_to_return_type() {
     let input = "pub let f(x: Int) -> LinExpr = x;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(123)])
@@ -514,12 +555,22 @@ fn coercion_param_to_return_type() {
 fn mixed_implicit_and_explicit() {
     let input = "pub let f() -> LinExpr = (5 as LinExpr) + $V() + 10;";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -540,9 +591,7 @@ fn mixed_implicit_and_explicit() {
 fn cast_with_collection_operations() {
     let input = "pub let f() -> [LinExpr] = ([1, 2] as [LinExpr]) + ([3, 4] as [LinExpr]);";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -560,9 +609,7 @@ fn cast_with_collection_operations() {
 fn nested_casts() {
     let input = "pub let f() -> LinExpr = ((5 as LinExpr) as LinExpr);";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -580,12 +627,22 @@ fn nested_casts() {
 fn cast_in_comparison() {
     let input = "pub let f() -> Bool = (5 as LinExpr) == ($V() as LinExpr);";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     // LinExpr values can be compared for equality
@@ -601,9 +658,7 @@ fn cast_in_comparison() {
 fn coercion_in_forall_body() {
     let input = "pub let f() -> Constraint = forall x in [1, 2, 3] { x === 1 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -621,9 +676,7 @@ fn coercion_in_forall_body() {
 fn coercion_in_sum_to_linexpr() {
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -644,9 +697,7 @@ fn coercion_in_sum_to_linexpr() {
 fn cast_identity() {
     let input = "pub let f(x: Int) -> Int = x as Int;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(42)])
@@ -659,12 +710,22 @@ fn cast_identity() {
 fn cast_linexpr_identity() {
     let input = "pub let f() -> LinExpr = ($V() as LinExpr);";
 
-    let vars = HashMap::from([("V".to_string(), vec![])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V,
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+    }
 
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
+
+    let env = NoObjectEnv {};
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn(&env, "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -685,9 +746,7 @@ fn cast_linexpr_identity() {
 fn cast_empty_list_typed() {
     let input = "pub let f() -> [LinExpr] = [] as [LinExpr];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -700,9 +759,7 @@ fn cast_empty_list_typed() {
 fn cast_in_nested_list() {
     let input = "pub let f() -> [[Int]] = [[] as [Int], [1, 2] as [Int]];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])

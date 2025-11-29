@@ -6,9 +6,7 @@ use super::*;
 fn eq_ints_true() {
     let input = "pub let f() -> Bool = 42 == 42;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -20,9 +18,7 @@ fn eq_ints_true() {
 fn eq_ints_false() {
     let input = "pub let f() -> Bool = 42 == 43;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -34,9 +30,7 @@ fn eq_ints_false() {
 fn eq_ints_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x == y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Int(10)])
@@ -53,9 +47,7 @@ fn eq_ints_with_params() {
 fn eq_bools_true() {
     let input = "pub let f() -> Bool = true == true;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -67,9 +59,7 @@ fn eq_bools_true() {
 fn eq_bools_false() {
     let input = "pub let f() -> Bool = true == false;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -81,9 +71,7 @@ fn eq_bools_false() {
 fn eq_bools_with_params() {
     let input = "pub let f(a: Bool, b: Bool) -> Bool = a == b;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Bool(false), ExprValue::Bool(false)])
@@ -100,9 +88,7 @@ fn eq_bools_with_params() {
 fn eq_lists_empty() {
     let input = "pub let f() -> Bool = [] == [];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -114,9 +100,7 @@ fn eq_lists_empty() {
 fn eq_lists_same_content() {
     let input = "pub let f() -> Bool = [1, 2, 3] == [1, 2, 3];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -128,9 +112,7 @@ fn eq_lists_same_content() {
 fn eq_lists_different_content() {
     let input = "pub let f() -> Bool = [1, 2, 3] == [1, 2, 4];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -142,9 +124,7 @@ fn eq_lists_different_content() {
 fn eq_lists_different_length() {
     let input = "pub let f() -> Bool = [1, 2] == [1, 2, 3];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -157,9 +137,7 @@ fn eq_lists_order_dependent() {
     // Lists are Vec, so order should matter
     let input = "pub let f() -> Bool = [3, 1, 2] == [1, 2, 3];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -171,9 +149,7 @@ fn eq_lists_order_dependent() {
 fn eq_lists_with_params() {
     let input = "pub let f(list1: [Int], list2: [Int]) -> Bool = list1 == list2;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let list1 = ExprValue::List(
         ExprType::Int,
@@ -196,9 +172,7 @@ fn eq_lists_with_params() {
 fn ne_ints_true() {
     let input = "pub let f() -> Bool = 42 != 43;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -210,9 +184,7 @@ fn ne_ints_true() {
 fn ne_ints_false() {
     let input = "pub let f() -> Bool = 42 != 42;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -224,9 +196,7 @@ fn ne_ints_false() {
 fn ne_ints_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x != y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Int(11)])
@@ -243,9 +213,7 @@ fn ne_ints_with_params() {
 fn ne_bools_true() {
     let input = "pub let f() -> Bool = true != false;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -257,9 +225,7 @@ fn ne_bools_true() {
 fn ne_bools_false() {
     let input = "pub let f() -> Bool = false != false;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -271,9 +237,7 @@ fn ne_bools_false() {
 fn ne_lists_different() {
     let input = "pub let f() -> Bool = [1, 2] != [3, 4];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -285,9 +249,7 @@ fn ne_lists_different() {
 fn ne_lists_same() {
     let input = "pub let f() -> Bool = [1, 2, 3] != [1, 2, 3];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -299,9 +261,7 @@ fn ne_lists_same() {
 fn ne_empty_lists() {
     let input = "pub let f() -> Bool = [] != [];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -315,9 +275,7 @@ fn ne_empty_lists() {
 fn lt_ints_true() {
     let input = "pub let f() -> Bool = 5 < 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -329,9 +287,7 @@ fn lt_ints_true() {
 fn lt_ints_false() {
     let input = "pub let f() -> Bool = 10 < 5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -343,9 +299,7 @@ fn lt_ints_false() {
 fn lt_ints_equal_false() {
     let input = "pub let f() -> Bool = 10 < 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -357,9 +311,7 @@ fn lt_ints_equal_false() {
 fn lt_with_negative() {
     let input = "pub let f() -> Bool = -5 < 3;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -371,9 +323,7 @@ fn lt_with_negative() {
 fn lt_both_negative() {
     let input = "pub let f() -> Bool = -10 < -5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -385,9 +335,7 @@ fn lt_both_negative() {
 fn lt_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x < y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(3), ExprValue::Int(7)])
@@ -401,9 +349,7 @@ fn lt_with_params() {
 fn le_ints_less_true() {
     let input = "pub let f() -> Bool = 5 <= 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -415,9 +361,7 @@ fn le_ints_less_true() {
 fn le_ints_equal_true() {
     let input = "pub let f() -> Bool = 10 <= 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -429,9 +373,7 @@ fn le_ints_equal_true() {
 fn le_ints_greater_false() {
     let input = "pub let f() -> Bool = 15 <= 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -443,9 +385,7 @@ fn le_ints_greater_false() {
 fn le_with_negative() {
     let input = "pub let f() -> Bool = -5 <= 0;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -457,9 +397,7 @@ fn le_with_negative() {
 fn le_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x <= y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Int(10)])
@@ -473,9 +411,7 @@ fn le_with_params() {
 fn gt_ints_true() {
     let input = "pub let f() -> Bool = 10 > 5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -487,9 +423,7 @@ fn gt_ints_true() {
 fn gt_ints_false() {
     let input = "pub let f() -> Bool = 5 > 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -501,9 +435,7 @@ fn gt_ints_false() {
 fn gt_ints_equal_false() {
     let input = "pub let f() -> Bool = 10 > 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -515,9 +447,7 @@ fn gt_ints_equal_false() {
 fn gt_with_negative() {
     let input = "pub let f() -> Bool = 3 > -5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -529,9 +459,7 @@ fn gt_with_negative() {
 fn gt_both_negative() {
     let input = "pub let f() -> Bool = -5 > -10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -543,9 +471,7 @@ fn gt_both_negative() {
 fn gt_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x > y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(7), ExprValue::Int(3)])
@@ -559,9 +485,7 @@ fn gt_with_params() {
 fn ge_ints_greater_true() {
     let input = "pub let f() -> Bool = 10 >= 5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -573,9 +497,7 @@ fn ge_ints_greater_true() {
 fn ge_ints_equal_true() {
     let input = "pub let f() -> Bool = 10 >= 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -587,9 +509,7 @@ fn ge_ints_equal_true() {
 fn ge_ints_less_false() {
     let input = "pub let f() -> Bool = 5 >= 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -601,9 +521,7 @@ fn ge_ints_less_false() {
 fn ge_with_negative() {
     let input = "pub let f() -> Bool = 0 >= -5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -615,9 +533,7 @@ fn ge_with_negative() {
 fn ge_with_params() {
     let input = "pub let f(x: Int, y: Int) -> Bool = x >= y;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Int(10)])
@@ -631,9 +547,7 @@ fn ge_with_params() {
 fn comparison_chain_with_and() {
     let input = "pub let f(x: Int) -> Bool = x > 0 and x < 10;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(5)])
@@ -650,9 +564,7 @@ fn comparison_chain_with_and() {
 fn comparison_in_arithmetic_context() {
     let input = "pub let f(x: Int) -> Int = if x > 5 { x } else { 0 };";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result_greater = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(10)])

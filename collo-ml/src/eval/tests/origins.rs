@@ -1,4 +1,5 @@
 use super::*;
+use crate::traits::FieldType;
 use std::collections::HashMap;
 
 /// Test that a simple constraint gets an origin when returned from a function
@@ -8,12 +9,23 @@ fn simple_constraint_gets_origin() {
     pub let make_constraint(x: Int) -> Constraint = $V(x) === 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_constraint", vec![ExprValue::Int(42)])
+        .eval_fn(&env, "make_constraint", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     match result {
@@ -46,12 +58,23 @@ fn nested_function_origin_is_inner() {
     pub let outer(y: Int) -> Constraint = inner(y + 1);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("outer", vec![ExprValue::Int(10)])
+        .eval_fn(&env, "outer", vec![ExprValue::Int(10)])
         .expect("Should evaluate");
 
     match result {
@@ -82,12 +105,23 @@ fn multiple_constraints_same_origin() {
         ($V(x) === 1) and ($V(x + 1) === 2);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_two", vec![ExprValue::Int(5)])
+        .eval_fn(&env, "make_two", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -115,12 +149,24 @@ fn origin_with_multiple_params() {
         $V(x) === y + z;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
+            &env,
             "complex",
             vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)],
         )
@@ -152,12 +198,23 @@ fn reified_constraint_origin() {
     pub let use_reified(y: Int) -> Constraint = $BaseVar(y) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("use_reified", vec![ExprValue::Int(7)])
+        .eval_fn(&env, "use_reified", vec![ExprValue::Int(7)])
         .expect("Should evaluate");
 
     match result {
@@ -191,12 +248,23 @@ fn forall_constraint_origin() {
         forall i in [0..n] { $V(i) === 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("forall_constraints", vec![ExprValue::Int(3)])
+        .eval_fn(&env, "forall_constraints", vec![ExprValue::Int(3)])
         .expect("Should evaluate");
 
     match result {
@@ -226,12 +294,23 @@ fn combined_constraints_preserve_separate_origins() {
     pub let combined(x: Int) -> Constraint = c1(x) and c2(x);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("combined", vec![ExprValue::Int(5)])
+        .eval_fn(&env, "combined", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -275,9 +354,20 @@ fn origin_with_list_param() {
         forall x in items { $V(x) === 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let mut list_items = Vec::new();
     list_items.push(ExprValue::Int(1));
@@ -287,7 +377,7 @@ fn origin_with_list_param() {
     let list_arg = ExprValue::List(ExprType::Int, list_items.clone());
 
     let result = checked_ast
-        .quick_eval_fn("list_constraint", vec![list_arg.clone()])
+        .eval_fn(&env, "list_constraint", vec![list_arg.clone()])
         .expect("Should evaluate");
 
     match result {
@@ -314,12 +404,23 @@ fn inner_function_origin_preserved() {
     pub let wrapper(y: Int) -> Constraint = helper(y * 2);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("wrapper", vec![ExprValue::Int(3)])
+        .eval_fn(&env, "wrapper", vec![ExprValue::Int(3)])
         .expect("Should evaluate");
 
     match result {
@@ -352,12 +453,23 @@ fn deeply_nested_function_origin() {
     pub let outer(x: Int) -> Constraint = middle(x + 5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Vars {
+        V(i32),
+    }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    impl EvalVar for Vars {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![FieldType::Int])])
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    let checked_ast = CheckedAST::<NoObject, Vars>::new(input).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("outer", vec![ExprValue::Int(1)])
+        .eval_fn(&env, "outer", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
 
     match result {
@@ -388,9 +500,7 @@ fn docstring_substitution_with_args() {
     pub let f() -> Constraint = h(1) and h(2);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -439,9 +549,7 @@ fn multiline_docstring_multiple_params() {
     pub let test() -> Constraint = range_check(5, 10);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("test", vec![])
@@ -477,9 +585,7 @@ fn repeated_parameter_substitution() {
     pub let test() -> Constraint = self_compare(42);
     "#;
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("test", vec![])

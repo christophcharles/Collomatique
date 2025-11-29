@@ -4,9 +4,7 @@ use super::*;
 fn simple_number() {
     let input = "pub let f() -> Int = 42;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -18,9 +16,7 @@ fn simple_number() {
 fn negative_number() {
     let input = "pub let f() -> Int = -5;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -32,9 +28,7 @@ fn negative_number() {
 fn boolean_true() {
     let input = "pub let f() -> Bool = true;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -46,9 +40,7 @@ fn boolean_true() {
 fn boolean_false() {
     let input = "pub let f() -> Bool = false;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -60,9 +52,7 @@ fn boolean_false() {
 fn boolean_list() {
     let input = "pub let f() -> [Bool] = [true, false, true];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -84,9 +74,7 @@ fn boolean_list() {
 fn number_list() {
     let input = "pub let f() -> [Int] = [0, 42, -1];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -104,9 +92,7 @@ fn number_list() {
 fn cardinality_of_fixed_list() {
     let input = "pub let f() -> Int = |[0, 42, -1]|;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -118,9 +104,7 @@ fn cardinality_of_fixed_list() {
 fn cardinality_of_list_in_param() {
     let input = "pub let f(list: [Int]) -> Int = |list|;";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -138,9 +122,7 @@ fn cardinality_of_list_in_param() {
 fn range() {
     let input = "pub let f() -> [Int] = [-3..2];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -164,9 +146,7 @@ fn range() {
 fn empty_range() {
     let input = "pub let f() -> [Int] = [0..0];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -178,9 +158,7 @@ fn empty_range() {
 fn empty_range_with_end_below_start() {
     let input = "pub let f() -> [Int] = [3..-2];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
@@ -192,9 +170,7 @@ fn empty_range_with_end_below_start() {
 fn range_with_one_element() {
     let input = "pub let f() -> [Int] = [4..5];";
 
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(input).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("f", vec![])
