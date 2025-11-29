@@ -39,7 +39,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
 
     // Generate helper functions
-    let helper_functions = generate_helper_functions(enum_name, &variant_info);
+    let helper_functions = generate_helper_functions(enum_name);
 
     // Generate EvalObject implementation
     let eval_object_impl =
@@ -176,22 +176,7 @@ fn generate_from_impls(
     }
 }
 
-fn generate_helper_functions(
-    enum_name: &syn::Ident,
-    variants: &[VariantInfo],
-) -> proc_macro2::TokenStream {
-    // Generate the TypeId match arms for converting FieldType::Object -> ExprType::Object
-    let type_id_to_name_arms = variants.iter().map(|info| {
-        let id_type = &info.id_type;
-        let dsl_name = &info.dsl_type_name;
-
-        quote! {
-            id if id == ::std::any::TypeId::of::<#id_type>() => {
-                ::collo_ml::ExprType::Object(#dsl_name.to_string())
-            }
-        }
-    });
-
+fn generate_helper_functions(enum_name: &syn::Ident) -> proc_macro2::TokenStream {
     quote! {
         impl #enum_name {
             #[doc(hidden)]
@@ -200,9 +185,9 @@ fn generate_helper_functions(
                     ::collo_ml::traits::FieldType::Int => ::collo_ml::ExprType::Int,
                     ::collo_ml::traits::FieldType::Bool => ::collo_ml::ExprType::Bool,
                     ::collo_ml::traits::FieldType::Object(type_id) => {
-                        match type_id {
-                            #(#type_id_to_name_arms,)*
-                            _ => panic!("Unknown object type: {:?}", type_id),
+                        match #enum_name::type_id_to_name(type_id) {
+                            Some(name) => ::collo_ml::ExprType::Object(name),
+                            None => panic!("Unknown object type: {:?}", type_id),
                         }
                     }
                     ::collo_ml::traits::FieldType::List(inner) => {
@@ -270,6 +255,18 @@ fn generate_eval_object_impl(
         }
     });
 
+    // Generate the TypeId match arms for converting TypeId -> Object name
+    let type_id_to_name_arms = variants.iter().map(|info| {
+        let id_type = &info.id_type;
+        let dsl_name = &info.dsl_type_name;
+
+        quote! {
+            id if id == ::std::any::TypeId::of::<#id_type>() => {
+                Some(#dsl_name.to_string())
+            }
+        }
+    });
+
     // Generate field_access implementation (with or without caching)
     let field_access_arms = if cache_config.is_some() {
         generate_cached_field_access_arms(enum_name, env_type, variants)
@@ -315,6 +312,13 @@ fn generate_eval_object_impl(
             fn typ_name(&self, _env: &Self::Env) -> String {
                 match self {
                     #(#typ_name_arms,)*
+                }
+            }
+
+            fn type_id_to_name(type_id: ::std::any::TypeId) -> Option<String> {
+                match type_id {
+                    #(#type_id_to_name_arms,)*
+                    _ => None,
                 }
             }
 

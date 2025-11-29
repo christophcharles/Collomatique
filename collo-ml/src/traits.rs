@@ -286,6 +286,18 @@ pub trait EvalObject: UsableData {
     /// if the type name is not recognized.
     fn objects_with_typ(env: &Self::Env, name: &str) -> BTreeSet<Self>;
 
+    /// Converts a TypeId to an object nmae
+    ///
+    /// # Arguemnts
+    ///
+    /// * `type_id` - rust TypeID object to be converted into an object name
+    ///
+    /// # Returns
+    ///
+    /// The corresponding object name if the `EvalObject`` is used for evaluation.
+    /// Returns `None` if `type_id` is an object that cannot be represented with this `EvalObject`.
+    fn type_id_to_name(field_typ: std::any::TypeId) -> Option<String>;
+
     /// Returns the DSL type name of this object.
     ///
     /// # Arguments
