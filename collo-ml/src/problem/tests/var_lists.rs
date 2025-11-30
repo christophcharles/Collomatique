@@ -116,3 +116,115 @@ fn list_constraint_reification() {
         x_val
     );
 }
+
+#[test]
+fn list_constraint_reification_exact_count_with_param() {
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum Var {
+        X(i32), // Parameter from 0 to 99
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("X".to_string(), vec![crate::traits::FieldType::Int])])
+        }
+
+        fn fix(&self) -> Option<f64> {
+            match self {
+                Var::X(i) => {
+                    // Fix to 0 (false) if out of valid range [0, 100)
+                    if *i < 0 || *i >= 100 {
+                        Some(0.0)
+                    } else {
+                        None
+                    }
+                }
+            }
+        }
+
+        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            let mut vars = BTreeMap::new();
+            // Create a binary variable for each valid index
+            for i in 0..100 {
+                vars.insert(Var::X(i), collomatique_ilp::Variable::binary());
+            }
+            vars
+        }
+    }
+
+    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "X" => {
+                    if value.params.len() != 1 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "X".into(),
+                            expected: 1,
+                            found: value.params.len(),
+                        });
+                    }
+                    let param = match &value.params[0] {
+                        crate::eval::ExprValue::Int(i) => *i,
+                        _ => {
+                            return Err(VarConversionError::WrongParameterType {
+                                name: "X".into(),
+                                param: 0,
+                                expected: crate::traits::FieldType::Int,
+                            })
+                        }
+                    };
+                    Ok(Var::X(param))
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let mut pb_builder =
+        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+
+    // Reify a list of constraints: X(i) === 1 for i in 0..100
+    // Then enforce exactly 5 must be true
+    let warnings = pb_builder
+        .add_constraints(
+            Script {
+                name: "exact_count".into(),
+                content: r#"
+                    let constraints() -> [Constraint] = [$X(i) === 1 for i in [0..100]];
+                    reify constraints as $[R];
+                    pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
+                "#
+                .into(),
+            },
+            vec![("exactly_five".to_string(), vec![])],
+        )
+        .expect("Should compile");
+
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+
+    let problem = pb_builder.build();
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(problem.get_inner_problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    // Count how many X(i) are set to 1
+    let mut count = 0;
+    for i in 0..100 {
+        if let Some(val) = sol.get(ProblemVar::Base(Var::X(i))) {
+            if val >= 0.99 {
+                count += 1;
+            }
+        }
+    }
+
+    assert_eq!(
+        count, 5,
+        "Exactly 5 variables should be set to 1, but got {}",
+        count
+    );
+}
