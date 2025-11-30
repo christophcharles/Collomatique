@@ -802,6 +802,20 @@ impl<
             .expect("There should be warnings (maybe empty) for the initial script"))
     }
 
+    pub fn add_constraints_and_objectives(
+        &mut self,
+        script: Script,
+        funcs: Vec<(String, Vec<ExprValue<T>>)>,
+        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+    ) -> Result<Vec<SemWarning>, ProblemError> {
+        let script = StoredScript::new(script);
+        let script_ref = script.get_ref().clone();
+        let mut warnings = self.evaluate_recursively(script, funcs, objectives)?;
+        Ok(warnings
+            .remove(&script_ref)
+            .expect("There should be warnings (maybe empty) for the initial script"))
+    }
+
     pub fn build(mut self) -> Problem<T, V> {
         for (constraint, _desc) in self.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
