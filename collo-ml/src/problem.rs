@@ -202,7 +202,7 @@ impl<
                 let var = LinExpr::var(var);
                 let constraints = vec![
                     (lin_expr.leq(&(max * (&one - &var))), origin.clone()),
-                    (lin_expr.geq(&(min * &var + &one)), origin),
+                    (lin_expr.geq(&((min - 1.) * &var + &one)), origin),
                 ];
                 constraints
             }
@@ -234,7 +234,7 @@ impl<
     /// to enforce this.
     fn reify_constraint<'b>(
         &mut self,
-        constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, V>>>,
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, V>>>,
         origin: ConstraintDesc<T>,
         var: ProblemVar<T, V>,
     ) -> Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>
@@ -247,6 +247,9 @@ impl<
         if constraints.len() == 0 {
             let var = LinExpr::var(var);
             return vec![(var.eq(&LinExpr::constant(1.)), origin)];
+        }
+        if constraints.len() == 1 {
+            return self.reify_single_constraint(constraints.next().unwrap(), origin, var);
         }
 
         // We reify each constraint with helper variables
