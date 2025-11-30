@@ -122,6 +122,8 @@ pub enum ProblemError {
     InvalidExprValue(String),
     #[error("Variable \"{0}\" is already defined")]
     VariableAlreadyDefined(String),
+    #[error("Script already used for reified variables")]
+    ScriptAlreadyUsed(StoredScript),
     #[error(transparent)]
     CompileError(#[from] CompileError),
     #[error("Function {func} returns {returned} instead of {expected}")]
@@ -691,44 +693,57 @@ impl<
         })
     }
 
-    pub fn add_reified_variable(
+    pub fn add_reified_variables(
         &mut self,
         script: Script,
-        func: String,
-        name: String,
+        func_and_names: Vec<(String, String)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
-        if self.base_vars.contains_key(&name) {
-            return Err(ProblemError::VariableAlreadyDefined(name));
-        }
-        if self.reified_vars.contains_key(&name) {
-            return Err(ProblemError::VariableAlreadyDefined(name));
-        }
-
-        let vars = self.generate_current_vars();
-        let ast = CheckedAST::<T>::new(&script.content, vars)?;
-        let func_map = ast.get_functions();
-        let Some((args, expr_type)) = func_map.get(&func) else {
-            return Err(ProblemError::UnknownFunction(func));
-        };
-
-        if *expr_type != ExprType::Constraint {
-            return Err(ProblemError::WrongReturnType {
-                func,
-                returned: expr_type.clone(),
-                expected: ExprType::Constraint,
-            });
+        for (_func, name) in &func_and_names {
+            if self.base_vars.contains_key(name) {
+                return Err(ProblemError::VariableAlreadyDefined(name.clone()));
+            }
+            if self.reified_vars.contains_key(name) {
+                return Err(ProblemError::VariableAlreadyDefined(name.clone()));
+            }
         }
 
         let stored_script = StoredScript::new(script);
-        self.reified_vars.insert(
-            name.clone(),
-            ReifiedVarDesc {
-                func,
-                args: args.clone(),
-                script_ref: stored_script.get_ref().clone(),
-            },
-        );
+        for s in &self.stored_scripts {
+            if stored_script == *s {
+                return Err(ProblemError::ScriptAlreadyUsed(stored_script));
+            }
+        }
+        let script_ref = stored_script.get_ref().clone();
+
+        let vars = self.generate_current_vars();
+        let ast = CheckedAST::<T>::new(stored_script.get_content(), vars)?;
+
         self.stored_scripts.push(stored_script);
+
+        let func_map = ast.get_functions();
+
+        for (func, name) in func_and_names {
+            let Some((args, expr_type)) = func_map.get(&func) else {
+                return Err(ProblemError::UnknownFunction(func));
+            };
+
+            if *expr_type != ExprType::Constraint {
+                return Err(ProblemError::WrongReturnType {
+                    func,
+                    returned: expr_type.clone(),
+                    expected: ExprType::Constraint,
+                });
+            }
+
+            self.reified_vars.insert(
+                name.clone(),
+                ReifiedVarDesc {
+                    func,
+                    args: args.clone(),
+                    script_ref: script_ref.clone(),
+                },
+            );
+        }
 
         Ok(ast.get_warnings().clone())
     }
