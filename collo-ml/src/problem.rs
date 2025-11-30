@@ -10,14 +10,17 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 mod scripts;
 use scripts::{Script, ScriptRef, StoredScript};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct ReifiedPublicVar<T: EvalObject> {
+pub struct ReifiedPublicVar<T: EvalObject> {
     name: String,
     params: Vec<ExprValue<T>>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct ReifiedPrivateVar<T: EvalObject> {
+pub struct ReifiedPrivateVar<T: EvalObject> {
     script_ref: ScriptRef,
     name: String,
     from_list: Option<usize>,
@@ -25,12 +28,13 @@ struct ReifiedPrivateVar<T: EvalObject> {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-enum ProblemVar<T: EvalObject, V: EvalVar> {
+pub enum ProblemVar<T: EvalObject, V: EvalVar> {
     Base(V),
     ReifiedPublic(ReifiedPublicVar<T>),
     ReifiedPrivate(ReifiedPrivateVar<T>),
     Helper(u64),
 }
+
 struct ReifiedVarDesc {
     func: String,
     args: ArgsType,
@@ -38,7 +42,7 @@ struct ReifiedVarDesc {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum ConstraintDesc<T: EvalObject> {
+pub enum ConstraintDesc<T: EvalObject> {
     Reified {
         script_ref: ScriptRef,
         var_name: String,
@@ -814,4 +818,12 @@ impl<
 #[derive(Debug, Clone)]
 pub struct Problem<T: EvalObject, V: EvalVar> {
     problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
+}
+
+impl<T: EvalObject, V: EvalVar> Problem<T, V> {
+    pub fn get_inner_problem(
+        &self,
+    ) -> &collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>> {
+        &self.problem
+    }
 }
