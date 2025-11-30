@@ -400,6 +400,17 @@ impl FieldType {
     }
 }
 
+impl std::fmt::Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldType::Bool => write!(f, "Bool"),
+            FieldType::Int => write!(f, "Int"),
+            FieldType::List(typ) => write!(f, "[{}]", typ),
+            FieldType::Object(type_id) => write!(f, "Object({:?})", type_id),
+        }
+    }
+}
+
 /// Represents the value of a field from a view object.
 ///
 /// This is an intermediate representation between view objects and the final [`ExprValue`] type.
@@ -611,6 +622,14 @@ pub enum VarConversionError {
         name: String,
         expected: usize,
         found: usize,
+    },
+    #[error(
+        "Cannot convert variable {name}: parameter {param} has wrong type. Expected {expected}"
+    )]
+    WrongParameterType {
+        name: String,
+        param: usize,
+        expected: FieldType,
     },
 }
 

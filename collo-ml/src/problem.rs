@@ -296,6 +296,13 @@ impl<
                             } => {
                                 panic!("Inconsistent EvalVar, cannot convert var: {}", e)
                             }
+                            VarConversionError::WrongParameterType {
+                                name: _,
+                                param: _,
+                                expected: _,
+                            } => {
+                                panic!("Inconsistent EvalVar, cannot convert var: {}", e)
+                            }
                         },
                     })
                 } else {
