@@ -87,7 +87,7 @@ pub struct ProblemBuilder<
     called_public_reified_variables: BTreeSet<ReifiedPublicVar<T>>,
 
     /// Objective function
-    objective: Option<Objective<ProblemVar<T, V>>>,
+    objective: Objective<ProblemVar<T, V>>,
 
     /// Internal ID.
     ///
@@ -497,7 +497,7 @@ impl<
         &mut self,
         script: StoredScript,
         mut start_constraints: Vec<(String, Vec<ExprValue<T>>)>,
-        mut start_obj: Option<(String, Vec<ExprValue<T>>, ObjectiveSense)>,
+        mut start_obj: Option<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError> {
         let vars = self.generate_current_vars();
         let mut current_script_opt = Some(script);
@@ -537,7 +537,7 @@ impl<
 
             // We then evaluate the objective if any
             // (this will happen on the first iteration of the loop only)
-            while let Some((fn_name, args, obj_sense)) = start_obj.take() {
+            while let Some((fn_name, args, coef, obj_sense)) = start_obj.take() {
                 let (lin_expr, _origin) = self.eval_lin_expr_in_history(
                     script.get_ref(),
                     &mut eval_history,
@@ -546,7 +546,7 @@ impl<
                 )?;
                 uncalled_vars
                     .extend(self.look_for_uncalled_public_reified_var_in_lin_expr(&lin_expr));
-                self.objective = Some(Objective::new(lin_expr, obj_sense));
+                self.objective = &self.objective + Objective::new(coef * lin_expr, obj_sense);
             }
 
             // Then we evaluate the missing public reified vars from this scripts
@@ -714,7 +714,7 @@ impl<
             stored_scripts: vec![],
             constraints: vec![],
             called_public_reified_variables: BTreeSet::new(),
-            objective: None,
+            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Maximize),
             current_helper_id: 0,
             vars_desc,
         })
@@ -789,17 +789,18 @@ impl<
             .expect("There should be warnings (maybe empty) for the initial script"))
     }
 
-    pub fn set_objective(
+    pub fn add_to_objective(
         &mut self,
         script: Script,
         func: String,
         args: Vec<ExprValue<T>>,
+        coef: f64,
         obj_sense: ObjectiveSense,
     ) -> Result<Vec<SemWarning>, ProblemError> {
         let script = StoredScript::new(script);
         let script_ref = script.get_ref().clone();
         let mut warnings =
-            self.evaluate_recursively(script, vec![], Some((func, args, obj_sense)))?;
+            self.evaluate_recursively(script, vec![], Some((func, args, coef, obj_sense)))?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
@@ -825,31 +826,30 @@ impl<
             }
             *constraint = constraint.reduce(&fixed_variables);
         }
-        if let Some(obj) = &mut self.objective {
-            let mut fixed_variables = BTreeMap::new();
-            for var in obj.get_function().variables() {
-                if fixed_variables.contains_key(&var) {
-                    continue;
-                }
-                let ProblemVar::Base(v) = var else {
-                    continue;
-                };
-                let Some(value) = v.fix() else {
-                    continue;
-                };
-                fixed_variables.insert(ProblemVar::Base(v), value);
+        let mut fixed_variables = BTreeMap::new();
+        for var in self.objective.get_function().variables() {
+            if fixed_variables.contains_key(&var) {
+                continue;
             }
-            if !fixed_variables.is_empty() {
-                *obj = Objective::new(obj.get_function().reduce(&fixed_variables), obj.get_sense());
-            }
+            let ProblemVar::Base(v) = var else {
+                continue;
+            };
+            let Some(value) = v.fix() else {
+                continue;
+            };
+            fixed_variables.insert(ProblemVar::Base(v), value);
+        }
+        if !fixed_variables.is_empty() {
+            self.objective = Objective::new(
+                self.objective.get_function().reduce(&fixed_variables),
+                self.objective.get_sense(),
+            );
         }
 
         let mut problem_builder = collomatique_ilp::ProblemBuilder::new()
             .set_variables(self.vars_desc)
             .add_constraints(self.constraints);
-        if let Some(obj) = self.objective {
-            problem_builder = problem_builder.set_objective(obj);
-        }
+        problem_builder = problem_builder.set_objective(self.objective);
 
         Problem {
             problem: problem_builder.build().expect("Problem should be valid"),
