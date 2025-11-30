@@ -29,15 +29,15 @@ pub enum IlpVar<T: EvalObject> {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Origin<T: EvalObject> {
-    fn_name: Spanned<String>,
-    args: Vec<ExprValue<T>>,
-    pretty_docstring: Vec<String>,
+    pub fn_name: Spanned<String>,
+    pub args: Vec<ExprValue<T>>,
+    pub pretty_docstring: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct ConstraintWithOrigin<T: EvalObject> {
-    constraint: Constraint<IlpVar<T>>,
-    origin: Option<Origin<T>>,
+    pub constraint: Constraint<IlpVar<T>>,
+    pub origin: Option<Origin<T>>,
 }
 
 impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {

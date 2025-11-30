@@ -361,11 +361,13 @@ dependencies = [
 name = "collo-ml"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "collo-ml-derive",
  "collomatique-ilp",
  "pest",
  "pest_derive",
  "regex",
+ "sha2",
  "thiserror",
 ]
 

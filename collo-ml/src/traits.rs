@@ -610,18 +610,5 @@ pub enum VarConversionError {
 
 pub trait EvalVar: UsableData {
     fn field_schema() -> HashMap<String, Vec<FieldType>>;
-
-    fn vars<T: EvalObject>() -> Result<HashMap<String, Vec<ExprType>>, FieldConversionError> {
-        Self::field_schema()
-            .into_iter()
-            .map(|(name, typ)| {
-                Ok((
-                    name,
-                    typ.into_iter()
-                        .map(|x| x.convert_to_expr_type::<T>())
-                        .collect::<Result<_, _>>()?,
-                ))
-            })
-            .collect::<Result<_, _>>()
-    }
+    fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable>;
 }
