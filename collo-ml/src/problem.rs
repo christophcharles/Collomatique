@@ -840,10 +840,7 @@ impl<
             fixed_variables.insert(ProblemVar::Base(v), value);
         }
         if !fixed_variables.is_empty() {
-            self.objective = Objective::new(
-                self.objective.get_function().reduce(&fixed_variables),
-                self.objective.get_sense(),
-            );
+            self.objective = self.objective.reduce(&fixed_variables);
         }
 
         let mut problem_builder = collomatique_ilp::ProblemBuilder::new()
