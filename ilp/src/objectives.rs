@@ -351,6 +351,45 @@ impl<V: UsableData> Objective<V> {
             sense: self.sense,
         }
     }
+
+    /// Reduce an objective by replacing part or all
+    /// of its variables by values.
+    ///
+    /// This function takes a list of values for some variables
+    /// and substitute these values into the objective.
+    /// The result is a new objective (which might be trivial).
+    /// This can be understood as a partial evaluation of the objective.
+    ///
+    /// The list of variables can contain variables that do not appear in
+    /// the objective. It can also omit variables that do appear since
+    /// the evaluation is only partial. As such, this function can't fail.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, objectives::{Objective, ObjectiveSense}};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    /// let objective = Objective::new(expr, ObjectiveSense::Maximize);
+    ///
+    /// let objective_reduced = objective.reduce(&BTreeMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    ///
+    /// let objective_expected = Objective::new(-3.0*&expr2 - 44.0, ObjectiveSense::Maximize);
+    /// assert_eq!(objective_reduced, objective_expected);
+    /// ```
+    pub fn reduce(&self, vars: &std::collections::BTreeMap<V, f64>) -> Objective<V> {
+        let new_func = self.func.reduce(vars);
+
+        Objective {
+            func: new_func,
+            sense: self.sense,
+        }
+    }
 }
 
 impl<V: UsableData> std::ops::Add for &Objective<V> {
