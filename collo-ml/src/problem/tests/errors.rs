@@ -190,3 +190,63 @@ fn error_wrong_return_type_for_constraint() {
         _ => panic!("Expected WrongReturnType error, got: {:?}", result),
     }
 }
+
+#[test]
+fn error_variable_already_defined() {
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum Var {
+        V,
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![])])
+        }
+        fn fix(&self) -> Option<f64> {
+            None
+        }
+        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+        }
+    }
+
+    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let mut pb_builder =
+        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+
+    // Try to reify with the same name as a base variable
+    let result = pb_builder.add_reified_variables(
+        Script {
+            name: "conflict".into(),
+            content: r#"pub let f() -> Constraint = true;"#.into(),
+        },
+        vec![("f".to_string(), "V".to_string())],
+    );
+
+    assert!(result.is_err());
+    match result {
+        Err(ProblemError::VariableAlreadyDefined(name)) => {
+            assert_eq!(name, "V");
+        }
+        _ => panic!("Expected VariableAlreadyDefined error, got: {:?}", result),
+    }
+}
