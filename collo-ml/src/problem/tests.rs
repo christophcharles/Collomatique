@@ -25,7 +25,16 @@ fn single_constraint_problem() {
         type Error = VarConversionError;
         fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
-                "V" => Ok(Var::V),
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
                 _ => Err(VarConversionError::Unknown(value.name.clone())),
             }
         }

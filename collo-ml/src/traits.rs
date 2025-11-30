@@ -606,6 +606,12 @@ pub enum TypeConversionError {
 pub enum VarConversionError {
     #[error("Cannot convert variable: unknown name \"{0}\"")]
     Unknown(String),
+    #[error("Cannot convert variable: wrong parameter count for {name}. Expected {expected} got {found}")]
+    WrongParameterCount {
+        name: String,
+        expected: usize,
+        found: usize,
+    },
 }
 
 pub trait EvalVar: UsableData {

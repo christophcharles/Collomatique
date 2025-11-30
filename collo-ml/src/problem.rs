@@ -286,6 +286,13 @@ impl<
                             VarConversionError::Unknown(n) => {
                                 panic!("Inconsistent EvalVar, cannot convert var name {}", n)
                             }
+                            VarConversionError::WrongParameterCount {
+                                name: _,
+                                expected: _,
+                                found: _,
+                            } => {
+                                panic!("Inconsistent EvalVar, cannot convert var: {}", e)
+                            }
                         },
                     })
                 } else {
