@@ -101,6 +101,7 @@
 use proc_macro::TokenStream;
 
 mod eval_object;
+mod eval_var;
 mod view_object;
 
 /// Derives the `ViewObject` trait for a struct.
@@ -407,4 +408,9 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(EvalObject, attributes(env, cached, name))]
 pub fn derive_eval_object(input: TokenStream) -> TokenStream {
     eval_object::derive(input)
+}
+
+#[proc_macro_derive(EvalVar, attributes(eval_object, name, var, range, default_fix))]
+pub fn derive_eval_var(input: TokenStream) -> TokenStream {
+    eval_var::derive(input)
 }
