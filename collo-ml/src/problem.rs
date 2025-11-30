@@ -356,6 +356,7 @@ impl<
         eval_history: &mut EvalHistory<'b, T>,
         fn_name: &str,
         args: &Vec<ExprValue<T>>,
+        allow_list: bool,
     ) -> Result<
         (
             Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
@@ -385,6 +386,13 @@ impl<
 
         let constraints = match constraints_expr {
             ExprValue::Constraint(constraints) => constraints,
+            ExprValue::List(ExprType::Constraint, list) if allow_list => list
+                .into_iter()
+                .flat_map(|x| match x {
+                    ExprValue::Constraint(constraints) => constraints.into_iter(),
+                    _ => panic!("Inconsistent ExprValue::List"),
+                })
+                .collect(),
             _ => {
                 return Err(ProblemError::WrongReturnType {
                     func: fn_name.to_string(),
@@ -517,6 +525,7 @@ impl<
                     &mut eval_history,
                     &fn_name,
                     &args,
+                    true,
                 )?;
                 uncalled_vars.extend(
                     self.look_for_uncalled_public_reified_var(
@@ -549,6 +558,7 @@ impl<
                         &mut eval_history,
                         &reification.func,
                         &reification.args,
+                        false,
                     )?;
                     let dropped_origin: Vec<_> = reification_constraints
                         .into_iter()
