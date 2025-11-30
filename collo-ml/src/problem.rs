@@ -497,7 +497,7 @@ impl<
         &mut self,
         script: StoredScript,
         mut start_constraints: Vec<(String, Vec<ExprValue<T>>)>,
-        mut start_obj: Option<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+        mut start_obj: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError> {
         let vars = self.generate_current_vars();
         let mut current_script_opt = Some(script);
@@ -537,7 +537,7 @@ impl<
 
             // We then evaluate the objective if any
             // (this will happen on the first iteration of the loop only)
-            while let Some((fn_name, args, coef, obj_sense)) = start_obj.take() {
+            while let Some((fn_name, args, coef, obj_sense)) = start_obj.pop() {
                 let (lin_expr, _origin) = self.eval_lin_expr_in_history(
                     script.get_ref(),
                     &mut eval_history,
@@ -783,7 +783,7 @@ impl<
         let script = StoredScript::new(script);
         let script_ref = script.get_ref().clone();
         let start_funcs = funcs;
-        let mut warnings = self.evaluate_recursively(script, start_funcs, None)?;
+        let mut warnings = self.evaluate_recursively(script, start_funcs, vec![])?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
@@ -792,15 +792,11 @@ impl<
     pub fn add_to_objective(
         &mut self,
         script: Script,
-        func: String,
-        args: Vec<ExprValue<T>>,
-        coef: f64,
-        obj_sense: ObjectiveSense,
+        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
         let script = StoredScript::new(script);
         let script_ref = script.get_ref().clone();
-        let mut warnings =
-            self.evaluate_recursively(script, vec![], Some((func, args, coef, obj_sense)))?;
+        let mut warnings = self.evaluate_recursively(script, vec![], objectives)?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
