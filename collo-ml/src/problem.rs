@@ -759,11 +759,59 @@ impl<
             .expect("There should be warnings (maybe empty) for the initial script"))
     }
 
-    pub fn build(self) -> Problem<V> {
-        todo!()
+    pub fn build(mut self) -> Problem<T, V> {
+        for (constraint, _desc) in self.constraints.iter_mut() {
+            let mut fixed_variables = BTreeMap::new();
+            for var in constraint.variables() {
+                if fixed_variables.contains_key(&var) {
+                    continue;
+                }
+                let ProblemVar::Base(v) = var else {
+                    continue;
+                };
+                let Some(value) = v.fix() else {
+                    continue;
+                };
+                fixed_variables.insert(ProblemVar::Base(v), value);
+            }
+            if fixed_variables.is_empty() {
+                continue;
+            }
+            *constraint = constraint.reduce(&fixed_variables);
+        }
+        if let Some(obj) = &mut self.objective {
+            let mut fixed_variables = BTreeMap::new();
+            for var in obj.get_function().variables() {
+                if fixed_variables.contains_key(&var) {
+                    continue;
+                }
+                let ProblemVar::Base(v) = var else {
+                    continue;
+                };
+                let Some(value) = v.fix() else {
+                    continue;
+                };
+                fixed_variables.insert(ProblemVar::Base(v), value);
+            }
+            if !fixed_variables.is_empty() {
+                *obj = Objective::new(obj.get_function().reduce(&fixed_variables), obj.get_sense());
+            }
+        }
+
+        let mut problem_builder = collomatique_ilp::ProblemBuilder::new()
+            .set_variables(self.vars_desc)
+            .add_constraints(self.constraints);
+        if let Some(obj) = self.objective {
+            problem_builder = problem_builder.set_objective(obj);
+        }
+
+        Problem {
+            problem: problem_builder.build().expect("Problem should be valid"),
+        }
     }
 }
 
-pub struct Problem<V: EvalVar> {
-    _phantom_var: std::marker::PhantomData<V>,
+#[derive(Debug, Clone)]
+pub struct Problem<T: EvalObject, V: EvalVar> {
+    problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
 }
