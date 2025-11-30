@@ -385,3 +385,118 @@ fn global_reified_used_in_multiple_scripts() {
         "X should be 1"
     );
 }
+
+#[test]
+fn private_reification_does_not_leak() {
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum Var {
+        V,
+        W,
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
+        }
+        fn fix(&self) -> Option<f64> {
+            None
+        }
+        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+            ])
+        }
+    }
+
+    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                "W" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "W".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::W)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let mut pb_builder =
+        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+
+    // First script: private reification R means V === 1
+    let warnings = pb_builder
+        .add_constraints(
+            Script {
+                name: "first_script".into(),
+                content: r#"
+                    let v_constraint() -> Constraint = $V() === 1;
+                    reify v_constraint as $R;
+                    pub let use_r() -> Constraint = $R() === 1;
+                "#
+                .into(),
+            },
+            vec![("use_r".to_string(), vec![])],
+        )
+        .expect("Should compile first script");
+
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+
+    // Second script: private reification R means W === 1 (opposite constraint)
+    let warnings = pb_builder
+        .add_constraints(
+            Script {
+                name: "second_script".into(),
+                content: r#"
+                    let w_constraint() -> Constraint = $W() === 1;
+                    reify w_constraint as $R;
+                    pub let use_r_again() -> Constraint = $R() === 0;
+                "#
+                .into(),
+            },
+            vec![("use_r_again".to_string(), vec![])],
+        )
+        .expect("Should compile second script");
+
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+
+    let problem = pb_builder.build();
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(problem.get_inner_problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    // First script: R === 1 means V === 1 must hold
+    // Second script: R === 0 means W === 1 must NOT hold, so W === 0
+    // If private reifications leaked, these would conflict
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::V)),
+        Some(1.0),
+        "V should be 1 (from first script's private R)"
+    );
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0 (from second script's private R)"
+    );
+}
