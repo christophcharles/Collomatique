@@ -21,9 +21,9 @@ fn single_constraint_problem() {
         }
     }
 
-    impl TryFrom<&ExternVar<NoObject>> for Var {
+    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<NoObject>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => Ok(Var::V),
                 _ => Err(VarConversionError::Unknown(value.name.clone())),
@@ -33,7 +33,7 @@ fn single_constraint_problem() {
 
     let env = NoObjectEnv {};
     let mut pb_builder =
-        ProblemBuilder::<_, Var>::new(&env).expect("NoObject and Var should be compatible");
+        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
 
     let warnings = pb_builder
         .add_constraints(
