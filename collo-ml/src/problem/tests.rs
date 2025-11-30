@@ -1,5 +1,6 @@
 use super::*;
 
+mod complete_interrogation_scheduling;
 mod complex_reification;
 mod constraints_and_objectives_at_once;
 mod constraints_list;
