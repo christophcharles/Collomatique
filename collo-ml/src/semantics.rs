@@ -292,6 +292,7 @@ pub type ObjectFields = HashMap<String, ExprType>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDesc {
+    pub name_span: Span,
     pub typ: FunctionType,
     pub public: bool,
     pub used: bool,
@@ -419,6 +420,7 @@ impl GlobalEnv {
     fn register_fn(
         &mut self,
         name: &str,
+        name_span: Span,
         fn_typ: FunctionType,
         public: bool,
         arg_names: Vec<String>,
@@ -431,6 +433,7 @@ impl GlobalEnv {
         self.functions.insert(
             name.to_string(),
             FunctionDesc {
+                name_span,
                 typ: fn_typ.clone(),
                 public,
                 used: should_be_used_by_default(name),
@@ -2507,6 +2510,7 @@ impl GlobalEnv {
                     };
                     self.register_fn(
                         &name.node,
+                        name.span.clone(),
                         fn_typ,
                         public,
                         params.iter().map(|x| x.name.node.clone()).collect(),

@@ -30,11 +30,10 @@ fn eval_with_variables_simple_reified_var() {
         .vars
         .contains_key(&("MyVar".to_string(), vec![ExprValue::Int(5)])));
 
-    let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(5)])];
+    let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(5)])].0;
 
     // MyVar(5) should have the constraint from base(5): $V(5) === 1
     assert_eq!(my_var_constraints.len(), 1);
-    let constraints = strip_origins(my_var_constraints);
 
     let expected = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V".into(),
@@ -42,7 +41,7 @@ fn eval_with_variables_simple_reified_var() {
     }))
     .eq(&LinExpr::constant(1.));
 
-    assert!(constraints.contains(&expected));
+    assert!(my_var_constraints.contains(&expected));
 }
 
 #[test]
@@ -79,26 +78,24 @@ fn eval_with_variables_multiple_calls_same_var() {
         .contains_key(&("MyVar".to_string(), vec![ExprValue::Int(7)])));
 
     // Verify constraints for MyVar(3)
-    let my_var_3_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(3)])];
+    let my_var_3_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(3)])].0;
     assert_eq!(my_var_3_constraints.len(), 1);
-    let constraints_3 = strip_origins(my_var_3_constraints);
     let expected_3 = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V".into(),
         params: vec![ExprValue::Int(3)],
     }))
     .eq(&LinExpr::constant(1.));
-    assert!(constraints_3.contains(&expected_3));
+    assert!(my_var_3_constraints.contains(&expected_3));
 
     // Verify constraints for MyVar(7)
-    let my_var_7_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(7)])];
+    let my_var_7_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(7)])].0;
     assert_eq!(my_var_7_constraints.len(), 1);
-    let constraints_7 = strip_origins(my_var_7_constraints);
     let expected_7 = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V".into(),
         params: vec![ExprValue::Int(7)],
     }))
     .eq(&LinExpr::constant(1.));
-    assert!(constraints_7.contains(&expected_7));
+    assert!(my_var_7_constraints.contains(&expected_7));
 }
 
 #[test]
@@ -140,15 +137,14 @@ fn eval_with_variables_in_forall() {
 
     // Verify each has the correct constraint
     for i in 0..3 {
-        let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(i)])];
+        let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(i)])].0;
         assert_eq!(my_var_constraints.len(), 1);
-        let constraints = strip_origins(my_var_constraints);
         let expected = LinExpr::var(IlpVar::Base(ExternVar {
             name: "V".into(),
             params: vec![ExprValue::Int(i)],
         }))
         .eq(&LinExpr::constant(1.));
-        assert!(constraints.contains(&expected));
+        assert!(my_var_constraints.contains(&expected));
     }
 }
 
@@ -196,24 +192,22 @@ fn eval_with_variables_multiple_vars() {
         .contains_key(&("Var2".to_string(), vec![ExprValue::Int(10)])));
 
     // Verify Var1 constraint
-    let var1_constraints = &var_defs.vars[&("Var1".to_string(), vec![ExprValue::Int(5)])];
-    let constraints1 = strip_origins(var1_constraints);
+    let var1_constraints = &var_defs.vars[&("Var1".to_string(), vec![ExprValue::Int(5)])].0;
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V1".into(),
         params: vec![ExprValue::Int(5)],
     }))
     .eq(&LinExpr::constant(1.));
-    assert!(constraints1.contains(&expected1));
+    assert!(var1_constraints.contains(&expected1));
 
     // Verify Var2 constraint
-    let var2_constraints = &var_defs.vars[&("Var2".to_string(), vec![ExprValue::Int(10)])];
-    let constraints2 = strip_origins(var2_constraints);
+    let var2_constraints = &var_defs.vars[&("Var2".to_string(), vec![ExprValue::Int(10)])].0;
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V2".into(),
         params: vec![ExprValue::Int(10)],
     }))
     .eq(&LinExpr::constant(0.));
-    assert!(constraints2.contains(&expected2));
+    assert!(var2_constraints.contains(&expected2));
 }
 
 #[test]
@@ -254,15 +248,15 @@ fn eval_with_variables_var_with_multiple_params() {
     let my_var_constraints = &var_defs.vars[&(
         "MyVar".to_string(),
         vec![ExprValue::Int(3), ExprValue::Int(7)],
-    )];
+    )]
+        .0;
     assert_eq!(my_var_constraints.len(), 1);
-    let constraints = strip_origins(my_var_constraints);
     let expected = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V".into(),
         params: vec![ExprValue::Int(3), ExprValue::Int(7)],
     }))
     .eq(&LinExpr::constant(1.));
-    assert!(constraints.contains(&expected));
+    assert!(my_var_constraints.contains(&expected));
 }
 
 #[test]
@@ -304,15 +298,15 @@ fn eval_with_variables_simple_var_list() {
     let var_list_constraints = &var_defs.var_lists[&(
         "MyVarList".to_string(),
         vec![ExprValue::Int(3), ExprValue::Int(7)],
-    )];
+    )]
+        .0;
 
     // Should have 2 constraint sets (one for each constraint in base's return list)
     assert_eq!(var_list_constraints.len(), 2);
 
     // Each constraint set should have 1 constraint
-    for constraint_set in var_list_constraints {
-        assert_eq!(constraint_set.len(), 1);
-        let constraints = strip_origins(constraint_set);
+    for constraints in var_list_constraints {
+        assert_eq!(constraints.len(), 1);
         let constraint = constraints.iter().next().unwrap();
 
         // Should be either $V(3, 7) === 1 or $V(3, 7) <== 10
@@ -398,7 +392,8 @@ fn eval_with_variables_var_list_in_nested_forall() {
     let var_list_1_10 = &var_defs.var_lists[&(
         "MyVarList".to_string(),
         vec![ExprValue::Int(1), ExprValue::Int(10)],
-    )];
+    )]
+        .0;
 
     // Should have 2 constraint sets (one for each constraint in base's return list)
     assert_eq!(var_list_1_10.len(), 2);
@@ -442,15 +437,14 @@ fn eval_with_variables_with_let_expr() {
         .vars
         .contains_key(&("MyVar".to_string(), vec![ExprValue::Int(10)])));
 
-    let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(10)])];
+    let my_var_constraints = &var_defs.vars[&("MyVar".to_string(), vec![ExprValue::Int(10)])].0;
     assert_eq!(my_var_constraints.len(), 1);
-    let constraints = strip_origins(my_var_constraints);
     let expected = LinExpr::var(IlpVar::Base(ExternVar {
         name: "V".into(),
         params: vec![ExprValue::Int(10)],
     }))
     .eq(&LinExpr::constant(1.));
-    assert!(constraints.contains(&expected));
+    assert!(my_var_constraints.contains(&expected));
 }
 
 #[test]

@@ -489,7 +489,7 @@ impl<T: EvalObject> CheckedAST<T> {
         args: Vec<ExprValue<T>>,
     ) -> Result<ExprValue<T>, EvalError> {
         let mut eval_history = self.start_eval_history(env)?;
-        eval_history.eval_fn(fn_name, args)
+        Ok(eval_history.eval_fn(fn_name, args)?.0)
     }
 
     pub fn eval_fn_with_variables(
@@ -499,7 +499,7 @@ impl<T: EvalObject> CheckedAST<T> {
         args: Vec<ExprValue<T>>,
     ) -> Result<(ExprValue<T>, VariableDefinitions<T>), EvalError> {
         let mut eval_history = self.start_eval_history(env)?;
-        let r = eval_history.eval_fn(fn_name, args)?;
+        let (r, _o) = eval_history.eval_fn(fn_name, args)?;
         Ok((r, eval_history.into_var_def()))
     }
 }
@@ -697,6 +697,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     .collect::<Result<_, _>>()?;
                 eval_history
                     .add_fn_to_call_history(&name.node, args, true)?
+                    .0
                     .into()
             }
             Expr::VarCall { name, args } => {
@@ -1672,7 +1673,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     })
                     .collect();
 
-                let constraints = eval_history.add_fn_to_call_history(
+                let (constraints, _origin) = eval_history.add_fn_to_call_history(
                     var_list_fn,
                     coerced_args.iter().map(|x| x.clone().into()).collect(),
                     true,
@@ -1812,7 +1813,7 @@ pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST<T>,
     env: &'a T::Env,
     cache: T::Cache,
-    funcs: BTreeMap<(String, Vec<ExprValue<T>>), ExprValue<T>>,
+    funcs: BTreeMap<(String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
     vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
     var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
 }
@@ -1883,7 +1884,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         fn_name: &str,
         args: Vec<AnnotatedValue<T>>,
         allow_private: bool,
-    ) -> Result<ExprValue<T>, EvalError> {
+    ) -> Result<(ExprValue<T>, Origin<T>), EvalError> {
         let fn_desc = self
             .ast
             .global_env
@@ -1946,10 +1947,12 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 annotated_result, fn_desc.typ.output
             ))
             .with_origin(&origin);
-        self.funcs
-            .insert((fn_name.to_string(), coerced_args), result.clone());
+        self.funcs.insert(
+            (fn_name.to_string(), coerced_args),
+            (result.clone(), origin.clone()),
+        );
 
-        Ok(result)
+        Ok((result, origin))
     }
 }
 
@@ -1980,7 +1983,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         &mut self,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
-    ) -> Result<ExprValue<T>, EvalError> {
+    ) -> Result<(ExprValue<T>, Origin<T>), EvalError> {
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -1999,22 +2002,27 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         };
 
         for ((v_name, v_args), fn_name) in self.vars {
-            let fn_call_result = self
+            let (fn_call_result, new_origin) = self
                 .funcs
                 .get(&(fn_name.clone(), v_args.clone()))
                 .expect("Fn call should be valid");
             let constraint = match fn_call_result {
-                ExprValue::Constraint(c) => c,
+                ExprValue::Constraint(c) => c
+                    .iter()
+                    .map(|c_with_o| c_with_o.constraint.clone())
+                    .collect::<Vec<_>>(),
                 _ => panic!(
                     "Fn call should have returned a constraint: {:?}",
                     fn_call_result
                 ),
             };
-            var_def.vars.insert((v_name, v_args), constraint.clone());
+            var_def
+                .vars
+                .insert((v_name, v_args), (constraint, new_origin.clone()));
         }
 
         for ((vl_name, vl_args), fn_name) in self.var_lists {
-            let fn_call_result = self
+            let (fn_call_result, new_origin) = self
                 .funcs
                 .get(&(fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
@@ -2022,7 +2030,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 ExprValue::List(ExprType::Constraint, cs) => cs
                     .iter()
                     .map(|c| match c {
-                        ExprValue::Constraint(c) => c.clone(),
+                        ExprValue::Constraint(c) => c
+                            .iter()
+                            .map(|c_with_o| c_with_o.constraint.clone())
+                            .collect::<Vec<_>>(),
                         _ => panic!(
                             "Elements of the returned list should be constraints: {:?}",
                             c
@@ -2034,7 +2045,9 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     fn_call_result
                 ),
             };
-            var_def.var_lists.insert((vl_name, vl_args), constraints);
+            var_def
+                .var_lists
+                .insert((vl_name, vl_args), (constraints, new_origin.clone()));
         }
 
         var_def
@@ -2043,6 +2056,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
 #[derive(Clone, Debug)]
 pub struct VariableDefinitions<T: EvalObject> {
-    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), Vec<ConstraintWithOrigin<T>>>,
-    pub var_lists: BTreeMap<(String, Vec<ExprValue<T>>), Vec<Vec<ConstraintWithOrigin<T>>>>,
+    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), (Vec<Constraint<IlpVar<T>>>, Origin<T>)>,
+    pub var_lists:
+        BTreeMap<(String, Vec<ExprValue<T>>), (Vec<Vec<Constraint<IlpVar<T>>>>, Origin<T>)>,
 }

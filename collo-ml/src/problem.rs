@@ -41,8 +41,8 @@ struct ReifiedVarDesc {
 enum ConstraintDesc<T: EvalObject> {
     Reified {
         script_ref: ScriptRef,
-        name: String,
-        args: Vec<ExprValue<T>>,
+        var_name: String,
+        origin: Origin<T>,
     },
     InScript {
         script_ref: ScriptRef,
@@ -319,8 +319,14 @@ impl<
         eval_history: &mut EvalHistory<'b, T>,
         fn_name: &str,
         args: &Vec<ExprValue<T>>,
-    ) -> Result<Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>, ProblemError> {
-        let constraints_expr =
+    ) -> Result<
+        (
+            Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
+            Origin<T>,
+        ),
+        ProblemError,
+    > {
+        let (constraints_expr, origin) =
             eval_history
                 .eval_fn(fn_name, args.clone())
                 .map_err(|e| match e {
@@ -351,15 +357,18 @@ impl<
             }
         };
 
-        Ok(constraints
-            .into_iter()
-            .map(|c_with_o| {
-                (
-                    self.clean_constraint(script_ref, c_with_o.constraint),
-                    Self::update_origin(c_with_o.origin, script_ref.clone()),
-                )
-            })
-            .collect())
+        Ok((
+            constraints
+                .into_iter()
+                .map(|c_with_o| {
+                    (
+                        self.clean_constraint(script_ref, c_with_o.constraint),
+                        Self::update_origin(c_with_o.origin, script_ref.clone()),
+                    )
+                })
+                .collect(),
+            origin,
+        ))
     }
 
     fn look_for_uncalled_public_reified_var<'b>(
@@ -405,7 +414,7 @@ impl<
 
             let mut uncalled_vars = vec![];
             let mut constraints_to_reify =
-                BTreeMap::<ProblemVar<T, V>, Vec<Constraint<ProblemVar<T, V>>>>::new();
+                BTreeMap::<ProblemVar<T, V>, (Vec<Constraint<ProblemVar<T, V>>>, Origin<T>)>::new();
 
             let mut eval_history = ast
                 .start_eval_history(&self.env)
@@ -413,7 +422,7 @@ impl<
             // We start by evaluating the proper constraints if any
             // (this will happen on the first iteration of the loop only)
             while let Some((fn_name, args)) = start_funcs.pop() {
-                let new_constraints = self.eval_constraint_in_history(
+                let (new_constraints, _origin) = self.eval_constraint_in_history(
                     script.get_ref(),
                     &mut eval_history,
                     &fn_name,
@@ -431,7 +440,7 @@ impl<
             let reifications_from_current_script = pending_reification.remove(script.get_ref());
             if let Some(reifications) = reifications_from_current_script {
                 for reification in reifications {
-                    let reification_constraints = self.eval_constraint_in_history(
+                    let (reification_constraints, new_origin) = self.eval_constraint_in_history(
                         script.get_ref(),
                         &mut eval_history,
                         &reification.func,
@@ -452,16 +461,16 @@ impl<
 
                     self.vars_desc.insert(new_var.clone(), Variable::binary());
                     self.called_public_reified_variables.insert(reified_pub_var);
-                    constraints_to_reify.insert(new_var, dropped_origin);
+                    constraints_to_reify.insert(new_var, (dropped_origin, new_origin));
                 }
             }
 
             // We're done evaluating. Let's collect the private reified vars
             let var_def = eval_history.into_var_def();
-            for ((var_name, var_args), constraints) in var_def.vars {
+            for ((var_name, var_args), (constraints, new_origin)) in var_def.vars {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
-                    .map(|c_with_o| self.clean_constraint(script.get_ref(), c_with_o.constraint))
+                    .map(|c| self.clean_constraint(script.get_ref(), c))
                     .collect();
 
                 uncalled_vars
@@ -476,15 +485,15 @@ impl<
                 let new_var = ProblemVar::ReifiedPrivate(reified_priv_var);
 
                 self.vars_desc.insert(new_var.clone(), Variable::binary());
-                constraints_to_reify.insert(new_var, cleaned_constraints);
+                constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
             }
-            for ((var_list_name, var_list_args), constraints_list) in var_def.var_lists {
+            for ((var_list_name, var_list_args), (constraints_list, new_origin)) in
+                var_def.var_lists
+            {
                 for (i, constraints) in constraints_list.into_iter().enumerate() {
                     let cleaned_constraints: Vec<_> = constraints
                         .into_iter()
-                        .map(|c_with_o| {
-                            self.clean_constraint(script.get_ref(), c_with_o.constraint)
-                        })
+                        .map(|c| self.clean_constraint(script.get_ref(), c))
                         .collect();
 
                     uncalled_vars.extend(
@@ -500,33 +509,29 @@ impl<
                     let new_var = ProblemVar::ReifiedPrivate(reified_priv_var);
 
                     self.vars_desc.insert(new_var.clone(), Variable::binary());
-                    constraints_to_reify.insert(new_var, cleaned_constraints);
+                    constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
                 }
             }
 
             // Last pass: now that all variables are declared in vars_desc,
             // we can compute the range of all lin_expr. So we can finally reify the
             // constraints
-            for (var, constraints) in constraints_to_reify {
-                let new_origin = match &var {
+            for (var, (constraints, origin)) in constraints_to_reify {
+                let var_name = match &var {
                     ProblemVar::ReifiedPrivate(ReifiedPrivateVar {
-                        script_ref,
+                        script_ref: _,
                         name,
                         from_list: _,
-                        params,
-                    }) => ConstraintDesc::Reified {
-                        script_ref: script_ref.clone(),
-                        name: name.clone(),
-                        args: params.clone(),
-                    },
-                    ProblemVar::ReifiedPublic(ReifiedPublicVar { name, params }) => {
-                        ConstraintDesc::Reified {
-                            script_ref: script.get_ref().clone(),
-                            name: name.clone(),
-                            args: params.clone(),
-                        }
-                    }
+                        params: _,
+                    }) => name.clone(),
+                    ProblemVar::ReifiedPublic(ReifiedPublicVar { name, params: _ }) => name.clone(),
                     _ => panic!("Unexpected variable type to reify: {:?}", var),
+                };
+
+                let new_origin = ConstraintDesc::Reified {
+                    script_ref: script.get_ref().clone(),
+                    var_name,
+                    origin,
                 };
 
                 let reified_constraints =
