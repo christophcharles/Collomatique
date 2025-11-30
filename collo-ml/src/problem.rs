@@ -4,7 +4,7 @@ use crate::eval::{
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
 use crate::{CheckedAST, EvalObject, EvalVar, ExprType, SemWarning};
-use collomatique_ilp::{Constraint, LinExpr, Objective, Variable};
+use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 mod scripts;
@@ -270,19 +270,17 @@ impl<
         output
     }
 
-    fn clean_constraint(
-        &self,
-        script_ref: &ScriptRef,
-        constraint: Constraint<IlpVar<T>>,
-    ) -> Constraint<ProblemVar<T, V>> {
-        constraint.transmute(|v| match v {
+    fn clean_var(&self, script_ref: &ScriptRef, var: &IlpVar<T>) -> ProblemVar<T, V> {
+        match var {
             IlpVar::Base(extern_var) => {
                 if self.base_vars.contains_key(&extern_var.name) {
                     ProblemVar::Base(match extern_var.try_into() {
                         Ok(v) => v,
                         Err(e) => match e {
-                            VarConversionError::Unknown(n) => panic!("Inconsistent EvalVar, cannot convert var name {}", n),
-                        }
+                            VarConversionError::Unknown(n) => {
+                                panic!("Inconsistent EvalVar, cannot convert var name {}", n)
+                            }
+                        },
                     })
                 } else {
                     if !self.reified_vars.contains_key(&extern_var.name) {
@@ -305,7 +303,23 @@ impl<
                 from_list: from_list.clone(),
                 params: params.clone(),
             }),
-        })
+        }
+    }
+
+    fn clean_constraint(
+        &self,
+        script_ref: &ScriptRef,
+        constraint: &Constraint<IlpVar<T>>,
+    ) -> Constraint<ProblemVar<T, V>> {
+        constraint.transmute(|v| self.clean_var(script_ref, v))
+    }
+
+    fn clean_lin_expr(
+        &self,
+        script_ref: &ScriptRef,
+        lin_expr: &LinExpr<IlpVar<T>>,
+    ) -> LinExpr<ProblemVar<T, V>> {
+        lin_expr.transmute(|v| self.clean_var(script_ref, v))
     }
 
     fn update_origin(origin: Option<Origin<T>>, script_ref: ScriptRef) -> ConstraintDesc<T> {
@@ -362,13 +376,54 @@ impl<
                 .into_iter()
                 .map(|c_with_o| {
                     (
-                        self.clean_constraint(script_ref, c_with_o.constraint),
+                        self.clean_constraint(script_ref, &c_with_o.constraint),
                         Self::update_origin(c_with_o.origin, script_ref.clone()),
                     )
                 })
                 .collect(),
             origin,
         ))
+    }
+
+    fn eval_lin_expr_in_history<'b>(
+        &self,
+        script_ref: &ScriptRef,
+        eval_history: &mut EvalHistory<'b, T>,
+        fn_name: &str,
+        args: &Vec<ExprValue<T>>,
+    ) -> Result<(LinExpr<ProblemVar<T, V>>, Origin<T>), ProblemError> {
+        let (lin_expr_expr, origin) =
+            eval_history
+                .eval_fn(fn_name, args.clone())
+                .map_err(|e| match e {
+                    EvalError::ArgumentCountMismatch {
+                        identifier,
+                        expected,
+                        found,
+                    } => ProblemError::ArgumentCountMismatch {
+                        func: identifier,
+                        expected,
+                        found,
+                    },
+                    EvalError::InvalidExprValue { param } => {
+                        ProblemError::InvalidExprValue(format!("{:?}", args[param]))
+                    }
+                    EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
+                    _ => panic!("Unexpected error: {:?}", e),
+                })?;
+
+        let lin_expr = match lin_expr_expr {
+            ExprValue::LinExpr(lin_expr) => lin_expr,
+            _ => {
+                return Err(ProblemError::WrongReturnType {
+                    func: fn_name.to_string(),
+                    returned: lin_expr_expr.get_type(&self.env),
+                    expected: ExprType::LinExpr,
+                })
+            }
+        };
+
+        Ok((self.clean_lin_expr(script_ref, &lin_expr), origin))
     }
 
     fn look_for_uncalled_public_reified_var<'b>(
@@ -381,25 +436,37 @@ impl<
     {
         let mut output = vec![];
         for constraint in constraints {
-            for var in constraint.variables() {
-                let ProblemVar::ReifiedPublic(reified_pub_var) = var else {
-                    continue;
-                };
-                if !self
-                    .called_public_reified_variables
-                    .contains(&reified_pub_var)
-                {
-                    output.push(reified_pub_var);
-                }
+            output.extend(
+                self.look_for_uncalled_public_reified_var_in_lin_expr(constraint.get_lhs()),
+            );
+        }
+        output
+    }
+
+    fn look_for_uncalled_public_reified_var_in_lin_expr(
+        &self,
+        lin_expr: &LinExpr<ProblemVar<T, V>>,
+    ) -> Vec<ReifiedPublicVar<T>> {
+        let mut output = vec![];
+        for var in lin_expr.variables() {
+            let ProblemVar::ReifiedPublic(reified_pub_var) = var else {
+                continue;
+            };
+            if !self
+                .called_public_reified_variables
+                .contains(&reified_pub_var)
+            {
+                output.push(reified_pub_var);
             }
         }
         output
     }
 
-    fn add_constraints_rec(
+    fn evaluate_recursively(
         &mut self,
         script: StoredScript,
-        mut start_funcs: Vec<(String, Vec<ExprValue<T>>)>,
+        mut start_constraints: Vec<(String, Vec<ExprValue<T>>)>,
+        mut start_obj: Option<(String, Vec<ExprValue<T>>, ObjectiveSense)>,
     ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError> {
         let vars = self.generate_current_vars();
         let mut current_script_opt = Some(script);
@@ -421,7 +488,7 @@ impl<
                 .expect("Environment should be compatible with AST");
             // We start by evaluating the proper constraints if any
             // (this will happen on the first iteration of the loop only)
-            while let Some((fn_name, args)) = start_funcs.pop() {
+            while let Some((fn_name, args)) = start_constraints.pop() {
                 let (new_constraints, _origin) = self.eval_constraint_in_history(
                     script.get_ref(),
                     &mut eval_history,
@@ -434,6 +501,20 @@ impl<
                     ),
                 );
                 self.constraints.extend(new_constraints);
+            }
+
+            // We then evaluate the objective if any
+            // (this will happen on the first iteration of the loop only)
+            while let Some((fn_name, args, obj_sense)) = start_obj.take() {
+                let (lin_expr, _origin) = self.eval_lin_expr_in_history(
+                    script.get_ref(),
+                    &mut eval_history,
+                    &fn_name,
+                    &args,
+                )?;
+                uncalled_vars
+                    .extend(self.look_for_uncalled_public_reified_var_in_lin_expr(&lin_expr));
+                self.objective = Some(Objective::new(lin_expr, obj_sense));
             }
 
             // Then we evaluate the missing public reified vars from this scripts
@@ -470,7 +551,7 @@ impl<
             for ((var_name, var_args), (constraints, new_origin)) in var_def.vars {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
-                    .map(|c| self.clean_constraint(script.get_ref(), c))
+                    .map(|c| self.clean_constraint(script.get_ref(), &c))
                     .collect();
 
                 uncalled_vars
@@ -493,7 +574,7 @@ impl<
                 for (i, constraints) in constraints_list.into_iter().enumerate() {
                     let cleaned_constraints: Vec<_> = constraints
                         .into_iter()
-                        .map(|c| self.clean_constraint(script.get_ref(), c))
+                        .map(|c| self.clean_constraint(script.get_ref(), &c))
                         .collect();
 
                     uncalled_vars.extend(
@@ -656,7 +737,23 @@ impl<
         let script = StoredScript::new(script);
         let script_ref = script.get_ref().clone();
         let start_funcs = funcs;
-        let mut warnings = self.add_constraints_rec(script, start_funcs)?;
+        let mut warnings = self.evaluate_recursively(script, start_funcs, None)?;
+        Ok(warnings
+            .remove(&script_ref)
+            .expect("There should be warnings (maybe empty) for the initial script"))
+    }
+
+    pub fn set_objective(
+        &mut self,
+        script: Script,
+        func: String,
+        args: Vec<ExprValue<T>>,
+        obj_sense: ObjectiveSense,
+    ) -> Result<Vec<SemWarning>, ProblemError> {
+        let script = StoredScript::new(script);
+        let script_ref = script.get_ref().clone();
+        let mut warnings =
+            self.evaluate_recursively(script, vec![], Some((func, args, obj_sense)))?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
