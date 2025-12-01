@@ -633,9 +633,9 @@ pub enum VarConversionError {
     },
 }
 
-pub trait EvalVar: UsableData {
+pub trait EvalVar<T: EvalObject>: UsableData {
     fn field_schema() -> HashMap<String, Vec<FieldType>>;
-    fn vars<T: EvalObject>(
+    fn vars(
         env: &T::Env,
     ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>;
     fn fix(&self) -> Option<f64>;

@@ -9,14 +9,14 @@ fn single_constraint_problem() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -86,7 +86,7 @@ fn multiple_constraints_in_script() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -97,7 +97,7 @@ fn multiple_constraints_in_script() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -201,14 +201,14 @@ fn multiple_function_calls() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -297,14 +297,14 @@ fn constraints_from_different_scripts() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

@@ -11,7 +11,7 @@ fn list_constraint_reification() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -22,7 +22,7 @@ fn list_constraint_reification() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -127,7 +127,7 @@ fn list_constraint_reification_exact_count_with_param() {
         X(i32), // Parameter from 0 to 99
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("X".to_string(), vec![crate::traits::FieldType::Int])])
         }
@@ -145,7 +145,7 @@ fn list_constraint_reification_exact_count_with_param() {
             }
         }
 
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

@@ -9,7 +9,7 @@ fn test_fix_forces_variable_values() {
         V(i32), // Parameter from 0 to 9
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![crate::traits::FieldType::Int])])
         }
@@ -27,7 +27,7 @@ fn test_fix_forces_variable_values() {
             }
         }
 
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

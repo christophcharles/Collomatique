@@ -88,7 +88,7 @@ enum Var {
     StudentGroup(SimpleObject),
 }
 
-impl EvalVar for Var {
+impl<T: EvalObject> EvalVar<T> for Var {
     fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
         HashMap::from([(
             "StudentGroup".to_string(),
@@ -102,7 +102,7 @@ impl EvalVar for Var {
         None // All students are valid, no need to fix
     }
 
-    fn vars<T: EvalObject>(
+    fn vars(
         _env: &T::Env,
     ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
     {

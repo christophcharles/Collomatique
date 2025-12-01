@@ -9,14 +9,14 @@ fn error_unknown_function() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -74,14 +74,14 @@ fn error_wrong_return_type_for_reified() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -145,14 +145,14 @@ fn error_wrong_return_type_for_constraint() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -216,14 +216,14 @@ fn error_variable_already_defined() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -282,14 +282,14 @@ fn error_reified_variable_already_defined() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

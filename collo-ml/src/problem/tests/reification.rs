@@ -11,7 +11,7 @@ fn internal_reification() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -22,7 +22,7 @@ fn internal_reification() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -140,14 +140,14 @@ fn global_reified_variables_basic() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -253,7 +253,7 @@ fn global_reified_used_in_multiple_scripts() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -264,7 +264,7 @@ fn global_reified_used_in_multiple_scripts() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -403,14 +403,14 @@ fn private_reification_does_not_leak() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

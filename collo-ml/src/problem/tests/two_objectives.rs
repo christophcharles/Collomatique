@@ -13,7 +13,7 @@ fn two_objectives_same_script() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -25,7 +25,7 @@ fn two_objectives_same_script() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -175,7 +175,7 @@ fn two_objectives_different_scripts() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -187,7 +187,7 @@ fn two_objectives_different_scripts() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
@@ -347,7 +347,7 @@ fn objectives_with_different_senses() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -359,7 +359,7 @@ fn objectives_with_different_senses() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

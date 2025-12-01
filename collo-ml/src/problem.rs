@@ -28,7 +28,7 @@ pub struct ReifiedPrivateVar<T: EvalObject> {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum ProblemVar<T: EvalObject, V: EvalVar> {
+pub enum ProblemVar<T: EvalObject, V: EvalVar<T>> {
     Base(V),
     ReifiedPublic(ReifiedPublicVar<T>),
     ReifiedPrivate(ReifiedPrivateVar<T>),
@@ -57,7 +57,7 @@ pub enum ConstraintDesc<T: EvalObject> {
 pub struct ProblemBuilder<
     'a,
     T: EvalObject,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
 > {
     /// Reference to the evaluation environment
     env: &'a T::Env,
@@ -137,7 +137,7 @@ pub enum ProblemError {
 impl<
         'a,
         T: EvalObject,
-        V: EvalVar + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
+        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
     fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError> {
@@ -698,12 +698,12 @@ struct PendingReification<T: EvalObject> {
 impl<
         'a,
         T: EvalObject,
-        V: EvalVar + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
+        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
     pub fn new(env: &'a T::Env) -> Result<Self, ProblemError> {
         let base_vars = Self::build_vars()?;
-        let vars_desc = V::vars::<T>(env)
+        let vars_desc = V::vars(env)
             .map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?
             .into_iter()
             .map(|(name, desc)| (ProblemVar::Base(name), desc))
@@ -866,11 +866,11 @@ impl<
 }
 
 #[derive(Debug, Clone)]
-pub struct Problem<T: EvalObject, V: EvalVar> {
+pub struct Problem<T: EvalObject, V: EvalVar<T>> {
     problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
 }
 
-impl<T: EvalObject, V: EvalVar> Problem<T, V> {
+impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
     pub fn get_inner_problem(
         &self,
     ) -> &collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>> {

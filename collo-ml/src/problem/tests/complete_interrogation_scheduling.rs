@@ -22,7 +22,7 @@ fn complete_interrogations_scheduling() {
         },
     }
 
-    impl EvalVar for Var {
+    impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([(
                 "StudentWithTeacher".to_string(),
@@ -56,7 +56,7 @@ fn complete_interrogations_scheduling() {
             }
         }
 
-        fn vars<T: EvalObject>(
+        fn vars(
             _env: &T::Env,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {

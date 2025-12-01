@@ -242,15 +242,52 @@ fn generate_eval_var_impl(
         }
     });
 
+    // Collect all unique object types (same logic as in generate_try_from_impl)
+    let mut object_types = std::collections::HashSet::new();
+    for variant in variants {
+        for field in &variant.fields {
+            if let Type::Path(type_path) = &field.ty {
+                let segment = type_path.path.segments.last().unwrap();
+                let type_name = segment.ident.to_string();
+                if type_name != "i32" && type_name != "bool" {
+                    object_types.insert(field.ty.clone());
+                }
+            }
+        }
+    }
+
+    // Generate where clause for all object types
+    let where_clauses = object_types.iter().map(|ty| {
+        quote! {
+            #ty: TryFrom<__T, Error = ::collo_ml::traits::TypeConversionError>
+        }
+    });
+
+    let where_text = if where_clauses.len() == 0 {
+        quote! {}
+    } else {
+        quote! {
+            where
+                #(#where_clauses),*
+        }
+    };
+
     quote! {
-        impl ::collo_ml::EvalVar for #enum_name {
+        impl<__T: ::collo_ml::EvalObject> ::collo_ml::EvalVar<__T> for #enum_name
+            #where_text
+        {
             fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
                 let mut schema = ::std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
             }
 
-            fn vars<__T: ::collo_ml::EvalObject>(env: &__T::Env) -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable> {
+            fn vars(
+                env: &__T::Env
+            ) -> ::std::result::Result<
+                ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
+                ::std::any::TypeId
+            > {
                 #vars_generation
             }
 
@@ -305,7 +342,7 @@ fn generate_vars_impl(
         use ::collomatique_ilp::Variable;
         let mut vars = ::std::collections::BTreeMap::new();
         #(#variant_iterations)*
-        vars
+        Ok(vars)
     }
 }
 
@@ -520,10 +557,18 @@ fn generate_try_from_impl(
         }
     });
 
+    let where_text = if where_clauses.len() == 0 {
+        quote! {}
+    } else {
+        quote! {
+            where
+                #(#where_clauses),*
+        }
+    };
+
     quote! {
         impl<__T: ::collo_ml::EvalObject> TryFrom<&::collo_ml::eval::ExternVar<__T>> for #enum_name
-        where
-            #(#where_clauses),*
+            #where_text
         {
             type Error = ::collo_ml::traits::VarConversionError;
 
