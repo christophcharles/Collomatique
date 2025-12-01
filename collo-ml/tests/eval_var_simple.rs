@@ -152,6 +152,7 @@ enum SimpleVar {
     StudentTakesSubject(StudentId, SubjectId),
 
     // With a week number (range 0-3 for a 3-week schedule)
+    #[name("StSiW")]
     StudentTakesSubjectInWeek {
         student: StudentId,
         subject: SubjectId,
@@ -176,12 +177,12 @@ fn test_field_schema() {
 
     // Check that all variants are present
     assert!(schema.contains_key("StudentTakesSubject"));
-    assert!(schema.contains_key("StudentTakesSubjectInWeek"));
+    assert!(schema.contains_key("StSiW"));
     assert!(schema.contains_key("WeekUsed"));
 
     // Check field counts
     assert_eq!(schema.get("StudentTakesSubject").unwrap().len(), 2);
-    assert_eq!(schema.get("StudentTakesSubjectInWeek").unwrap().len(), 3);
+    assert_eq!(schema.get("StSiW").unwrap().len(), 3);
     assert_eq!(schema.get("WeekUsed").unwrap().len(), 1);
 
     // Check field types
