@@ -410,7 +410,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
     eval_object::derive(input)
 }
 
-#[proc_macro_derive(EvalVar, attributes(eval_object, name, var, range, default_fix))]
+#[proc_macro_derive(EvalVar, attributes(name, var, range, default_fix))]
 pub fn derive_eval_var(input: TokenStream) -> TokenStream {
     eval_var::derive(input)
 }
