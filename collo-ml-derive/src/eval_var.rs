@@ -250,10 +250,7 @@ fn generate_eval_var_impl(
                 schema
             }
 
-            fn vars<__T: ::collo_ml::EvalObject>(env: &__T::Env) -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>
-            where
-                Self: Sized,
-            {
+            fn vars<__T: ::collo_ml::EvalObject>(env: &__T::Env) -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable> {
                 #vars_generation
             }
 
