@@ -17,7 +17,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
 
     // Extract default value for fix() if present
-    let default_fix_value = extract_default_attribute(&input.attrs).unwrap_or(0.0);
+    let default_fix_value = extract_default_fix_attribute(&input.attrs).unwrap_or(0.0);
 
     // Process each variant
     let mut variant_info = Vec::new();
@@ -61,9 +61,9 @@ enum RangeInfo {
 }
 
 // Helper function to extract #[default(value)]
-fn extract_default_attribute(attrs: &[Attribute]) -> Option<f64> {
+fn extract_default_fix_attribute(attrs: &[Attribute]) -> Option<f64> {
     for attr in attrs {
-        if attr.path().is_ident("default") {
+        if attr.path().is_ident("default_fix") {
             if let Meta::List(meta_list) = &attr.meta {
                 if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone()) {
                     match lit {
@@ -165,7 +165,7 @@ fn process_variant(variant: &Variant, default_fix: f64) -> VariantInfo {
     let var_type = extract_var_attribute(&variant.attrs);
 
     // Extract default fix value for this variant if specified
-    let variant_default_fix = extract_default_attribute(&variant.attrs).unwrap_or(default_fix);
+    let variant_default_fix = extract_default_fix_attribute(&variant.attrs).unwrap_or(default_fix);
 
     // Process fields
     let fields = match &variant.fields {
@@ -275,6 +275,7 @@ fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
             match type_name.as_str() {
                 "i32" => quote! { ::collo_ml::traits::FieldType::Int },
                 "bool" => quote! { ::collo_ml::traits::FieldType::Bool },
+                "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
                 _ => {
                     // It's an object type - use TypeId
                     quote! { ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#ty>()) }
@@ -296,7 +297,7 @@ fn generate_vars_impl(
             .as_ref()
             .map(|expr| quote! { #expr })
             .unwrap_or_else(|| {
-                quote! { ::collomatique_ilp::Variable::binary() }
+                quote! { Variable::binary() }
             });
 
         // Generate nested loops for each field
@@ -304,6 +305,7 @@ fn generate_vars_impl(
     });
 
     quote! {
+        use ::collomatique_ilp::Variable;
         let mut vars = ::std::collections::BTreeMap::new();
         #(#variant_iterations)*
         vars
@@ -392,11 +394,17 @@ fn generate_field_loop(
                     }
                 }
                 "bool" => {
+                    if range.is_some() {
+                        panic!("#[range(...)] attribute is not supported for bool type");
+                    }
                     quote! {
                         for #var_name in [false, true]
                     }
                 }
                 _ => {
+                    if range.is_some() {
+                        panic!("#[range(...)] attribute is not supported for object types");
+                    }
                     // It's an object type
                     // Get the type name from TypeId, then get all objects of that type
                     quote! {
