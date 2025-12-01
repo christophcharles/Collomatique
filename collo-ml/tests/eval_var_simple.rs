@@ -160,6 +160,7 @@ enum SimpleVar {
     },
 
     // Just a week number
+    #[default_fix(1.)]
     WeekUsed(#[range(0..3)] i32),
 }
 
@@ -225,10 +226,10 @@ fn test_fix_within_range() {
 #[test]
 fn test_fix_outside_range() {
     let var = SimpleVar::WeekUsed(5); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(0.0));
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(1.0));
 
     let var = SimpleVar::WeekUsed(-1); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(0.0));
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(1.0));
 
     let var = SimpleVar::StudentTakesSubjectInWeek {
         student: StudentId(0),
