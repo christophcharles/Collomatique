@@ -410,6 +410,238 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
     eval_object::derive(input)
 }
 
+/// Derives the `EvalVar` trait for an enum of ILP variables.
+///
+/// This macro generates the complete `EvalVar<T>` trait implementation, including field schema,
+/// variable enumeration, and fix value computation. The enum represents all possible variable
+/// types in your Integer Linear Programming problem.
+///
+/// # Key Design
+///
+/// The trait is **generic over the `EvalObject` type**, allowing the same variable definitions
+/// to work with different data sources. The macro generates where clauses to ensure type safety.
+///
+/// # Optional Attributes
+///
+/// ## On the enum:
+///
+/// - `#[default_fix(value)]` - Sets the default fix value for out-of-range variables (default: 0.0)
+///
+/// ## On variants:
+///
+/// - `#[name("VarName")]` - Overrides the DSL variable name (default is variant name)
+/// - `#[var(expr)]` - Sets the variable type (default: `Variable::binary()`)
+/// - `#[default_fix(value)]` - Override fix value for this specific variant
+///
+/// ## On fields:
+///
+/// - `#[range(start..end)]` - **Required for `i32` fields**. Specifies valid range (exclusive end)
+///
+/// # Supported Field Types
+///
+/// - `i32` - **Must** have `#[range(...)]` attribute
+/// - `bool` - Automatically enumerates `true` and `false`
+/// - Object ID types - Enumerated via `EvalObject::objects_with_typ()`
+///
+/// # Requirements
+///
+/// - Must be applied to an enum
+/// - All `i32` fields must have `#[range(...)]` attribute
+/// - For object types, `IdType: TryFrom<T>` must be satisfied
+/// - The enum must implement standard derives: `Clone, PartialEq, Eq, PartialOrd, Ord`
+///
+/// # Examples
+///
+/// ## Basic usage
+///
+/// ```ignore
+/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+/// enum Var {
+///     StudentInGroup(StudentId, GroupId),
+///     
+///     TimeSlot {
+///         #[range(0..7)]
+///         day: i32,
+///         #[range(8..18)]
+///         hour: i32,
+///     },
+/// }
+/// ```
+///
+/// ## With custom DSL names
+///
+/// ```ignore
+/// #[derive(EvalVar)]
+/// enum Var {
+///     #[name("SiG")]  // Called "SiG" in DSL scripts
+///     StudentInGroup(StudentId, GroupId),
+/// }
+/// ```
+///
+/// ## With custom variable types
+///
+/// ```ignore
+/// #[derive(EvalVar)]
+/// enum Var {
+///     #[var(Variable::binary())]
+///     IsSelected(TaskId),
+///     
+///     #[var(Variable::integer())]
+///     Count(#[range(0..100)] i32),
+///     
+///     #[var(Variable::continuous().min(0.0).max(1.0))]
+///     Proportion(ProjectId),
+/// }
+/// ```
+///
+/// ## With custom fix values
+///
+/// ```ignore
+/// #[derive(EvalVar)]
+/// #[default_fix(0.0)]  // Global default
+/// enum Var {
+///     NormalVar(#[range(0..10)] i32),
+///     
+///     #[default_fix(1.0)]  // Specific to this variant
+///     SpecialVar(#[range(0..10)] i32),
+/// }
+/// ```
+///
+/// ## With boolean fields
+///
+/// ```ignore
+/// #[derive(EvalVar)]
+/// enum Var {
+///     TaskEnabled {
+///         task: TaskId,
+///         is_enabled: bool,  // No range needed - automatically [false, true]
+///     },
+/// }
+/// ```
+///
+/// # Generated Code
+///
+/// ```ignore
+/// impl<__T: EvalObject> EvalVar<__T> for Var
+/// where
+///     StudentId: TryFrom<__T, Error = TypeConversionError>,
+///     GroupId: TryFrom<__T, Error = TypeConversionError>,
+/// {
+///     fn field_schema() -> HashMap<String, Vec<FieldType>> {
+///         // Maps DSL names to parameter types
+///     }
+///     
+///     fn vars(env: &__T::Env) -> Result<BTreeMap<Self, Variable>, TypeId> {
+///         // Generates cartesian product of all parameter combinations
+///         // Returns Err(type_id) if an object type is unknown
+///     }
+///     
+///     fn fix(&self) -> Option<f64> {
+///         // Returns Some(default_fix) if any i32 is out of range
+///     }
+/// }
+///
+/// // Also generates generic TryFrom for converting from DSL representation
+/// impl<__T: EvalObject> TryFrom<&ExternVar<__T>> for Var
+/// where
+///     StudentId: TryFrom<__T>,
+///     GroupId: TryFrom<__T>,
+/// {
+///     type Error = VarConversionError;
+///     
+///     fn try_from(value: &ExternVar<__T>) -> Result<Self, Self::Error> {
+///         // Matches DSL name and converts parameters
+///     }
+/// }
+/// ```
+///
+/// # Usage with Different EvalObjects
+///
+/// The generic design allows using the same `Var` with different data sources:
+///
+/// ```ignore
+/// // Production use with real database
+/// let vars = <Var as EvalVar<ProductionObjectId>>::vars(&production_env)?;
+///
+/// // Testing with mock data
+/// let vars = <Var as EvalVar<MockObjectId>>:::vars(&test_env)?;
+/// ```
+///
+/// # Variable Enumeration
+///
+/// The `vars()` method generates all valid variable combinations:
+///
+/// - **i32**: Iterates through the specified range `start..end` (exclusive end)
+/// - **bool**: Iterates through `[false, true]`
+/// - **Objects**: Calls `T::objects_with_typ(env, type_name)` and converts to the ID type
+///
+/// For example:
+/// ```ignore
+/// StudentInGroup(StudentId, GroupId)
+/// // With 3 students and 5 groups → generates 15 variables
+///
+/// TimeSlot { day: i32, hour: i32 }  // #[range(0..7)] and #[range(8..18)]
+/// // 7 days × 10 hours → generates 70 variables
+/// ```
+///
+/// # Fix Values
+///
+/// The `fix()` method returns a value for variables that should be fixed in the ILP solver:
+///
+/// - Returns `None` if all parameters are within their valid ranges
+/// - Returns `Some(default_fix)` if any `i32` parameter is out of range
+/// - Useful for handling edge cases or enforcing constraints
+///
+/// # Error Handling
+///
+/// ## Compile-time Errors
+///
+/// The macro panics at compile time if:
+/// - Applied to non-enum types
+/// - An `i32` field lacks `#[range(...)]` attribute
+/// - A `bool` or object field has `#[range(...)]` attribute
+/// - A `Vec` type is used (lists cannot be enumerated)
+///
+/// ## Runtime Errors
+///
+/// `vars()` returns `Err(type_id)` if an object type's name cannot be resolved via
+/// `T::type_id_to_name()`. This typically indicates a mismatch between your variable
+/// definition and your `EvalObject` implementation.
+///
+/// `TryFrom` returns `VarConversionError` if:
+/// - The DSL variable name is unknown
+/// - Parameter count doesn't match
+/// - A parameter has the wrong type
+///
+/// # Integration with ColloML
+///
+/// Variables work seamlessly with ColloML constraint scripts:
+///
+/// ```ignore
+/// // Rust definition
+/// #[derive(EvalVar)]
+/// enum Var {
+///     #[name("SiG")]
+///     StudentInGroup(StudentId, GroupId),
+/// }
+///
+/// // ColloML script
+/// pub let constraints() -> [Constraint] = [
+///     sum g in @[Group] { $SiG(s, g) } === 1
+///     for s in @[Student]
+/// ];
+/// ```
+///
+/// # Variable Type Expressions
+///
+/// The `#[var(...)]` attribute accepts any expression that evaluates to `Variable`:
+///
+/// ```ignore
+/// #[var(Variable::binary())]                    // Binary variable (0 or 1)
+/// #[var(Variable::integer())]                   // Integer variable
+/// #[var(Variable::continuous())]                // Continuous variable
+/// #[var(Variable::integer().min(0).max(100))]   // With bounds
+/// ```
 #[proc_macro_derive(EvalVar, attributes(name, var, range, default_fix))]
 pub fn derive_eval_var(input: TokenStream) -> TokenStream {
     eval_var::derive(input)

@@ -633,10 +633,276 @@ pub enum VarConversionError {
     },
 }
 
+/// Represents variables in an Integer Linear Programming problem.
+///
+/// This trait defines the interface for enumerating and working with ILP variables that are
+/// parameterized by data from the environment. Variables can have parameters like object IDs,
+/// integers, or booleans, and the trait provides methods for:
+///
+/// - Describing the schema of variable parameters
+/// - Enumerating all valid variable instances
+/// - Determining if a variable should be fixed to a specific value
+///
+/// # Design Philosophy
+///
+/// `EvalVar` is **generic over `T: EvalObject`**, allowing the same variable definitions to work
+/// with different data sources. This enables:
+///
+/// - Testing with mock data while using production data in deployment
+/// - Reusing variable definitions across different problem instances
+/// - Clear separation between variable structure and data access
+///
+/// # Type Parameter
+///
+/// - `T`: The `EvalObject` type that provides access to the underlying data via its environment
+///
+/// # Implementation
+///
+/// This trait is typically implemented via the `#[derive(EvalVar)]` macro on an enum:
+///
+/// ```ignore
+/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+/// enum Var {
+///     StudentInGroup(StudentId, GroupId),
+///     
+///     TimeSlot {
+///         #[range(0..7)]
+///         day: i32,
+///         #[range(8..18)]
+///         hour: i32,
+///     },
+/// }
+/// ```
+///
+/// The macro generates an implementation like:
+///
+/// ```ignore
+/// impl<T: EvalObject> EvalVar<T> for Var
+/// where
+///     StudentId: TryFrom<T, Error = TypeConversionError>,
+///     GroupId: TryFrom<T, Error = TypeConversionError>,
+/// {
+///     fn field_schema() -> HashMap<String, Vec<FieldType>> { /* ... */ }
+///     fn vars(env: &T::Env) -> Result<BTreeMap<Self, Variable>, TypeId> { /* ... */ }
+///     fn fix(&self) -> Option<f64> { /* ... */ }
+/// }
+/// ```
+///
+/// # Usage Example
+///
+/// ```ignore
+/// // Define variables
+/// #[derive(EvalVar)]
+/// enum Var {
+///     StudentInGroup(StudentId, GroupId),
+/// }
+///
+/// // Create environment
+/// let env = MyEnv::new();
+///
+/// // Generate all variables with a specific EvalObject type
+/// let vars = <Var as EvalVar<ObjectId>>::vars(&env)?;
+///
+/// // Check if a specific variable should be fixed
+/// let var = Var::StudentInGroup(StudentId(0), GroupId(1));
+/// if let Some(value) = <Var as EvalVar<ObjectId>>::fix(&var) {
+///     // This variable should be fixed to `value`
+/// }
+///
+/// // Get the schema
+/// let schema = Var::field_schema();
+/// ```
+///
+/// # Variable Enumeration Strategy
+///
+/// The `vars()` method generates all valid combinations by taking the cartesian product of:
+///
+/// - **i32 parameters**: All values in the specified range (e.g., `0..10` → 10 values)
+/// - **bool parameters**: Both `true` and `false` (2 values)
+/// - **Object parameters**: All objects of that type from `T::objects_with_typ(env, type_name)`
+///
+/// For example:
+/// ```ignore
+/// TimeSlot {
+///     #[range(0..7)]
+///     day: i32,     // range 0..7  → 7 values
+///     #[range(8..18)]
+///     hour: i32,    // range 8..18 → 10 values
+/// }
+/// // Total: 7 × 10 = 70 variables
+/// ```
+///
+/// # Fix Values
+///
+/// The `fix()` method allows specifying that certain variable instances should be fixed to
+/// specific values in the ILP solver. This is useful for:
+///
+/// - Enforcing constraints (e.g., "this combination is impossible")
+/// - Handling boundary cases
+/// - Pre-solving parts of the problem
+///
+/// Return `None` if the variable is free to take any value, or `Some(value)` to fix it.
+///
+/// # Integration with ColloML
+///
+/// Variables defined with `EvalVar` can be referenced in ColloML constraint scripts using
+/// the `$` syntax:
+///
+/// ```ignore
+/// // Rust
+/// #[derive(EvalVar)]
+/// enum Var {
+///     #[name("SiG")]
+///     StudentInGroup(StudentId, GroupId),
+/// }
+///
+/// // ColloML
+/// pub let one_group_per_student() -> [Constraint] = [
+///     sum g in @[Group] { $SiG(s, g) } === 1
+///     for s in @[Student]
+/// ];
+/// ```
+///
+/// # Thread Safety
+///
+/// Like the view pattern, `EvalVar` is designed for single-threaded use:
+/// - `vars()` takes an immutable reference to the environment
+/// - The generated variables are independent and can be used concurrently if needed
+/// - Type `T` and `Self` must be `Send` if variables need to cross thread boundaries
 pub trait EvalVar<T: EvalObject>: UsableData {
+    /// Returns the schema describing all variable types and their parameters.
+    ///
+    /// This method provides type information for each variable variant, mapping the DSL name
+    /// to a list of parameter types. This schema is used for semantic analysis and validation
+    /// before code generation.
+    ///
+    /// # Returns
+    ///
+    /// A map where:
+    /// - Keys are DSL variable names (affected by `#[name("...")]` attributes)
+    /// - Values are vectors of parameter types in declaration order
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// #[derive(EvalVar)]
+    /// enum Var {
+    ///     #[name("SiG")]
+    ///     StudentInGroup(StudentId, GroupId),
+    ///     
+    ///     TimeSlot {
+    ///         #[range(0..7)]
+    ///         day: i32,
+    ///         #[range(8..18)]
+    ///         hour: i32,
+    ///     },
+    /// }
+    ///
+    /// let schema = Var::field_schema();
+    /// // Returns:
+    /// // {
+    /// //     "SiG": [FieldType::Object(TypeId::of::<StudentId>()),
+    /// //             FieldType::Object(TypeId::of::<GroupId>())],
+    /// //     "TimeSlot": [FieldType::Int, FieldType::Int],
+    /// // }
+    /// ```
     fn field_schema() -> HashMap<String, Vec<FieldType>>;
+    /// Generates all valid variable instances by enumerating parameter combinations.
+    ///
+    /// This method creates the cartesian product of all possible parameter values, using the
+    /// environment to enumerate object instances. Each generated variable is associated with
+    /// its `Variable` type (binary, integer, continuous, etc.).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - Reference to the environment containing the data needed to enumerate objects
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(BTreeMap<Self, Variable>)` - Map of all variable instances to their variable types
+    /// * `Err(TypeId)` - If an object type cannot be resolved via `T::type_id_to_name()`
+    ///
+    /// The error case typically indicates a mismatch between the variable definition and the
+    /// `EvalObject` implementation.
+    ///
+    /// # Enumeration Strategy
+    ///
+    /// For each parameter type:
+    ///
+    /// - **i32**: Iterates through the range specified in `#[range(start..end)]`
+    /// - **bool**: Enumerates `[false, true]`
+    /// - **Objects**: Calls `T::objects_with_typ(env, type_name)` and converts to the ID type
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// #[derive(EvalVar)]
+    /// enum Var {
+    ///     StudentInGroup(StudentId, GroupId),
+    ///     WeekUsed(#[range(0..3)] i32),
+    /// }
+    ///
+    /// let env = MyEnv { /* ... */ };
+    /// let vars = <Var as EvalVar<ObjectId>>::vars(&env)?;
+    ///
+    /// // If there are 5 students and 3 groups:
+    /// // - StudentInGroup generates: 5 × 3 = 15 variables
+    /// // - WeekUsed generates: 3 variables
+    /// // Total: 18 variables
+    /// ```
+    ///
+    /// # Performance Considerations
+    ///
+    /// The cartesian product can grow quickly with multiple parameters:
+    /// - 10 students × 5 groups × 7 days = 350 variables
+    /// - 100 tasks × 20 slots × 2 bools = 4000 variables
+    ///
+    /// Be mindful of the total number of combinations when designing your variables.
     fn vars(
         env: &T::Env,
     ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>;
+    /// Returns a fixed value for this variable instance, if it should be fixed.
+    ///
+    /// This method allows specifying that certain variable instances should be fixed to
+    /// specific values in the ILP solver, rather than being decision variables. This is
+    /// useful for handling boundary cases or invalid states. The goal is mainly to catch
+    /// variables that are invalid but that the type system of ColloML cannot forbid.
+    ///
+    /// # Returns
+    ///
+    /// * `None` - This variable instance is free to take any value (it's a decision variable)
+    /// * `Some(value)` - This variable instance should be fixed to `value`
+    ///
+    /// # Default Behavior (Generated by Macro)
+    ///
+    /// The macro generates a `fix()` implementation that returns `Some(default_fix)` if any
+    /// `i32` parameter is outside its specified range, and `None` otherwise. This prevents
+    /// invalid variable instances from being created.
+    ///
+    /// The default fix value is:
+    /// - `0.0` by default
+    /// - Can be overridden with `#[default_fix(value)]` on the enum or variant
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// #[derive(EvalVar)]
+    /// #[default_fix(0.0)]
+    /// enum Var {
+    ///     TimeSlot {
+    ///         #[range(0..7)]
+    ///         day: i32,
+    ///         #[range(8..18)]
+    ///         hour: i32,
+    ///     },
+    /// }
+    ///
+    /// let valid_var = Var::TimeSlot { day: 3, hour: 10 };
+    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&valid_var), None);  // Free variable
+    ///
+    /// let invalid_var = Var::TimeSlot { day: 10, hour: 10 };  // day out of range
+    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&invalid_var), Some(0.0));  // Fixed to 0.0
+    /// ```
+    ///
     fn fix(&self) -> Option<f64>;
 }
