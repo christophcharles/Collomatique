@@ -16,7 +16,9 @@ fn single_constraint_problem() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
@@ -91,7 +93,9 @@ fn multiple_constraints_in_script() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -199,7 +203,9 @@ fn multiple_function_calls() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -292,7 +298,9 @@ fn constraints_from_different_scripts() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),

@@ -703,7 +703,7 @@ impl<
 {
     pub fn new(env: &'a T::Env) -> Result<Self, ProblemError> {
         let base_vars = Self::build_vars()?;
-        let vars_desc = V::vars()
+        let vars_desc = V::vars::<T>(env)
             .into_iter()
             .map(|(name, desc)| (ProblemVar::Base(name), desc))
             .collect();

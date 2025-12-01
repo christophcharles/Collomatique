@@ -25,7 +25,9 @@ fn two_objectives_same_script() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -184,7 +186,9 @@ fn two_objectives_different_scripts() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -353,7 +357,9 @@ fn objectives_with_different_senses() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),

@@ -27,7 +27,9 @@ fn test_fix_forces_variable_values() {
             }
         }
 
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             let mut vars = BTreeMap::new();
             // Only include variables that are not fixed
             // In this case, only V(7) is not fixed

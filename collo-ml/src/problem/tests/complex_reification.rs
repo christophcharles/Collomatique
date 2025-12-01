@@ -102,7 +102,9 @@ impl EvalVar for Var {
         None // All students are valid, no need to fix
     }
 
-    fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+    fn vars<T: EvalObject>(
+        _env: &T::Env,
+    ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
         let mut vars = BTreeMap::new();
         // Create a variable for each student
         for student in [

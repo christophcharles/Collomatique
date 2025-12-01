@@ -269,7 +269,7 @@ fn generate_eval_var_impl(
                 schema
             }
 
-            fn vars() -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable> {
+            fn vars<T: EvalObject>(_env: &T::Env) -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable> {
                 #vars_generation
             }
 

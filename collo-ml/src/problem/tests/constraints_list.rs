@@ -17,7 +17,9 @@ fn constraint_list_return_type() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),

@@ -22,7 +22,9 @@ fn internal_reification() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -144,7 +146,9 @@ fn global_reified_variables_basic() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -258,7 +262,9 @@ fn global_reified_used_in_multiple_scripts() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
@@ -401,7 +407,9 @@ fn private_reification_does_not_leak() {
         fn fix(&self) -> Option<f64> {
             None
         }
-        fn vars() -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        fn vars<T: EvalObject>(
+            _env: &T::Env,
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
             BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
