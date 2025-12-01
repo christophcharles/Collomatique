@@ -58,7 +58,8 @@ fn complete_interrogations_scheduling() {
 
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
             let mut vars = BTreeMap::new();
             // Only create variables for valid combinations
             for student in 0..11 {
@@ -75,7 +76,7 @@ fn complete_interrogations_scheduling() {
                     }
                 }
             }
-            vars
+            Ok(vars)
         }
     }
 

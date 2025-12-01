@@ -637,6 +637,6 @@ pub trait EvalVar: UsableData {
     fn field_schema() -> HashMap<String, Vec<FieldType>>;
     fn vars<T: EvalObject>(
         env: &T::Env,
-    ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable>;
+    ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>;
     fn fix(&self) -> Option<f64>;
 }

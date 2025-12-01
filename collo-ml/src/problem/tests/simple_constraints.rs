@@ -18,8 +18,12 @@ fn single_constraint_problem() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([(
+                Var::V,
+                collomatique_ilp::Variable::binary(),
+            )]))
         }
     }
 
@@ -95,12 +99,13 @@ fn multiple_constraints_in_script() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -205,11 +210,12 @@ fn multiple_function_calls() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -300,11 +306,12 @@ fn constraints_from_different_scripts() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 

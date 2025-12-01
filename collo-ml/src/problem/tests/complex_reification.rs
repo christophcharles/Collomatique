@@ -104,7 +104,8 @@ impl EvalVar for Var {
 
     fn vars<T: EvalObject>(
         _env: &T::Env,
-    ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+    ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+    {
         let mut vars = BTreeMap::new();
         // Create a variable for each student
         for student in [
@@ -123,7 +124,7 @@ impl EvalVar for Var {
                 collomatique_ilp::Variable::integer().min(1.).max(3.),
             );
         }
-        vars
+        Ok(vars)
     }
 }
 

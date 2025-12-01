@@ -27,13 +27,14 @@ fn two_objectives_same_script() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -188,13 +189,14 @@ fn two_objectives_different_scripts() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -359,13 +361,14 @@ fn objectives_with_different_senses() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 

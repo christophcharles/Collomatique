@@ -20,11 +20,12 @@ fn simple_objective_selects_solution() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -138,11 +139,12 @@ fn objective_direction_changes_solution() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 

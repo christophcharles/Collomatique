@@ -24,12 +24,13 @@ fn list_constraint_reification() {
         }
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
-            ])
+            ]))
         }
     }
 
@@ -146,13 +147,14 @@ fn list_constraint_reification_exact_count_with_param() {
 
         fn vars<T: EvalObject>(
             _env: &T::Env,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
             let mut vars = BTreeMap::new();
             // Create a binary variable for each valid index
             for i in 0..100 {
                 vars.insert(Var::X(i), collomatique_ilp::Variable::binary());
             }
-            vars
+            Ok(vars)
         }
     }
 

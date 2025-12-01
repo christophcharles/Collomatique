@@ -406,11 +406,12 @@ fn generate_field_loop(
                     // Get the type name from TypeId, then get all objects of that type
                     quote! {
                         for #var_name in {
-                            let type_name = __T::type_id_to_name(::std::any::TypeId::of::<#ty>())
-                                .expect("Object type should be known");
+                            let type_id = ::std::any::TypeId::of::<#ty>();
+                            let type_name = __T::type_id_to_name(type_id.clone())
+                                .map_err(|_| type_id)?;
                             __T::objects_with_typ(env, &type_name)
                                 .into_iter()
-                                .filter_map(|obj| <#ty>::try_from(obj).ok())
+                                .map(|obj| <#ty>::try_from(obj).expect("Consistent TryFrom implementation with type_id_to_name"))
                         }
                     }
                 }
@@ -515,7 +516,7 @@ fn generate_try_from_impl(
     // Generate where clause for all object types
     let where_clauses = object_types.iter().map(|ty| {
         quote! {
-            #ty: TryFrom<__T, Error = ::collo_ml::traits::TypeConversionError>
+            #ty: TryFrom<__T>
         }
     });
 
