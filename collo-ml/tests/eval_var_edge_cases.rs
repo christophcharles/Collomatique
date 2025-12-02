@@ -443,8 +443,8 @@ fn test_unit_variant() {
     // Total: 1 variable
     assert_eq!(
         vars.len(),
-        1,
-        "Should generate 1 variable for unit variants"
+        2,
+        "Should generate 2 variables (one for each unit variant)"
     );
 
     // Verify NoFields exists
