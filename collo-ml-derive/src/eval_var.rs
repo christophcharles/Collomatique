@@ -534,8 +534,18 @@ fn generate_fix_pattern_and_checks_and_output(
     let fix = &info.fix;
 
     if info.fields.is_empty() {
-        // Unit variant - no checks needed
-        return (quote! {}, quote! { None });
+        return (
+            quote! {},
+            match fix {
+                FixType::DeferFix(defer_fix) => quote! {
+                    #defer_fix
+                },
+                FixType::FixWith(_) => {
+                    // cannot be out of range with unit variant. No test needed
+                    quote! { None }
+                }
+            },
+        );
     }
 
     let mut field_patterns = Vec::new();
