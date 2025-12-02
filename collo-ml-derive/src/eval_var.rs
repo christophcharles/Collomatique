@@ -425,10 +425,19 @@ fn generate_field_iterations(
 
     for (idx, field) in fields.iter().enumerate() {
         let var_name = syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
-        var_names.push(var_name.clone());
+
+        let binding = if let Some(field_name) = &field.name {
+            quote! {
+                let #field_name = &#var_name;
+                let _ = #field_name; // To avoid unused warnings
+            }
+        } else {
+            quote! {}
+        };
 
         let loop_code = generate_field_loop(&field.ty, &var_name, &field.range);
-        loops.push(loop_code);
+        loops.push((loop_code, binding));
+        var_names.push(var_name);
     }
 
     // Build the variant construction
@@ -466,9 +475,10 @@ fn generate_field_iterations(
         }
     };
 
-    for loop_code in loops.into_iter().rev() {
+    for (loop_code, binding) in loops.into_iter().rev() {
         inner_code = quote! {
             #loop_code {
+                #binding
                 #inner_code
             }
         };
