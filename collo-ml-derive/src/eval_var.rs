@@ -476,15 +476,17 @@ fn generate_fix_pattern_and_checks(
     }
 
     let mut field_patterns = Vec::new();
+    let mut bindings = Vec::new();
 
     for (idx, field) in info.fields.iter().enumerate() {
-        let var_name = syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
-
-        if let Some(field_name) = &field.name {
-            field_patterns.push(quote! { #field_name: #var_name });
-        } else {
-            field_patterns.push(quote! { #var_name });
-        }
+        let var_name = match &field.name {
+            Some(field_name) => {
+                bindings.push(quote! { let _ = #field_name; }); // To avoid unused field warning
+                field_name.clone()
+            }
+            None => syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site()),
+        };
+        field_patterns.push(quote! { #var_name });
     }
 
     let pattern = if info.fields.iter().all(|f| f.name.is_some()) {
@@ -495,24 +497,18 @@ fn generate_fix_pattern_and_checks(
 
     let checks_code = match fix {
         FixType::DeferFix(defer_fix) => {
-            let param_refs = (0..info.fields.len())
-                .map(|idx| {
-                    let var_name =
-                        syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
-                    quote! { &#var_name }
-                })
-                .collect::<Vec<_>>();
-
             quote! {
-                return #defer_fix(env, #(#param_refs),*);
+                return #defer_fix;
             }
         }
         FixType::FixWith(fix_with) => {
             let mut checks = Vec::new();
 
             for (idx, field) in info.fields.iter().enumerate() {
-                let var_name =
-                    syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
+                let var_name = match &field.name {
+                    Some(field_name) => field_name.clone(),
+                    None => syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site()),
+                };
 
                 // Generate range check for i32 fields
                 if let Type::Path(type_path) = &field.ty {
@@ -532,6 +528,7 @@ fn generate_fix_pattern_and_checks(
             }
 
             quote! {
+                #(#bindings)*
                 #(#checks)*
             }
         }
