@@ -16,6 +16,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
         _ => panic!("EvalVar can only be derived for enums"),
     };
 
+    // Extract optional env type from #[env(EnvType)]
+    let env_type = extract_env_attribute(&input.attrs);
+
     // Extract value for fix_with if present
     let fix_with_expr = extract_fix_with_attribute(&input.attrs)
         .map(|expr| quote! { #expr })
@@ -29,7 +32,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 
     // Generate the implementations
-    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info);
+    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info, env_type.as_ref());
     let try_from_impl = generate_try_from_impl(enum_name, &variant_info);
 
     // Combine everything
@@ -60,6 +63,20 @@ struct FieldInfo {
     name: Option<syn::Ident>, // Field name if named struct
     ty: Type,                 // Field type
     range: Option<syn::Expr>, // Optional range for i32 fields
+}
+
+// Helper function to extract #[env(Type)]
+fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
+    for attr in attrs {
+        if attr.path().is_ident("env") {
+            if let Meta::List(meta_list) = &attr.meta {
+                if let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone()) {
+                    return Some(ty);
+                }
+            }
+        }
+    }
+    None
 }
 
 // Helper function to extract #[fix_with(expr)]
@@ -197,6 +214,7 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
 fn generate_eval_var_impl(
     enum_name: &syn::Ident,
     variants: &[VariantInfo],
+    env_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
     // Generate field_schema implementation
     let field_schema_entries = variants.iter().map(|info| {
@@ -253,37 +271,83 @@ fn generate_eval_var_impl(
         }
     });
 
-    let where_text = if where_clauses.len() == 0 {
-        quote! {}
-    } else {
+    // Generate impl based on whether env_type is specified
+    if let Some(env_ty) = env_type {
+        // Env-specific implementation with concrete env type
+        let where_clauses_vec: Vec<_> = where_clauses.collect();
+        let where_text = if where_clauses_vec.is_empty() {
+            quote! {
+                where
+                    __T: ::collo_ml::EvalObject<Env = #env_ty>
+            }
+        } else {
+            quote! {
+                where
+                    __T: ::collo_ml::EvalObject<Env = #env_ty>,
+                    #(#where_clauses_vec),*
+            }
+        };
+
         quote! {
-            where
-                #(#where_clauses),*
+            impl<__T> ::collo_ml::EvalVar<__T> for #enum_name
+                #where_text
+            {
+                fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
+                    let mut schema = ::std::collections::HashMap::new();
+                    #(#field_schema_entries)*
+                    schema
+                }
+
+                fn vars(
+                    env: &#env_ty
+                ) -> ::std::result::Result<
+                    ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
+                    ::std::any::TypeId
+                > {
+                    #vars_generation
+                }
+
+                fn fix(&self, env: &#env_ty) -> Option<f64> {
+                    match self {
+                        #(#fix_arms,)*
+                    }
+                }
+            }
         }
-    };
-
-    quote! {
-        impl<__T: ::collo_ml::EvalObject> ::collo_ml::EvalVar<__T> for #enum_name
-            #where_text
-        {
-            fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
-                let mut schema = ::std::collections::HashMap::new();
-                #(#field_schema_entries)*
-                schema
+    } else {
+        // Generic implementation
+        let where_text = if where_clauses.len() == 0 {
+            quote! {}
+        } else {
+            quote! {
+                where
+                    #(#where_clauses),*
             }
+        };
 
-            fn vars(
-                env: &__T::Env
-            ) -> ::std::result::Result<
-                ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
-                ::std::any::TypeId
-            > {
-                #vars_generation
-            }
+        quote! {
+            impl<__T: ::collo_ml::EvalObject> ::collo_ml::EvalVar<__T> for #enum_name
+                #where_text
+            {
+                fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
+                    let mut schema = ::std::collections::HashMap::new();
+                    #(#field_schema_entries)*
+                    schema
+                }
 
-            fn fix(&self, env: &__T::Env) -> Option<f64> {
-                match self {
-                    #(#fix_arms,)*
+                fn vars(
+                    env: &__T::Env
+                ) -> ::std::result::Result<
+                    ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
+                    ::std::any::TypeId
+                > {
+                    #vars_generation
+                }
+
+                fn fix(&self, env: &__T::Env) -> Option<f64> {
+                    match self {
+                        #(#fix_arms,)*
+                    }
                 }
             }
         }

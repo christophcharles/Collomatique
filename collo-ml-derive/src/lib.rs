@@ -642,7 +642,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// #[var(Variable::continuous())]                // Continuous variable
 /// #[var(Variable::integer().min(0).max(100))]   // With bounds
 /// ```
-#[proc_macro_derive(EvalVar, attributes(name, var, range, fix_with, defer_fix))]
+#[proc_macro_derive(EvalVar, attributes(name, var, range, fix_with, defer_fix, env))]
 pub fn derive_eval_var(input: TokenStream) -> TokenStream {
     eval_var::derive(input)
 }
