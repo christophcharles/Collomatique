@@ -18,13 +18,17 @@ EOL = _{ "\r\n" | "\n" | "\r" }
 ident_char = _{ ASCII_ALPHANUMERIC | "_" }
 ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
 reserved_keyword = { 
+    "Constraint" |
+    "LinExpr" |
     "forall" |  // before "for"
     "false" |
     "reify" |
     "where" |
     "else" |
     "true" |
+    "Bool" |
     "sum" |
+    "Int" |
     "let" |
     "pub" |
     "not" |
@@ -48,7 +52,7 @@ params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ type_name }
 
 // ========== Type Names ==========
-primitive_type = { "Int" | "Bool" | "LinExpr" | "Constraint" | ident }
+primitive_type = { ident | "Int" | "Bool" | "LinExpr" | "Constraint" }
 type_name = { 
     "[" ~ type_name ~ "]" |
     primitive_type
