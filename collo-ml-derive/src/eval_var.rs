@@ -240,12 +240,11 @@ fn generate_eval_var_impl(
         let variant_name = &info.variant_name;
 
         // Generate pattern matching for fields
-        let (pattern, checks) = generate_fix_pattern_and_checks(info);
+        let (pattern, checks_and_output) = generate_fix_pattern_and_checks_and_output(info);
 
         quote! {
             #enum_name::#variant_name #pattern => {
-                #checks
-                None
+                #checks_and_output
             }
         }
     });
@@ -529,14 +528,14 @@ fn generate_field_loop(
     }
 }
 
-fn generate_fix_pattern_and_checks(
+fn generate_fix_pattern_and_checks_and_output(
     info: &VariantInfo,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let fix = &info.fix;
 
     if info.fields.is_empty() {
         // Unit variant - no checks needed
-        return (quote! {}, quote! {});
+        return (quote! {}, quote! { None });
     }
 
     let mut field_patterns = Vec::new();
@@ -559,10 +558,11 @@ fn generate_fix_pattern_and_checks(
         quote! { ( #(#field_patterns),* ) }
     };
 
-    let checks_code = match fix {
+    let checks_and_output_code = match fix {
         FixType::DeferFix(defer_fix) => {
             quote! {
-                return #defer_fix;
+                #(#bindings)*
+                #defer_fix
             }
         }
         FixType::FixWith(fix_with) => {
@@ -594,11 +594,12 @@ fn generate_fix_pattern_and_checks(
             quote! {
                 #(#bindings)*
                 #(#checks)*
+                None
             }
         }
     };
 
-    (pattern, checks_code)
+    (pattern, checks_and_output_code)
 }
 
 fn generate_try_from_impl(

@@ -424,7 +424,6 @@ fn test_complex_fix_with_expression() {
 // ============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
-#[env(EdgeCaseEnv)]
 enum UnitVariantVar {
     #[fix_with(5.0)]
     NoFields,
