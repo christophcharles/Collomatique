@@ -119,6 +119,7 @@ enum ObjectId {
 
 #[derive(Clone, ViewObject)]
 #[eval_object(ObjectId)]
+#[pretty("Student {name}")]
 struct Student {
     #[hidden]
     name: String,
@@ -126,6 +127,7 @@ struct Student {
 
 #[derive(Clone, ViewObject)]
 #[eval_object(ObjectId)]
+#[pretty("Subject {name}")]
 struct Subject {
     #[hidden]
     name: String,
