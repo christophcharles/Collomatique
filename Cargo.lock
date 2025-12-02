@@ -396,6 +396,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "collomatique-binding-colloscopes",
  "collomatique-ilp",
  "collomatique-ops",
  "collomatique-rpc",

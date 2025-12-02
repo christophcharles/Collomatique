@@ -5,6 +5,7 @@
 
 use clap::Parser;
 use collomatique_gtk4::AppModel;
+use collomatique_ilp::solvers::Solver;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
@@ -58,7 +59,18 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
     println!("\nBuilding ILP problem...");
 
-    let problem_with_translators =
+    use collomatique_binding_colloscopes::scripts::build_default_problem;
+    let problem = build_default_problem(&data);
+
+    println!("\nSolving ILP problem...");
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    let sol_opt = solver.solve(problem.get_inner_problem());
+    match sol_opt {
+        Some(sol) => println!("\n\nPotential solution: {:?}", sol),
+        None => println!("No solution found"),
+    }
+
+    /*let problem_with_translators =
         collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_collo_params(
             &data.get_inner_data().params,
         )
@@ -72,7 +84,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
         .solve(&solver)
         .map(|x| x.into_solution());
 
-    println!("\n\nPotential solution: {:?}", solution);
+    println!("\n\nPotential solution: {:?}", solution);*/
 
     Ok(())
 }
