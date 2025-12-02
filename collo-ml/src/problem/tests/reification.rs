@@ -19,7 +19,7 @@ fn internal_reification() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -144,7 +144,7 @@ fn global_reified_variables_basic() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -261,7 +261,7 @@ fn global_reified_used_in_multiple_scripts() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -407,7 +407,7 @@ fn private_reification_does_not_leak() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(

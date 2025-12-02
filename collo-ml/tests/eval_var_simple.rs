@@ -213,31 +213,35 @@ fn test_vars_generation() {
 
 #[test]
 fn test_fix_within_range() {
+    let env = TestEnv::simple_env();
+
     let var = SimpleVar::WeekUsed(1);
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), None);
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), None);
 
     let var = SimpleVar::StudentTakesSubjectInWeek {
         student: StudentId(0),
         subject: SubjectId(0),
         week: 2,
     };
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), None);
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), None);
 }
 
 #[test]
 fn test_fix_outside_range() {
+    let env = TestEnv::simple_env();
+
     let var = SimpleVar::WeekUsed(5); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(1.0));
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(1.0));
 
     let var = SimpleVar::WeekUsed(-1); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(1.0));
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(1.0));
 
     let var = SimpleVar::StudentTakesSubjectInWeek {
         student: StudentId(0),
         subject: SubjectId(0),
         week: 10, // Outside range 0..3
     };
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var), Some(0.0));
+    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
 }
 
 #[test]

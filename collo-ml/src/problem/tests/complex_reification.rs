@@ -98,7 +98,7 @@ impl<T: EvalObject> EvalVar<T> for Var {
         )])
     }
 
-    fn fix(&self) -> Option<f64> {
+    fn fix(&self, _env: &T::Env) -> Option<f64> {
         None // All students are valid, no need to fix
     }
 

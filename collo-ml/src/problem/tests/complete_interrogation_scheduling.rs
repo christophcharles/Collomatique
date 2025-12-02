@@ -34,7 +34,7 @@ fn complete_interrogations_scheduling() {
             )])
         }
 
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             match self {
                 Var::StudentWithTeacher {
                     student,

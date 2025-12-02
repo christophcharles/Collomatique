@@ -14,7 +14,7 @@ fn test_fix_forces_variable_values() {
             HashMap::from([("V".to_string(), vec![crate::traits::FieldType::Int])])
         }
 
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             match self {
                 Var::V(i) => {
                     // Fix all variables to 0 except V(7)

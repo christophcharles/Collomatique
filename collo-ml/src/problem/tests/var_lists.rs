@@ -19,7 +19,7 @@ fn list_constraint_reification() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -132,7 +132,7 @@ fn list_constraint_reification_exact_count_with_param() {
             HashMap::from([("X".to_string(), vec![crate::traits::FieldType::Int])])
         }
 
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             match self {
                 Var::X(i) => {
                     // Fix to 0 (false) if out of valid range [0, 100)

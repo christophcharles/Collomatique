@@ -13,7 +13,7 @@ fn single_constraint_problem() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -94,7 +94,7 @@ fn multiple_constraints_in_script() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -205,7 +205,7 @@ fn multiple_function_calls() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -301,7 +301,7 @@ fn constraints_from_different_scripts() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(

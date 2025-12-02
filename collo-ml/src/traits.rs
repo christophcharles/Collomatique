@@ -684,7 +684,7 @@ pub enum VarConversionError {
 /// {
 ///     fn field_schema() -> HashMap<String, Vec<FieldType>> { /* ... */ }
 ///     fn vars(env: &T::Env) -> Result<BTreeMap<Self, Variable>, TypeId> { /* ... */ }
-///     fn fix(&self) -> Option<f64> { /* ... */ }
+///     fn fix(&self, env: &T::Env) -> Option<f64> { /* ... */ }
 /// }
 /// ```
 ///
@@ -904,5 +904,5 @@ pub trait EvalVar<T: EvalObject>: UsableData {
     /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&invalid_var), Some(0.0));  // Fixed to 0.0
     /// ```
     ///
-    fn fix(&self) -> Option<f64>;
+    fn fix(&self, env: &T::Env) -> Option<f64>;
 }

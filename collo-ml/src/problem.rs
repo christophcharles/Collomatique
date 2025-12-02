@@ -827,7 +827,7 @@ impl<
                 let ProblemVar::Base(v) = var else {
                     continue;
                 };
-                let Some(value) = v.fix() else {
+                let Some(value) = v.fix(&self.env) else {
                     continue;
                 };
                 fixed_variables.insert(ProblemVar::Base(v), value);
@@ -845,7 +845,7 @@ impl<
             let ProblemVar::Base(v) = var else {
                 continue;
             };
-            let Some(value) = v.fix() else {
+            let Some(value) = v.fix(&self.env) else {
                 continue;
             };
             fixed_variables.insert(ProblemVar::Base(v), value);

@@ -15,7 +15,7 @@ fn constraints_and_objectives_same_call() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(

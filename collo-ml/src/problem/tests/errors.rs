@@ -13,7 +13,7 @@ fn error_unknown_function() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -78,7 +78,7 @@ fn error_wrong_return_type_for_reified() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -149,7 +149,7 @@ fn error_wrong_return_type_for_constraint() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -220,7 +220,7 @@ fn error_variable_already_defined() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -286,7 +286,7 @@ fn error_reified_variable_already_defined() {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(

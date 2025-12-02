@@ -291,7 +291,7 @@ fn generate_eval_var_impl(
                 #vars_generation
             }
 
-            fn fix(&self) -> Option<f64> {
+            fn fix(&self, env: &__T::Env) -> Option<f64> {
                 match self {
                     #(#fix_arms,)*
                 }

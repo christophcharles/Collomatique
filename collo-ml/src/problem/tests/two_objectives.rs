@@ -22,7 +22,7 @@ fn two_objectives_same_script() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -184,7 +184,7 @@ fn two_objectives_different_scripts() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
@@ -356,7 +356,7 @@ fn objectives_with_different_senses() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self) -> Option<f64> {
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
             None
         }
         fn vars(
