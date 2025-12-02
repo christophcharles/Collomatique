@@ -8,7 +8,7 @@ use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable}
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 mod scripts;
-use scripts::{Script, ScriptRef, StoredScript};
+pub use scripts::{Script, ScriptRef, StoredScript};
 
 #[cfg(test)]
 mod tests;
