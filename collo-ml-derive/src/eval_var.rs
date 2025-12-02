@@ -16,13 +16,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
         _ => panic!("EvalVar can only be derived for enums"),
     };
 
-    // Extract default value for fix() if present
-    let default_fix_value = extract_default_fix_attribute(&input.attrs).unwrap_or(0.0);
+    // Extract value for fix_with if present
+    let fix_with_expr = extract_fix_with_attribute(&input.attrs)
+        .map(|expr| quote! { #expr })
+        .unwrap_or(quote! { 0.0 });
 
     // Process each variant
     let mut variant_info = Vec::new();
     for variant in variants {
-        let info = process_variant(variant, default_fix_value);
+        let info = process_variant(variant, &fix_with_expr);
         variant_info.push(info);
     }
 
@@ -39,38 +41,48 @@ pub fn derive(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+enum FixType {
+    FixWith(proc_macro2::TokenStream),
+    DeferFix(proc_macro2::TokenStream),
+}
+
 // Helper struct to hold variant information
 struct VariantInfo {
     variant_name: syn::Ident,    // e.g., "StudentInGroup"
     dsl_name: String,            // e.g., "SiG" or "StudentInGroup"
     fields: Vec<FieldInfo>,      // Field parameters
     var_type: Option<syn::Expr>, // Optional Variable type expression
-    default_fix: f64,            // Default value for fix()
+    fix: FixType,
 }
 
 // Information about each field in a variant
 struct FieldInfo {
     name: Option<syn::Ident>, // Field name if named struct
     ty: Type,                 // Field type
-    range: Option<RangeInfo>, // Optional range for i32 fields
+    range: Option<syn::Expr>, // Optional range for i32 fields
 }
 
-// Range information for i32 fields
-enum RangeInfo {
-    Range { start: i32, end: i32 }, // start..end (exclusive end)
-}
-
-// Helper function to extract #[default(value)]
-fn extract_default_fix_attribute(attrs: &[Attribute]) -> Option<f64> {
+// Helper function to extract #[fix_with(expr)]
+fn extract_fix_with_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("default_fix") {
+        if attr.path().is_ident("fix_with") {
             if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone()) {
-                    match lit {
-                        Lit::Float(f) => return Some(f.base10_parse().ok()?),
-                        Lit::Int(i) => return Some(i.base10_parse::<i32>().ok()? as f64),
-                        _ => {}
-                    }
+                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
+                    return Some(expr);
+                }
+            }
+        }
+    }
+    None
+}
+
+// Helper function to extract #[defer_fix(expr)]
+fn extract_defer_fix_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
+    for attr in attrs {
+        if attr.path().is_ident("defer_fix") {
+            if let Meta::List(meta_list) = &attr.meta {
+                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
+                    return Some(expr);
                 }
             }
         }
@@ -109,44 +121,12 @@ fn extract_var_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 }
 
 // Helper function to extract #[range(...)]
-fn extract_range_attribute(attrs: &[Attribute]) -> Option<RangeInfo> {
+fn extract_range_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
         if attr.path().is_ident("range") {
             if let Meta::List(meta_list) = &attr.meta {
-                // Parse range expression like "0..20"
                 if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    if let Expr::Range(range_expr) = expr {
-                        // Extract start and end
-                        let start = if let Some(start_expr) = &range_expr.start {
-                            if let Expr::Lit(lit) = start_expr.as_ref() {
-                                if let Lit::Int(int_lit) = &lit.lit {
-                                    int_lit.base10_parse::<i32>().ok()?
-                                } else {
-                                    panic!("Range start must be an integer literal");
-                                }
-                            } else {
-                                panic!("Range start must be a literal");
-                            }
-                        } else {
-                            panic!("Range must have a start");
-                        };
-
-                        let end = if let Some(end_expr) = &range_expr.end {
-                            if let Expr::Lit(lit) = end_expr.as_ref() {
-                                if let Lit::Int(int_lit) = &lit.lit {
-                                    int_lit.base10_parse::<i32>().ok()?
-                                } else {
-                                    panic!("Range end must be an integer literal");
-                                }
-                            } else {
-                                panic!("Range end must be a literal");
-                            }
-                        } else {
-                            panic!("Range must have an end");
-                        };
-
-                        return Some(RangeInfo::Range { start, end });
-                    }
+                    return Some(expr);
                 }
             }
         }
@@ -154,7 +134,7 @@ fn extract_range_attribute(attrs: &[Attribute]) -> Option<RangeInfo> {
     None
 }
 
-fn process_variant(variant: &Variant, default_fix: f64) -> VariantInfo {
+fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) -> VariantInfo {
     let variant_name = variant.ident.clone();
 
     // Extract DSL name from #[name("...")] or use variant name
@@ -165,7 +145,17 @@ fn process_variant(variant: &Variant, default_fix: f64) -> VariantInfo {
     let var_type = extract_var_attribute(&variant.attrs);
 
     // Extract default fix value for this variant if specified
-    let variant_default_fix = extract_default_fix_attribute(&variant.attrs).unwrap_or(default_fix);
+    let variant_fix_with = extract_fix_with_attribute(&variant.attrs);
+    let variant_defer_fix = extract_defer_fix_attribute(&variant.attrs);
+
+    let fix = match (variant_defer_fix, variant_fix_with) {
+        (Some(_), Some(_)) => {
+            panic!("#[fix_with(...)] and #[defer_fix(...)] are mutually exclusive")
+        }
+        (Some(defer_fix), None) => FixType::DeferFix(quote! { #defer_fix }),
+        (None, Some(fix_with)) => FixType::FixWith(quote! { #fix_with }),
+        (None, None) => FixType::FixWith(fix_with_expr.clone()), // fall back to enum default
+    };
 
     // Process fields
     let fields = match &variant.fields {
@@ -200,7 +190,7 @@ fn process_variant(variant: &Variant, default_fix: f64) -> VariantInfo {
         dsl_name,
         fields,
         var_type,
-        default_fix: variant_default_fix,
+        fix,
     }
 }
 
@@ -335,7 +325,13 @@ fn generate_vars_impl(
             });
 
         // Generate nested loops for each field
-        generate_field_iterations(enum_name, variant_name, &info.fields, &var_type)
+        generate_field_iterations(
+            enum_name,
+            variant_name,
+            &info.fields,
+            &var_type,
+            matches!(info.fix, FixType::DeferFix(_)),
+        )
     });
 
     quote! {
@@ -351,6 +347,7 @@ fn generate_field_iterations(
     variant_name: &syn::Ident,
     fields: &[FieldInfo],
     var_type: &proc_macro2::TokenStream,
+    defered_fix: bool,
 ) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         // Unit variant
@@ -392,8 +389,18 @@ fn generate_field_iterations(
     };
 
     // Nest the loops from innermost to outermost
-    let mut inner_code = quote! {
-        vars.insert(#variant_construction, #var_type);
+    let mut inner_code = if defered_fix {
+        quote! {
+            let new_var = #variant_construction;
+            if new_var.fix(env).is_some() {
+                continue;
+            }
+            vars.insert(new_var, #var_type);
+        }
+    } else {
+        quote! {
+            vars.insert(#variant_construction, #var_type);
+        }
     };
 
     for loop_code in loops.into_iter().rev() {
@@ -410,7 +417,7 @@ fn generate_field_iterations(
 fn generate_field_loop(
     ty: &Type,
     var_name: &syn::Ident,
-    range: &Option<RangeInfo>,
+    range: &Option<syn::Expr>,
 ) -> proc_macro2::TokenStream {
     match ty {
         Type::Path(type_path) => {
@@ -419,9 +426,9 @@ fn generate_field_loop(
 
             match type_name.as_str() {
                 "i32" => {
-                    if let Some(RangeInfo::Range { start, end }) = range {
+                    if let Some(range_expr) = range {
                         quote! {
-                            for #var_name in #start..#end
+                            for #var_name in #range_expr
                         }
                     } else {
                         panic!("i32 fields must have a #[range(...)] attribute");
@@ -461,7 +468,7 @@ fn generate_field_loop(
 fn generate_fix_pattern_and_checks(
     info: &VariantInfo,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let default_fix = info.default_fix;
+    let fix = &info.fix;
 
     if info.fields.is_empty() {
         // Unit variant - no checks needed
@@ -469,7 +476,6 @@ fn generate_fix_pattern_and_checks(
     }
 
     let mut field_patterns = Vec::new();
-    let mut checks = Vec::new();
 
     for (idx, field) in info.fields.iter().enumerate() {
         let var_name = syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
@@ -479,22 +485,6 @@ fn generate_fix_pattern_and_checks(
         } else {
             field_patterns.push(quote! { #var_name });
         }
-
-        // Generate range check for i32 fields
-        if let Type::Path(type_path) = &field.ty {
-            let segment = type_path.path.segments.last().unwrap();
-            let type_name = segment.ident.to_string();
-
-            if type_name == "i32" {
-                if let Some(RangeInfo::Range { start, end }) = &field.range {
-                    checks.push(quote! {
-                        if *#var_name < #start || *#var_name >= #end {
-                            return Some(#default_fix);
-                        }
-                    });
-                }
-            }
-        }
     }
 
     let pattern = if info.fields.iter().all(|f| f.name.is_some()) {
@@ -503,8 +493,48 @@ fn generate_fix_pattern_and_checks(
         quote! { ( #(#field_patterns),* ) }
     };
 
-    let checks_code = quote! {
-        #(#checks)*
+    let checks_code = match fix {
+        FixType::DeferFix(defer_fix) => {
+            let param_refs = (0..info.fields.len())
+                .map(|idx| {
+                    let var_name =
+                        syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
+                    quote! { &#var_name }
+                })
+                .collect::<Vec<_>>();
+
+            quote! {
+                return #defer_fix(env, #(#param_refs),*);
+            }
+        }
+        FixType::FixWith(fix_with) => {
+            let mut checks = Vec::new();
+
+            for (idx, field) in info.fields.iter().enumerate() {
+                let var_name =
+                    syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site());
+
+                // Generate range check for i32 fields
+                if let Type::Path(type_path) = &field.ty {
+                    let segment = type_path.path.segments.last().unwrap();
+                    let type_name = segment.ident.to_string();
+
+                    if type_name == "i32" {
+                        if let Some(range_expr) = &field.range {
+                            checks.push(quote! {
+                                if !(#range_expr).contains(#var_name) {
+                                    return Some(#fix_with);
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
+            quote! {
+                #(#checks)*
+            }
+        }
     };
 
     (pattern, checks_code)

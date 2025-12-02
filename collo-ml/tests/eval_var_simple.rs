@@ -161,7 +161,7 @@ enum SimpleVar {
     },
 
     // Just a week number
-    #[default_fix(1.)]
+    #[fix_with(1.)]
     WeekUsed(#[range(0..3)] i32),
 }
 

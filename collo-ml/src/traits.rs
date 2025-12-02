@@ -898,10 +898,10 @@ pub trait EvalVar<T: EvalObject>: UsableData {
     /// }
     ///
     /// let valid_var = Var::TimeSlot { day: 3, hour: 10 };
-    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&valid_var), None);  // Free variable
+    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&valid_var, &env), None);  // Free variable
     ///
     /// let invalid_var = Var::TimeSlot { day: 10, hour: 10 };  // day out of range
-    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&invalid_var), Some(0.0));  // Fixed to 0.0
+    /// assert_eq!(<Var as EvalVar<ObjectId>>::fix(&invalid_var, &env), Some(0.0));  // Fixed to 0.0
     /// ```
     ///
     fn fix(&self, env: &T::Env) -> Option<f64>;
