@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-binding-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collo-ml = { path = "../collo-ml" }
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-ilp = { path = "../ilp" }

@@ -381,6 +381,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-binding-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "collo-ml",
+ "collomatique-ilp",
+ "collomatique-state-colloscopes",
+]
+
+[[package]]
 name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
