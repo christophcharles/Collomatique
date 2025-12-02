@@ -1,7 +1,7 @@
 use super::objects::{InterrogationData, WeekId};
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
-use collomatique_state_colloscopes::{Data, GroupListId};
+use collomatique_state_colloscopes::{Data, GroupListId, SubjectId};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
@@ -10,11 +10,13 @@ pub enum ObjectId {
     Interrogation(InterrogationData),
     Week(WeekId),
     GroupList(GroupListId),
+    Subject(SubjectId),
 }
 
 #[derive(ViewObject)]
 #[eval_object(ObjectId)]
 pub struct Interrogation {
+    subject: SubjectId,
     week: WeekId,
     group_list: GroupListId,
 }
@@ -29,6 +31,13 @@ pub struct Week {
 #[eval_object(ObjectId)]
 pub struct GroupList {
     groups: Vec<i32>,
+}
+
+#[derive(ViewObject)]
+#[eval_object(ObjectId)]
+pub struct Subject {
+    max_group_per_interrogation: i32,
+    min_group_per_interrogation: i32,
 }
 
 impl ViewBuilder<Data, InterrogationData> for ObjectId {
@@ -65,6 +74,7 @@ impl ViewBuilder<Data, InterrogationData> for ObjectId {
         let group_list_id = period_associations.get(&subject_id)?;
 
         Some(Interrogation {
+            subject: subject_id,
             week: WeekId(id.week),
             group_list: *group_list_id,
         })
@@ -111,6 +121,35 @@ impl ViewBuilder<Data, GroupListId> for ObjectId {
             groups: (0..(*group_list_data.params.group_count.end() as i32))
                 .into_iter()
                 .collect(),
+        })
+    }
+}
+
+impl ViewBuilder<Data, SubjectId> for ObjectId {
+    type Object = Subject;
+
+    fn enumerate(env: &Data) -> BTreeSet<SubjectId> {
+        env.get_inner_data()
+            .params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn build(env: &Data, id: &SubjectId) -> Option<Self::Object> {
+        let subject_data = env.get_inner_data().params.subjects.find_subject(*id)?;
+
+        Some(match &subject_data.parameters.interrogation_parameters {
+            Some(params) => Subject {
+                max_group_per_interrogation: params.groups_per_interrogation.end().get() as i32,
+                min_group_per_interrogation: params.groups_per_interrogation.start().get() as i32,
+            },
+            None => Subject {
+                max_group_per_interrogation: 0,
+                min_group_per_interrogation: 0,
+            },
         })
     }
 }

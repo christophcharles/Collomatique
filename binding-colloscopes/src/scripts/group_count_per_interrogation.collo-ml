@@ -1,0 +1,24 @@
+let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
+    sum group in interrogation.group_list.groups {
+        $GroupInInterrogation(interrogation, group)
+    } >== 1;
+
+reify interrogation_has_groups as $InterrogationHasGroups;
+
+let max_group_per_interrogation(interrogation: Interrogation) -> Constraint =
+    sum group in interrogation.group_list.groups {
+        $GroupInInterrogation(interrogation, group)
+    } <== interrogation.subject.max_group_per_interrogation;
+
+let min_group_per_interrogation(interrogation: Interrogation) -> Constraint =
+    sum group in interrogation.group_list.groups {
+        $GroupInInterrogation(interrogation, group)
+    } >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(interrogation);
+
+let enforce_group_count(interrogation: Interrogation) -> Constraint =
+    max_group_per_interrogation(interrogation) and min_group_per_interrogation(interrogation);
+
+pub let constraint() -> Constraint =
+    forall interrogation in @[Interrogation] {
+        enforce_group_count(interrogation)
+    };
