@@ -11,6 +11,7 @@ pub enum Var {
         #[range(Self::compute_group_range(env, interrogation))]
         group: i32,
     },
+    #[defer_fix(Self::fix_student_group(env, student, group_list))]
     #[var(Variable::integer().min(0.).max(Self::compute_max_group_num(env, group_list)))]
     StudentGroup {
         student: StudentId,
@@ -70,5 +71,24 @@ impl Var {
             None => return default_range,
         };
         0..*group_list.params.group_count.end() as i32
+    }
+
+    fn fix_student_group(env: &Data, student: &StudentId, group_list: &GroupListId) -> Option<f64> {
+        let group_list_data = match env
+            .get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .get(group_list)
+        {
+            Some(data) => data,
+            None => return Some(-1.),
+        };
+
+        if group_list_data.params.excluded_students.contains(student) {
+            return Some(-1.);
+        }
+
+        None
     }
 }
