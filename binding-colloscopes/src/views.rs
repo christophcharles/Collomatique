@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
 #[env(Data)]
+#[cached]
 pub enum ObjectId {
     Interrogation(InterrogationData),
     Week(WeekId),
@@ -14,7 +15,7 @@ pub enum ObjectId {
     Student(StudentId),
 }
 
-#[derive(ViewObject)]
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 pub struct Interrogation {
     subject: SubjectId,
@@ -22,26 +23,26 @@ pub struct Interrogation {
     group_list: GroupListId,
 }
 
-#[derive(ViewObject)]
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 pub struct Week {
     num: i32,
 }
 
-#[derive(ViewObject)]
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 pub struct GroupList {
     groups: Vec<i32>,
 }
 
-#[derive(ViewObject)]
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 pub struct Subject {
     max_group_per_interrogation: i32,
     min_group_per_interrogation: i32,
 }
 
-#[derive(ViewObject)]
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 #[pretty("{firstname} {surname}")]
 pub struct Student {
