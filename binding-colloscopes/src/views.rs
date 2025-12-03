@@ -1,7 +1,7 @@
 use super::objects::{InterrogationData, WeekId};
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
-use collomatique_state_colloscopes::{Data, GroupListId, SubjectId};
+use collomatique_state_colloscopes::{Data, GroupListId, StudentId, SubjectId};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
@@ -11,6 +11,7 @@ pub enum ObjectId {
     Week(WeekId),
     GroupList(GroupListId),
     Subject(SubjectId),
+    Student(StudentId),
 }
 
 #[derive(ViewObject)]
@@ -38,6 +39,16 @@ pub struct GroupList {
 pub struct Subject {
     max_group_per_interrogation: i32,
     min_group_per_interrogation: i32,
+}
+
+#[derive(ViewObject)]
+#[eval_object(ObjectId)]
+#[pretty("{firstname} {surname}")]
+pub struct Student {
+    #[hidden]
+    firstname: String,
+    #[hidden]
+    surname: String,
 }
 
 impl ViewBuilder<Data, InterrogationData> for ObjectId {
@@ -150,6 +161,29 @@ impl ViewBuilder<Data, SubjectId> for ObjectId {
                 max_group_per_interrogation: 0,
                 min_group_per_interrogation: 0,
             },
+        })
+    }
+}
+
+impl ViewBuilder<Data, StudentId> for ObjectId {
+    type Object = Student;
+
+    fn enumerate(env: &Data) -> BTreeSet<StudentId> {
+        env.get_inner_data()
+            .params
+            .students
+            .student_map
+            .keys()
+            .copied()
+            .collect()
+    }
+
+    fn build(env: &Data, id: &StudentId) -> Option<Self::Object> {
+        let student_data = env.get_inner_data().params.students.student_map.get(id)?;
+
+        Some(Student {
+            firstname: student_data.desc.firstname.clone(),
+            surname: student_data.desc.surname.clone(),
         })
     }
 }

@@ -1,7 +1,7 @@
 use super::objects::InterrogationData;
 use super::tools::*;
 use collo_ml::EvalVar;
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::{Data, GroupListId, StudentId};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(Data)]
@@ -11,9 +11,28 @@ pub enum Var {
         #[range(Self::compute_group_range(env, interrogation))]
         group: i32,
     },
+    #[var(Variable::integer().min(0.).max(Self::compute_max_group_num(env, group_list)))]
+    StudentGroup {
+        student: StudentId,
+        group_list: GroupListId,
+    },
 }
 
 impl Var {
+    fn compute_max_group_num(env: &Data, group_list: &GroupListId) -> f64 {
+        let group_list_data = match env
+            .get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .get(group_list)
+        {
+            Some(data) => data,
+            None => return 0.,
+        };
+        (*group_list_data.params.group_count.end() - 1) as f64
+    }
+
     fn compute_group_range(env: &Data, interrogation: &InterrogationData) -> std::ops::Range<i32> {
         let default_range = 0..0;
         let subject_id = match env
