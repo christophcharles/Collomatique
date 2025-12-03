@@ -436,6 +436,15 @@ fn type_primitive_types() {
 }
 
 #[test]
+fn do_not_reject_types_starting_like_primitive_types() {
+    let cases = vec!["Interrogation", "Boolean", "Constraints"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
 fn type_custom_types() {
     let cases = vec!["Student", "Week", "Room", "MyType", "CustomType"];
     for case in cases {
