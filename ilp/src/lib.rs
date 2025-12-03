@@ -507,6 +507,35 @@ impl Variable {
     pub fn get_max(&self) -> Option<f64> {
         self.max.map(|x| x.into_inner())
     }
+
+    /// Checks if a value is consistent with the Variable
+    ///
+    ///
+    pub fn checks_value(&self, value: f64) -> bool {
+        if f64::is_nan(value) || f64::is_infinite(value) {
+            return false;
+        }
+
+        if self.is_integer() {
+            if !f64_equals(value, value.floor()) {
+                return false;
+            }
+        }
+
+        if let Some(m) = self.max {
+            if value > m.0 {
+                return false;
+            }
+        }
+
+        if let Some(m) = self.min {
+            if value < m.0 {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 /// Problem builder
@@ -1199,10 +1228,8 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
             return false;
         };
 
-        if var_constraint.is_integer() {
-            if !f64_equals(value, value.floor()) {
-                return false;
-            }
+        if !var_constraint.checks_value(value) {
+            return false;
         }
 
         true
