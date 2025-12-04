@@ -319,7 +319,7 @@ impl EvalObject for NoObject {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedAST<T: EvalObject = NoObject> {
     global_env: GlobalEnv,
     type_info: TypeInfo,

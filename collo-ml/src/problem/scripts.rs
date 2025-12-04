@@ -1,6 +1,13 @@
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StoredScript {
+use std::collections::HashMap;
+
+use crate::{semantics::ArgsType, CheckedAST, EvalObject};
+
+use super::ProblemError;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredScript<T: EvalObject> {
     script_ref: ScriptRef,
+    ast: CheckedAST<T>,
     content: String,
 }
 
@@ -32,13 +39,15 @@ impl ScriptRef {
     }
 }
 
-impl StoredScript {
-    pub fn new(script: Script) -> Self {
+impl<T: EvalObject> StoredScript<T> {
+    pub fn new(script: Script, vars: HashMap<String, ArgsType>) -> Result<Self, ProblemError> {
         let script_ref = ScriptRef::new(script.name, &script.content);
-        StoredScript {
+        let ast = CheckedAST::new(&script.content, vars)?;
+        Ok(StoredScript {
             script_ref,
+            ast,
             content: script.content,
-        }
+        })
     }
 
     pub fn get_ref(&self) -> &ScriptRef {
@@ -47,5 +56,16 @@ impl StoredScript {
 
     pub fn get_content(&self) -> &str {
         &self.content
+    }
+
+    pub fn get_ast(&self) -> &CheckedAST<T> {
+        &self.ast
+    }
+
+    pub fn script(&self) -> Script {
+        Script {
+            name: self.script_ref.name.clone(),
+            content: self.content.clone(),
+        }
     }
 }

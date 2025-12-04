@@ -5,7 +5,7 @@ mod string_case;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ExprType {
     Int,
     Bool,
@@ -590,7 +590,7 @@ pub enum SemError {
     },
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SemWarning {
     #[error("Identifier \"{identifier}\" at {span:?} shadows previous definition at {previous:?}")]
     IdentifierShadowed {
