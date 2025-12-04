@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
+use crate::ops::ColloscopeOp;
 
 /// Description of a colloscope
 ///
@@ -46,6 +47,63 @@ impl Colloscope {
             period_map,
             group_lists,
         }
+    }
+
+    pub fn update_ops(&self, other: Self) -> Option<Vec<ColloscopeOp>> {
+        let mut output = vec![];
+
+        if self.group_lists.len() != other.group_lists.len() {
+            return None;
+        }
+        for (group_list_id, other_group_list) in other.group_lists {
+            let group_list = self.group_lists.get(&group_list_id)?;
+
+            if *group_list != other_group_list {
+                output.push(ColloscopeOp::UpdateGroupList(
+                    group_list_id,
+                    other_group_list,
+                ));
+            }
+        }
+
+        if self.period_map.len() != other.period_map.len() {
+            return None;
+        }
+        for (period_id, other_period) in other.period_map {
+            let period = self.period_map.get(&period_id)?;
+            if period.slot_map.len() != other_period.slot_map.len() {
+                return None;
+            }
+            for (slot_id, other_slot) in other_period.slot_map {
+                let slot = period.slot_map.get(&slot_id)?;
+                if slot.interrogations.len() != other_slot.interrogations.len() {
+                    return None;
+                }
+                for (week_in_period, other_interrogation_opt) in
+                    other_slot.interrogations.into_iter().enumerate()
+                {
+                    let interrogation_opt = slot.interrogations.get(week_in_period)?;
+                    if interrogation_opt.is_some() != other_interrogation_opt.is_some() {
+                        return None;
+                    }
+                    let (Some(interrogation), Some(other_interrogation)) =
+                        (interrogation_opt, other_interrogation_opt)
+                    else {
+                        continue;
+                    };
+                    if *interrogation != other_interrogation {
+                        output.push(ColloscopeOp::UpdateInterrogation(
+                            period_id,
+                            slot_id,
+                            week_in_period,
+                            other_interrogation,
+                        ));
+                    }
+                }
+            }
+        }
+
+        Some(output)
     }
 }
 

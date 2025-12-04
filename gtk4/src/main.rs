@@ -5,6 +5,7 @@
 
 use clap::Parser;
 use collomatique_gtk4::AppModel;
+use collomatique_state::traits::Manager;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
@@ -75,7 +76,27 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
         &config_data,
     )
     .expect("Config data should be compatible with colloscope parameters");
-    println!("{:?}", new_colloscope);
+
+    println!("\nSaving colloscope...");
+    let update_ops = data
+        .get_inner_data()
+        .colloscope
+        .update_ops(new_colloscope)
+        .expect("New and old colloscopes should be compatible");
+
+    use collomatique_state::AppState;
+    let mut state = AppState::new(data);
+    for op in update_ops {
+        state
+            .apply(collomatique_state_colloscopes::Op::Colloscope(op), ())
+            .expect("Op should be valid");
+    }
+    rt.block_on(async {
+        collomatique_storage::save_data_to_file(state.get_data(), &path)
+            .await
+            .expect("Failed to save file")
+    });
+    println!("\nDone.");
 
     Ok(())
 }
