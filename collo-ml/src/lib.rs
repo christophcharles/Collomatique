@@ -7,5 +7,5 @@ pub mod traits;
 pub use ast::AstError;
 pub use collo_ml_derive::{EvalObject, EvalVar, ViewObject};
 pub use eval::{CheckedAST, ExprValue};
-pub use semantics::{ExprType, SemError, SemWarning};
+pub use semantics::{string_case, ExprType, SemError, SemWarning};
 pub use traits::{EvalObject, EvalVar, ViewBuilder, ViewObject};

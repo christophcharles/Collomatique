@@ -1,0 +1,4 @@
+pub let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
+    sum group in interrogation.group_list.groups {
+        $GroupInInterrogation(interrogation, group)
+    } >== 1;

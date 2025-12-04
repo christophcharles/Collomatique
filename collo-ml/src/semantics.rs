@@ -1,7 +1,7 @@
 use crate::ast::{Expr, Param, Span, Spanned};
 use std::collections::HashMap;
 
-mod string_case;
+pub mod string_case;
 #[cfg(test)]
 mod tests;
 
