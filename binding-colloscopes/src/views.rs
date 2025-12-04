@@ -90,7 +90,7 @@ impl ViewBuilder<Data, InterrogationData> for ObjectId {
             .params
             .slots
             .find_slot_subject_and_position(id.slot)?;
-        let period_id = week_to_period_id(env, id.week);
+        let (period_id, _) = week_to_period_id(&env.get_inner_data().params, id.week)?;
         let period_associations = env
             .get_inner_data()
             .params
@@ -128,7 +128,7 @@ impl ViewBuilder<Data, WeekId> for ObjectId {
     }
 
     fn build(env: &Data, id: &WeekId) -> Option<Self::Object> {
-        let period = tools::week_to_period_id(env, id.0);
+        let (period, _) = tools::week_to_period_id(&env.get_inner_data().params, id.0)?;
 
         Some(Week {
             num: id.0 as i32,

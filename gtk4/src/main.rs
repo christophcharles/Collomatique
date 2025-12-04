@@ -5,7 +5,6 @@
 
 use clap::Parser;
 use collomatique_gtk4::AppModel;
-use collomatique_ilp::solvers::Solver;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
@@ -64,27 +63,19 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
     println!("\nSolving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let sol_opt = solver.solve(problem.get_inner_problem());
-    match sol_opt {
-        Some(sol) => println!("\n\nPotential solution: {:?}", sol),
-        None => println!("No solution found"),
-    }
-
-    /*let problem_with_translators =
-        collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_collo_params(
-            &data.get_inner_data().params,
-        )
-        .expect("Data should be complete for resolution");
-
-    println!("Start resolution...");
-
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let solution = problem_with_translators
-        .problem
-        .solve(&solver)
-        .map(|x| x.into_solution());
-
-    println!("\n\nPotential solution: {:?}", solution);*/
+    let sol_opt = problem.solve(&solver);
+    let Some(sol) = sol_opt else {
+        println!("\nNo solution found");
+        return Ok(());
+    };
+    println!("\nSolution found!");
+    let config_data = sol.get_data();
+    let new_colloscope = collomatique_binding_colloscopes::convert::build_colloscope(
+        &data.get_inner_data().params,
+        &config_data,
+    )
+    .expect("Config data should be compatible with colloscope parameters");
+    println!("{:?}", new_colloscope);
 
     Ok(())
 }

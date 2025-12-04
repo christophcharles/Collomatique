@@ -45,7 +45,10 @@ impl Var {
             Some((subject_id, _pos)) => subject_id,
             None => return default_range,
         };
-        let period_id = week_to_period_id(env, interrogation.week);
+        let period_id = match week_to_period_id(&env.get_inner_data().params, interrogation.week) {
+            Some((id, _)) => id,
+            None => return default_range,
+        };
         let period_associations = match env
             .get_inner_data()
             .params

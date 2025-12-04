@@ -1,3 +1,4 @@
+pub mod convert;
 pub mod objects;
 pub mod scripts;
 pub mod tools;

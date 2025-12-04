@@ -1,15 +1,17 @@
-use collomatique_state_colloscopes::{Data, PeriodId, WeekPatternId};
+use collomatique_state_colloscopes::{
+    colloscope_params::Parameters, Data, PeriodId, WeekPatternId,
+};
 
-pub fn week_to_period_id(env: &Data, week: usize) -> PeriodId {
+pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;
-    for (period_id, period_desc) in &env.get_inner_data().params.periods.ordered_period_list {
+    for (period_id, period_desc) in &params.periods.ordered_period_list {
         let next_period_week = current_week + period_desc.len();
         if week >= current_week && week < next_period_week {
-            return *period_id;
+            return Some((*period_id, week - current_week));
         }
         current_week = next_period_week;
     }
-    panic!("Invalid week")
+    None
 }
 
 pub fn extract_week_pattern(env: &Data, week_pattern_id: Option<WeekPatternId>) -> Vec<bool> {
