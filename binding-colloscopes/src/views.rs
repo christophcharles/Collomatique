@@ -37,6 +37,9 @@ pub struct Week {
 #[eval_object(ObjectId)]
 pub struct GroupList {
     groups: Vec<i32>,
+    students: Vec<StudentId>,
+    min_student_per_group: i32,
+    max_student_per_group: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -162,6 +165,17 @@ impl ViewBuilder<Data, GroupListId> for ObjectId {
             groups: (0..(*group_list_data.params.group_count.end() as i32))
                 .into_iter()
                 .collect(),
+            students: env
+                .get_inner_data()
+                .params
+                .students
+                .student_map
+                .keys()
+                .copied()
+                .filter(|x| !group_list_data.params.excluded_students.contains(x))
+                .collect(),
+            min_student_per_group: *group_list_data.params.group_count.start() as i32,
+            max_student_per_group: *group_list_data.params.group_count.end() as i32,
         })
     }
 }
