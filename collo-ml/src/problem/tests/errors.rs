@@ -261,7 +261,7 @@ fn error_variable_already_defined() {
     let result = pb_builder.add_reified_variables(
         Script {
             name: "conflict".into(),
-            content: r#"pub let f() -> Constraint = true;"#.into(),
+            content: r#"pub let f() -> Constraint = 1 === 1;"#.into(),
         },
         vec![("f".to_string(), "V".to_string())],
     );

@@ -729,6 +729,20 @@ impl<
         script: Script,
         func_and_names: Vec<(String, String)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
+        let stored_script = self.compile_script(script)?;
+        self.add_reified_variables_with_compiled_script(stored_script, func_and_names)
+    }
+
+    pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError> {
+        let vars = self.generate_current_vars();
+        StoredScript::new(script, vars)
+    }
+
+    pub fn add_reified_variables_with_compiled_script(
+        &mut self,
+        stored_script: StoredScript<T>,
+        func_and_names: Vec<(String, String)>,
+    ) -> Result<Vec<SemWarning>, ProblemError> {
         for (_func, name) in &func_and_names {
             if self.base_vars.contains_key(name) {
                 return Err(ProblemError::VariableAlreadyDefined(name.clone()));
@@ -738,15 +752,12 @@ impl<
             }
         }
 
-        let vars = self.generate_current_vars();
-        let stored_script = StoredScript::new(script, vars)?;
         for s in &self.stored_scripts {
             if stored_script == *s {
                 return Err(ProblemError::ScriptAlreadyUsed(stored_script.script()));
             }
         }
         let script_ref = stored_script.get_ref().clone();
-
         let ast = stored_script.get_ast();
 
         let func_map = ast.get_functions();
@@ -785,8 +796,7 @@ impl<
         script: Script,
         funcs: Vec<(String, Vec<ExprValue<T>>)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
-        let vars = self.generate_current_vars();
-        let script = StoredScript::new(script, vars)?;
+        let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let start_funcs = funcs;
         let mut warnings = self.evaluate_recursively(script, start_funcs, vec![])?;
@@ -800,8 +810,7 @@ impl<
         script: Script,
         objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
-        let vars = self.generate_current_vars();
-        let script = StoredScript::new(script, vars)?;
+        let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let mut warnings = self.evaluate_recursively(script, vec![], objectives)?;
         Ok(warnings
@@ -815,8 +824,7 @@ impl<
         funcs: Vec<(String, Vec<ExprValue<T>>)>,
         objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
-        let vars = self.generate_current_vars();
-        let script = StoredScript::new(script, vars)?;
+        let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let mut warnings = self.evaluate_recursively(script, funcs, objectives)?;
         Ok(warnings
