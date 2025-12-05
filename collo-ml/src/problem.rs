@@ -185,6 +185,27 @@ impl<
         new_var
     }
 
+    fn get_variable_type(&self, v: &ProblemVar<T, V>) -> Variable {
+        match v {
+            ProblemVar::Helper(_)
+            | ProblemVar::ReifiedPrivate(_)
+            | ProblemVar::ReifiedPublic(_) => Variable::binary(),
+            ProblemVar::Base(b) => match self.vars_desc.get(v) {
+                Some(def) => def.clone(),
+                None => match b.fix(&self.env) {
+                    Some(val) => {
+                        let new_var = Variable::integer().min(val).max(val);
+                        if !new_var.checks_value(val) {
+                            panic!("Variable {:?} has a non-integer fixed value! ({})", b, val);
+                        }
+                        new_var
+                    }
+                    None => panic!("Unknown unfixed variable!"),
+                },
+            },
+        }
+    }
+
     fn reify_single_constraint(
         &mut self,
         constraint: &Constraint<ProblemVar<T, V>>,
@@ -192,30 +213,62 @@ impl<
         var: ProblemVar<T, V>,
     ) -> Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)> {
         use collomatique_ilp::linexpr::EqSymbol;
+
+        let vars = constraint.get_lhs().variables();
+        // Handle special cases with 0 or 1 variable in the lin_expr.
+        match vars.len() {
+            0 => {
+                // If there are no variables, we can simply check if the constraint is satisfied
+                // and fix the variable accordingly
+                let var = LinExpr::var(var);
+                let c = if constraint.is_trivially_true() {
+                    let one = LinExpr::constant(1.);
+                    var.eq(&one)
+                } else {
+                    let zero = LinExpr::constant(0.);
+                    var.eq(&zero)
+                };
+                return vec![(c, origin)];
+            }
+            1 => {
+                let single_var = vars
+                    .into_iter()
+                    .next()
+                    .expect("There is one variable in this branch");
+                let var_type = self.get_variable_type(&single_var);
+
+                // If the variable is binary, we can check if the constraint is satisfied in each case
+                // and construct a corresponding matching constraint
+                if var_type == Variable::binary() {
+                    let f = |val: bool| {
+                        let reduced = constraint.reduce(&BTreeMap::from([(
+                            single_var.clone(),
+                            if val { 1.0 } else { 0.0 },
+                        )]));
+                        reduced
+                            .trivially_eval()
+                            .expect("Constraint should be trivial")
+                    };
+                    let orig_var = LinExpr::var(single_var.clone());
+                    let var = LinExpr::var(var);
+                    let one = LinExpr::constant(1.);
+                    let zero = LinExpr::constant(0.);
+                    let c = match (f(true), f(false)) {
+                        (true, true) => var.eq(&one),
+                        (false, false) => var.eq(&zero),
+                        (true, false) => var.eq(&orig_var),
+                        (false, true) => var.eq(&(&one - &orig_var)),
+                    };
+                    return vec![(c, origin)];
+                }
+            }
+            _ => {} // Generic case
+        }
+
         match constraint.get_symbol() {
             EqSymbol::LessThan => {
                 let lin_expr = constraint.get_lhs().clone();
-                let range = lin_expr.compute_range_with(|v| match v {
-                    ProblemVar::Helper(_)
-                    | ProblemVar::ReifiedPrivate(_)
-                    | ProblemVar::ReifiedPublic(_) => Some(Variable::binary()),
-                    ProblemVar::Base(b) => match self.vars_desc.get(v) {
-                        Some(def) => Some(def.clone()),
-                        None => match b.fix(&self.env) {
-                            Some(val) => {
-                                let new_var = Variable::integer().min(val).max(val);
-                                if !new_var.checks_value(val) {
-                                    panic!(
-                                        "Variable {:?} has a non-integer fixed value! ({})",
-                                        b, val
-                                    );
-                                }
-                                Some(new_var)
-                            }
-                            None => panic!("Unknown unfixed variable!"),
-                        },
-                    },
-                });
+                let range = lin_expr.compute_range_with(|v| Some(self.get_variable_type(v)));
                 let min = *range.start();
                 let max = *range.end();
                 assert!(
