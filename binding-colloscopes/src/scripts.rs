@@ -23,7 +23,6 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
                 content: script.to_string(),
             })
             .expect(&format!("Should compile: {}\n\n{}", name, script));
-        let warnings = stored_script.get_ast().get_warnings().clone();
         let funcs = stored_script.get_ast().get_functions();
         let to_reify = funcs
             .into_iter()
@@ -41,14 +40,9 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
                 "Should be compatible with builder: {}\n\n{}",
                 name, script
             ));
-
-        if !warnings.is_empty() {
-            let warnings_str: Vec<_> = warnings.iter().map(|w| w.to_string()).collect();
-            eprintln!("Warnings: {}", warnings_str.join("\n"));
-        }
     }
     for (name, script) in constraints::DEFAULT_CONSTRAINT_LIST {
-        let warnings = builder
+        let _warnings = builder
             .add_constraints(
                 Script {
                     name: name.to_string(),
@@ -57,11 +51,6 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
                 vec![("constraint".to_string(), vec![])],
             )
             .expect(&format!("Should compile: {}\n\n{}", name, script));
-
-        if !warnings.is_empty() {
-            let warnings_str: Vec<_> = warnings.iter().map(|w| w.to_string()).collect();
-            eprintln!("Warnings: {}", warnings_str.join("\n"));
-        }
     }
     builder.build()
 }
