@@ -225,10 +225,14 @@ impl<
                     range,
                 );
                 let one = LinExpr::constant(1.);
+                let epsilon = LinExpr::constant(0.1);
                 let var = LinExpr::var(var);
                 let constraints = vec![
-                    (lin_expr.leq(&(max * (&one - &var))), origin.clone()),
-                    (lin_expr.geq(&((min - 1.) * &var + &one)), origin),
+                    (
+                        lin_expr.leq(&(max * (&one - &var) + &epsilon)),
+                        origin.clone(),
+                    ),
+                    (lin_expr.geq(&((min - 1.) * &var + &one - &epsilon)), origin),
                 ];
                 constraints
             }
@@ -1078,6 +1082,10 @@ impl<'a, T: EvalObject, V: EvalVar<T>> Solution<'a, T, V> {
         Some(FeasableSolution {
             feasable_config: self.config.into_feasable()?,
         })
+    }
+
+    pub fn blame(&self) -> Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)> {
+        self.config.blame().cloned().collect()
     }
 }
 
