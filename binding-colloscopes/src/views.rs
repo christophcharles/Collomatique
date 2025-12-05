@@ -174,8 +174,8 @@ impl ViewBuilder<Data, GroupListId> for ObjectId {
                 .copied()
                 .filter(|x| !group_list_data.params.excluded_students.contains(x))
                 .collect(),
-            min_student_per_group: *group_list_data.params.group_count.start() as i32,
-            max_student_per_group: *group_list_data.params.group_count.end() as i32,
+            min_student_per_group: group_list_data.params.students_per_group.start().get() as i32,
+            max_student_per_group: group_list_data.params.students_per_group.end().get() as i32,
         })
     }
 }
