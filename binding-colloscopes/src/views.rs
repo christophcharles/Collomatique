@@ -105,6 +105,7 @@ pub struct TimeSlot {
     hour: i32,
     minute: i32,
     duration: i32,
+    interrogations: Vec<InterrogationData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -501,8 +502,47 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
         output
     }
 
-    fn build(_env: &Env, id: &TimeSlotData) -> Option<Self::Object> {
+    fn build(env: &Env, id: &TimeSlotData) -> Option<Self::Object> {
         use chrono::Timelike;
+        let mut interrogations = vec![];
+
+        for (subject_id, subject_slots) in &env.data.get_inner_data().params.slots.subject_map {
+            let subject_desc = env
+                .data
+                .get_inner_data()
+                .params
+                .subjects
+                .find_subject(*subject_id)
+                .expect("Subject ID should be valid");
+            let subject_params = subject_desc
+                .parameters
+                .interrogation_parameters
+                .as_ref()
+                .expect("Subject with slots should have parameters");
+            let duration = subject_params.duration.clone();
+            for (slot_id, slot_desc) in &subject_slots.ordered_slots {
+                let week_pattern = tools::extract_week_pattern(&env.data, slot_desc.week_pattern);
+                let status = week_pattern
+                    .get(id.week.0)
+                    .expect("Week number should be valid");
+                if !status {
+                    continue;
+                }
+                let slot_with_duration = collomatique_time::SlotWithDuration::new(
+                    slot_desc.start_time.clone(),
+                    duration,
+                )
+                .expect("Slot should not cross the midnight boundary");
+                if !slot_with_duration.overlaps_with(&id.slot) {
+                    continue;
+                }
+                interrogations.push(InterrogationData {
+                    slot: *slot_id,
+                    week: id.week.0,
+                })
+            }
+        }
+
         Some(TimeSlot {
             day: WeekdayData {
                 day: id.slot.start().weekday,
@@ -510,6 +550,7 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
             hour: id.slot.start().start_time.hour() as i32,
             minute: id.slot.start().start_time.minute() as i32,
             duration: id.slot.duration().get().get() as i32,
+            interrogations,
         })
     }
 }
