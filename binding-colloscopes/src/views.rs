@@ -12,6 +12,15 @@ pub struct Env {
     pub ignore_prefill_for_group_lists: BTreeSet<GroupListId>,
 }
 
+impl From<Data> for Env {
+    fn from(value: Data) -> Self {
+        Env {
+            data: value,
+            ignore_prefill_for_group_lists: BTreeSet::new(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
 #[env(Env)]
 #[cached]

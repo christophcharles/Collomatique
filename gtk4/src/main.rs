@@ -7,7 +7,7 @@ use clap::Parser;
 use collomatique_gtk4::AppModel;
 use collomatique_state::traits::Manager;
 use relm4::RelmApp;
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -60,10 +60,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     println!("\nBuilding ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::build_default_problem;
-    let env = collomatique_binding_colloscopes::views::Env {
-        data,
-        ignore_prefill_for_group_lists: BTreeSet::new(),
-    };
+    let env = collomatique_binding_colloscopes::views::Env::from(data);
     let problem = build_default_problem(&env);
 
     println!("\nSolving ILP problem...");
