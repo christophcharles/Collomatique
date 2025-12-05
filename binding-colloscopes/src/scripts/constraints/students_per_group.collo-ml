@@ -1,4 +1,3 @@
-
 let count_students_in_group(group_list: GroupList, group: Int) -> LinExpr =
     sum student in group_list.students {
         $StudentInGroup(student, group_list, group)
