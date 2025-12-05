@@ -57,20 +57,20 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
         println!("Caveat: {:?}", caveat);
     }
 
-    println!("\nBuilding ILP problem...");
+    println!("Building ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::build_default_problem;
     let env = collomatique_binding_colloscopes::views::Env::from(data);
     let problem = build_default_problem(&env);
 
-    println!("\nSolving ILP problem...");
+    println!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
     let sol_opt = problem.solve(&solver);
     let Some(sol) = sol_opt else {
-        println!("\nNo solution found");
+        println!("No solution found");
         return Ok(());
     };
-    println!("\nSolution found!");
+    println!("Solution found!");
     let config_data = sol.get_data();
     let new_colloscope = collomatique_binding_colloscopes::convert::build_colloscope(
         &env.data.get_inner_data().params,
@@ -78,7 +78,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     )
     .expect("Config data should be compatible with colloscope parameters");
 
-    println!("\nSaving colloscope...");
+    println!("Saving colloscope...");
     let update_ops = env
         .data
         .get_inner_data()
@@ -98,7 +98,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
             .await
             .expect("Failed to save file")
     });
-    println!("\nDone.");
+    println!("Done.");
 
     Ok(())
 }
