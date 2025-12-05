@@ -193,7 +193,12 @@ impl<
         match constraint.get_symbol() {
             EqSymbol::LessThan => {
                 let lin_expr = constraint.get_lhs().clone();
-                let range = lin_expr.compute_range(&self.vars_desc);
+                let range = lin_expr.compute_range_with(|v| match v {
+                    ProblemVar::Helper(_)
+                    | ProblemVar::ReifiedPrivate(_)
+                    | ProblemVar::ReifiedPublic(_) => Some(Variable::binary()),
+                    ProblemVar::Base(_) => self.vars_desc.get(v).cloned(),
+                });
                 let min = *range.start();
                 let max = *range.end();
                 assert!(
@@ -628,9 +633,10 @@ impl<
                 }
             }
 
-            // Last pass: now that all variables are declared in vars_desc,
-            // we can compute the range of all lin_expr. So we can finally reify the
-            // constraints
+            // Ok, we finally reify the constraints
+            // Originally this was done as a last path to have variables defined before.
+            // This could work for private reification. It does not work for chained public reification.
+            // So this is just a final pass, wiht the reason for being last being historic.
             for (var, (constraints, origin)) in constraints_to_reify {
                 let var_name = match &var {
                     ProblemVar::ReifiedPrivate(ReifiedPrivateVar {
