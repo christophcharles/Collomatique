@@ -197,7 +197,22 @@ impl<
                     ProblemVar::Helper(_)
                     | ProblemVar::ReifiedPrivate(_)
                     | ProblemVar::ReifiedPublic(_) => Some(Variable::binary()),
-                    ProblemVar::Base(_) => self.vars_desc.get(v).cloned(),
+                    ProblemVar::Base(b) => match self.vars_desc.get(v) {
+                        Some(def) => Some(def.clone()),
+                        None => match b.fix(&self.env) {
+                            Some(val) => {
+                                let new_var = Variable::integer().min(val).max(val);
+                                if !new_var.checks_value(val) {
+                                    panic!(
+                                        "Variable {:?} has a non-integer fixed value! ({})",
+                                        b, val
+                                    );
+                                }
+                                Some(new_var)
+                            }
+                            None => panic!("Unknown unfixed variable!"),
+                        },
+                    },
                 });
                 let min = *range.start();
                 let max = *range.end();
@@ -205,7 +220,7 @@ impl<
                     min.is_finite() && max.is_finite(),
                     "Linear expression from ColloML should always have finite ranges. But this expression is unbounded: {:?} (found range: {:?})",
                     lin_expr,
-                    range
+                    range,
                 );
                 let one = LinExpr::constant(1.);
                 let var = LinExpr::var(var);

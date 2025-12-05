@@ -95,12 +95,16 @@ impl GroupListPrefilledGroups {
     }
 
     pub fn contains_student(&self, student_id: StudentId) -> bool {
-        for group in &self.groups {
+        self.find_student_group(student_id).is_some()
+    }
+
+    pub fn find_student_group(&self, student_id: StudentId) -> Option<usize> {
+        for (num, group) in self.groups.iter().enumerate() {
             if group.students.contains(&student_id) {
-                return true;
+                return Some(num);
             }
         }
-        false
+        None
     }
 
     pub fn is_empty(&self) -> bool {
