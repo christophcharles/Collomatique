@@ -72,11 +72,9 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     };
     println!("Solution found!");
     let config_data = sol.get_data();
-    let new_colloscope = collomatique_binding_colloscopes::convert::build_colloscope(
-        &env.data.get_inner_data().params,
-        &config_data,
-    )
-    .expect("Config data should be compatible with colloscope parameters");
+    let new_colloscope =
+        collomatique_binding_colloscopes::convert::build_colloscope(&env, &config_data)
+            .expect("Config data should be compatible with colloscope parameters");
 
     println!("Saving colloscope...");
     let update_ops = env
