@@ -380,6 +380,13 @@ impl WholeMinuteTime {
     pub fn into_inner(self) -> chrono::NaiveTime {
         self.0
     }
+
+    /// Returns the time in minutes from midnight
+    pub fn minutes_from_midnight(&self) -> u32 {
+        use chrono::Timelike;
+        const MINUTES_PER_HOUR: u32 = 60;
+        self.hour() * MINUTES_PER_HOUR + self.minute()
+    }
 }
 
 impl std::fmt::Display for WholeMinuteTime {

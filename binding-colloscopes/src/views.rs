@@ -1,9 +1,10 @@
 use crate::tools;
 
-use super::objects::{GroupId, InterrogationData, WeekId};
+use super::objects::{GroupId, InterrogationData, TimeSlotData, WeekId, WeekdayData};
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
 use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, StudentId, SubjectId};
+use collomatique_time::{NonZeroMinutes, WholeMinuteTime};
 use std::collections::BTreeSet;
 
 #[derive(Debug)]
@@ -21,7 +22,7 @@ impl From<Data> for Env {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
 #[env(Env)]
 #[cached]
 pub enum ObjectId {
@@ -32,6 +33,8 @@ pub enum ObjectId {
     Student(StudentId),
     Period(PeriodId),
     Group(GroupId),
+    Weekday(WeekdayData),
+    TimeSlot(TimeSlotData),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -93,6 +96,21 @@ pub struct Student {
 #[eval_object(ObjectId)]
 pub struct Period {
     weeks: Vec<WeekId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct TimeSlot {
+    day: WeekdayData,
+    hour: i32,
+    minute: i32,
+    duration: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct Weekday {
+    num: i32,
 }
 
 impl ViewBuilder<Env, InterrogationData> for ObjectId {
@@ -402,6 +420,96 @@ impl ViewBuilder<Env, PeriodId> for ObjectId {
                     }
                 })
                 .collect(),
+        })
+    }
+}
+
+impl ViewBuilder<Env, WeekdayData> for ObjectId {
+    type Object = Weekday;
+
+    fn enumerate(_env: &Env) -> BTreeSet<WeekdayData> {
+        let mut output = BTreeSet::new();
+        for day in collomatique_time::Weekday::iter() {
+            output.insert(WeekdayData { day });
+        }
+        output
+    }
+
+    fn build(_env: &Env, id: &WeekdayData) -> Option<Self::Object> {
+        Some(Weekday {
+            num: id.day.num_days_from_monday() as i32,
+        })
+    }
+}
+
+impl TimeSlot {
+    fn generate_time_slots_for_a_single_day(
+        env: &Env,
+        day: collomatique_time::Weekday,
+    ) -> Vec<collomatique_time::SlotWithDuration> {
+        let duration = tools::compute_time_resolution(&env.data.get_inner_data().params);
+
+        const MINUTES_PER_HOUR: u32 = 60;
+        const HOUR_PER_DAY: u32 = 24;
+        const MINUTES_PER_DAY: u32 = MINUTES_PER_HOUR * HOUR_PER_DAY;
+
+        (0..MINUTES_PER_DAY)
+            .step_by(duration as usize)
+            .map(|start_minute| {
+                let hour = start_minute / MINUTES_PER_HOUR;
+                let min = start_minute % MINUTES_PER_HOUR;
+                let start_time = WholeMinuteTime::new(
+                    chrono::NaiveTime::from_hms_opt(hour, min, 0).expect("Time should be valid"),
+                )
+                .expect("Time should be with a whole minute");
+                collomatique_time::SlotWithDuration::new(
+                    collomatique_time::SlotStart {
+                        weekday: day.clone().into(),
+                        start_time,
+                    },
+                    NonZeroMinutes::new(duration).expect("duration should be non-zero"),
+                )
+                .expect("Slot should be valid and not cross the midnight boundary")
+            })
+            .collect()
+    }
+}
+
+impl ViewBuilder<Env, TimeSlotData> for ObjectId {
+    type Object = TimeSlot;
+
+    fn enumerate(env: &Env) -> BTreeSet<TimeSlotData> {
+        let mut output = BTreeSet::new();
+        for day in collomatique_time::Weekday::iter() {
+            for (week, status) in tools::extract_week_pattern(&env.data, None)
+                .into_iter()
+                .enumerate()
+            {
+                if !status {
+                    continue;
+                }
+                output.extend(
+                    TimeSlot::generate_time_slots_for_a_single_day(env, day)
+                        .into_iter()
+                        .map(|slot| TimeSlotData {
+                            slot,
+                            week: WeekId(week),
+                        }),
+                );
+            }
+        }
+        output
+    }
+
+    fn build(_env: &Env, id: &TimeSlotData) -> Option<Self::Object> {
+        use chrono::Timelike;
+        Some(TimeSlot {
+            day: WeekdayData {
+                day: id.slot.start().weekday,
+            },
+            hour: id.slot.start().start_time.hour() as i32,
+            minute: id.slot.start().start_time.minute() as i32,
+            duration: id.slot.duration().get().get() as i32,
         })
     }
 }

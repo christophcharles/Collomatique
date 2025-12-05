@@ -426,7 +426,7 @@ fn generate_cached_field_access_arms(
                 let field_value = obj.get_field(field)?;
 
                 // Store in cache (requires Clone)
-                cache.#cache_field.insert(*id, obj.clone());
+                cache.#cache_field.insert(id.clone(), obj.clone());
 
                 Some(Self::__collo_ml_convert_field_value(field_value))
             }
@@ -480,7 +480,7 @@ fn generate_cached_pretty_print_arms(
                 let result = obj.pretty_print();
 
                 // Store in cache (requires Clone)
-                cache.#cache_field.insert(*id, obj.clone());
+                cache.#cache_field.insert(id.clone(), obj.clone());
 
                 result
             }

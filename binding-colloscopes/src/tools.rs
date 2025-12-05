@@ -49,3 +49,45 @@ pub fn extract_week_pattern(env: &Data, week_pattern_id: Option<WeekPatternId>) 
 
     output
 }
+
+pub fn compute_time_resolution(params: &Parameters) -> u32 {
+    let mut resolution = 60u32; // Enforce at least hour resolution
+
+    for (subject_id, subject_slots) in &params.slots.subject_map {
+        let subject_desc = params
+            .subjects
+            .find_subject(*subject_id)
+            .expect("Subject ID should be valid");
+        let interrogation_params = subject_desc
+            .parameters
+            .interrogation_parameters
+            .as_ref()
+            .expect("There should be parameters when there are slots");
+        resolution = gcd(resolution, interrogation_params.duration.get().get());
+        for (_slot_id, slot_desc) in &subject_slots.ordered_slots {
+            resolution = gcd(
+                resolution,
+                slot_desc.start_time.start_time.minutes_from_midnight(),
+            );
+        }
+    }
+
+    for (_incompat_id, incompat) in &params.incompats.incompat_map {
+        for slot in &incompat.slots {
+            resolution = gcd(resolution, slot.start().start_time.minutes_from_midnight());
+            resolution = gcd(resolution, slot.duration().get().get());
+        }
+    }
+
+    resolution
+}
+
+fn gcd(mut n1: u32, mut n2: u32) -> u32 {
+    while n2 != 0 {
+        let r = n1 % n2;
+        n1 = n2;
+        n2 = r;
+    }
+
+    n1
+}

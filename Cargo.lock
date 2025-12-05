@@ -384,9 +384,11 @@ dependencies = [
 name = "collomatique-binding-colloscopes"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "collo-ml",
  "collomatique-ilp",
  "collomatique-state-colloscopes",
+ "collomatique-time",
 ]
 
 [[package]]
