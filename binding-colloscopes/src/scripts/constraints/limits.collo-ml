@@ -1,0 +1,46 @@
+let count_interrogations_in_day(student: Student, day: Day) -> LinExpr =
+    sum time_slot in day.time_slots {
+        sum interrogation in time_slot.interrogations where
+            (student in interrogation.students) &&
+            interrogation.subject.take_into_account
+        {
+            $StudentAtInterrogation(student, interrogation)
+        }
+    };
+
+let max_per_day_for(student: Student) -> Constraint =
+    forall day in @[Day] where day.week.period in student.periods {
+        count_interrogations_in_day(student, day) <== student.max_interrogations_per_day
+    };
+
+let max_per_day() -> Constraint =
+    forall student in @[Student] where student.hard_max_interrogations_per_day {
+        max_per_day_for(student)
+    };
+
+let count_interrogations_in_week(student: Student, week: Week) -> LinExpr =
+    sum day in week.days {
+        count_interrogations_in_day(student, day)
+    };
+
+let max_per_week_for(student: Student) -> Constraint =
+    forall week in @[Week] where week.period in student.periods {
+        count_interrogations_in_week(student, week) <== student.max_interrogations_per_week
+    };
+
+let max_per_week() -> Constraint =
+    forall student in @[Student] where student.hard_max_interrogations_per_week {
+        max_per_week_for(student)
+    };
+
+let min_per_week_for(student: Student) -> Constraint =
+    forall week in @[Week] where week.period in student.periods {
+        count_interrogations_in_week(student, week) >== student.min_interrogations_per_week
+    };
+
+let min_per_week() -> Constraint =
+    forall student in @[Student] where student.hard_min_interrogations_per_week {
+        min_per_week_for(student)
+    };
+
+pub let constraint() -> Constraint = max_per_day() and max_per_week() and min_per_week();

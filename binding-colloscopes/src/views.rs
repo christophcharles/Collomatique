@@ -91,6 +91,13 @@ pub struct Subject {
 #[eval_object(ObjectId)]
 #[pretty("{firstname} {surname}")]
 pub struct Student {
+    hard_max_interrogations_per_day: bool,
+    max_interrogations_per_day: i32,
+    hard_max_interrogations_per_week: bool,
+    max_interrogations_per_week: i32,
+    hard_min_interrogations_per_week: bool,
+    min_interrogations_per_week: i32,
+    periods: Vec<PeriodId>,
     #[hidden]
     firstname: String,
     #[hidden]
@@ -428,9 +435,54 @@ impl ViewBuilder<Env, StudentId> for ObjectId {
             .student_map
             .get(id)?;
 
+        let limits = env
+            .data
+            .get_inner_data()
+            .params
+            .settings
+            .students
+            .get(id)
+            .unwrap_or(&env.data.get_inner_data().params.settings.global);
+
+        let (hard_max_interrogations_per_day, max_interrogations_per_day) =
+            match &limits.max_interrogations_per_day {
+                Some(val) => (!val.soft, val.value.get() as i32),
+                None => (false, -1),
+            };
+        let (hard_max_interrogations_per_week, max_interrogations_per_week) =
+            match &limits.interrogations_per_week_max {
+                Some(val) => (!val.soft, val.value as i32),
+                None => (false, -1),
+            };
+        let (hard_min_interrogations_per_week, min_interrogations_per_week) =
+            match &limits.interrogations_per_week_min {
+                Some(val) => (!val.soft, val.value as i32),
+                None => (false, -1),
+            };
+
         Some(Student {
             firstname: student_data.desc.firstname.clone(),
             surname: student_data.desc.surname.clone(),
+            hard_max_interrogations_per_day,
+            max_interrogations_per_day,
+            hard_max_interrogations_per_week,
+            max_interrogations_per_week,
+            hard_min_interrogations_per_week,
+            min_interrogations_per_week,
+            periods: env
+                .data
+                .get_inner_data()
+                .params
+                .periods
+                .ordered_period_list
+                .iter()
+                .filter_map(|(period_id, _desc)| {
+                    if student_data.excluded_periods.contains(period_id) {
+                        return None;
+                    }
+                    Some(*period_id)
+                })
+                .collect(),
         })
     }
 }
