@@ -40,6 +40,8 @@ pub struct GroupList {
     students: Vec<StudentId>,
     min_student_per_group: i32,
     max_student_per_group: i32,
+    max_group_count: i32,
+    min_group_count: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -176,6 +178,8 @@ impl ViewBuilder<Data, GroupListId> for ObjectId {
                 .collect(),
             min_student_per_group: group_list_data.params.students_per_group.start().get() as i32,
             max_student_per_group: group_list_data.params.students_per_group.end().get() as i32,
+            min_group_count: *group_list_data.params.group_count.start() as i32,
+            max_group_count: *group_list_data.params.group_count.end() as i32,
         })
     }
 }
