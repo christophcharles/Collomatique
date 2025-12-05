@@ -119,11 +119,24 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
 
     fn enumerate(env: &Env) -> BTreeSet<InterrogationData> {
         let mut output = BTreeSet::new();
-        for (_subject_id, subject_slots) in &env.data.get_inner_data().params.slots.subject_map {
+        for (subject_id, subject_slots) in &env.data.get_inner_data().params.slots.subject_map {
+            let subject_desc = env
+                .data
+                .get_inner_data()
+                .params
+                .subjects
+                .find_subject(*subject_id)
+                .expect("Subject ID should be valid");
             for (slot_id, slot_desc) in &subject_slots.ordered_slots {
                 let week_pattern = tools::extract_week_pattern(&env.data, slot_desc.week_pattern);
                 for (week, status) in week_pattern.into_iter().enumerate() {
                     if !status {
+                        continue;
+                    }
+                    let (period, _) =
+                        tools::week_to_period_id(&env.data.get_inner_data().params, week)
+                            .expect("Week should correspond to some period");
+                    if subject_desc.excluded_periods.contains(&period) {
                         continue;
                     }
                     output.insert(InterrogationData {
@@ -514,6 +527,12 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
                 .subjects
                 .find_subject(*subject_id)
                 .expect("Subject ID should be valid");
+            let (period, _) =
+                tools::week_to_period_id(&env.data.get_inner_data().params, id.week.0)
+                    .expect("Week should correspond to some period");
+            if subject_desc.excluded_periods.contains(&period) {
+                continue;
+            }
             let subject_params = subject_desc
                 .parameters
                 .interrogation_parameters
