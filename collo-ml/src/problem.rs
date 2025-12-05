@@ -896,6 +896,11 @@ impl<
         if !fixed_variables.is_empty() {
             self.objective = self.objective.reduce(&fixed_variables);
         }
+        self.constraints = self
+            .constraints
+            .into_iter()
+            .filter(|(c, _d)| !c.is_trivially_true())
+            .collect();
 
         let reification_constraints: Vec<_> = self
             .constraints

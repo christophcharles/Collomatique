@@ -5,6 +5,8 @@
 #[cfg(test)]
 mod tests;
 
+use crate::f64_is_positive;
+
 use super::{f64_is_zero, UsableData};
 use std::{
     borrow::Borrow,
@@ -945,6 +947,20 @@ impl<V: UsableData> LinExpr<V> {
 }
 
 impl<V: UsableData> Constraint<V> {
+    /// Returns true if the constraints is trivially true
+    ///
+    /// A constraint is trivially true if there are no variables in it
+    /// and it is indeed satisfied
+    pub fn is_trivially_true(&self) -> bool {
+        if !self.expr.coefs.is_empty() {
+            return false;
+        }
+        match self.symbol {
+            EqSymbol::Equals => f64_is_zero(self.expr.constant.0),
+            EqSymbol::LessThan => f64_is_positive(-self.expr.constant.0),
+        }
+    }
+
     /// Returns the variables that appear in the constraint.
     ///
     /// As for [LinExpr::variables], if a variable has a zero coefficient
