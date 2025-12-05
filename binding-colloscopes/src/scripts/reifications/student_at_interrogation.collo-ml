@@ -10,11 +10,14 @@ let student_in_prefilled_group(student: Student, group_list: GroupList) -> Bool 
     };
 
 let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
+    # returns -1 if no group corresponds
     fold group in group_list.groups with result = -1 {
-        result + if student in group.prefilled_students {
-            group.num + 1
+        # with a consistent database only one such group might exists
+        # but in principle this code returns the last one found
+        if student in group.prefilled_students {
+            group.num
         } else {
-            0
+            result
         }
     };
 
