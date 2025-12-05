@@ -517,7 +517,7 @@ impl Variable {
         }
 
         if self.is_integer() {
-            if !f64_equals(value, value.floor()) {
+            if !f64_equals(value, value.round()) {
                 return false;
             }
         }
