@@ -26,6 +26,7 @@ mod collections;
 mod comparisons;
 mod complex;
 mod control_flow;
+mod folds;
 mod let_expr;
 mod literals;
 mod logical;
