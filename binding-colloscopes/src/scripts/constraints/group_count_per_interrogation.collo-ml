@@ -1,11 +1,11 @@
 let max_group_per_interrogation(interrogation: Interrogation) -> Constraint =
     sum group in interrogation.group_list.groups {
-        $GroupInInterrogation(interrogation, group)
+        $GroupInInterrogation(interrogation, group.num)
     } <== interrogation.subject.max_group_per_interrogation;
 
 let min_group_per_interrogation(interrogation: Interrogation) -> Constraint =
     sum group in interrogation.group_list.groups {
-        $GroupInInterrogation(interrogation, group)
+        $GroupInInterrogation(interrogation, group.num)
     } >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(interrogation);
 
 let enforce_group_count(interrogation: Interrogation) -> Constraint =

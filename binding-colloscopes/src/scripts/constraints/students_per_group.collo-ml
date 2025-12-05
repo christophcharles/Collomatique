@@ -1,13 +1,13 @@
-let count_students_in_group(group_list: GroupList, group: Int) -> LinExpr =
+let count_students_in_group(group_list: GroupList, group: Group) -> LinExpr =
     sum student in group_list.students {
         $StudentInGroup(student, group_list, group)
-    };
+    } + |group.prefilled_students|;
 
-let enforce_min_student_per_group(group_list: GroupList, group: Int) -> Constraint =
+let enforce_min_student_per_group(group_list: GroupList, group: Group) -> Constraint =
     count_students_in_group(group_list, group) >==
         group_list.min_student_per_group * $GroupHasStudents(group_list, group);
 
-let enforce_max_student_per_group(group_list: GroupList, group: Int) -> Constraint =
+let enforce_max_student_per_group(group_list: GroupList, group: Group) -> Constraint =
     count_students_in_group(group_list, group) <== group_list.max_student_per_group;
 
 pub let constraint() -> Constraint =

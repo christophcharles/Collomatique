@@ -1,4 +1,4 @@
-pub let group_has_students(group_list: GroupList, group: Int) -> Constraint =
+pub let group_has_students(group_list: GroupList, group: Group) -> Constraint =
     sum student in group_list.students {
         $StudentInGroup(student, group_list, group)
-    } >== 1;
+    } + |group.prefilled_students| >== 1;
