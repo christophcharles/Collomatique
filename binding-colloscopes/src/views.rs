@@ -1,6 +1,6 @@
 use crate::tools;
 
-use super::objects::{GroupId, InterrogationData, TimeSlotData, WeekId, WeekdayData};
+use super::objects::{DayData, GroupId, InterrogationData, TimeSlotData, WeekId, WeekdayData};
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
 use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, StudentId, SubjectId};
@@ -34,6 +34,7 @@ pub enum ObjectId {
     Period(PeriodId),
     Group(GroupId),
     Weekday(WeekdayData),
+    Day(DayData),
     TimeSlot(TimeSlotData),
 }
 
@@ -51,6 +52,7 @@ pub struct Interrogation {
 pub struct Week {
     num: i32,
     period: PeriodId,
+    days: Vec<DayData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -81,6 +83,8 @@ pub struct Group {
 pub struct Subject {
     max_group_per_interrogation: i32,
     min_group_per_interrogation: i32,
+    take_into_account: bool,
+    duration: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -102,7 +106,7 @@ pub struct Period {
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
 #[eval_object(ObjectId)]
 pub struct TimeSlot {
-    day: WeekdayData,
+    day: DayData,
     hour: i32,
     minute: i32,
     duration: i32,
@@ -113,6 +117,14 @@ pub struct TimeSlot {
 #[eval_object(ObjectId)]
 pub struct Weekday {
     num: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct Day {
+    weekday: WeekdayData,
+    week: WeekId,
+    time_slots: Vec<TimeSlotData>,
 }
 
 impl ViewBuilder<Env, InterrogationData> for ObjectId {
@@ -219,6 +231,9 @@ impl ViewBuilder<Env, WeekId> for ObjectId {
         Some(Week {
             num: id.0 as i32,
             period,
+            days: collomatique_time::Weekday::iter()
+                .map(|day| DayData { day, week: *id })
+                .collect(),
         })
     }
 }
@@ -377,10 +392,14 @@ impl ViewBuilder<Env, SubjectId> for ObjectId {
             Some(params) => Subject {
                 max_group_per_interrogation: params.groups_per_interrogation.end().get() as i32,
                 min_group_per_interrogation: params.groups_per_interrogation.start().get() as i32,
+                take_into_account: params.take_duration_into_account,
+                duration: params.duration.get().get() as i32,
             },
             None => Subject {
                 max_group_per_interrogation: 0,
                 min_group_per_interrogation: 0,
+                take_into_account: false,
+                duration: 60,
             },
         })
     }
@@ -469,6 +488,48 @@ impl ViewBuilder<Env, WeekdayData> for ObjectId {
     fn build(_env: &Env, id: &WeekdayData) -> Option<Self::Object> {
         Some(Weekday {
             num: id.day.num_days_from_monday() as i32,
+        })
+    }
+}
+
+impl ViewBuilder<Env, DayData> for ObjectId {
+    type Object = Day;
+
+    fn enumerate(env: &Env) -> BTreeSet<DayData> {
+        let mut output = BTreeSet::new();
+
+        let mut current_first_week = 0usize;
+        for (_period_id, period_desc) in
+            &env.data.get_inner_data().params.periods.ordered_period_list
+        {
+            for (num, week_desc) in period_desc.iter().enumerate() {
+                if !week_desc.interrogations {
+                    continue;
+                }
+                for day in collomatique_time::Weekday::iter() {
+                    output.insert(DayData {
+                        week: WeekId(current_first_week + num),
+                        day,
+                    });
+                }
+            }
+            current_first_week += period_desc.len();
+        }
+
+        output
+    }
+
+    fn build(env: &Env, id: &DayData) -> Option<Self::Object> {
+        Some(Day {
+            weekday: WeekdayData { day: id.day },
+            week: id.week,
+            time_slots: TimeSlot::generate_time_slots_for_a_single_day(env, id.day)
+                .into_iter()
+                .map(|slot| TimeSlotData {
+                    slot,
+                    week: id.week,
+                })
+                .collect(),
         })
     }
 }
@@ -580,8 +641,9 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
         }
 
         Some(TimeSlot {
-            day: WeekdayData {
+            day: DayData {
                 day: id.slot.start().weekday,
+                week: id.week,
             },
             hour: id.slot.start().start_time.hour() as i32,
             minute: id.slot.start().start_time.minute() as i32,

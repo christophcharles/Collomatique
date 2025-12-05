@@ -22,6 +22,12 @@ pub struct TimeSlotData {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub struct DayData {
+    pub day: collomatique_time::Weekday,
+    pub week: WeekId,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct WeekdayData {
     pub day: collomatique_time::Weekday,
 }
