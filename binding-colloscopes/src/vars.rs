@@ -1,10 +1,11 @@
 use super::objects::InterrogationData;
 use super::tools::*;
+use super::views::Env;
 use collo_ml::EvalVar;
-use collomatique_state_colloscopes::{Data, GroupListId, StudentId};
+use collomatique_state_colloscopes::{GroupListId, StudentId};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
-#[env(Data)]
+#[env(Env)]
 pub enum Var {
     GroupInInterrogation {
         interrogation: InterrogationData,
@@ -20,8 +21,9 @@ pub enum Var {
 }
 
 impl Var {
-    fn compute_max_group_num(env: &Data, group_list: &GroupListId) -> f64 {
+    fn compute_max_group_num(env: &Env, group_list: &GroupListId) -> f64 {
         let group_list_data = match env
+            .data
             .get_inner_data()
             .params
             .group_lists
@@ -34,9 +36,10 @@ impl Var {
         (*group_list_data.params.group_count.end() - 1) as f64
     }
 
-    fn compute_group_range(env: &Data, interrogation: &InterrogationData) -> std::ops::Range<i32> {
+    fn compute_group_range(env: &Env, interrogation: &InterrogationData) -> std::ops::Range<i32> {
         let default_range = 0..0;
         let subject_id = match env
+            .data
             .get_inner_data()
             .params
             .slots
@@ -45,11 +48,13 @@ impl Var {
             Some((subject_id, _pos)) => subject_id,
             None => return default_range,
         };
-        let period_id = match week_to_period_id(&env.get_inner_data().params, interrogation.week) {
-            Some((id, _)) => id,
-            None => return default_range,
-        };
+        let period_id =
+            match week_to_period_id(&env.data.get_inner_data().params, interrogation.week) {
+                Some((id, _)) => id,
+                None => return default_range,
+            };
         let period_associations = match env
+            .data
             .get_inner_data()
             .params
             .group_lists
@@ -64,6 +69,7 @@ impl Var {
             None => return default_range,
         };
         let group_list = match env
+            .data
             .get_inner_data()
             .params
             .group_lists
@@ -76,8 +82,9 @@ impl Var {
         0..*group_list.params.group_count.end() as i32
     }
 
-    fn fix_student_group(env: &Data, student: &StudentId, group_list: &GroupListId) -> Option<f64> {
+    fn fix_student_group(env: &Env, student: &StudentId, group_list: &GroupListId) -> Option<f64> {
         let group_list_data = match env
+            .data
             .get_inner_data()
             .params
             .group_lists

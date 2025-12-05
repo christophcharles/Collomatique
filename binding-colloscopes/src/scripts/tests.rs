@@ -1,9 +1,17 @@
+use std::collections::BTreeSet;
+
+use crate::views;
+
 use super::*;
 
 #[test]
 fn all_scripts_should_compile() {
     let data = collomatique_state_colloscopes::Data::new();
-    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&data)
+    let env = views::Env {
+        data,
+        ignore_prefill_for_group_lists: BTreeSet::new(),
+    };
+    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&env)
         .expect("ObjectId, Var and Data should be compatible");
     for (name, script) in reifications::DEFAULT_REIFICATION_LIST {
         let stored_script = builder
@@ -43,7 +51,11 @@ fn all_scripts_should_compile() {
 #[test]
 fn all_scripts_should_compile_without_warnings() {
     let data = collomatique_state_colloscopes::Data::new();
-    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&data)
+    let env = views::Env {
+        data,
+        ignore_prefill_for_group_lists: BTreeSet::new(),
+    };
+    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&env)
         .expect("ObjectId, Var and Data should be compatible");
     for (name, script) in reifications::DEFAULT_REIFICATION_LIST {
         let stored_script = builder

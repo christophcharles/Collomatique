@@ -7,7 +7,7 @@ use clap::Parser;
 use collomatique_gtk4::AppModel;
 use collomatique_state::traits::Manager;
 use relm4::RelmApp;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -60,7 +60,11 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     println!("\nBuilding ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::build_default_problem;
-    let problem = build_default_problem(&data);
+    let env = collomatique_binding_colloscopes::views::Env {
+        data,
+        ignore_prefill_for_group_lists: BTreeSet::new(),
+    };
+    let problem = build_default_problem(&env);
 
     println!("\nSolving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
@@ -72,20 +76,21 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     println!("\nSolution found!");
     let config_data = sol.get_data();
     let new_colloscope = collomatique_binding_colloscopes::convert::build_colloscope(
-        &data.get_inner_data().params,
+        &env.data.get_inner_data().params,
         &config_data,
     )
     .expect("Config data should be compatible with colloscope parameters");
 
     println!("\nSaving colloscope...");
-    let update_ops = data
+    let update_ops = env
+        .data
         .get_inner_data()
         .colloscope
         .update_ops(new_colloscope)
         .expect("New and old colloscopes should be compatible");
 
     use collomatique_state::AppState;
-    let mut state = AppState::new(data);
+    let mut state = AppState::new(env.data);
     for op in update_ops {
         state
             .apply(collomatique_state_colloscopes::Op::Colloscope(op), ())

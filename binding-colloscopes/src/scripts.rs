@@ -1,9 +1,11 @@
-use super::{vars::Var, views::ObjectId};
+use super::{
+    vars::Var,
+    views::{Env, ObjectId},
+};
 use collo_ml::{
     problem::{Problem, ProblemBuilder, Script},
     ExprType,
 };
-use collomatique_state_colloscopes::Data;
 
 mod constraints;
 mod reifications;
@@ -11,8 +13,8 @@ mod reifications;
 #[cfg(test)]
 mod tests;
 
-pub fn build_default_problem(data: &Data) -> Problem<ObjectId, Var> {
-    let mut builder = ProblemBuilder::<ObjectId, Var>::new(data)
+pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
+    let mut builder = ProblemBuilder::<ObjectId, Var>::new(env)
         .expect("ObjectId, Var and Data should be compatible");
     for (name, script) in reifications::DEFAULT_REIFICATION_LIST {
         let stored_script = builder
