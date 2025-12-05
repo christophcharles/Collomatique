@@ -6,7 +6,10 @@
 mod tests;
 
 use super::{f64_is_zero, UsableData};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 /// [LinExpr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
 ///
@@ -627,11 +630,75 @@ impl<V: UsableData> LinExpr<V> {
         &self,
         vars: &BTreeMap<V, super::Variable>,
     ) -> std::ops::RangeInclusive<f64> {
+        self.compute_range_with(|v| vars.get(v).cloned())
+    }
+
+    /// Returns the range of possible values of an expression from a closure.
+    ///
+    /// Compared to [Self::compute_range], [Self::compute_range_with] takes a closure.
+    /// This means we can evaluate dynamically what variables should be defined. This is useful in some
+    /// contexts.
+    ///
+    /// This will return the range of possible values for the expression given a range
+    /// of possible values for each variable. This is the absolutely worst case scenario.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// If there is no minimum, then -infinity is given for the lower bound. This means that arbitrarily low values
+    /// are possible.
+    /// If there is no maximum, then +infinity is given for the upper bound. This means that arbitrarily high values
+    /// are possible.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::binary()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(ranges), -45.0..=-40.0);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -f64::INFINITY..=f64::INFINITY);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::non_negative()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -f64::INFINITY..=-40.0);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::non_positive()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -42.0..=f64::INFINITY);
+    /// ```
+    pub fn compute_range_with<U: ?Sized, F: FnMut(&U) -> Option<super::Variable>>(
+        &self,
+        mut f: F,
+    ) -> std::ops::RangeInclusive<f64>
+    where
+        V: Borrow<U>,
+    {
         let mut minimum = self.constant.0;
         let mut maximum = self.constant.0;
 
         for (var, coef) in &self.coefs {
-            let var_def = vars.get(var);
+            let var_def = f(var.borrow());
             let var_range = match var_def {
                 Some(def) => {
                     let min_value = def.get_min().unwrap_or(-f64::INFINITY);
