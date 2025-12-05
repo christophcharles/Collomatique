@@ -1502,7 +1502,7 @@ impl LocalEnv {
                                 "sum collection type must be known (use 'as' for explicit typing)"
                                     .to_string(),
                         });
-                        return Some(ExprType::Constraint.into()); // Return early
+                        return None; // Return early
                     }
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
@@ -1514,7 +1514,7 @@ impl LocalEnv {
                             found: t,
                             context: "sum collection must be a list".to_string(),
                         });
-                        return Some(ExprType::Constraint.into()); // Return early
+                        return None; // Return early
                     }
                     None => return None,
                 }
@@ -1564,6 +1564,171 @@ impl LocalEnv {
                         None
                     }
                     None => None,
+                }
+            }
+
+            Expr::Fold {
+                var,
+                collection,
+                accumulator,
+                init_value,
+                filter,
+                body,
+                reversed: _,
+            } => {
+                let coll_type = self.check_expr(
+                    global_env,
+                    &collection.node,
+                    &collection.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
+                );
+
+                let annotated_acc_type = self.check_expr(
+                    global_env,
+                    &init_value.node,
+                    &init_value.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
+                );
+
+                // Check naming conventions
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &var.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: var.node.clone(),
+                        span: var.span.clone(),
+                        suggestion,
+                    });
+                }
+
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &accumulator.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: accumulator.node.clone(),
+                        span: accumulator.span.clone(),
+                        suggestion,
+                    });
+                }
+
+                // Extract type info
+                match coll_type {
+                    Some(AnnotatedType::Forced(ExprType::List(elem_t)))
+                    | Some(AnnotatedType::Regular(ExprType::List(elem_t))) => {
+                        // Register the loop variable with the element type
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            *elem_t,
+                            type_info,
+                            warnings,
+                        );
+                    }
+                    Some(AnnotatedType::UntypedList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)).into(), // placeholder
+                            found: AnnotatedType::UntypedList,
+                            context:
+                                "sum collection type must be known (use 'as' for explicit typing)"
+                                    .to_string(),
+                        });
+                        return None; // Return early
+                    }
+                    Some(t) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(
+                                t.inner().expect("UntypedList case already handled").clone(),
+                            ))
+                            .into(),
+                            found: t,
+                            context: "sum collection must be a list".to_string(),
+                        });
+                        return None; // Return early
+                    }
+                    None => return None,
+                }
+
+                let acc_type = match annotated_acc_type {
+                    Some(AnnotatedType::Forced(t)) | Some(AnnotatedType::Regular(t)) => {
+                        // Register the acc variable with the init_value type
+                        self.register_identifier(
+                            &accumulator.node,
+                            accumulator.span.clone(),
+                            t.clone(),
+                            type_info,
+                            warnings,
+                        );
+                        t
+                    }
+                    Some(AnnotatedType::UntypedList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: accumulator.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)).into(), // placeholder
+                            found: AnnotatedType::UntypedList,
+                            context:
+                                "accumulator type must be known (use 'as' for explicit typing)"
+                                    .to_string(),
+                        });
+                        return None; // Return early
+                    }
+                    None => return None,
+                };
+
+                self.push_scope();
+
+                // Check filter (must be Bool)
+                if let Some(filter_expr) = filter {
+                    let filter_type = self.check_expr(
+                        global_env,
+                        &filter_expr.node,
+                        &filter_expr.span,
+                        type_info,
+                        expr_types,
+                        errors,
+                        warnings,
+                    );
+
+                    if let Some(typ) = filter_type {
+                        if !typ.can_coerce_to(&ExprType::Bool) {
+                            errors.push(SemError::TypeMismatch {
+                                span: filter_expr.span.clone(),
+                                expected: ExprType::Bool.into(),
+                                found: typ,
+                                context: "sum filter must be Bool".to_string(),
+                            });
+                        }
+                    }
+                }
+
+                // Check body (must match accumulator)
+                let body_type = self.check_expr(
+                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                );
+
+                self.pop_scope(warnings);
+
+                match body_type {
+                    Some(typ) if typ.can_coerce_to(&acc_type) => Some(acc_type.into()),
+                    Some(typ) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: body.span.clone(),
+                            expected: acc_type.clone().into(),
+                            found: typ,
+                            context: "fold|rfold body must match accumulator type".to_string(),
+                        });
+                        Some(acc_type.into())
+                    }
+                    None => Some(acc_type.into()), // Intent is expressed by accumulator
                 }
             }
 

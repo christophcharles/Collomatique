@@ -102,6 +102,15 @@ pub enum Expr {
         filter: Option<Box<Spanned<Expr>>>,
         body: Box<Spanned<Expr>>,
     },
+    Fold {
+        var: Spanned<String>,
+        collection: Box<Spanned<Expr>>,
+        accumulator: Spanned<String>,
+        init_value: Box<Spanned<Expr>>,
+        filter: Option<Box<Spanned<Expr>>>,
+        body: Box<Spanned<Expr>>,
+        reversed: bool,
+    },
 
     // branches
     If {
@@ -847,6 +856,8 @@ impl Expr {
             Rule::let_expr => Self::from_let_expr(inner),
             Rule::if_expr => Self::from_if_expr(inner),
             Rule::sum => Self::from_sum(inner),
+            Rule::fold => Self::from_fold(inner, false),
+            Rule::rfold => Self::from_fold(inner, true),
             Rule::cardinality => Self::from_cardinality(inner),
             Rule::list_comprehension => Self::from_list_comprehension(inner),
             Rule::list_range => Self::from_list_range(inner),
@@ -946,6 +957,57 @@ impl Expr {
             collection: collection.ok_or(AstError::MissingBody(span.clone()))?,
             filter,
             body: body.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
+    fn from_fold(pair: Pair<Rule>, reversed: bool) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut var = None;
+        let mut accumulator = None;
+        let mut init_value = None;
+        let mut collection = None;
+        let mut filter = None;
+        let mut body = None;
+        let mut has_filter = false;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let ident_span = Span::from_pest(&inner);
+                    if var.is_none() {
+                        var = Some(Spanned::new(inner.as_str().to_string(), ident_span));
+                    } else {
+                        accumulator = Some(Spanned::new(inner.as_str().to_string(), ident_span));
+                    }
+                }
+                Rule::where_op => {
+                    has_filter = true;
+                }
+                Rule::expr => {
+                    let expr_span = Span::from_pest(&inner);
+                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    if collection.is_none() {
+                        collection = Some(expr);
+                    } else if init_value.is_none() {
+                        init_value = Some(expr);
+                    } else if has_filter && filter.is_none() {
+                        filter = Some(expr);
+                    } else if body.is_none() {
+                        body = Some(expr);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Expr::Fold {
+            var: var.ok_or(AstError::MissingName(span.clone()))?,
+            collection: collection.ok_or(AstError::MissingBody(span.clone()))?,
+            accumulator: accumulator.ok_or(AstError::MissingName(span.clone()))?,
+            init_value: init_value.ok_or(AstError::MissingBody(span.clone()))?,
+            filter,
+            body: body.ok_or(AstError::MissingBody(span))?,
+            reversed,
         })
     }
 

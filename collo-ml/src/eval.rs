@@ -1545,6 +1545,79 @@ impl<T: EvalObject> LocalEnv<T> {
                     ExprValue::Int(output).into()
                 }
             }
+            Expr::Fold {
+                var,
+                collection,
+                accumulator,
+                init_value,
+                filter,
+                body,
+                reversed,
+            } => {
+                let collection_value = self.eval_expr(eval_history, &collection)?;
+                let init_value = self.eval_expr(eval_history, &init_value)?;
+
+                let target = match eval_history
+                    .ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("Semantic analysis should have given a target type")
+                {
+                    AnnotatedType::Regular(t) => t,
+                    AnnotatedType::Forced(_) | AnnotatedType::UntypedList => {
+                        panic!("Expected known regular type")
+                    }
+                };
+
+                let (_typ, mut list) = match collection_value {
+                    AnnotatedValue::Regular(ExprValue::List(typ, list))
+                    | AnnotatedValue::Forced(ExprValue::List(typ, list)) => (typ, list),
+                    _ => panic!("Expected list"),
+                };
+
+                let mut output = init_value
+                    .coerce_to(&eval_history.env, target)
+                    .expect(&format!(
+                        "Initial value ({:?}) should be of type {:?}",
+                        init_value, target
+                    ));
+
+                if *reversed {
+                    list.reverse();
+                }
+
+                for elem in list {
+                    self.register_identifier(&var.node, elem);
+                    self.register_identifier(&accumulator.node, output.clone());
+                    self.push_scope();
+
+                    let cond = match filter {
+                        None => true,
+                        Some(f) => {
+                            let filter_value = self.eval_expr(eval_history, &f)?;
+                            let coerced_filter = filter_value
+                                .coerce_to(eval_history.env, &ExprType::Bool)
+                                .expect("Coercion should be valid");
+                            match coerced_filter {
+                                ExprValue::Bool(v) => v,
+                                _ => panic!("Expected bool"),
+                            }
+                        }
+                    };
+
+                    if cond {
+                        let new_value = self.eval_expr(eval_history, &body)?;
+                        let coerced_body = new_value
+                            .coerce_to(eval_history.env, target)
+                            .expect("Coercion should be valid");
+                        output = coerced_body;
+                    }
+
+                    self.pop_scope();
+                }
+
+                output.into()
+            }
             Expr::Forall {
                 var,
                 collection,

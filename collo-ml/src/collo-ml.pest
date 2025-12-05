@@ -24,6 +24,9 @@ reserved_keyword = {
     "false" |
     "reify" |
     "where" |
+    "rfold" |
+    "fold" |
+    "with" |
     "else" |
     "true" |
     "Bool" |
@@ -89,6 +92,8 @@ primary_expr = {
     let_expr |
     if_expr |
     sum |
+    fold |
+    rfold |
     cardinality |
     list_comprehension |  // Must come before list_literal to parse correctly
     list_range | // Must come before list_literal to parse correctly
@@ -107,6 +112,8 @@ primary_expr = {
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
 sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+fold = { "fold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+rfold = { "rfold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 cardinality = { "|" ~ expr ~ "|" }
 list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
@@ -132,6 +139,7 @@ and_op = @{ "&&" | "and" ~ !ident_char }
 not_op = @{ "!" | "not" ~ !ident_char }
 
 where_op = @{ "where" ~ !ident_char }
+with_op = @{ "with" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
 number = @{ "-"? ~ ASCII_DIGIT+ }
