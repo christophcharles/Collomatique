@@ -8,6 +8,7 @@ mod comparisons;
 mod complex_combinations;
 mod constraints;
 mod eval_with_variables;
+mod folds;
 mod functions;
 mod if_branches;
 mod let_expr;
