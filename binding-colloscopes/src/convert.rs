@@ -78,7 +78,7 @@ pub fn build_config(env: &Env) -> ConfigData<Var> {
     config_data
 }
 
-pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Colloscope> {
+pub fn build_empty_colloscope_with_prefilled_groups(env: &Env) -> Colloscope {
     let mut colloscope = Colloscope::new_empty_from_params(&env.data.get_inner_data().params);
 
     for (group_list_id, group_list) in &env.data.get_inner_data().params.group_lists.group_list_map
@@ -98,6 +98,12 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
             }
         }
     }
+
+    colloscope
+}
+
+pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Colloscope> {
+    let mut colloscope = build_empty_colloscope_with_prefilled_groups(env);
 
     for (var, value) in config_data.get_values() {
         match var {

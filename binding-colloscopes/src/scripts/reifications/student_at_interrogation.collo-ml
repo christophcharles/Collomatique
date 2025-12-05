@@ -1,6 +1,6 @@
 let student_at_interrogation_in_group(student: Student, interrogation: Interrogation, group: Group) -> Constraint =
-    $StudentGroup(student, group.group_list) === group.num and
-    $GroupInInterrogation(interrogation, group.num) === 1;
+    # Use inequalities to reduce the amount of helper variables
+    $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation, group.num) >== 1;
 
 reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
 
