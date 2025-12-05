@@ -112,6 +112,8 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
 pub enum ProblemError {
+    #[error("Variable {0} has non-integer type")]
+    NonIntegerVariable(String),
     #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
     EvalVarIncompatibleWithEvalObject(std::any::TypeId),
     #[error("Function \"{0}\" was not found in script (maybe it is not public?)")]
@@ -727,6 +729,11 @@ impl<
         let base_vars = Self::build_vars()?;
         let original_var_list =
             V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
+        for (name, desc) in &original_var_list {
+            if !desc.is_integer() {
+                return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
+            }
+        }
         let vars_desc = original_var_list
             .iter()
             .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
