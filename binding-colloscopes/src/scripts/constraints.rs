@@ -10,6 +10,8 @@ pub const GROUPS_FILLED_BY_ASCENDING_ORDER: &'static str =
 pub const GROUP_COUNT_PER_GROUP_LIST: &'static str =
     include_str!("constraints/group_count_per_group_list.collo-ml");
 
+pub const SEALED_GROUPS: &'static str = include_str!("constraints/sealed_groups.collo-ml");
+
 pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
     (
         "group_count_per_interrogation",
@@ -21,4 +23,5 @@ pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
         GROUPS_FILLED_BY_ASCENDING_ORDER,
     ),
     ("group_count_per_group_list", GROUP_COUNT_PER_GROUP_LIST),
+    ("sealed_groups", SEALED_GROUPS),
 ];

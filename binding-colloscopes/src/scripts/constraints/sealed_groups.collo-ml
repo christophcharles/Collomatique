@@ -1,0 +1,9 @@
+let count_extra_students_in_group(group: Group) -> LinExpr =
+    sum student in group.group_list.students {
+        $StudentInGroup(student, group.group_list, group)
+    };
+
+pub let constraint() -> Constraint =
+    forall group in @[Group] where group.sealed {
+        count_extra_students_in_group(group) === 0
+    };
