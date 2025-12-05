@@ -736,7 +736,9 @@ impl<
         func_and_names: Vec<(String, String)>,
     ) -> Result<Vec<SemWarning>, ProblemError> {
         let stored_script = self.compile_script(script)?;
-        self.add_reified_variables_with_compiled_script(stored_script, func_and_names)
+        let warnings = stored_script.get_ast().get_warnings().clone();
+        self.add_reified_variables_with_compiled_script(stored_script, func_and_names)?;
+        Ok(warnings)
     }
 
     pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError> {
@@ -748,7 +750,7 @@ impl<
         &mut self,
         stored_script: StoredScript<T>,
         func_and_names: Vec<(String, String)>,
-    ) -> Result<Vec<SemWarning>, ProblemError> {
+    ) -> Result<(), ProblemError> {
         for (_func, name) in &func_and_names {
             if self.base_vars.contains_key(name) {
                 return Err(ProblemError::VariableAlreadyDefined(name.clone()));
@@ -790,11 +792,9 @@ impl<
                 },
             );
         }
-        let warnings = ast.get_warnings().clone();
-
         self.stored_scripts.push(stored_script);
 
-        Ok(warnings)
+        Ok(())
     }
 
     pub fn add_constraints(

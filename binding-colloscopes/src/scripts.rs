@@ -8,6 +8,9 @@ use collomatique_state_colloscopes::Data;
 mod constraints;
 mod reifications;
 
+#[cfg(test)]
+mod tests;
+
 pub fn build_default_problem(data: &Data) -> Problem<ObjectId, Var> {
     let mut builder = ProblemBuilder::<ObjectId, Var>::new(data)
         .expect("ObjectId, Var and Data should be compatible");
@@ -18,6 +21,7 @@ pub fn build_default_problem(data: &Data) -> Problem<ObjectId, Var> {
                 content: script.to_string(),
             })
             .expect(&format!("Should compile: {}\n\n{}", name, script));
+        let warnings = stored_script.get_ast().get_warnings().clone();
         let funcs = stored_script.get_ast().get_functions();
         let to_reify = funcs
             .into_iter()
@@ -29,7 +33,7 @@ pub fn build_default_problem(data: &Data) -> Problem<ObjectId, Var> {
                 Some((name, var_name))
             })
             .collect();
-        let warnings = builder
+        builder
             .add_reified_variables_with_compiled_script(stored_script, to_reify)
             .expect(&format!(
                 "Should be compatible with builder: {}\n\n{}",
