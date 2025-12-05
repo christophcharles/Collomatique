@@ -1,2 +1,2 @@
-pub let student_in_group(student: Student, group_list: GroupList, group: Group) -> Constraint =
-    $StudentGroup(student, group_list) === group.num;
+pub let student_in_group(student: Student, group: Group) -> Constraint =
+    $StudentGroup(student, group.group_list) === group.num;

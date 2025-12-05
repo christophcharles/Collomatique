@@ -1,11 +1,9 @@
-let group_is_not_empty_if_next_group_is_not_empty(group_list: GroupList, group: Group) -> Constraint =
+let group_is_not_empty_if_next_group_is_not_empty(group: Group) -> Constraint =
     # this works for last group too - because last+1 is never attributed, the
     # corresponding reified variable will always be zero
-    $GroupHasStudents(group_list, group) >== $GroupHasStudents(group_list, group.next);
+    $GroupHasStudents(group) >== $GroupHasStudents(group.next);
 
 pub let constraint() -> Constraint =
-    forall group_list in @[GroupList] {
-        forall group in group_list.groups {
-           group_is_not_empty_if_next_group_is_not_empty(group_list, group)
-        }
+    forall group in @[Group] {
+        group_is_not_empty_if_next_group_is_not_empty(group)
     };
