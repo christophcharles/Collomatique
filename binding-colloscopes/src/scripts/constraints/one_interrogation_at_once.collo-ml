@@ -1,0 +1,11 @@
+let at_most_one_interrogation(time_slot: TimeSlot, student: Student) -> Constraint =
+    sum interrogation in time_slot.interrogations where student in interrogation.students {
+        $StudentAtInterrogation(student, interrogation)
+    } <== 1;
+
+pub let constraint() -> Constraint =
+    forall time_slot in @[TimeSlot] {
+        forall student in @[Student] {
+            at_most_one_interrogation(time_slot, student)
+        }
+    };

@@ -43,6 +43,7 @@ pub struct Interrogation {
     subject: SubjectId,
     week: WeekId,
     group_list: GroupListId,
+    students: Vec<StudentId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -166,10 +167,26 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
             .get(&period_id)?;
         let group_list_id = period_associations.get(&subject_id)?;
 
+        let students = match env
+            .data
+            .get_inner_data()
+            .params
+            .assignments
+            .period_map
+            .get(&period_id)
+            .expect("Period ID should be valid")
+            .subject_map
+            .get(&subject_id)
+        {
+            Some(students) => students.iter().cloned().collect(),
+            None => vec![],
+        };
+
         Some(Interrogation {
             subject: subject_id,
             week: WeekId(id.week),
             group_list: *group_list_id,
+            students,
         })
     }
 }
