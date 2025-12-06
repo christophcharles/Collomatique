@@ -33,6 +33,10 @@ impl SimpleType {
         )
     }
 
+    pub fn is_none(&self) -> bool {
+        matches!(self, SimpleType::None)
+    }
+
     pub fn is_list(&self) -> bool {
         matches!(self, SimpleType::List(_))
     }
@@ -169,10 +173,13 @@ impl ExprType {
         }
     }
 
-    pub fn maybe(typ: SimpleType) -> ExprType {
-        ExprType {
-            variants: BTreeSet::from([SimpleType::None, typ]),
+    pub fn maybe(typ: SimpleType) -> Option<ExprType> {
+        if typ.is_none() {
+            return None;
         }
+        Some(ExprType {
+            variants: BTreeSet::from([SimpleType::None, typ]),
+        })
     }
 
     pub fn sum(types: impl IntoIterator<Item = SimpleType>) -> Option<Self> {
@@ -237,6 +244,10 @@ impl ExprType {
 
     pub fn is_list(&self) -> bool {
         self.as_simple().map(|x| x.is_list()).unwrap_or(false)
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.as_simple().map(|x| x.is_none()).unwrap_or(false)
     }
 
     pub fn is_sum_of_objects(&self) -> bool {
@@ -334,6 +345,8 @@ pub enum TypeNameError {
     OptionTypeInSumType,
     #[error("All types in sum types should appear once")]
     DuplicatedTypeInSumType,
+    #[error("Option marker '?' is forbidden on None")]
+    OptionMarkerOnNone,
 }
 
 impl TryFrom<crate::ast::TypeName> for ExprType {
@@ -346,7 +359,8 @@ impl TryFrom<crate::ast::TypeName> for ExprType {
                 let maybe_type = value.types.into_iter().next().unwrap();
                 match maybe_type.maybe_count {
                     0 => Ok(ExprType::simple(SimpleType::try_from(maybe_type.inner)?)),
-                    1 => Ok(ExprType::maybe(SimpleType::try_from(maybe_type.inner)?)),
+                    1 => Ok(ExprType::maybe(SimpleType::try_from(maybe_type.inner)?)
+                        .ok_or(TypeNameError::OptionMarkerOnNone)?),
                     _ => Err(TypeNameError::MultipleOptionMarkers),
                 }
             }
@@ -874,6 +888,8 @@ pub enum SemError {
     OptionTypeInSumType { span: Span },
     #[error("Sum type at {span:?} has multiple copies of the same type")]
     DuplicatedTypeInSumType { span: Span },
+    #[error("Option type at {span:?} has an option marker on None")]
+    OptionMarkerOnNone { span: Span },
     #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
     GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
@@ -1127,6 +1143,13 @@ impl LocalEnv {
                     }
                     Err(TypeNameError::DuplicatedTypeInSumType) => {
                         errors.push(SemError::DuplicatedTypeInSumType {
+                            span: typ.span.clone(),
+                        });
+                        return loose_type; // Fallback to inferred type
+                                           // We don't make it forced as it might not correspond to desired type
+                    }
+                    Err(TypeNameError::OptionMarkerOnNone) => {
+                        errors.push(SemError::OptionMarkerOnNone {
                             span: typ.span.clone(),
                         });
                         return loose_type; // Fallback to inferred type
@@ -2346,6 +2369,12 @@ impl LocalEnv {
                         });
                         return None;
                     }
+                    Err(TypeNameError::OptionMarkerOnNone) => {
+                        errors.push(SemError::OptionMarkerOnNone {
+                            span: type_name.span.clone(),
+                        });
+                        return None;
+                    }
                 };
                 if !global_env.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
@@ -3002,6 +3031,12 @@ impl GlobalEnv {
                             });
                             error_in_typs = true;
                         }
+                        Err(TypeNameError::OptionMarkerOnNone) => {
+                            errors.push(SemError::OptionMarkerOnNone {
+                                span: param.typ.span.clone(),
+                            });
+                            error_in_typs = true;
+                        }
                         Ok(param_typ) => {
                             params_typ.push(param_typ.clone());
                             if !self.validate_type(&param_typ) {
@@ -3063,6 +3098,11 @@ impl GlobalEnv {
                         }
                         Err(TypeNameError::DuplicatedTypeInSumType) => {
                             errors.push(SemError::DuplicatedTypeInSumType {
+                                span: output_type.span.clone(),
+                            });
+                        }
+                        Err(TypeNameError::OptionMarkerOnNone) => {
+                            errors.push(SemError::OptionMarkerOnNone {
                                 span: output_type.span.clone(),
                             });
                         }
