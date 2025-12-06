@@ -332,6 +332,8 @@ pub enum TypeNameError {
     MultipleOptionMarkers,
     #[error("Option types are not allowed in sum types")]
     OptionTypeInSumType,
+    #[error("All types in sum types should appear once")]
+    DuplicatedTypeInSumType,
 }
 
 impl TryFrom<crate::ast::TypeName> for ExprType {
@@ -353,14 +355,21 @@ impl TryFrom<crate::ast::TypeName> for ExprType {
                     return Err(TypeNameError::OptionTypeInSumType);
                 }
 
-                Ok(ExprType::sum(
+                let init_count = value.types.len();
+                let expr_type = ExprType::sum(
                     value
                         .types
                         .into_iter()
                         .map(|x| SimpleType::try_from(x.inner))
                         .collect::<Result<Vec<_>, _>>()?,
                 )
-                .expect("There should be more than 0 variants"))
+                .expect("There should be more than 0 variants");
+
+                if expr_type.variants.len() != init_count {
+                    return Err(TypeNameError::DuplicatedTypeInSumType);
+                }
+
+                Ok(expr_type)
             }
         }
     }
@@ -863,6 +872,8 @@ pub enum SemError {
     MultipleOptionMarkers { span: Span },
     #[error("Option types ('?') in sum type defined at {span:?}")]
     OptionTypeInSumType { span: Span },
+    #[error("Sum type at {span:?} has multiple copies of the same type")]
+    DuplicatedTypeInSumType { span: Span },
     #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
     GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
@@ -1109,6 +1120,13 @@ impl LocalEnv {
                     }
                     Err(TypeNameError::OptionTypeInSumType) => {
                         errors.push(SemError::OptionTypeInSumType {
+                            span: typ.span.clone(),
+                        });
+                        return loose_type; // Fallback to inferred type
+                                           // We don't make it forced as it might not correspond to desired type
+                    }
+                    Err(TypeNameError::DuplicatedTypeInSumType) => {
+                        errors.push(SemError::DuplicatedTypeInSumType {
                             span: typ.span.clone(),
                         });
                         return loose_type; // Fallback to inferred type
@@ -2322,6 +2340,12 @@ impl LocalEnv {
                         });
                         return None;
                     }
+                    Err(TypeNameError::DuplicatedTypeInSumType) => {
+                        errors.push(SemError::DuplicatedTypeInSumType {
+                            span: type_name.span.clone(),
+                        });
+                        return None;
+                    }
                 };
                 if !global_env.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
@@ -2972,6 +2996,12 @@ impl GlobalEnv {
                             });
                             error_in_typs = true;
                         }
+                        Err(TypeNameError::DuplicatedTypeInSumType) => {
+                            errors.push(SemError::DuplicatedTypeInSumType {
+                                span: param.typ.span.clone(),
+                            });
+                            error_in_typs = true;
+                        }
                         Ok(param_typ) => {
                             params_typ.push(param_typ.clone());
                             if !self.validate_type(&param_typ) {
@@ -3028,6 +3058,11 @@ impl GlobalEnv {
                         }
                         Err(TypeNameError::OptionTypeInSumType) => {
                             errors.push(SemError::OptionTypeInSumType {
+                                span: output_type.span.clone(),
+                            });
+                        }
+                        Err(TypeNameError::DuplicatedTypeInSumType) => {
+                            errors.push(SemError::DuplicatedTypeInSumType {
                                 span: output_type.span.clone(),
                             });
                         }
