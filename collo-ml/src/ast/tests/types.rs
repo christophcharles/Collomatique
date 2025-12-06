@@ -12,7 +12,15 @@ fn parse_int_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Int));
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Int,
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -26,7 +34,15 @@ fn parse_bool_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Bool));
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Bool,
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -40,7 +56,15 @@ fn parse_linexpr_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::LinExpr));
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::LinExpr,
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -54,7 +78,15 @@ fn parse_constraint_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Constraint));
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Constraint,
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -68,7 +100,15 @@ fn parse_custom_object_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Object(ref s) if s == "Student"));
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Object("Student".into()),
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -83,12 +123,23 @@ fn parse_simple_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Int));
-            }
-            _ => panic!("Expected List type"),
-        },
+        Statement::Let { output_type, .. } => {
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Int,
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -100,12 +151,23 @@ fn parse_list_of_bool() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Bool));
-            }
-            _ => panic!("Expected List type"),
-        },
+        Statement::Let { output_type, .. } => {
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Bool,
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -117,12 +179,23 @@ fn parse_list_of_object() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Object(ref s) if s == "Student"));
-            }
-            _ => panic!("Expected List type"),
-        },
+        Statement::Let { output_type, .. } => {
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Object("Student".into()),
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -134,15 +207,28 @@ fn parse_nested_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { params, .. } => match &params[0].typ.node {
-            TypeName::List(inner1) => match &**inner1 {
-                TypeName::List(inner2) => {
-                    assert!(matches!(**inner2, TypeName::Int));
-                }
-                _ => panic!("Expected nested list"),
-            },
-            _ => panic!("Expected list type"),
-        },
+        Statement::Let { params, .. } => {
+            assert_eq!(
+                params[0].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::List(TypeName {
+                                    types: vec![MaybeTypeName {
+                                        maybe_count: 0,
+                                        inner: SimpleTypeName::Int,
+                                    }]
+                                }),
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -154,18 +240,33 @@ fn parse_deeply_nested_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { params, .. } => match &params[0].typ.node {
-            TypeName::List(inner1) => match &**inner1 {
-                TypeName::List(inner2) => match &**inner2 {
-                    TypeName::List(inner3) => {
-                        assert!(matches!(**inner3, TypeName::Bool));
-                    }
-                    _ => panic!("Expected third level list"),
+        Statement::Let { params, .. } => {
+            assert_eq!(
+                params[0].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::List(TypeName {
+                                    types: vec![MaybeTypeName {
+                                        maybe_count: 0,
+                                        inner: SimpleTypeName::List(TypeName {
+                                            types: vec![MaybeTypeName {
+                                                maybe_count: 0,
+                                                inner: SimpleTypeName::Bool,
+                                            }]
+                                        }),
+                                    }]
+                                }),
+                            }]
+                        }),
+                    }]
                 },
-                _ => panic!("Expected second level list"),
-            },
-            _ => panic!("Expected first level list"),
-        },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -177,12 +278,23 @@ fn parse_list_of_linexpr() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::LinExpr));
-            }
-            _ => panic!("Expected List type"),
-        },
+        Statement::Let { output_type, .. } => {
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::LinExpr,
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -194,12 +306,23 @@ fn parse_list_of_constraint() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Constraint));
-            }
-            _ => panic!("Expected List type"),
-        },
+        Statement::Let { output_type, .. } => {
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::List(TypeName {
+                            types: vec![MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Constraint,
+                            }]
+                        }),
+                    }]
+                },
+                "Expected List type"
+            );
+        }
         _ => panic!("Expected Let statement"),
     }
 }

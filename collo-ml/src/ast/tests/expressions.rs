@@ -406,7 +406,15 @@ fn parse_explicit_type_annotation() {
         Statement::Let { body, .. } => match &body.node {
             Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Ident(_)));
-                assert!(matches!(typ.node, TypeName::LinExpr));
+                assert_eq!(
+                    typ.node,
+                    TypeName {
+                        types: vec![MaybeTypeName {
+                            maybe_count: 0,
+                            inner: SimpleTypeName::LinExpr,
+                        }]
+                    }
+                );
             }
             _ => panic!("Expected ExplicitType"),
         },
@@ -424,7 +432,15 @@ fn parse_explicit_type_with_number() {
         Statement::Let { body, .. } => match &body.node {
             Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Number(5)));
-                assert!(matches!(typ.node, TypeName::Int));
+                assert_eq!(
+                    typ.node,
+                    TypeName {
+                        types: vec![MaybeTypeName {
+                            maybe_count: 0,
+                            inner: SimpleTypeName::Int,
+                        }]
+                    }
+                );
             }
             _ => panic!("Expected ExplicitType"),
         },
@@ -440,12 +456,23 @@ fn parse_explicit_type_with_list() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ExplicitType { typ, .. } => match &typ.node {
-                TypeName::List(inner) => {
-                    assert!(matches!(**inner, TypeName::Int));
-                }
-                _ => panic!("Expected List type"),
-            },
+            Expr::ExplicitType { typ, .. } => {
+                assert_eq!(
+                    typ.node,
+                    TypeName {
+                        types: vec![MaybeTypeName {
+                            maybe_count: 0,
+                            inner: SimpleTypeName::List(TypeName {
+                                types: vec![MaybeTypeName {
+                                    maybe_count: 0,
+                                    inner: SimpleTypeName::Int,
+                                }]
+                            }),
+                        }]
+                    },
+                    "Expected List type"
+                );
+            }
             _ => panic!("Expected ExplicitType"),
         },
         _ => panic!("Expected Let statement"),

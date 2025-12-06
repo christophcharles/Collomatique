@@ -1,4 +1,4 @@
-use crate::ast::{Spanned, TypeName};
+use crate::ast::Spanned;
 use crate::parser::Rule;
 use crate::semantics::*;
 use crate::traits::{EvalObject, FieldConversionError};
@@ -620,7 +620,8 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::ExplicitType { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = ExprType::from(typ.node.clone());
+                let target_type = ExprType::try_from(typ.node.clone())
+                    .expect("At this point types should be valid");
 
                 // A forced value can be cast anyway
                 let loose_value = value.loosen();
@@ -691,20 +692,20 @@ impl<T: EvalObject> LocalEnv<T> {
                 .into()
             }
             Expr::GlobalList(typ_name) => {
-                let typ_as_str = match &typ_name.node {
-                    TypeName::Object(obj) => obj.clone(),
-                    _ => panic!("Object expected"),
-                };
-                let objects = T::objects_with_typ(&eval_history.env, &typ_as_str);
+                let expr_type = ExprType::try_from(typ_name.node.clone())
+                    .expect("At this point, types should be valid");
 
-                ExprValue::List(
-                    ExprType::from(typ_name.node.clone()),
-                    objects
-                        .iter()
-                        .map(|x| ExprValue::Object(x.clone()))
-                        .collect(),
-                )
-                .into()
+                let mut collection = vec![];
+                for variant in expr_type.get_variants() {
+                    let typ_as_str = match &variant {
+                        SimpleType::Object(obj) => obj.clone(),
+                        _ => panic!("Object expected"),
+                    };
+                    let objects = T::objects_with_typ(&eval_history.env, &typ_as_str);
+                    collection.extend(objects.into_iter().map(|x| ExprValue::Object(x)));
+                }
+
+                ExprValue::List(expr_type, collection).into()
             }
             Expr::FnCall { name, args } => {
                 let args = args

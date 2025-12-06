@@ -23,8 +23,24 @@ fn parse_simple_let_statement() {
             assert_eq!(name.node, "f");
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].name.node, "x");
-            assert!(matches!(params[0].typ.node, TypeName::Int));
-            assert_eq!(output_type.node, TypeName::LinExpr);
+            assert_eq!(
+                params[0].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Int,
+                    }]
+                }
+            );
+            assert_eq!(
+                output_type.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::LinExpr,
+                    }]
+                }
+            );
             assert!(matches!(body.node, Expr::Number(5)));
             assert!(!public);
             assert!(docstring.is_empty());
@@ -43,11 +59,35 @@ fn parse_let_with_multiple_params() {
         Statement::Let { params, .. } => {
             assert_eq!(params.len(), 3);
             assert_eq!(params[0].name.node, "x");
-            assert!(matches!(params[0].typ.node, TypeName::Int));
+            assert_eq!(
+                params[0].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Int,
+                    }]
+                }
+            );
             assert_eq!(params[1].name.node, "y");
-            assert!(matches!(params[1].typ.node, TypeName::Bool));
+            assert_eq!(
+                params[1].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Bool,
+                    }]
+                }
+            );
             assert_eq!(params[2].name.node, "z");
-            assert!(matches!(params[2].typ.node, TypeName::Object(ref s) if s == "Student"));
+            assert_eq!(
+                params[2].typ.node,
+                TypeName {
+                    types: vec![MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Object("Student".into()),
+                    }]
+                }
+            );
         }
         _ => panic!("Expected Let statement"),
     }

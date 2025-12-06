@@ -76,14 +76,25 @@ pub struct Param {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeName {
+pub struct TypeName {
+    pub types: Vec<MaybeTypeName>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaybeTypeName {
+    pub maybe_count: usize,
+    pub inner: SimpleTypeName,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimpleTypeName {
     LinExpr,
     Constraint,
     None,
     Int,
     Bool,
-    Object(String),      // Student, Week, etc
-    List(Box<TypeName>), // [Student], [[Int]], etc.
+    Object(String), // Student, Week, etc
+    List(TypeName), // [Student], [[Int]], etc.
 }
 
 // ============= Expressions =============
@@ -440,16 +451,79 @@ impl TypeName {
             });
         }
 
+        // type_name is: maybe_type ~ ( "|" ~ maybe_type )*
+        let types: Result<Vec<_>, _> = pair
+            .into_inner()
+            .map(|maybe_type_pair| MaybeTypeName::from_pest(maybe_type_pair))
+            .collect();
+
+        Ok(TypeName { types: types? })
+    }
+}
+
+impl MaybeTypeName {
+    fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::maybe_type {
+            return Err(AstError::UnexpectedRule {
+                expected: "maybe_type",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
+        // maybe_type is: maybe_op* ~ list_type
+        let inner_pairs = pair.into_inner();
+
+        // Count the maybe_ops ("?")
+        let mut maybe_count = 0;
+        let mut list_type_pair = None;
+
+        for inner_pair in inner_pairs {
+            match inner_pair.as_rule() {
+                Rule::maybe_op => maybe_count += 1,
+                Rule::list_type => {
+                    list_type_pair = Some(inner_pair);
+                    break;
+                }
+                _ => {
+                    return Err(AstError::UnexpectedRule {
+                        expected: "maybe_op or list_type",
+                        found: inner_pair.as_rule(),
+                        span: Span::from_pest(&inner_pair),
+                    });
+                }
+            }
+        }
+
+        let list_type_pair = list_type_pair.ok_or(AstError::MissingTypeName(span.clone()))?;
+        let inner = SimpleTypeName::from_pest(list_type_pair)?;
+
+        Ok(MaybeTypeName { maybe_count, inner })
+    }
+}
+
+impl SimpleTypeName {
+    fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::list_type {
+            return Err(AstError::UnexpectedRule {
+                expected: "list_type",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
         let inner = pair
             .into_inner()
             .next()
             .ok_or(AstError::MissingTypeName(span))?;
 
         match inner.as_rule() {
-            Rule::primitive_type => Self::from_pimitive_type(inner),
+            Rule::primitive_type => Self::from_primitive_type(inner),
             Rule::type_name => {
-                // It's a list type: [...]
-                Ok(TypeName::List(Box::new(Self::from_pest(inner)?)))
+                // It's a list type: [type_name]
+                Ok(SimpleTypeName::List(TypeName::from_pest(inner)?))
             }
             _ => Err(AstError::UnexpectedRule {
                 expected: "primitive_type or type_name",
@@ -459,17 +533,17 @@ impl TypeName {
         }
     }
 
-    fn from_pimitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+    fn from_primitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
         match pair.as_rule() {
             Rule::primitive_type => {
                 let type_name = pair.as_str();
                 match type_name {
-                    "None" => Ok(TypeName::None),
-                    "Int" => Ok(TypeName::Int),
-                    "Bool" => Ok(TypeName::Bool),
-                    "LinExpr" => Ok(TypeName::LinExpr),
-                    "Constraint" => Ok(TypeName::Constraint),
-                    _ => Ok(TypeName::Object(type_name.to_string())),
+                    "None" => Ok(SimpleTypeName::None),
+                    "Int" => Ok(SimpleTypeName::Int),
+                    "Bool" => Ok(SimpleTypeName::Bool),
+                    "LinExpr" => Ok(SimpleTypeName::LinExpr),
+                    "Constraint" => Ok(SimpleTypeName::Constraint),
+                    _ => Ok(SimpleTypeName::Object(type_name.to_string())),
                 }
             }
             _ => Err(AstError::UnexpectedRule {

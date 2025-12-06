@@ -131,17 +131,19 @@ impl SimpleType {
     }
 }
 
-impl From<crate::ast::TypeName> for SimpleType {
-    fn from(value: crate::ast::TypeName) -> Self {
-        use crate::ast::TypeName;
+impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
+    type Error = TypeNameError;
+
+    fn try_from(value: crate::ast::SimpleTypeName) -> Result<Self, TypeNameError> {
+        use crate::ast::SimpleTypeName;
         match value {
-            TypeName::None => SimpleType::None,
-            TypeName::Bool => SimpleType::Bool,
-            TypeName::Int => SimpleType::Int,
-            TypeName::LinExpr => SimpleType::LinExpr,
-            TypeName::Constraint => SimpleType::Constraint,
-            TypeName::Object(name) => SimpleType::Object(name),
-            TypeName::List(sub_typ) => SimpleType::List((*sub_typ).into()),
+            SimpleTypeName::None => Ok(SimpleType::None),
+            SimpleTypeName::Bool => Ok(SimpleType::Bool),
+            SimpleTypeName::Int => Ok(SimpleType::Int),
+            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
+            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
+            SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::List(sub_typ) => Ok(SimpleType::List(sub_typ.try_into()?)),
         }
     }
 }
@@ -164,6 +166,12 @@ impl ExprType {
     pub fn simple(typ: SimpleType) -> ExprType {
         ExprType {
             variants: BTreeSet::from([typ]),
+        }
+    }
+
+    pub fn maybe(typ: SimpleType) -> ExprType {
+        ExprType {
+            variants: BTreeSet::from([SimpleType::None, typ]),
         }
     }
 
@@ -231,6 +239,12 @@ impl ExprType {
         self.as_simple().map(|x| x.is_list()).unwrap_or(false)
     }
 
+    pub fn is_sum_of_objects(&self) -> bool {
+        self.variants
+            .iter()
+            .all(|x| matches!(x, SimpleType::Object(_)))
+    }
+
     pub fn get_inner_object_type(&self) -> Option<&String> {
         self.as_simple()
             .map(|x| x.get_inner_object_type())
@@ -268,6 +282,10 @@ impl ExprType {
     /// Checks if type is valid for arithmetic operations
     pub fn is_arithmetic(&self) -> bool {
         self.as_simple().map(|x| x.is_arithmetic()).unwrap_or(false)
+    }
+
+    pub fn get_variants(&self) -> &BTreeSet<SimpleType> {
+        &self.variants
     }
 
     pub fn can_coerce_to(&self, target: &ExprType) -> bool {
@@ -308,9 +326,43 @@ impl ExprType {
     }
 }
 
-impl From<crate::ast::TypeName> for ExprType {
-    fn from(value: crate::ast::TypeName) -> Self {
-        ExprType::simple(value.into())
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum TypeNameError {
+    #[error("Only one option marker '?' is allowed on types")]
+    MultipleOptionMarkers,
+    #[error("Option types are not allowed in sum types")]
+    OptionTypeInSumType,
+}
+
+impl TryFrom<crate::ast::TypeName> for ExprType {
+    type Error = TypeNameError;
+
+    fn try_from(value: crate::ast::TypeName) -> Result<Self, TypeNameError> {
+        match value.types.len() {
+            0 => panic!("It should not be possible to form 0-length typenames"),
+            1 => {
+                let maybe_type = value.types.into_iter().next().unwrap();
+                match maybe_type.maybe_count {
+                    0 => Ok(ExprType::simple(SimpleType::try_from(maybe_type.inner)?)),
+                    1 => Ok(ExprType::maybe(SimpleType::try_from(maybe_type.inner)?)),
+                    _ => Err(TypeNameError::MultipleOptionMarkers),
+                }
+            }
+            _ => {
+                if value.types.iter().any(|x| x.maybe_count > 0) {
+                    return Err(TypeNameError::OptionTypeInSumType);
+                }
+
+                Ok(ExprType::sum(
+                    value
+                        .types
+                        .into_iter()
+                        .map(|x| SimpleType::try_from(x.inner))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+                .expect("There should be more than 0 variants"))
+            }
+        }
     }
 }
 
@@ -807,10 +859,12 @@ pub enum SemError {
     },
     #[error("Type {typ} at {span:?} is unknown")]
     UnknownType { typ: String, span: Span },
-    #[error("Type {typ} at {span:?} is a list and is disallowed in global collections")]
-    ListNotAllowedInGlobalCollections { typ: String, span: Span },
-    #[error("Type {typ} at {span:?} is a primitive type and is disallowed in global collections")]
-    PrimitiveTypeNotAllowedInGlobalCollections { typ: String, span: Span },
+    #[error("TMultiple option markers '?' in type at {span:?}")]
+    MultipleOptionMarkers { span: Span },
+    #[error("Option types ('?') in sum type defined at {span:?}")]
+    OptionTypeInSumType { span: Span },
+    #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
+    GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
     ParameterAlreadyDefined {
         identifier: String,
@@ -1044,7 +1098,23 @@ impl LocalEnv {
                 let loose_type = expr_type.map(|x| x.loosen());
 
                 // Convert the declared type
-                let target_type = ExprType::from(typ.node.clone());
+                let target_type = match ExprType::try_from(typ.node.clone()) {
+                    Ok(t) => t,
+                    Err(TypeNameError::MultipleOptionMarkers) => {
+                        errors.push(SemError::MultipleOptionMarkers {
+                            span: typ.span.clone(),
+                        });
+                        return loose_type; // Fallback to inferred type
+                                           // We don't make it forced as it might not correspond to desired type
+                    }
+                    Err(TypeNameError::OptionTypeInSumType) => {
+                        errors.push(SemError::OptionTypeInSumType {
+                            span: typ.span.clone(),
+                        });
+                        return loose_type; // Fallback to inferred type
+                                           // We don't make it forced as it might not correspond to desired type
+                    }
+                };
 
                 // Validate that the target type is actually valid
                 if !global_env.validate_type(&target_type) {
@@ -2238,21 +2308,29 @@ impl LocalEnv {
 
             // ========== Collections ==========
             Expr::GlobalList(type_name) => {
-                let typ = ExprType::from(type_name.node.clone());
+                let typ = match ExprType::try_from(type_name.node.clone()) {
+                    Ok(t) => t,
+                    Err(TypeNameError::MultipleOptionMarkers) => {
+                        errors.push(SemError::MultipleOptionMarkers {
+                            span: type_name.span.clone(),
+                        });
+                        return None;
+                    }
+                    Err(TypeNameError::OptionTypeInSumType) => {
+                        errors.push(SemError::OptionTypeInSumType {
+                            span: type_name.span.clone(),
+                        });
+                        return None;
+                    }
+                };
                 if !global_env.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
                         typ: typ.to_string(),
                         span: type_name.span.clone(),
                     });
                     None
-                } else if typ.is_primitive_type() {
-                    errors.push(SemError::PrimitiveTypeNotAllowedInGlobalCollections {
-                        typ: typ.to_string(),
-                        span: type_name.span.clone(),
-                    });
-                    None
-                } else if typ.is_list() {
-                    errors.push(SemError::ListNotAllowedInGlobalCollections {
+                } else if !typ.is_sum_of_objects() {
+                    errors.push(SemError::GlobalCollectionsMustBeAListOfObjects {
                         typ: typ.to_string(),
                         span: type_name.span.clone(),
                     });
@@ -2879,42 +2957,59 @@ impl GlobalEnv {
 
                 let mut local_env = LocalEnv::new();
                 let mut error_in_typs = false;
+                let mut params_typ = vec![];
                 for param in params {
-                    let param_typ = param.typ.node.clone().into();
-                    if !self.validate_type(&param_typ) {
-                        errors.push(SemError::UnknownType {
-                            typ: param_typ.to_string(),
-                            span: param.typ.span.clone(),
-                        });
-                        error_in_typs = true;
-                    } else if let Some((_typ, span)) =
-                        local_env.lookup_in_pending_scope(&param.name.node)
-                    {
-                        errors.push(SemError::ParameterAlreadyDefined {
-                            identifier: param.name.node.clone(),
-                            span: param.name.span.clone(),
-                            here: span,
-                        });
-                    } else {
-                        if let Some(suggestion) =
-                            string_case::generate_suggestion_for_naming_convention(
-                                &param.name.node,
-                                string_case::NamingConvention::SnakeCase,
-                            )
-                        {
-                            warnings.push(SemWarning::ParameterNamingConvention {
-                                identifier: param.name.node.clone(),
-                                span: param.name.span.clone(),
-                                suggestion,
+                    match ExprType::try_from(param.typ.node.clone()) {
+                        Err(TypeNameError::MultipleOptionMarkers) => {
+                            errors.push(SemError::MultipleOptionMarkers {
+                                span: param.typ.span.clone(),
                             });
+                            error_in_typs = true;
                         }
-                        local_env.register_identifier(
-                            &param.name.node,
-                            param.name.span.clone(),
-                            param_typ,
-                            type_info,
-                            warnings,
-                        );
+                        Err(TypeNameError::OptionTypeInSumType) => {
+                            errors.push(SemError::OptionTypeInSumType {
+                                span: param.typ.span.clone(),
+                            });
+                            error_in_typs = true;
+                        }
+                        Ok(param_typ) => {
+                            params_typ.push(param_typ.clone());
+                            if !self.validate_type(&param_typ) {
+                                errors.push(SemError::UnknownType {
+                                    typ: param_typ.to_string(),
+                                    span: param.typ.span.clone(),
+                                });
+                                error_in_typs = true;
+                            } else if let Some((_typ, span)) =
+                                local_env.lookup_in_pending_scope(&param.name.node)
+                            {
+                                errors.push(SemError::ParameterAlreadyDefined {
+                                    identifier: param.name.node.clone(),
+                                    span: param.name.span.clone(),
+                                    here: span,
+                                });
+                            } else {
+                                if let Some(suggestion) =
+                                    string_case::generate_suggestion_for_naming_convention(
+                                        &param.name.node,
+                                        string_case::NamingConvention::SnakeCase,
+                                    )
+                                {
+                                    warnings.push(SemWarning::ParameterNamingConvention {
+                                        identifier: param.name.node.clone(),
+                                        span: param.name.span.clone(),
+                                        suggestion,
+                                    });
+                                }
+                                local_env.register_identifier(
+                                    &param.name.node,
+                                    param.name.span.clone(),
+                                    param_typ,
+                                    type_info,
+                                    warnings,
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -2925,50 +3020,58 @@ impl GlobalEnv {
                 local_env.pop_scope(warnings);
 
                 if let Some(body_type) = body_type_opt {
-                    let out_typ = ExprType::from(output_type.node.clone());
-                    if !self.validate_type(&out_typ) {
-                        errors.push(SemError::UnknownType {
-                            typ: out_typ.to_string(),
-                            span: output_type.span.clone(),
-                        });
-                        error_in_typs = true;
-                    } else {
-                        // Allow coercion
-                        let types_match = match (out_typ.clone(), body_type.clone()) {
-                            (a, b) if b.can_coerce_to(&a) => true,
-                            _ => false,
-                        };
-
-                        if !types_match {
-                            errors.push(SemError::BodyTypeMismatch {
-                                func: name.node.clone(),
-                                span: body.span.clone(),
-                                expected: out_typ,
-                                found: body_type,
+                    match ExprType::try_from(output_type.node.clone()) {
+                        Err(TypeNameError::MultipleOptionMarkers) => {
+                            errors.push(SemError::MultipleOptionMarkers {
+                                span: output_type.span.clone(),
                             });
                         }
-                    }
-                }
+                        Err(TypeNameError::OptionTypeInSumType) => {
+                            errors.push(SemError::OptionTypeInSumType {
+                                span: output_type.span.clone(),
+                            });
+                        }
+                        Ok(out_typ) => {
+                            if !self.validate_type(&out_typ) {
+                                errors.push(SemError::UnknownType {
+                                    typ: out_typ.to_string(),
+                                    span: output_type.span.clone(),
+                                });
+                            } else {
+                                // Allow coercion
+                                let types_match = match (out_typ.clone(), body_type.clone()) {
+                                    (a, b) if b.can_coerce_to(&a) => true,
+                                    _ => false,
+                                };
 
-                if !error_in_typs {
-                    let args = params
-                        .iter()
-                        .map(|param| param.typ.node.clone().into())
-                        .collect();
-                    let fn_typ = FunctionType {
-                        args,
-                        output: output_type.node.clone().into(),
+                                if !types_match {
+                                    errors.push(SemError::BodyTypeMismatch {
+                                        func: name.node.clone(),
+                                        span: body.span.clone(),
+                                        expected: out_typ.clone(),
+                                        found: body_type,
+                                    });
+                                }
+
+                                if !error_in_typs {
+                                    let fn_typ = FunctionType {
+                                        args: params_typ,
+                                        output: out_typ,
+                                    };
+                                    self.register_fn(
+                                        &name.node,
+                                        name.span.clone(),
+                                        fn_typ,
+                                        public,
+                                        params.iter().map(|x| x.name.node.clone()).collect(),
+                                        body.clone(),
+                                        docstring.clone(),
+                                        type_info,
+                                    );
+                                }
+                            }
+                        }
                     };
-                    self.register_fn(
-                        &name.node,
-                        name.span.clone(),
-                        fn_typ,
-                        public,
-                        params.iter().map(|x| x.name.node.clone()).collect(),
-                        body.clone(),
-                        docstring.clone(),
-                        type_info,
-                    );
                 }
             }
         }
