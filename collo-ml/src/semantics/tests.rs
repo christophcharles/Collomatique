@@ -13,6 +13,7 @@ mod let_expr;
 mod operators;
 mod scoping;
 mod statements;
+mod sum_types;
 mod type_system;
 mod warnings;
 
