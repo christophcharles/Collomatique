@@ -360,12 +360,12 @@ fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
             let type_name = segment.ident.to_string();
 
             match type_name.as_str() {
-                "i32" => quote! { ::collo_ml::traits::FieldType::Int },
-                "bool" => quote! { ::collo_ml::traits::FieldType::Bool },
+                "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
+                "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
                 "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
                 _ => {
                     // It's an object type - use TypeId
-                    quote! { ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#ty>()) }
+                    quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into() }
                 }
             }
         }
@@ -747,7 +747,7 @@ fn generate_param_extraction(
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::FieldType::Int,
+                                    expected: ::collo_ml::traits::SimpleFieldType::Int.into(),
                                 })
                             }
                         };
@@ -761,7 +761,7 @@ fn generate_param_extraction(
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::FieldType::Bool,
+                                    expected: ::collo_ml::traits::SimpleFieldType::Bool.into(),
                                 })
                             }
                         };
@@ -776,14 +776,14 @@ fn generate_param_extraction(
                                     .map_err(|_| ::collo_ml::traits::VarConversionError::WrongParameterType {
                                         name: #dsl_name.into(),
                                         param: #idx,
-                                        expected: ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#ty>()),
+                                        expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into(),
                                     })?
                             }
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#ty>()),
+                                    expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into(),
                                 })
                             }
                         };

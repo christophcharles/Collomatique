@@ -76,8 +76,8 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
-        let student_type = HashMap::from([("id".to_string(), SimpleType::Int)]);
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+        let student_type = HashMap::from([("id".to_string(), SimpleType::Int.into())]);
         HashMap::from([("Student".into(), student_type)])
     }
 }
@@ -92,9 +92,10 @@ impl<T: EvalObject> EvalVar<T> for Var {
     fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
         HashMap::from([(
             "StudentGroup".to_string(),
-            vec![crate::traits::FieldType::Object(std::any::TypeId::of::<
-                SimpleObject,
-            >())],
+            vec![
+                crate::traits::SimpleFieldType::Object(std::any::TypeId::of::<SimpleObject>())
+                    .into(),
+            ],
         )])
     }
 
@@ -146,19 +147,19 @@ impl TryFrom<&ExternVar<SimpleObject>> for Var {
                         .map_err(|_| VarConversionError::WrongParameterType {
                             name: "StudentGroup".into(),
                             param: 0,
-                            expected: crate::traits::FieldType::Object(std::any::TypeId::of::<
-                                SimpleObject,
-                            >(
-                            )),
+                            expected: crate::traits::SimpleFieldType::Object(
+                                std::any::TypeId::of::<SimpleObject>(),
+                            )
+                            .into(),
                         })?,
                     _ => {
                         return Err(VarConversionError::WrongParameterType {
                             name: "StudentGroup".into(),
                             param: 0,
-                            expected: crate::traits::FieldType::Object(std::any::TypeId::of::<
-                                SimpleObject,
-                            >(
-                            )),
+                            expected: crate::traits::SimpleFieldType::Object(
+                                std::any::TypeId::of::<SimpleObject>(),
+                            )
+                            .into(),
                         })
                     }
                 };

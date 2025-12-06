@@ -205,7 +205,7 @@ fn coercion_in_list_unification() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(SimpleType::LinExpr, list) => {
+        ExprValue::List(a, list) if a.is_lin_expr() => {
             assert_eq!(list.len(), 2);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -225,7 +225,7 @@ fn coercion_in_list_comprehension() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(SimpleType::LinExpr, list) => {
+        ExprValue::List(a, list) if a.is_lin_expr() => {
             assert_eq!(list.len(), 3);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -236,7 +236,7 @@ fn coercion_in_list_comprehension() {
 fn coercion_in_sum_body() {
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) + x };";
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -324,7 +324,7 @@ fn explicit_cast_list_type() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
 }
 
 #[test]
@@ -340,7 +340,7 @@ fn explicit_cast_list_of_linexpr() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(SimpleType::LinExpr, list) => {
+        ExprValue::List(a, list) if a.is_lin_expr() => {
             assert_eq!(list.len(), 3);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -549,7 +549,7 @@ fn cast_with_collection_operations() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(SimpleType::LinExpr, list) => {
+        ExprValue::List(a, list) if a.is_lin_expr() => {
             assert_eq!(list.len(), 4);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -693,7 +693,10 @@ fn cast_empty_list_typed() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(SimpleType::LinExpr, Vec::new()));
+    assert_eq!(
+        result,
+        ExprValue::List(SimpleType::LinExpr.into(), Vec::new())
+    );
 }
 
 #[test]
@@ -709,8 +712,9 @@ fn cast_in_nested_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(SimpleType::List(inner), list) => {
-            assert_eq!(*inner, SimpleType::Int);
+        ExprValue::List(a, list) if a.is_list() => {
+            let inner = a.to_inner_list_type().unwrap();
+            assert_eq!(inner, SimpleType::Int.into());
             assert_eq!(list.len(), 2);
         }
         _ => panic!("Expected List of List of Int"),

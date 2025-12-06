@@ -27,9 +27,9 @@ fn complete_interrogations_scheduling() {
             HashMap::from([(
                 "StudentWithTeacher".to_string(),
                 vec![
-                    crate::traits::FieldType::Int,
-                    crate::traits::FieldType::Int,
-                    crate::traits::FieldType::Int,
+                    crate::traits::SimpleFieldType::Int.into(),
+                    crate::traits::SimpleFieldType::Int.into(),
+                    crate::traits::SimpleFieldType::Int.into(),
                 ],
             )])
         }
@@ -98,7 +98,7 @@ fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 0,
-                                expected: crate::traits::FieldType::Int,
+                                expected: crate::traits::SimpleFieldType::Int.into(),
                             })
                         }
                     };
@@ -108,7 +108,7 @@ fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 1,
-                                expected: crate::traits::FieldType::Int,
+                                expected: crate::traits::SimpleFieldType::Int.into(),
                             })
                         }
                     };
@@ -118,7 +118,7 @@ fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 2,
-                                expected: crate::traits::FieldType::Int,
+                                expected: crate::traits::SimpleFieldType::Int.into(),
                             })
                         }
                     };

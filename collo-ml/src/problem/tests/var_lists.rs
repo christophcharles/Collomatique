@@ -129,7 +129,10 @@ fn list_constraint_reification_exact_count_with_param() {
 
     impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([("X".to_string(), vec![crate::traits::FieldType::Int])])
+            HashMap::from([(
+                "X".to_string(),
+                vec![crate::traits::SimpleFieldType::Int.into()],
+            )])
         }
 
         fn fix(&self, _env: &T::Env) -> Option<f64> {
@@ -176,7 +179,7 @@ fn list_constraint_reification_exact_count_with_param() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "X".into(),
                                 param: 0,
-                                expected: crate::traits::FieldType::Int,
+                                expected: crate::traits::SimpleFieldType::Int.into(),
                             })
                         }
                     };

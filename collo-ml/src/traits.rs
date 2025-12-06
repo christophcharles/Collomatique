@@ -128,12 +128,12 @@
 //!
 //! The module uses intermediate types to handle type information across boundaries:
 //!
-//! - [`FieldType`]: Intermediate representation of field types in view objects, using `TypeId`
-//!   for object references
+//! - [`SimpleFieldType`]: Building blocks for field types (Int, Bool, Object, List)
+//! - [`FieldType`]: May represent simple types or sum types (unions), using `TypeId` for
+//!   object references
 //! - [`FieldValue`]: Intermediate representation of field values, preserving type info for
 //!   empty collections
-//! - These are converted to [`ExprType`] and
-//!   [`ExprValue`] by `EvalObject`
+//! - These are converted to [`SimpleType`]/[`ExprType`] and [`ExprValue`] by `EvalObject`
 //!
 //! # Caching
 //!
@@ -202,8 +202,8 @@
 //! - `Cache` is borrowed mutably (preventing shared access)
 //! - View objects are constructed on-demand and don't persist
 
-use crate::eval::ExprValue;
 use crate::semantics::SimpleType;
+use crate::{eval::ExprValue, ExprType};
 use collomatique_ilp::UsableData;
 use std::collections::{BTreeSet, HashMap};
 
@@ -288,7 +288,7 @@ pub trait EvalObject: UsableData {
 
     /// Converts a TypeId to an object nmae
     ///
-    /// # Arguemnts
+    /// # Arguments
     ///
     /// * `type_id` - rust TypeID object to be converted into an object name
     ///
@@ -339,7 +339,7 @@ pub trait EvalObject: UsableData {
     /// A nested map where:
     /// - Outer keys are DSL type names (e.g., "Student")
     /// - Inner maps associate field names with their types
-    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>>;
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>>;
 
     /// Returns a human-readable string representation of this object.
     ///
@@ -359,26 +359,38 @@ pub trait EvalObject: UsableData {
     }
 }
 
-/// Represents the type of a field in a view object.
+/// Represents a simple (non-sum) field type in a view object.
 ///
-/// This is an intermediate representation used between view objects and the final DSL type system.
-/// It captures field types without requiring knowledge of the DSL type names for object references
-/// (those are resolved later using `TypeId`).
+/// This is an intermediate representation used as a building block for [`FieldType`], which may
+/// represent sum types. It captures field types without requiring knowledge of the DSL type names
+/// for object references (those are resolved later using `TypeId`).
 ///
 /// # Variants
 ///
 /// - `Int`: An integer field (`i32`)
 /// - `Bool`: A boolean field
 /// - `Object(TypeId)`: A reference to another object, identified by its Rust type's `TypeId`
-/// - `List(Box<FieldType>)`: A collection (typically `Vec`) of values of the inner type
+/// - `List(Box<FieldType>)`: A collection (typically `Vec`) of values - note the inner type is
+///   [`FieldType`], which allows lists of sum types like `[Int | Bool]`
+///
+/// # Relationship to FieldType
+///
+/// `SimpleFieldType` is to [`FieldType`] as [`SimpleType`] is to [`ExprType`]:
+/// - `SimpleFieldType`: A single, atomic field type
+/// - `FieldType`: A set of `SimpleFieldType` variants (may represent a sum type)
+///
+/// For example:
+/// - `SimpleFieldType::Int` converts to `FieldType` with one variant: `{Int}`
+/// - A sum type like `Int | Bool` is represented as `FieldType` with two `SimpleFieldType` variants: `{Int, Bool}`
 ///
 /// # Type Resolution
 ///
-/// `Object` variants store a `TypeId` which is later mapped to DSL type names in a [ExprType] by the
-/// [EvalObject] implementation. This allows view objects to be defined without knowledge
+/// `Object` variants store a `TypeId` which is later mapped to DSL type names through
+/// [`convert_to_simple_type`](SimpleFieldType::convert_to_simple_type), which uses
+/// `EvalObject::type_id_to_name()`. This allows view objects to be defined without knowledge
 /// of the complete object hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FieldType {
+pub enum SimpleFieldType {
     /// An integer field
     Int,
     /// A boolean field
@@ -386,29 +398,166 @@ pub enum FieldType {
     /// A reference to another object, identified by the Rust type's TypeId
     Object(std::any::TypeId),
     /// A collection of values of the specified type
-    List(Box<FieldType>),
+    List(FieldType),
+}
+
+impl SimpleFieldType {
+    pub fn convert_to_simple_type<T: EvalObject>(self) -> Result<SimpleType, FieldConversionError> {
+        match self {
+            SimpleFieldType::Bool => Ok(SimpleType::Bool),
+            SimpleFieldType::Int => Ok(SimpleType::Int),
+            SimpleFieldType::List(typ) => Ok(SimpleType::List(typ.convert_to_expr_type::<T>()?)),
+            SimpleFieldType::Object(type_id) => {
+                Ok(SimpleType::Object(T::type_id_to_name(type_id)?))
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for SimpleFieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimpleFieldType::Bool => write!(f, "Bool"),
+            SimpleFieldType::Int => write!(f, "Int"),
+            SimpleFieldType::List(typ) => write!(f, "[{}]", typ),
+            SimpleFieldType::Object(type_id) => write!(f, "Object({:?})", type_id),
+        }
+    }
+}
+
+/// Represents a field type, which may be a sum type.
+///
+/// This struct wraps a set of [`SimpleFieldType`] variants, allowing representation of both simple
+/// types and sum types (unions of multiple types). It serves as an intermediate representation
+/// between view objects and the DSL's [`ExprType`].
+///
+/// # Structure
+///
+/// Internally, `FieldType` contains a `BTreeSet<SimpleFieldType>`, which:
+/// - Ensures uniqueness (no duplicate types in a sum)
+/// - Ensures the order of the types does not matter
+///
+/// # Examples
+///
+/// ## Simple Types
+///
+/// ```ignore
+/// // A simple Int field
+/// let int_field = FieldType::simple(SimpleFieldType::Int);
+///
+/// // A simple list field
+/// let list_field = FieldType::simple(
+///     SimpleFieldType::List(FieldType::simple(SimpleFieldType::Int))
+/// );
+/// ```
+///
+/// ## Sum Types (Future)
+///
+/// ```ignore
+/// // Int | Bool field
+/// let sum_field = FieldType::sum(vec![
+///     SimpleFieldType::Int,
+///     SimpleFieldType::Bool,
+/// ]).unwrap();
+///
+/// // List of (Int | Bool)
+/// let list_of_sum = FieldType::simple(
+///     SimpleFieldType::List(sum_field)
+/// );
+/// ```
+///
+/// # Conversion to ExprType
+///
+/// `FieldType` is converted to [`ExprType`] via [`convert_to_expr_type`](FieldType::convert_to_expr_type),
+/// which:
+/// 1. Converts each `SimpleFieldType` variant to a `SimpleType`
+/// 2. Resolves object `TypeId`s to type name strings
+/// 3. Creates an `ExprType` with the resulting set of `SimpleType` variants
+///
+/// This maintains the sum type structure through the conversion process.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FieldType {
+    variants: BTreeSet<SimpleFieldType>,
 }
 
 impl FieldType {
-    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<SimpleType, FieldConversionError> {
-        match self {
-            FieldType::Bool => Ok(SimpleType::Bool),
-            FieldType::Int => Ok(SimpleType::Int),
-            FieldType::List(typ) => {
-                Ok(SimpleType::List(Box::new(typ.convert_to_expr_type::<T>()?)))
-            }
-            FieldType::Object(type_id) => Ok(SimpleType::Object(T::type_id_to_name(type_id)?)),
+    pub fn simple(typ: SimpleFieldType) -> FieldType {
+        FieldType {
+            variants: BTreeSet::from([typ]),
         }
+    }
+
+    pub fn sum(types: impl IntoIterator<Item = SimpleFieldType>) -> Option<Self> {
+        let variants: BTreeSet<_> = types.into_iter().collect();
+
+        if variants.is_empty() {
+            return None;
+        }
+
+        Some(FieldType { variants })
+    }
+
+    pub fn is_simple(&self) -> bool {
+        assert!(
+            self.variants.len() >= 1,
+            "FieldType should always carry at least one type"
+        );
+        self.variants.len() == 1
+    }
+
+    pub fn as_simple(&self) -> Option<&SimpleFieldType> {
+        if !self.is_simple() {
+            return None;
+        }
+        Some(
+            self.variants
+                .iter()
+                .next()
+                .expect("FieldType should always carry at least one type"),
+        )
+    }
+
+    pub fn to_simple(self) -> Option<SimpleFieldType> {
+        if !self.is_simple() {
+            return None;
+        }
+        Some(
+            self.variants
+                .into_iter()
+                .next()
+                .expect("FieldType should always carry at least one type"),
+        )
+    }
+
+    pub fn get_variants(&self) -> &BTreeSet<SimpleFieldType> {
+        &self.variants
+    }
+
+    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<ExprType, FieldConversionError> {
+        Ok(ExprType::sum(
+            self.variants
+                .into_iter()
+                .map(|x| x.convert_to_simple_type::<T>())
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter(),
+        )
+        .expect("There should always be at least one variant"))
+    }
+}
+
+impl From<SimpleFieldType> for FieldType {
+    fn from(value: SimpleFieldType) -> Self {
+        FieldType::simple(value)
     }
 }
 
 impl std::fmt::Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FieldType::Bool => write!(f, "Bool"),
-            FieldType::Int => write!(f, "Int"),
-            FieldType::List(typ) => write!(f, "[{}]", typ),
-            FieldType::Object(type_id) => write!(f, "Object({:?})", type_id),
+        if self.variants.len() == 1 {
+            write!(f, "{}", self.variants.iter().next().unwrap())
+        } else {
+            let types: Vec<_> = self.variants.iter().map(|t| t.to_string()).collect();
+            write!(f, "{}", types.join(" | "))
         }
     }
 }

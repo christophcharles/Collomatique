@@ -133,9 +133,7 @@ fn test_collection_field_schema() {
     // BTreeSet<StudentId> should become List(Object("Student"))
     assert_eq!(
         teacher_schema.get("students"),
-        Some(&SimpleType::List(Box::new(SimpleType::Object(
-            "Student".to_string()
-        ))))
+        Some(&SimpleType::List(SimpleType::Object("Student".to_string()).into()).into())
     );
 }
 
@@ -166,7 +164,10 @@ fn test_collection_field_access() {
 
     // Should be a List of Objects
     if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(expr_type, SimpleType::Object("Student".to_string()));
+        assert_eq!(
+            expr_type.to_simple(),
+            Some(SimpleType::Object("Student".to_string()))
+        );
         assert_eq!(values.len(), 2);
         assert!(
             values.contains(&ExprValue::Object(CollectionObjectId::Student(StudentId(
@@ -206,7 +207,10 @@ fn test_empty_collection_field_access() {
 
     // Should be an empty List with correct type
     if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(expr_type, SimpleType::Object("Student".to_string()));
+        assert_eq!(
+            expr_type.to_simple(),
+            Some(SimpleType::Object("Student".to_string()))
+        );
         assert_eq!(values.len(), 0);
     } else {
         panic!("Expected empty List of Objects");
@@ -221,9 +225,12 @@ fn test_nested_collection_schema() {
     // BTreeSet<BTreeSet<StudentId>> should become List(List(Object("Student")))
     assert_eq!(
         course_schema.get("student_groups"),
-        Some(&SimpleType::List(Box::new(SimpleType::List(Box::new(
-            SimpleType::Object("Student".to_string())
-        )))))
+        Some(
+            &SimpleType::List(
+                SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
+            )
+            .into()
+        )
     );
 }
 
@@ -258,14 +265,17 @@ fn test_nested_collection_field_access() {
     if let Some(ExprValue::List(outer_type, outer_values)) = groups_field {
         assert_eq!(
             outer_type,
-            SimpleType::List(Box::new(SimpleType::Object("Student".to_string())))
+            SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
         );
         assert_eq!(outer_values.len(), 2);
 
         // Check that we have nested lists
         for value in outer_values {
             if let ExprValue::List(inner_type, _inner_values) = value {
-                assert_eq!(inner_type, SimpleType::Object("Student".to_string()));
+                assert_eq!(
+                    inner_type.to_simple(),
+                    Some(SimpleType::Object("Student".to_string()))
+                );
             } else {
                 panic!("Expected nested List");
             }
@@ -288,9 +298,10 @@ fn test_collection_of_primitives() {
     let schema = TeacherWithGrades::field_schema();
     assert_eq!(
         schema.get("grades"),
-        Some(&collo_ml::traits::FieldType::List(Box::new(
-            collo_ml::traits::FieldType::Int
-        )))
+        Some(
+            &collo_ml::traits::SimpleFieldType::List(collo_ml::traits::SimpleFieldType::Int.into())
+                .into()
+        )
     );
 }
 
@@ -318,7 +329,7 @@ fn test_empty_nested_collection() {
     if let Some(ExprValue::List(outer_type, values)) = groups_field {
         assert_eq!(
             outer_type,
-            SimpleType::List(Box::new(SimpleType::Object("Student".to_string())))
+            SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
         );
         assert_eq!(values.len(), 0);
     } else {

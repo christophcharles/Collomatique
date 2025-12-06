@@ -8,7 +8,7 @@ fn eval_with_variables_simple_reified_var() {
     pub let f(n: Int) -> Constraint = $MyVar(n) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -52,7 +52,7 @@ fn eval_with_variables_multiple_calls_same_var() {
     pub let f() -> Constraint = $MyVar(3) <== 1 and $MyVar(7) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::<NoObject>::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -106,7 +106,7 @@ fn eval_with_variables_in_forall() {
     pub let f(n: Int) -> Constraint = forall i in [0..n] { $MyVar(i) <== 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -159,8 +159,8 @@ fn eval_with_variables_multiple_vars() {
     "#;
 
     let vars = HashMap::from([
-        ("V1".to_string(), vec![SimpleType::Int]),
-        ("V2".to_string(), vec![SimpleType::Int]),
+        ("V1".to_string(), vec![ExprType::simple(SimpleType::Int)]),
+        ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -218,7 +218,10 @@ fn eval_with_variables_var_with_multiple_params() {
     pub let f(a: Int, b: Int) -> Constraint = $MyVar(a, b) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int, SimpleType::Int])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -267,7 +270,10 @@ fn eval_with_variables_simple_var_list() {
     pub let f(a: Int, b: Int) -> Constraint = forall v in $[MyVarList](a, b) { v <== 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int, SimpleType::Int])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -341,17 +347,20 @@ fn eval_with_variables_var_list_in_nested_forall() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int, SimpleType::Int])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(
-        SimpleType::Int,
+        SimpleType::Int.into(),
         Vec::from([ExprValue::<NoObject>::Int(1), ExprValue::Int(2)]),
     );
     let ys = ExprValue::List(
-        SimpleType::Int,
+        SimpleType::Int.into(),
         Vec::from([ExprValue::<NoObject>::Int(10), ExprValue::Int(20)]),
     );
 
@@ -415,7 +424,7 @@ fn eval_with_variables_with_let_expr() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -453,7 +462,7 @@ fn eval_with_variables_no_reified_vars() {
     pub let f(x: Int) -> Constraint = $V(x) === 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};

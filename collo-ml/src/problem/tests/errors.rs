@@ -131,8 +131,8 @@ fn error_wrong_return_type_for_reified() {
             expected,
         }) => {
             assert_eq!(func, "f");
-            assert_eq!(returned, SimpleType::Int);
-            assert_eq!(expected, SimpleType::Constraint);
+            assert_eq!(returned, SimpleType::Int.into());
+            assert_eq!(expected, SimpleType::Constraint.into());
         }
         _ => panic!("Expected WrongReturnType error, got: {:?}", result),
     }
@@ -202,8 +202,8 @@ fn error_wrong_return_type_for_constraint() {
             expected,
         }) => {
             assert_eq!(func, "f");
-            assert_eq!(returned, SimpleType::Bool);
-            assert_eq!(expected, SimpleType::Constraint);
+            assert_eq!(returned, SimpleType::Bool.into());
+            assert_eq!(expected, SimpleType::Constraint.into());
         }
         _ => panic!("Expected WrongReturnType error, got: {:?}", result),
     }

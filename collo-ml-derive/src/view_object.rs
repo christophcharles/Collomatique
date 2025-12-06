@@ -141,15 +141,15 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
             let type_name_str = type_name.to_string();
 
             match type_name_str.as_str() {
-                "i32" => quote! { ::collo_ml::traits::FieldType::Int },
-                "bool" => quote! { ::collo_ml::traits::FieldType::Bool },
+                "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
+                "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
                 "Vec" => {
                     // Extract the inner type from Vec<T>
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
                             let inner_expr_type = type_to_field_type(inner_ty);
                             return quote! {
-                                ::collo_ml::traits::FieldType::List(Box::new(#inner_expr_type))
+                                ::collo_ml::traits::SimpleFieldType::List(#inner_expr_type).into()
                             };
                         }
                     }
@@ -157,7 +157,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                 }
                 _ => {
                     // Assume this is an object
-                    quote! { ::collo_ml::traits::FieldType::Object(::std::any::TypeId::of::<#type_name>()) }
+                    quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#type_name>()).into() }
                 }
             }
         }

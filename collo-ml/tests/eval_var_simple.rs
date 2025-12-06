@@ -169,7 +169,7 @@ enum SimpleVar {
 // Tests
 // ============================================================================
 
-use collo_ml::traits::FieldType;
+use collo_ml::traits::SimpleFieldType;
 
 #[test]
 fn test_field_schema() {
@@ -187,11 +187,20 @@ fn test_field_schema() {
 
     // Check field types
     let sts_schema = schema.get("StudentTakesSubject").unwrap();
-    assert!(matches!(sts_schema[0], FieldType::Object(_)));
-    assert!(matches!(sts_schema[1], FieldType::Object(_)));
+    assert!(matches!(
+        sts_schema[0].as_simple(),
+        Some(SimpleFieldType::Object(_))
+    ));
+    assert!(matches!(
+        sts_schema[1].as_simple(),
+        Some(SimpleFieldType::Object(_))
+    ));
 
     let week_schema = schema.get("WeekUsed").unwrap();
-    assert!(matches!(week_schema[0], FieldType::Int));
+    assert!(matches!(
+        week_schema[0].as_simple(),
+        Some(SimpleFieldType::Int)
+    ));
 }
 
 #[test]

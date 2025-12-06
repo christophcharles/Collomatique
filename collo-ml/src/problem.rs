@@ -3,7 +3,7 @@ use crate::eval::{
 };
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
-use crate::{EvalObject, EvalVar, SemWarning, SimpleType};
+use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -135,8 +135,8 @@ pub enum ProblemError {
     #[error("Function {func} returns {returned} instead of {expected}")]
     WrongReturnType {
         func: String,
-        returned: SimpleType,
-        expected: SimpleType,
+        returned: ExprType,
+        expected: ExprType,
     },
 }
 
@@ -146,7 +146,7 @@ impl<
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
-    fn build_vars() -> Result<HashMap<String, Vec<SimpleType>>, ProblemError> {
+    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError> {
         V::field_schema()
             .into_iter()
             .map(|(name, typ)| {
@@ -469,7 +469,7 @@ impl<
 
         let constraints = match constraints_expr {
             ExprValue::Constraint(constraints) => constraints,
-            ExprValue::List(SimpleType::Constraint, list) if allow_list => list
+            ExprValue::List(a, list) if a.is_constraint() && allow_list => list
                 .into_iter()
                 .flat_map(|x| match x {
                     ExprValue::Constraint(constraints) => constraints.into_iter(),
@@ -479,8 +479,8 @@ impl<
             _ => {
                 return Err(ProblemError::WrongReturnType {
                     func: fn_name.to_string(),
-                    returned: constraints_expr.get_type(&self.env),
-                    expected: SimpleType::Constraint,
+                    returned: constraints_expr.get_type(&self.env).into(),
+                    expected: SimpleType::Constraint.into(),
                 })
             }
         };
@@ -531,8 +531,8 @@ impl<
             _ => {
                 return Err(ProblemError::WrongReturnType {
                     func: fn_name.to_string(),
-                    returned: lin_expr_expr.get_type(&self.env),
-                    expected: SimpleType::LinExpr,
+                    returned: lin_expr_expr.get_type(&self.env).into(),
+                    expected: SimpleType::LinExpr.into(),
                 })
             }
         };
@@ -854,11 +854,11 @@ impl<
                 return Err(ProblemError::UnknownFunction(func));
             };
 
-            if *expr_type != SimpleType::Constraint {
+            if *expr_type != ExprType::simple(SimpleType::Constraint) {
                 return Err(ProblemError::WrongReturnType {
                     func,
                     returned: expr_type.clone(),
-                    expected: SimpleType::Constraint,
+                    expected: SimpleType::Constraint.into(),
                 });
             }
 

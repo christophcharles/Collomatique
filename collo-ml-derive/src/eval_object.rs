@@ -311,7 +311,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::SimpleType>> {
+            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::ExprType>> {
                 let mut map = ::std::collections::HashMap::new();
                 #(#type_schemas_entries)*
                 map

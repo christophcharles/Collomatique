@@ -1,8 +1,8 @@
 use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::traits::{FieldConversionError, FieldType, FieldValue};
-use collo_ml::{EvalObject, ExprValue, SimpleType, ViewObject};
+use collo_ml::traits::{FieldConversionError, FieldValue, SimpleFieldType};
+use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -29,7 +29,7 @@ impl EvalObject for TestObjectId {
     fn typ_name(&self, _env: &Self::Env) -> String {
         String::new()
     }
-    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()
     }
 }
@@ -66,8 +66,8 @@ struct TestStudent {
 fn test_field_schema_generation() {
     let schema = TestStudent::field_schema();
     assert_eq!(schema.len(), 2);
-    assert_eq!(schema.get("age"), Some(&FieldType::Int));
-    assert_eq!(schema.get("enrolled"), Some(&FieldType::Bool));
+    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
+    assert_eq!(schema.get("enrolled"), Some(&SimpleFieldType::Bool.into()));
 }
 
 #[test]
@@ -123,10 +123,10 @@ fn test_object_references() {
 
     let schema = StudentWithRoom::field_schema();
     assert_eq!(schema.len(), 2);
-    assert_eq!(schema.get("age"), Some(&FieldType::Int));
+    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
     assert_eq!(
         schema.get("room"),
-        Some(&FieldType::Object(TypeId::of::<RoomId>()))
+        Some(&SimpleFieldType::Object(TypeId::of::<RoomId>()).into())
     );
 
     let student = StudentWithRoom {
@@ -155,7 +155,7 @@ fn test_collections_of_ints() {
     assert_eq!(schema.len(), 2);
     assert_eq!(
         schema.get("grades"),
-        Some(&FieldType::List(Box::new(FieldType::Int)))
+        Some(&SimpleFieldType::List(SimpleFieldType::Int.into()).into())
     );
 
     let mut grades = Vec::new();
@@ -168,7 +168,9 @@ fn test_collections_of_ints() {
         grades: grades.clone(),
     };
 
-    if let Some(FieldValue::List(FieldType::Int, values)) = student.get_field("grades") {
+    if let Some(FieldValue::List(a, values)) = student.get_field("grades") {
+        let inner = a.as_simple().expect("Expected simple type");
+        assert_eq!(inner, &SimpleFieldType::Int, "Expected List of Ints");
         assert_eq!(values.len(), 3);
         assert!(values.contains(&FieldValue::Int(85)));
         assert!(values.contains(&FieldValue::Int(90)));
@@ -189,7 +191,7 @@ fn test_collections_of_bools() {
     let schema = StudentWithFlags::field_schema();
     assert_eq!(
         schema.get("flags"),
-        Some(&FieldType::List(Box::new(FieldType::Bool)))
+        Some(&SimpleFieldType::List(SimpleFieldType::Bool.into()).into())
     );
 
     let mut flags = Vec::new();
@@ -221,9 +223,9 @@ fn test_collections_of_objects() {
     assert_eq!(schema.len(), 2);
     assert_eq!(
         schema.get("courses"),
-        Some(&FieldType::List(Box::new(FieldType::Object(TypeId::of::<
-            CourseId,
-        >()))))
+        Some(
+            &SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into()).into()
+        )
     );
 
     let mut courses = Vec::new();
@@ -323,21 +325,21 @@ fn test_complex_structure() {
 
     // Should have 5 visible fields
     assert_eq!(schema.len(), 5);
-    assert_eq!(schema.get("age"), Some(&FieldType::Int));
-    assert_eq!(schema.get("enrolled"), Some(&FieldType::Bool));
+    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
+    assert_eq!(schema.get("enrolled"), Some(&SimpleFieldType::Bool.into()));
     assert_eq!(
         schema.get("room"),
-        Some(&FieldType::Object(TypeId::of::<RoomId>()))
+        Some(&SimpleFieldType::Object(TypeId::of::<RoomId>()).into())
     );
     assert_eq!(
         schema.get("courses"),
-        Some(&FieldType::List(Box::new(FieldType::Object(TypeId::of::<
-            CourseId,
-        >()))))
+        Some(
+            &SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into()).into()
+        )
     );
     assert_eq!(
         schema.get("grades"),
-        Some(&FieldType::List(Box::new(FieldType::Int)))
+        Some(&SimpleFieldType::List(SimpleFieldType::Int.into()).into())
     );
 
     // Hidden field should not be in schema
@@ -430,15 +432,20 @@ fn test_schemas_for_recursive_vecs() {
     assert_eq!(schema.len(), 2);
     assert_eq!(
         schema.get("ages"),
-        Some(&FieldType::List(Box::new(FieldType::List(Box::new(
-            FieldType::Int
-        )))))
+        Some(
+            &SimpleFieldType::List(SimpleFieldType::List(SimpleFieldType::Int.into()).into())
+                .into()
+        )
     );
     assert_eq!(
         schema.get("courses"),
-        Some(&FieldType::List(Box::new(FieldType::List(Box::new(
-            FieldType::Object(TypeId::of::<CourseId>())
-        )))))
+        Some(
+            &SimpleFieldType::List(
+                SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into())
+                    .into()
+            )
+            .into()
+        )
     );
 }
 
@@ -467,7 +474,7 @@ fn test_get_field_for_recursive_vecs() {
         assert_eq!(
             values[0],
             FieldValue::List(
-                FieldType::Object(TypeId::of::<CourseId>()),
+                SimpleFieldType::Object(TypeId::of::<CourseId>()).into(),
                 Vec::from([
                     FieldValue::Object(TestObjectId),
                     FieldValue::Object(TestObjectId)
@@ -477,7 +484,7 @@ fn test_get_field_for_recursive_vecs() {
         assert_eq!(
             values[1],
             FieldValue::List(
-                FieldType::Object(TypeId::of::<CourseId>()),
+                SimpleFieldType::Object(TypeId::of::<CourseId>()).into(),
                 Vec::from([
                     FieldValue::Object(TestObjectId),
                     FieldValue::Object(TestObjectId)

@@ -234,17 +234,19 @@ fn list_comprehension_multiple_for_typechecks_correctly() {
     types.insert(
         "Student".to_string(),
         HashMap::from([
-            ("age".to_string(), SimpleType::Int),
-            ("enroled".to_string(), SimpleType::Bool),
+            ("age".to_string(), ExprType::simple(SimpleType::Int)),
+            ("enroled".to_string(), ExprType::simple(SimpleType::Bool)),
         ]),
     );
     types.insert(
         "Class".to_string(),
         HashMap::from([
-            ("num".to_string(), SimpleType::Int),
+            ("num".to_string(), ExprType::simple(SimpleType::Int)),
             (
                 "students".to_string(),
-                SimpleType::List(Box::new(SimpleType::Object("Student".into()))),
+                ExprType::simple(SimpleType::List(
+                    SimpleType::Object("Student".into()).into(),
+                )),
             ),
         ]),
     );
@@ -272,8 +274,8 @@ fn list_comprehension_where_can_reference_all_for_variables() {
     types.insert(
         "Person".to_string(),
         HashMap::from([
-            ("id".to_string(), SimpleType::Int),
-            ("active".to_string(), SimpleType::Bool),
+            ("id".to_string(), ExprType::simple(SimpleType::Int)),
+            ("active".to_string(), ExprType::simple(SimpleType::Bool)),
         ]),
     );
     types.insert(
@@ -281,9 +283,9 @@ fn list_comprehension_where_can_reference_all_for_variables() {
         HashMap::from([
             (
                 "members".to_string(),
-                SimpleType::List(Box::new(SimpleType::Object("Person".into()))),
+                ExprType::simple(SimpleType::List(SimpleType::Object("Person".into()).into())),
             ),
-            ("min_age".to_string(), SimpleType::Int),
+            ("min_age".to_string(), ExprType::simple(SimpleType::Int)),
         ]),
     );
 

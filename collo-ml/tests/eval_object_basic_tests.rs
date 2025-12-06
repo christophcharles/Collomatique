@@ -188,16 +188,19 @@ fn test_type_schemas() {
 
     // Check Student schema
     let student_schema = schemas.get("Student").unwrap();
-    assert_eq!(student_schema.get("age"), Some(&SimpleType::Int));
-    assert_eq!(student_schema.get("enrolled"), Some(&SimpleType::Bool));
+    assert_eq!(student_schema.get("age"), Some(&SimpleType::Int.into()));
+    assert_eq!(
+        student_schema.get("enrolled"),
+        Some(&SimpleType::Bool.into())
+    );
     assert_eq!(
         student_schema.get("room"),
-        Some(&SimpleType::Object("Room".to_string()))
+        Some(&SimpleType::Object("Room".to_string()).into())
     );
 
     // Check Room schema
     let room_schema = schemas.get("Room").unwrap();
-    assert_eq!(room_schema.get("number"), Some(&SimpleType::Int));
+    assert_eq!(room_schema.get("number"), Some(&SimpleType::Int.into()));
 }
 
 #[test]

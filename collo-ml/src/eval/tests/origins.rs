@@ -8,7 +8,7 @@ fn simple_constraint_gets_origin() {
     pub let make_constraint(x: Int) -> Constraint = $V(x) === 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -46,7 +46,7 @@ fn nested_function_origin_is_inner() {
     pub let outer(y: Int) -> Constraint = inner(y + 1);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -82,7 +82,7 @@ fn multiple_constraints_same_origin() {
         ($V(x) === 1) and ($V(x + 1) === 2);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -115,7 +115,7 @@ fn origin_with_multiple_params() {
         $V(x) === y + z;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -152,7 +152,7 @@ fn reified_constraint_origin() {
     pub let use_reified(y: Int) -> Constraint = $BaseVar(y) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -191,7 +191,7 @@ fn forall_constraint_origin() {
         forall i in [0..n] { $V(i) === 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -226,7 +226,7 @@ fn combined_constraints_preserve_separate_origins() {
     pub let combined(x: Int) -> Constraint = c1(x) and c2(x);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -275,7 +275,7 @@ fn origin_with_list_param() {
         forall x in items { $V(x) === 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -284,7 +284,7 @@ fn origin_with_list_param() {
     list_items.push(ExprValue::Int(2));
     list_items.push(ExprValue::Int(3));
 
-    let list_arg = ExprValue::List(SimpleType::Int, list_items.clone());
+    let list_arg = ExprValue::List(SimpleType::Int.into(), list_items.clone());
 
     let result = checked_ast
         .quick_eval_fn("list_constraint", vec![list_arg.clone()])
@@ -314,7 +314,7 @@ fn inner_function_origin_preserved() {
     pub let wrapper(y: Int) -> Constraint = helper(y * 2);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -352,7 +352,7 @@ fn deeply_nested_function_origin() {
     pub let outer(x: Int) -> Constraint = middle(x + 5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

@@ -11,7 +11,10 @@ fn test_fix_forces_variable_values() {
 
     impl<T: EvalObject> EvalVar<T> for Var {
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([("V".to_string(), vec![crate::traits::FieldType::Int])])
+            HashMap::from([(
+                "V".to_string(),
+                vec![crate::traits::SimpleFieldType::Int.into()],
+            )])
         }
 
         fn fix(&self, _env: &T::Env) -> Option<f64> {
@@ -57,7 +60,7 @@ fn test_fix_forces_variable_values() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "V".into(),
                                 param: 0,
-                                expected: crate::traits::FieldType::Int,
+                                expected: crate::traits::SimpleFieldType::Int.into(),
                             })
                         }
                     };

@@ -70,7 +70,7 @@ fn boolean_list() {
     assert_eq!(
         result,
         ExprValue::List(
-            SimpleType::Bool,
+            SimpleType::Bool.into(),
             Vec::from([
                 ExprValue::Bool(true),
                 ExprValue::Bool(false),
@@ -94,7 +94,7 @@ fn number_list() {
     assert_eq!(
         result,
         ExprValue::List(
-            SimpleType::Int,
+            SimpleType::Int.into(),
             Vec::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)])
         )
     );
@@ -126,7 +126,7 @@ fn cardinality_of_list_in_param() {
         .quick_eval_fn(
             "f",
             vec![ExprValue::List(
-                SimpleType::Int,
+                SimpleType::Int.into(),
                 Vec::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)]),
             )],
         )
@@ -148,7 +148,7 @@ fn range() {
     assert_eq!(
         result,
         ExprValue::List(
-            SimpleType::Int,
+            SimpleType::Int.into(),
             Vec::from([
                 ExprValue::Int(-3),
                 ExprValue::Int(-2),
@@ -171,7 +171,7 @@ fn empty_range() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn empty_range_with_end_below_start() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
 }
 
 #[test]
@@ -201,6 +201,6 @@ fn range_with_one_element() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(SimpleType::Int, Vec::from([ExprValue::Int(4)]))
+        ExprValue::List(SimpleType::Int.into(), Vec::from([ExprValue::Int(4)]))
     );
 }
