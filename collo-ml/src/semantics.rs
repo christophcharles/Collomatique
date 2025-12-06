@@ -3084,35 +3084,35 @@ impl GlobalEnv {
                 );
                 local_env.pop_scope(warnings);
 
-                if let Some(body_type) = body_type_opt {
-                    match ExprType::try_from(output_type.node.clone()) {
-                        Err(TypeNameError::MultipleOptionMarkers) => {
-                            errors.push(SemError::MultipleOptionMarkers {
+                match ExprType::try_from(output_type.node.clone()) {
+                    Err(TypeNameError::MultipleOptionMarkers) => {
+                        errors.push(SemError::MultipleOptionMarkers {
+                            span: output_type.span.clone(),
+                        });
+                    }
+                    Err(TypeNameError::OptionTypeInSumType) => {
+                        errors.push(SemError::OptionTypeInSumType {
+                            span: output_type.span.clone(),
+                        });
+                    }
+                    Err(TypeNameError::DuplicatedTypeInSumType) => {
+                        errors.push(SemError::DuplicatedTypeInSumType {
+                            span: output_type.span.clone(),
+                        });
+                    }
+                    Err(TypeNameError::OptionMarkerOnNone) => {
+                        errors.push(SemError::OptionMarkerOnNone {
+                            span: output_type.span.clone(),
+                        });
+                    }
+                    Ok(out_typ) => {
+                        if !self.validate_type(&out_typ) {
+                            errors.push(SemError::UnknownType {
+                                typ: out_typ.to_string(),
                                 span: output_type.span.clone(),
                             });
-                        }
-                        Err(TypeNameError::OptionTypeInSumType) => {
-                            errors.push(SemError::OptionTypeInSumType {
-                                span: output_type.span.clone(),
-                            });
-                        }
-                        Err(TypeNameError::DuplicatedTypeInSumType) => {
-                            errors.push(SemError::DuplicatedTypeInSumType {
-                                span: output_type.span.clone(),
-                            });
-                        }
-                        Err(TypeNameError::OptionMarkerOnNone) => {
-                            errors.push(SemError::OptionMarkerOnNone {
-                                span: output_type.span.clone(),
-                            });
-                        }
-                        Ok(out_typ) => {
-                            if !self.validate_type(&out_typ) {
-                                errors.push(SemError::UnknownType {
-                                    typ: out_typ.to_string(),
-                                    span: output_type.span.clone(),
-                                });
-                            } else {
+                        } else {
+                            if let Some(body_type) = body_type_opt {
                                 // Allow coercion
                                 let types_match = match (out_typ.clone(), body_type.clone()) {
                                     (a, b) if b.can_coerce_to(&a) => true,
@@ -3127,27 +3127,27 @@ impl GlobalEnv {
                                         found: body_type,
                                     });
                                 }
-
-                                if !error_in_typs {
-                                    let fn_typ = FunctionType {
-                                        args: params_typ,
-                                        output: out_typ,
-                                    };
-                                    self.register_fn(
-                                        &name.node,
-                                        name.span.clone(),
-                                        fn_typ,
-                                        public,
-                                        params.iter().map(|x| x.name.node.clone()).collect(),
-                                        body.clone(),
-                                        docstring.clone(),
-                                        type_info,
-                                    );
-                                }
                             }
                         }
-                    };
-                }
+
+                        if !error_in_typs {
+                            let fn_typ = FunctionType {
+                                args: params_typ,
+                                output: out_typ,
+                            };
+                            self.register_fn(
+                                &name.node,
+                                name.span.clone(),
+                                fn_typ,
+                                public,
+                                params.iter().map(|x| x.name.node.clone()).collect(),
+                                body.clone(),
+                                docstring.clone(),
+                                type_info,
+                            );
+                        }
+                    }
+                };
             }
         }
     }

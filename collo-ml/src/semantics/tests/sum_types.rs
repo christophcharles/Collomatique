@@ -279,6 +279,22 @@ fn triplicate_types_in_sum_error() {
 }
 
 #[test]
+fn triplicate_types_in_sum_error_with_extra_error() {
+    let types = simple_object("Student");
+    let input = "pub let f() -> Student | Student | Student = get();";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(!errors.is_empty(), "Triplicate types in sum should error");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::DuplicatedTypeInSumType { .. })),
+        "Should have DuplicatedTypeInSumType error: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn duplicate_after_flattening_error() {
     // None | Int | None should error after flattening
     let input = "pub let f() -> None | Int | None = none;";
