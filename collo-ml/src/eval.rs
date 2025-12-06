@@ -273,8 +273,8 @@ impl<T: EvalObject> AnnotatedValue<T> {
                         .expect("Coercion should be valid"),
                 )
             }
-            AnnotatedValue::UntypedList if target.is_list() => {
-                let inner_typ = target.get_inner_list_type().unwrap();
+            AnnotatedValue::UntypedList if target.contains_one_list() => {
+                let inner_typ = target.get_contained_inner_list_type().unwrap();
                 Some(ExprValue::List(inner_typ.clone(), Vec::new()))
             }
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
@@ -642,25 +642,23 @@ impl<T: EvalObject> LocalEnv<T> {
                     .map(|x| self.eval_expr(eval_history, &x))
                     .collect::<Result<_, _>>()?;
 
-                let mut unified_type = element_values[0].get_type(eval_history.env);
-                for item in &element_values[1..] {
-                    let item_type = item.get_type(eval_history.env);
-                    unified_type = AnnotatedType::unify(&unified_type, &item_type)
-                        .expect("Types should be unifiable");
-                }
-                let target_type = unified_type
-                    .into_inner()
-                    .expect("Type should be determined");
+                let annotated_type = eval_history
+                    .ast
+                    .expr_types
+                    .get(&expr.span)
+                    .expect("ListLiteral should have type");
+                let expr_type = annotated_type.inner().expect("Should have inner type");
+                let target_type = expr_type.get_inner_list_type().expect("Should be a list");
 
                 let coerced_elements: Vec<_> = element_values
                     .iter()
                     .map(|x| {
-                        x.coerce_to(eval_history.env, &target_type)
+                        x.coerce_to(eval_history.env, target_type)
                             .expect("Coercion to unified type should be possible")
                     })
                     .collect();
 
-                ExprValue::List(target_type, coerced_elements).into()
+                ExprValue::List(target_type.clone(), coerced_elements).into()
             }
             Expr::ListRange { start, end } => {
                 let start_value = self.eval_expr(eval_history, &start)?;

@@ -3,6 +3,7 @@ use super::*;
 mod arithmetic;
 mod boolean_logic;
 mod coercion_and_casting;
+mod coercion_sum_types;
 mod collections;
 mod comparisons;
 mod complex_combinations;

@@ -234,6 +234,18 @@ impl ExprType {
         self.variants.iter().filter(|x| x.is_list()).count() == 1
     }
 
+    pub fn get_contained_inner_list_type(&self) -> Option<&ExprType> {
+        if !self.contains_one_list() {
+            return None;
+        }
+        for variant in &self.variants {
+            if variant.is_list() {
+                return variant.get_inner_list_type();
+            }
+        }
+        None
+    }
+
     pub fn get_inner_list_type(&self) -> Option<&ExprType> {
         self.as_simple().map(|x| x.get_inner_list_type()).flatten()
     }
