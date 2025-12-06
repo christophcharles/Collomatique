@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::{GroupListId, SlotId};
+use collomatique_state_colloscopes::{GroupListId, PeriodId, SlotId, SubjectId};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct WeekId(pub usize);
@@ -30,4 +30,10 @@ pub struct DayData {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct WeekdayData {
     pub day: collomatique_time::Weekday,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub struct SubjectPeriodData {
+    pub subject: SubjectId,
+    pub period: PeriodId,
 }

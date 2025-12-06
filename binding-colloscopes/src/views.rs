@@ -1,6 +1,8 @@
 use crate::tools;
 
-use super::objects::{DayData, GroupId, InterrogationData, TimeSlotData, WeekId, WeekdayData};
+use super::objects::{
+    DayData, GroupId, InterrogationData, SubjectPeriodData, TimeSlotData, WeekId, WeekdayData,
+};
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
 use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, StudentId, SubjectId};
@@ -36,6 +38,7 @@ pub enum ObjectId {
     Weekday(WeekdayData),
     Day(DayData),
     TimeSlot(TimeSlotData),
+    SubjectPeriod(SubjectPeriodData),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -84,7 +87,16 @@ pub struct Subject {
     max_group_per_interrogation: i32,
     min_group_per_interrogation: i32,
     take_into_account: bool,
+    has_interrogations: bool,
     duration: i32,
+    periods_data: Vec<SubjectPeriodData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct SubjectPeriod {
+    subject: SubjectId,
+    period: PeriodId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -395,18 +407,40 @@ impl ViewBuilder<Env, SubjectId> for ObjectId {
             .subjects
             .find_subject(*id)?;
 
+        let periods_data = env
+            .data
+            .get_inner_data()
+            .params
+            .periods
+            .ordered_period_list
+            .iter()
+            .filter_map(|(period_id, _period_desc)| {
+                if subject_data.excluded_periods.contains(period_id) {
+                    return None;
+                }
+                Some(SubjectPeriodData {
+                    subject: *id,
+                    period: *period_id,
+                })
+            })
+            .collect();
+
         Some(match &subject_data.parameters.interrogation_parameters {
             Some(params) => Subject {
                 max_group_per_interrogation: params.groups_per_interrogation.end().get() as i32,
                 min_group_per_interrogation: params.groups_per_interrogation.start().get() as i32,
                 take_into_account: params.take_duration_into_account,
                 duration: params.duration.get().get() as i32,
+                has_interrogations: true,
+                periods_data,
             },
             None => Subject {
                 max_group_per_interrogation: 0,
                 min_group_per_interrogation: 0,
                 take_into_account: false,
                 duration: 60,
+                has_interrogations: false,
+                periods_data,
             },
         })
     }
@@ -701,6 +735,43 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
             minute: id.slot.start().start_time.minute() as i32,
             duration: id.slot.duration().get().get() as i32,
             interrogations,
+        })
+    }
+}
+
+impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
+    type Object = SubjectPeriod;
+
+    fn enumerate(env: &Env) -> BTreeSet<SubjectPeriodData> {
+        let mut output = BTreeSet::new();
+
+        for (subject_id, subject_data) in &env
+            .data
+            .get_inner_data()
+            .params
+            .subjects
+            .ordered_subject_list
+        {
+            for (period_id, _period_desc) in
+                &env.data.get_inner_data().params.periods.ordered_period_list
+            {
+                if subject_data.excluded_periods.contains(period_id) {
+                    continue;
+                }
+                output.insert(SubjectPeriodData {
+                    subject: *subject_id,
+                    period: *period_id,
+                });
+            }
+        }
+
+        output
+    }
+
+    fn build(_env: &Env, id: &SubjectPeriodData) -> Option<Self::Object> {
+        Some(SubjectPeriod {
+            subject: id.subject,
+            period: id.period,
         })
     }
 }
