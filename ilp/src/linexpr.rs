@@ -968,7 +968,7 @@ impl<V: UsableData> Constraint<V> {
         }
         Some(match self.symbol {
             EqSymbol::Equals => f64_is_zero(self.expr.constant.0),
-            EqSymbol::LessThan => f64_is_positive(-self.expr.constant.0),
+            EqSymbol::LessThan => !f64_is_positive(self.expr.constant.0),
         })
     }
 
