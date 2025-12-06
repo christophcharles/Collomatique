@@ -57,6 +57,7 @@ pub fn strip_origins<T: EvalObject>(
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ExprValue<T: EvalObject> {
+    None,
     Int(i32),
     Bool(bool),
     LinExpr(LinExpr<IlpVar<T>>),
@@ -105,6 +106,7 @@ impl<T: EvalObject> ExprValue<T> {
 
     pub fn get_type(&self, env: &T::Env) -> ExprType {
         match self {
+            ExprValue::None => ExprType::None,
             ExprValue::Int(_) => ExprType::Int,
             ExprValue::Bool(_) => ExprType::Bool,
             ExprValue::LinExpr(_) => ExprType::LinExpr,
@@ -561,6 +563,7 @@ impl<T: EvalObject> LocalEnv<T> {
     ) -> Result<AnnotatedValue<T>, EvalError> {
         use crate::ast::Expr;
         Ok(match &expr.node {
+            Expr::None => ExprValue::None.into(),
             Expr::Boolean(val) => ExprValue::Bool(*val).into(),
             Expr::Number(val) => ExprValue::Int(*val).into(),
             Expr::Ident(ident) => self
@@ -2032,6 +2035,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
     pub fn validate_value(&self, val: &ExprValue<T>) -> bool {
         match val {
+            ExprValue::None => true,
             ExprValue::Int(_) => true,
             ExprValue::Bool(_) => true,
             ExprValue::LinExpr(_) => true,

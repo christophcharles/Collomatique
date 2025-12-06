@@ -79,6 +79,7 @@ pub struct Param {
 pub enum TypeName {
     LinExpr,
     Constraint,
+    None,
     Int,
     Bool,
     Object(String),      // Student, Week, etc
@@ -141,6 +142,7 @@ pub enum Expr {
     },
 
     // Elements
+    None,
     Number(i32),
     Boolean(bool),
     Ident(Spanned<String>),
@@ -462,6 +464,7 @@ impl TypeName {
             Rule::primitive_type => {
                 let type_name = pair.as_str();
                 match type_name {
+                    "None" => Ok(TypeName::None),
                     "Int" => Ok(TypeName::Int),
                     "Bool" => Ok(TypeName::Bool),
                     "LinExpr" => Ok(TypeName::LinExpr),
@@ -867,6 +870,7 @@ impl Expr {
             Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::boolean => Self::from_boolean(inner),
+            Rule::none => Self::from_none(inner),
             Rule::neg => Self::from_neg(inner),
             Rule::number => {
                 let num_str = inner.as_str();
@@ -1246,6 +1250,18 @@ impl Expr {
             "false" => Ok(Expr::Boolean(false)),
             _ => Err(AstError::UnexpectedRule {
                 expected: "true or false",
+                found: pair.as_rule(),
+                span: Span::from_pest(&pair),
+            }),
+        }
+    }
+
+    fn from_none(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // boolean = { "true" | "false" }
+        match pair.as_str() {
+            "none" => Ok(Expr::None),
+            _ => Err(AstError::UnexpectedRule {
+                expected: "none",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),

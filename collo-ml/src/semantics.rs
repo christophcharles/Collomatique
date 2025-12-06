@@ -9,6 +9,7 @@ mod tests;
 pub enum ExprType {
     Int,
     Bool,
+    None,
     LinExpr,
     Constraint,
     List(Box<ExprType>),
@@ -17,17 +18,18 @@ pub enum ExprType {
 
 impl ExprType {
     pub fn is_primitive_type(&self) -> bool {
-        match self {
-            ExprType::Int | ExprType::Bool | ExprType::LinExpr | ExprType::Constraint => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ExprType::Int
+                | ExprType::Bool
+                | ExprType::LinExpr
+                | ExprType::Constraint
+                | ExprType::None
+        )
     }
 
     pub fn is_list(&self) -> bool {
-        match self {
-            ExprType::List(_) => true,
-            _ => false,
-        }
+        matches!(self, ExprType::List(_))
     }
 
     /// Checks if type is valid for arithmetic operations
@@ -80,6 +82,7 @@ impl From<crate::ast::TypeName> for ExprType {
     fn from(value: crate::ast::TypeName) -> Self {
         use crate::ast::TypeName;
         match value {
+            TypeName::None => ExprType::None,
             TypeName::Bool => ExprType::Bool,
             TypeName::Int => ExprType::Int,
             TypeName::LinExpr => ExprType::LinExpr,
@@ -93,6 +96,7 @@ impl From<crate::ast::TypeName> for ExprType {
 impl std::fmt::Display for ExprType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ExprType::None => write!(f, "None"),
             ExprType::Bool => write!(f, "Bool"),
             ExprType::Int => write!(f, "Int"),
             ExprType::LinExpr => write!(f, "LinExpr"),
@@ -382,6 +386,7 @@ pub enum GlobalEnvError {
 impl GlobalEnv {
     pub fn validate_type(&self, typ: &ExprType) -> bool {
         match typ {
+            ExprType::None => true,
             ExprType::Bool => true,
             ExprType::Int => true,
             ExprType::LinExpr => true,
@@ -748,6 +753,7 @@ impl LocalEnv {
 
         match expr {
             // ========== Literals ==========
+            Expr::None => Some(ExprType::None.into()),
             Expr::Number(_) => Some(ExprType::Int.into()),
             Expr::Boolean(_) => Some(ExprType::Bool.into()),
 

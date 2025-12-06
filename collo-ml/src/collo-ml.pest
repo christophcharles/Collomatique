@@ -30,6 +30,8 @@ reserved_keyword = {
     "else" |
     "true" |
     "Bool" |
+    "None" |
+    "none" |
     "sum" |
     "Int" |
     "let" |
@@ -55,7 +57,7 @@ params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ type_name }
 
 // ========== Type Names ==========
-primitive_type = { ident | "Int" | "Bool" | "LinExpr" | "Constraint" }
+primitive_type = { ident | "None" | "Int" | "Bool" | "LinExpr" | "Constraint" }
 type_name = { 
     "[" ~ type_name ~ "]" |
     primitive_type
@@ -103,6 +105,7 @@ primary_expr = {
     var_list_call |
     fn_call |
     boolean |
+    none |
     number |
     neg |
     ident |
@@ -142,6 +145,7 @@ where_op = @{ "where" ~ !ident_char }
 with_op = @{ "with" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
+none = @{ "none"  ~ !ident_char }
 number = @{ "-"? ~ ASCII_DIGIT+ }
 
 // ========== Test helpers ==========
