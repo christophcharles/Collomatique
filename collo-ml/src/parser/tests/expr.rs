@@ -21,6 +21,7 @@ use super::*;
 // Expression test submodules
 mod aggregations;
 mod arithmetic;
+mod as_sum_types;
 mod cardinality;
 mod collections;
 mod comparisons;
