@@ -8,3 +8,4 @@ mod expr;
 mod ident;
 mod let_statements;
 mod reify_statements;
+mod sum_types;
