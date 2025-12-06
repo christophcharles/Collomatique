@@ -80,7 +80,7 @@ fn let_expr_with_list_value() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -101,7 +101,7 @@ fn let_expr_with_list_range() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(0),
                 ExprValue::Int(1),
@@ -122,7 +122,7 @@ fn let_expr_with_membership_test() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
@@ -176,7 +176,7 @@ fn let_expr_with_sum_body() {
 fn let_expr_with_forall_generating_constraints() {
     let input = "pub let f(n: Int) -> Constraint = let bound = n * 2 { forall i in [0..bound] { $V(i) === 1 } };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -213,7 +213,7 @@ fn let_expr_using_bound_var_multiple_times() {
 fn let_expr_with_constraint_value() {
     let input = "pub let f(x: Int) -> Constraint = let c = $V(x) === 1 { c };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -242,7 +242,7 @@ fn let_expr_with_constraint_value() {
 fn let_expr_with_linexpr_arithmetic() {
     let input = "pub let f(x: Int) -> Constraint = let expr = $V(x) + 5 { expr === 10 };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -271,7 +271,7 @@ fn let_expr_with_linexpr_arithmetic() {
 fn let_expr_with_constraint_combination() {
     let input = "pub let f(x: Int) -> Constraint = let c1 = $V(x) === 1 { let c2 = $V(x) <== 10 { c1 and c2 } };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -315,7 +315,7 @@ fn let_expr_with_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(0),
                 ExprValue::Int(2),
@@ -335,7 +335,7 @@ fn let_expr_with_cardinality() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
@@ -355,11 +355,11 @@ fn let_expr_with_collection_union() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list_a = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list_b = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
@@ -370,7 +370,7 @@ fn let_expr_with_collection_union() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -480,7 +480,7 @@ fn let_expr_returning_list_from_if() {
     assert_eq!(
         result_true,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -491,7 +491,7 @@ fn let_expr_returning_list_from_if() {
     assert_eq!(
         result_false,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(4), ExprValue::Int(5)])
         )
     );

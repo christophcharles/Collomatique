@@ -235,7 +235,7 @@ fn variable_call_with_wrong_types() {
 
 #[test]
 fn using_predefined_variable() {
-    let vars = var_with_args("PredefinedVar", vec![ExprType::Int]);
+    let vars = var_with_args("PredefinedVar", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $PredefinedVar(x) === 0;";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -249,7 +249,10 @@ fn using_predefined_variable() {
 #[test]
 fn predefined_variable_with_object_type() {
     let types = simple_object("Student");
-    let vars = var_with_args("StudentVar", vec![ExprType::Object("Student".to_string())]);
+    let vars = var_with_args(
+        "StudentVar",
+        vec![SimpleType::Object("Student".to_string())],
+    );
 
     let input = "pub let f(s: Student) -> Constraint = $StudentVar(s) === 0;";
     let (_, errors, _) = analyze(input, types, vars);
@@ -266,7 +269,7 @@ fn predefined_variable_with_multiple_args() {
     let types = simple_object("Student");
     let vars = var_with_args(
         "MultiVar",
-        vec![ExprType::Object("Student".to_string()), ExprType::Int],
+        vec![SimpleType::Object("Student".to_string()), SimpleType::Int],
     );
 
     let input = "pub let f(s: Student, x: Int) -> Constraint = $MultiVar(s, x) === 0;";
@@ -283,7 +286,7 @@ fn predefined_variable_with_multiple_args() {
 
 #[test]
 fn variable_call_returns_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x);";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -296,7 +299,7 @@ fn variable_call_returns_linexpr() {
 
 #[test]
 fn variable_call_in_arithmetic() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x) + 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -309,7 +312,7 @@ fn variable_call_in_arithmetic() {
 
 #[test]
 fn variable_call_in_constraint() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 

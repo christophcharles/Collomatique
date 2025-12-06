@@ -203,7 +203,7 @@
 //! - View objects are constructed on-demand and don't persist
 
 use crate::eval::ExprValue;
-use crate::semantics::ExprType;
+use crate::semantics::SimpleType;
 use collomatique_ilp::UsableData;
 use std::collections::{BTreeSet, HashMap};
 
@@ -339,7 +339,7 @@ pub trait EvalObject: UsableData {
     /// A nested map where:
     /// - Outer keys are DSL type names (e.g., "Student")
     /// - Inner maps associate field names with their types
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>>;
+    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>>;
 
     /// Returns a human-readable string representation of this object.
     ///
@@ -390,12 +390,14 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<ExprType, FieldConversionError> {
+    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<SimpleType, FieldConversionError> {
         match self {
-            FieldType::Bool => Ok(ExprType::Bool),
-            FieldType::Int => Ok(ExprType::Int),
-            FieldType::List(typ) => Ok(ExprType::List(Box::new(typ.convert_to_expr_type::<T>()?))),
-            FieldType::Object(type_id) => Ok(ExprType::Object(T::type_id_to_name(type_id)?)),
+            FieldType::Bool => Ok(SimpleType::Bool),
+            FieldType::Int => Ok(SimpleType::Int),
+            FieldType::List(typ) => {
+                Ok(SimpleType::List(Box::new(typ.convert_to_expr_type::<T>()?)))
+            }
+            FieldType::Object(type_id) => Ok(SimpleType::Object(T::type_id_to_name(type_id)?)),
         }
     }
 }

@@ -105,7 +105,7 @@ fn fn_multi_call() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(0), ExprValue::Int(42)])
         )
     );
@@ -227,7 +227,7 @@ fn fn_returning_list() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -245,7 +245,7 @@ fn fn_returning_linexpr() {
     pub let f() -> LinExpr = get_var(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -274,7 +274,7 @@ fn fn_returning_constraint() {
     pub let f() -> Constraint = make_constraint(5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -297,7 +297,7 @@ fn fn_returning_list_of_linexpr() {
     pub let f() -> [LinExpr] = get_vars([1, 2, 3]);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -306,7 +306,7 @@ fn fn_returning_list_of_linexpr() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(ExprType::LinExpr, list) => {
+        ExprValue::List(SimpleType::LinExpr, list) => {
             assert_eq!(list.len(), 3);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -542,7 +542,7 @@ fn fn_with_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(4), ExprValue::Int(9)])
         )
     );
@@ -566,7 +566,7 @@ fn fn_with_collection_operations() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
         )
     );
@@ -581,7 +581,7 @@ fn fn_using_base_var() {
     pub let f() -> LinExpr = make_linexpr(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -610,7 +610,7 @@ fn fn_using_reified_var() {
     pub let f() -> LinExpr = use_var(5);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -641,7 +641,7 @@ fn fn_calling_fn_with_reified_var() {
     pub let f() -> LinExpr = user(10);
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -701,7 +701,7 @@ fn helper_fn_for_transformation() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(3), ExprValue::Int(5), ExprValue::Int(7)])
         )
     );
@@ -829,7 +829,7 @@ fn fn_call_in_quantifier() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let all_valid = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(5), ExprValue::Int(9)]),
     );
     let result_true = checked_ast
@@ -838,7 +838,7 @@ fn fn_call_in_quantifier() {
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let has_invalid = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(15)]),
     );
     let result_false = checked_ast
@@ -859,7 +859,7 @@ fn fn_call_in_list_comprehension() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
     );
     let result = checked_ast
@@ -868,7 +868,7 @@ fn fn_call_in_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(4), ExprValue::Int(9), ExprValue::Int(16)])
         )
     );

@@ -185,7 +185,7 @@ fn fold_with_param_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         vec![ExprValue::Int(10), ExprValue::Int(20), ExprValue::Int(30)],
     );
 
@@ -256,7 +256,7 @@ fn fold_building_list() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 3);
             assert_eq!(elements[0], ExprValue::Int(1));
             assert_eq!(elements[1], ExprValue::Int(2));
@@ -281,7 +281,7 @@ fn fold_reverse_list() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 4);
             assert_eq!(elements[0], ExprValue::Int(4));
             assert_eq!(elements[1], ExprValue::Int(3));
@@ -306,7 +306,7 @@ fn fold_filter_list() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 2);
             assert_eq!(elements[0], ExprValue::Int(2));
             assert_eq!(elements[1], ExprValue::Int(4));
@@ -334,7 +334,7 @@ fn fold_conditional_list_building() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 2);
             assert_eq!(elements[0], ExprValue::Int(2));
             assert_eq!(elements[1], ExprValue::Int(4));
@@ -431,7 +431,7 @@ fn fold_with_let_in_body() {
 fn fold_linexpr_simple() {
     let input = "pub let f() -> LinExpr = fold x in [1..3] with acc = $V(0) { acc + $V(x) };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -489,7 +489,7 @@ fn fold_linexpr_empty_list() {
     let input =
         "pub let f() -> LinExpr = fold x in [] as [Int] with acc = 5 as LinExpr { acc + $V(x) };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::Int])]);
+    let vars = HashMap::from([("V".to_string(), vec![SimpleType::Int])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -577,7 +577,7 @@ fn rfold_list_building() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 4);
             // Processes right to left, so builds [4, 3, 2, 1]
             assert_eq!(elements[0], ExprValue::Int(4));
@@ -723,7 +723,7 @@ fn fold_flatten_nested_list() {
 
     match result {
         ExprValue::List(typ, elements) => {
-            assert_eq!(typ, ExprType::Int);
+            assert_eq!(typ, SimpleType::Int);
             assert_eq!(elements.len(), 6);
             assert_eq!(elements[0], ExprValue::Int(1));
             assert_eq!(elements[5], ExprValue::Int(6));

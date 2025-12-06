@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
 use collo_ml::traits::{FieldConversionError, FieldType, FieldValue};
-use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
+use collo_ml::{EvalObject, ExprValue, SimpleType, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -29,7 +29,7 @@ impl EvalObject for TestObjectId {
     fn typ_name(&self, _env: &Self::Env) -> String {
         String::new()
     }
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
         HashMap::new()
     }
 }

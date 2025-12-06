@@ -176,11 +176,11 @@ fn eq_lists_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list2 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
 

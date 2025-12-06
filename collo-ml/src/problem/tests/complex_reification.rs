@@ -1,5 +1,5 @@
 use crate::eval::ExprValue;
-use crate::semantics::ExprType;
+use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
 
 use super::*;
@@ -76,8 +76,8 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-        let student_type = HashMap::from([("id".to_string(), ExprType::Int)]);
+    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
+        let student_type = HashMap::from([("id".to_string(), SimpleType::Int)]);
         HashMap::from([("Student".into(), student_type)])
     }
 }

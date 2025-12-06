@@ -42,7 +42,7 @@ pub(crate) fn simple_object(name: &str) -> HashMap<String, ObjectFields> {
 /// Helper to create an object type with fields
 pub(crate) fn object_with_fields(
     name: &str,
-    fields: Vec<(&str, ExprType)>,
+    fields: Vec<(&str, SimpleType)>,
 ) -> HashMap<String, ObjectFields> {
     let mut types = HashMap::new();
     let mut field_map = HashMap::new();
@@ -54,7 +54,7 @@ pub(crate) fn object_with_fields(
 }
 
 /// Helper to create a variable with specific argument types
-pub(crate) fn var_with_args(name: &str, args: Vec<ExprType>) -> HashMap<String, ArgsType> {
+pub(crate) fn var_with_args(name: &str, args: Vec<SimpleType>) -> HashMap<String, ArgsType> {
     let mut vars = HashMap::new();
     vars.insert(name.to_string(), args);
     vars

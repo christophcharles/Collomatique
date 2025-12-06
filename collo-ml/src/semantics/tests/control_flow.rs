@@ -44,7 +44,7 @@ fn if_branches_must_have_same_type() {
 
 #[test]
 fn if_unifies_int_and_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { 5 } else { $V(x) };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -152,7 +152,7 @@ fn forall_with_bool_body() {
 
 #[test]
 fn forall_with_constraint_body() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(xs: [Int]) -> Constraint = forall x in xs { $V(x) >== 0 };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -173,7 +173,7 @@ fn forall_body_must_be_bool_or_constraint() {
 
 #[test]
 fn forall_with_where_clause() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> Constraint = 
             forall s in @[Student] where s.age > 18 { 0 <== 1 };
@@ -286,7 +286,7 @@ fn sum_returns_int_for_int_body() {
 
 #[test]
 fn sum_returns_linexpr_for_linexpr_body() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -374,7 +374,7 @@ fn nested_sum() {
 
 #[test]
 fn sum_with_field_access() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student]) -> Int = 
             sum s in students { s.age };

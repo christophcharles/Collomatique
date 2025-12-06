@@ -48,7 +48,7 @@ fn list_of_bool() {
 
 #[test]
 fn list_of_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [$V(x), $V(x + 1)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -81,7 +81,7 @@ fn nested_lists_with_empty() {
 
 #[test]
 fn list_with_coercion() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [5, $V(x), 10];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -175,7 +175,7 @@ fn list_comprehension_with_where() {
 
 #[test]
 fn list_comprehension_type_transformation() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1, 2, 3]];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -188,7 +188,7 @@ fn list_comprehension_type_transformation() {
 
 #[test]
 fn list_comprehension_with_object_fields() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
@@ -201,7 +201,7 @@ fn list_comprehension_with_object_fields() {
 
 #[test]
 fn list_comprehension_where_uses_field() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input =
         "pub let f(students: [Student]) -> [Student] = [s for s in students where s.age > 18];";
     let (_, errors, _) = analyze(input, types, HashMap::new());
@@ -234,17 +234,17 @@ fn list_comprehension_multiple_for_typechecks_correctly() {
     types.insert(
         "Student".to_string(),
         HashMap::from([
-            ("age".to_string(), ExprType::Int),
-            ("enroled".to_string(), ExprType::Bool),
+            ("age".to_string(), SimpleType::Int),
+            ("enroled".to_string(), SimpleType::Bool),
         ]),
     );
     types.insert(
         "Class".to_string(),
         HashMap::from([
-            ("num".to_string(), ExprType::Int),
+            ("num".to_string(), SimpleType::Int),
             (
                 "students".to_string(),
-                ExprType::List(Box::new(ExprType::Object("Student".into()))),
+                SimpleType::List(Box::new(SimpleType::Object("Student".into()))),
             ),
         ]),
     );
@@ -272,8 +272,8 @@ fn list_comprehension_where_can_reference_all_for_variables() {
     types.insert(
         "Person".to_string(),
         HashMap::from([
-            ("id".to_string(), ExprType::Int),
-            ("active".to_string(), ExprType::Bool),
+            ("id".to_string(), SimpleType::Int),
+            ("active".to_string(), SimpleType::Bool),
         ]),
     );
     types.insert(
@@ -281,9 +281,9 @@ fn list_comprehension_where_can_reference_all_for_variables() {
         HashMap::from([
             (
                 "members".to_string(),
-                ExprType::List(Box::new(ExprType::Object("Person".into()))),
+                SimpleType::List(Box::new(SimpleType::Object("Person".into()))),
             ),
-            ("min_age".to_string(), ExprType::Int),
+            ("min_age".to_string(), SimpleType::Int),
         ]),
     );
 
@@ -307,7 +307,7 @@ fn list_comprehension_where_can_reference_all_for_variables() {
 
 #[test]
 fn list_comprehension_rejects_non_iterable_in_second_for() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
 
     let input = "
         let f(s: Student) -> [Int] = [x for y in s.age for x in @[Student]];

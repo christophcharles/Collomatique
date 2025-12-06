@@ -16,7 +16,7 @@ fn int_coerces_to_linexpr_in_return() {
 
 #[test]
 fn int_coerces_to_linexpr_in_arithmetic() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = x + $V(x);";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -44,7 +44,7 @@ fn int_coerces_to_linexpr_in_function_argument() {
 
 #[test]
 fn linexpr_does_not_coerce_to_int() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Int = $V(x);";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -120,7 +120,7 @@ fn bool_allowed_in_forall_body() {
 
 #[test]
 fn bool_and_constraint_cannot_mix() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = (x > 5) and ($V(x) === 1);";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -158,7 +158,7 @@ fn constraint_in_logical_and() {
 
 #[test]
 fn if_unifies_int_and_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { 5 } else { $V(x) };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -171,7 +171,7 @@ fn if_unifies_int_and_linexpr() {
 
 #[test]
 fn if_unifies_linexpr_and_int() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { $V(x) } else { 5 };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -216,7 +216,7 @@ fn if_cannot_unify_incompatible_types() {
 
 #[test]
 fn list_literal_unifies_mixed_types() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [5, $V(x), 10];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -241,7 +241,7 @@ fn list_literal_with_emptylist() {
 
 #[test]
 fn collection_union_unifies_types() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [5] + [$V(x)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -254,7 +254,7 @@ fn collection_union_unifies_types() {
 
 #[test]
 fn collection_diff_unifies_types() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] - [$V(x)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -297,7 +297,7 @@ fn forced_type_prohibits_coercion_in_constraint() {
 
 #[test]
 fn forced_type_prohibits_coercion_in_list() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [$V(x), 5 as Int];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 

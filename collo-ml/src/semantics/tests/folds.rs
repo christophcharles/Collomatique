@@ -24,7 +24,7 @@ fn fold_returns_accumulator_type() {
 
 #[test]
 fn fold_with_linexpr_accumulator() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc + i };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -57,7 +57,7 @@ fn fold_body_must_match_accumulator_type() {
 
 #[test]
 fn fold_body_can_coerce_to_accumulator_type() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc + 1 };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -154,7 +154,7 @@ fn fold_over_list_comprehension() {
 
 #[test]
 fn fold_with_field_access() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student]) -> Int = 
             fold s in students with acc = 0 { acc + s.age };
@@ -199,7 +199,7 @@ fn fold_with_function_call_init_value() {
 
 #[test]
 fn fold_init_value_determines_accumulator_type() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -543,7 +543,7 @@ fn fold_building_list() {
 
 #[test]
 fn fold_with_object_type() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student], count: Int) -> Int = 
             fold s in students with acc = count { acc + 1 };

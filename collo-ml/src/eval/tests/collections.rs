@@ -72,7 +72,7 @@ fn in_with_param_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list_with = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(5), ExprValue::Int(10)]),
     );
     let result_true = checked_ast
@@ -81,7 +81,7 @@ fn in_with_param_list() {
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let list_without = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(10)]),
     );
     let result_false = checked_ast
@@ -99,7 +99,7 @@ fn in_with_both_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
     );
 
@@ -182,7 +182,7 @@ fn union_two_lists() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -209,7 +209,7 @@ fn union_overlapping_lists() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -236,7 +236,7 @@ fn union_with_empty_list_left() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -256,7 +256,7 @@ fn union_with_empty_list_right() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -273,7 +273,7 @@ fn union_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
 }
 
 #[test]
@@ -285,11 +285,11 @@ fn union_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
     );
     let list2 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(3), ExprValue::Int(4)]),
     );
 
@@ -299,7 +299,7 @@ fn union_with_params() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -324,7 +324,7 @@ fn union_chain() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -344,7 +344,7 @@ fn union_with_ranges() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -369,7 +369,7 @@ fn union_bool_lists() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Bool,
+            SimpleType::Bool,
             Vec::from([ExprValue::Bool(true), ExprValue::Bool(false)])
         )
     );
@@ -391,7 +391,7 @@ fn diff_disjoint_lists() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -411,7 +411,7 @@ fn diff_overlapping_lists() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
         )
     );
@@ -428,7 +428,7 @@ fn diff_identical_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
 }
 
 #[test]
@@ -442,7 +442,7 @@ fn diff_with_empty_list_left() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
 }
 
 #[test]
@@ -459,7 +459,7 @@ fn diff_with_empty_list_right() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -476,7 +476,7 @@ fn diff_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, Vec::new()));
+    assert_eq!(result, ExprValue::List(SimpleType::Int, Vec::new()));
 }
 
 #[test]
@@ -488,7 +488,7 @@ fn diff_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let list1 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([
             ExprValue::Int(1),
             ExprValue::Int(2),
@@ -497,7 +497,7 @@ fn diff_with_params() {
         ]),
     );
     let list2 = ExprValue::List(
-        ExprType::Int,
+        SimpleType::Int,
         Vec::from([ExprValue::Int(2), ExprValue::Int(4)]),
     );
 
@@ -507,7 +507,7 @@ fn diff_with_params() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
         )
     );
@@ -527,7 +527,7 @@ fn diff_partial_overlap() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2)])
         )
     );
@@ -547,7 +547,7 @@ fn diff_with_ranges() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(5)])
         )
     );
@@ -567,7 +567,7 @@ fn diff_removing_single_element() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
         )
     );
@@ -590,7 +590,7 @@ fn union_then_diff() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
         )
     );
@@ -612,7 +612,7 @@ fn union_diff_combination() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([
                 ExprValue::Int(1),
                 ExprValue::Int(3),
@@ -706,7 +706,7 @@ fn collection_operations_with_if() {
     assert_eq!(
         result_true,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -716,6 +716,6 @@ fn collection_operations_with_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(ExprType::Int, Vec::from([ExprValue::Int(4)]))
+        ExprValue::List(SimpleType::Int, Vec::from([ExprValue::Int(4)]))
     );
 }

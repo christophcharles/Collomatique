@@ -115,7 +115,7 @@ fn if_returning_list() {
     assert_eq!(
         result_true,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
         )
     );
@@ -126,7 +126,7 @@ fn if_returning_list() {
     assert_eq!(
         result_false,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(4), ExprValue::Int(5)])
         )
     );
@@ -278,7 +278,7 @@ fn if_with_empty_list() {
     assert_eq!(
         result_true,
         ExprValue::List(
-            ExprType::Int,
+            SimpleType::Int,
             Vec::from([ExprValue::Int(1), ExprValue::Int(2)])
         )
     );
@@ -286,5 +286,5 @@ fn if_with_empty_list() {
     let result_false = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
-    assert_eq!(result_false, ExprValue::List(ExprType::Int, Vec::new()));
+    assert_eq!(result_false, ExprValue::List(SimpleType::Int, Vec::new()));
 }

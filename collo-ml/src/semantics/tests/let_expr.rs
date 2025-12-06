@@ -102,7 +102,7 @@ fn let_expr_with_forall_body() {
     let (_, errors, _) = analyze(
         input,
         HashMap::new(),
-        var_with_args("V", vec![ExprType::Int]),
+        var_with_args("V", vec![SimpleType::Int]),
     );
 
     assert!(
@@ -130,7 +130,7 @@ fn let_expr_with_constraint_value() {
     let (_, errors, _) = analyze(
         input,
         HashMap::new(),
-        var_with_args("V", vec![ExprType::Int]),
+        var_with_args("V", vec![SimpleType::Int]),
     );
 
     assert!(
@@ -158,7 +158,7 @@ fn let_expr_with_function_call() {
 #[test]
 fn let_expr_with_object_field_access() {
     let input = "pub let f(s: Student) -> Int = let age = s.age { age + 1 };";
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(
@@ -321,7 +321,7 @@ fn let_expr_with_linexpr() {
     let (_, errors, _) = analyze(
         input,
         HashMap::new(),
-        var_with_args("V", vec![ExprType::Int]),
+        var_with_args("V", vec![SimpleType::Int]),
     );
 
     assert!(
@@ -337,7 +337,7 @@ fn let_expr_with_constraint_combination() {
     let (_, errors, _) = analyze(
         input,
         HashMap::new(),
-        var_with_args("V", vec![ExprType::Int]),
+        var_with_args("V", vec![SimpleType::Int]),
     );
 
     assert!(

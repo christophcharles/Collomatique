@@ -179,7 +179,7 @@ fn unused_forall_variable() {
 #[test]
 fn no_warning_when_forall_variable_used() {
     let types = simple_object("Student");
-    let vars = var_with_args("V", vec![ExprType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };";
     let (_, _, warnings) = analyze(input, types, vars);
@@ -195,7 +195,7 @@ fn no_warning_when_forall_variable_used() {
 
 #[test]
 fn forall_variable_used_in_where_clause() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> Constraint = 
             forall s in @[Student] where s.age > 18 { 0 <== 1 };
@@ -231,7 +231,7 @@ fn unused_sum_variable() {
 #[test]
 fn no_warning_when_sum_variable_used() {
     let types = simple_object("Student");
-    let vars = var_with_args("V", vec![ExprType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };";
     let (_, _, warnings) = analyze(input, types, vars);
@@ -247,7 +247,7 @@ fn no_warning_when_sum_variable_used() {
 
 #[test]
 fn sum_variable_used_in_where_clause() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> LinExpr = 
             sum s in @[Student] where s.age > 18 { 1 };
@@ -447,8 +447,11 @@ fn shadowing_in_nested_forall() {
 
 #[test]
 fn no_warnings_for_well_written_code() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
-    let vars = var_with_args("StudentVar", vec![ExprType::Object("Student".to_string())]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
+    let vars = var_with_args(
+        "StudentVar",
+        vec![SimpleType::Object("Student".to_string())],
+    );
 
     let input = r#"
         pub let compute_total(students: [Student]) -> LinExpr = 

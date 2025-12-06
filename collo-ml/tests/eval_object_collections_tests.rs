@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprType, ExprValue, ViewBuilder, ViewObject};
+use collo_ml::{EvalObject, ExprValue, SimpleType, ViewBuilder, ViewObject};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -133,7 +133,7 @@ fn test_collection_field_schema() {
     // BTreeSet<StudentId> should become List(Object("Student"))
     assert_eq!(
         teacher_schema.get("students"),
-        Some(&ExprType::List(Box::new(ExprType::Object(
+        Some(&SimpleType::List(Box::new(SimpleType::Object(
             "Student".to_string()
         ))))
     );
@@ -166,7 +166,7 @@ fn test_collection_field_access() {
 
     // Should be a List of Objects
     if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(expr_type, ExprType::Object("Student".to_string()));
+        assert_eq!(expr_type, SimpleType::Object("Student".to_string()));
         assert_eq!(values.len(), 2);
         assert!(
             values.contains(&ExprValue::Object(CollectionObjectId::Student(StudentId(
@@ -206,7 +206,7 @@ fn test_empty_collection_field_access() {
 
     // Should be an empty List with correct type
     if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(expr_type, ExprType::Object("Student".to_string()));
+        assert_eq!(expr_type, SimpleType::Object("Student".to_string()));
         assert_eq!(values.len(), 0);
     } else {
         panic!("Expected empty List of Objects");
@@ -221,8 +221,8 @@ fn test_nested_collection_schema() {
     // BTreeSet<BTreeSet<StudentId>> should become List(List(Object("Student")))
     assert_eq!(
         course_schema.get("student_groups"),
-        Some(&ExprType::List(Box::new(ExprType::List(Box::new(
-            ExprType::Object("Student".to_string())
+        Some(&SimpleType::List(Box::new(SimpleType::List(Box::new(
+            SimpleType::Object("Student".to_string())
         )))))
     );
 }
@@ -258,14 +258,14 @@ fn test_nested_collection_field_access() {
     if let Some(ExprValue::List(outer_type, outer_values)) = groups_field {
         assert_eq!(
             outer_type,
-            ExprType::List(Box::new(ExprType::Object("Student".to_string())))
+            SimpleType::List(Box::new(SimpleType::Object("Student".to_string())))
         );
         assert_eq!(outer_values.len(), 2);
 
         // Check that we have nested lists
         for value in outer_values {
             if let ExprValue::List(inner_type, _inner_values) = value {
-                assert_eq!(inner_type, ExprType::Object("Student".to_string()));
+                assert_eq!(inner_type, SimpleType::Object("Student".to_string()));
             } else {
                 panic!("Expected nested List");
             }
@@ -318,7 +318,7 @@ fn test_empty_nested_collection() {
     if let Some(ExprValue::List(outer_type, values)) = groups_field {
         assert_eq!(
             outer_type,
-            ExprType::List(Box::new(ExprType::Object("Student".to_string())))
+            SimpleType::List(Box::new(SimpleType::Object("Student".to_string())))
         );
         assert_eq!(values.len(), 0);
     } else {

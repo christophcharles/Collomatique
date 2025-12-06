@@ -48,7 +48,7 @@ fn parameter_not_accessible_in_other_function() {
 #[test]
 fn forall_variable_accessible_in_body() {
     let types = simple_object("Student");
-    let vars = var_with_args("V", vec![ExprType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };";
     let (_, errors, _) = analyze(input, types, vars);
@@ -121,7 +121,7 @@ fn forall_variable_shadows_parameter() {
 
 #[test]
 fn forall_where_clause_can_access_variable() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> Constraint = 
             forall s in @[Student] where s.age > 18 { 0 <== 1 };
@@ -140,7 +140,7 @@ fn forall_where_clause_can_access_variable() {
 #[test]
 fn sum_variable_accessible_in_body() {
     let types = simple_object("Student");
-    let vars = var_with_args("V", vec![ExprType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };";
     let (_, errors, _) = analyze(input, types, vars);
@@ -168,7 +168,7 @@ fn sum_variable_not_accessible_outside() {
 
 #[test]
 fn sum_where_clause_can_access_variable() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> LinExpr = 
             sum s in @[Student] where s.age > 18 { 1 };
@@ -237,7 +237,7 @@ fn list_comprehension_where_clause() {
 
 #[test]
 fn list_comprehension_with_object_field_access() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
@@ -338,7 +338,7 @@ fn multiple_scopes_with_same_name_in_sequence() {
 
 #[test]
 fn nested_different_construct_scopes() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student]) -> Int = 
             sum s in students where (forall t in students { t.age > 0 }) { s.age };

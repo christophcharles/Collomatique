@@ -63,7 +63,7 @@ pub enum ExprValue<T: EvalObject> {
     LinExpr(LinExpr<IlpVar<T>>),
     Constraint(Vec<ConstraintWithOrigin<T>>),
     Object(T),
-    List(ExprType, Vec<ExprValue<T>>),
+    List(SimpleType, Vec<ExprValue<T>>),
 }
 
 impl<T: EvalObject> From<i32> for ExprValue<T> {
@@ -104,15 +104,15 @@ impl<T: EvalObject> ExprValue<T> {
         ExprValue::Object(obj)
     }
 
-    pub fn get_type(&self, env: &T::Env) -> ExprType {
+    pub fn get_type(&self, env: &T::Env) -> SimpleType {
         match self {
-            ExprValue::None => ExprType::None,
-            ExprValue::Int(_) => ExprType::Int,
-            ExprValue::Bool(_) => ExprType::Bool,
-            ExprValue::LinExpr(_) => ExprType::LinExpr,
-            ExprValue::Constraint(_) => ExprType::Constraint,
-            ExprValue::Object(obj) => ExprType::Object(obj.typ_name(env)),
-            ExprValue::List(typ, _list) => ExprType::List(Box::new(typ.clone())),
+            ExprValue::None => SimpleType::None,
+            ExprValue::Int(_) => SimpleType::Int,
+            ExprValue::Bool(_) => SimpleType::Bool,
+            ExprValue::LinExpr(_) => SimpleType::LinExpr,
+            ExprValue::Constraint(_) => SimpleType::Constraint,
+            ExprValue::Object(obj) => SimpleType::Object(obj.typ_name(env)),
+            ExprValue::List(typ, _list) => SimpleType::List(Box::new(typ.clone())),
         }
     }
 
@@ -150,11 +150,11 @@ impl<T: EvalObject> ExprValue<T> {
         self.get_type(env).is_arithmetic()
     }
 
-    pub fn can_coerce_to(&self, env: &T::Env, target: &ExprType) -> bool {
+    pub fn can_coerce_to(&self, env: &T::Env, target: &SimpleType) -> bool {
         self.get_type(env).can_coerce_to(target)
     }
 
-    pub fn coerce_to(&self, env: &T::Env, target: &ExprType) -> Option<ExprValue<T>> {
+    pub fn coerce_to(&self, env: &T::Env, target: &SimpleType) -> Option<ExprValue<T>> {
         if !self.can_coerce_to(env, target) {
             return None;
         }
@@ -164,20 +164,22 @@ impl<T: EvalObject> ExprValue<T> {
             (a, b) if a.get_type(env) == *b => a.clone(),
 
             // Int → LinExpr (but NOT LinExpr → Int)
-            (ExprValue::Int(v), ExprType::LinExpr) => {
+            (ExprValue::Int(v), SimpleType::LinExpr) => {
                 ExprValue::LinExpr(LinExpr::constant((*v).into()))
             }
 
             // Recursive: [A] → [B] if A can coerce to B
-            (ExprValue::List(a, list), ExprType::List(b)) if a.can_coerce_to(b) => ExprValue::List(
-                *b.clone(),
-                list.iter()
-                    .map(|x| {
-                        x.coerce_to(env, b)
-                            .expect("Coercion should be valid for all list elements")
-                    })
-                    .collect(),
-            ),
+            (ExprValue::List(a, list), SimpleType::List(b)) if a.can_coerce_to(b) => {
+                ExprValue::List(
+                    *b.clone(),
+                    list.iter()
+                        .map(|x| {
+                            x.coerce_to(env, b)
+                                .expect("Coercion should be valid for all list elements")
+                        })
+                        .collect(),
+                )
+            }
 
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
         })
@@ -222,7 +224,7 @@ impl<T: EvalObject> AnnotatedValue<T> {
         self.get_type(env).is_forced()
     }
 
-    pub fn matches(&self, env: &T::Env, target: &ExprType) -> bool {
+    pub fn matches(&self, env: &T::Env, target: &SimpleType) -> bool {
         self.get_type(env).matches(target)
     }
 
@@ -242,11 +244,11 @@ impl<T: EvalObject> AnnotatedValue<T> {
         }
     }
 
-    pub fn can_coerce_to(&self, env: &T::Env, target: &ExprType) -> bool {
+    pub fn can_coerce_to(&self, env: &T::Env, target: &SimpleType) -> bool {
         self.get_type(env).can_coerce_to(target)
     }
 
-    pub fn coerce_to(&self, env: &T::Env, target: &ExprType) -> Option<ExprValue<T>> {
+    pub fn coerce_to(&self, env: &T::Env, target: &SimpleType) -> Option<ExprValue<T>> {
         if !self.can_coerce_to(env, target) {
             return None;
         }
@@ -261,7 +263,9 @@ impl<T: EvalObject> AnnotatedValue<T> {
                 )
             }
             AnnotatedValue::UntypedList if target.is_list() => match target {
-                ExprType::List(inner_typ) => Some(ExprValue::List(*inner_typ.clone(), Vec::new())),
+                SimpleType::List(inner_typ) => {
+                    Some(ExprValue::List(*inner_typ.clone(), Vec::new()))
+                }
                 _ => panic!("Expected list!"),
             },
             _ => panic!("Inconsistency between can_coerce_to and coerce_to"),
@@ -316,7 +320,7 @@ impl EvalObject for NoObject {
         None
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
         HashMap::new()
     }
 }
@@ -367,7 +371,7 @@ pub enum EvalError {
     #[error("Type mismatch for parameter {param}: expected {expected} but found {found}")]
     TypeMismatch {
         param: usize,
-        expected: ExprType,
+        expected: SimpleType,
         found: AnnotatedType,
     },
     #[error("Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}")]
@@ -444,7 +448,7 @@ impl<T: EvalObject> CheckedAST<T> {
         &self.warnings
     }
 
-    pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
+    pub fn get_functions(&self) -> HashMap<String, (ArgsType, SimpleType)> {
         self.global_env
             .get_functions()
             .iter()
@@ -607,7 +611,7 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::ExplicitType { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = ExprType::from(typ.node.clone());
+                let target_type = SimpleType::from(typ.node.clone());
 
                 // A forced value can be cast anyway
                 let loose_value = value.loosen();
@@ -653,10 +657,10 @@ impl<T: EvalObject> LocalEnv<T> {
                 let end_value = self.eval_expr(eval_history, &end)?;
 
                 let coerced_start = start_value
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Int expected");
                 let coerced_end = end_value
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Int expected");
 
                 let start_num = match coerced_start {
@@ -669,7 +673,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 };
 
                 ExprValue::List(
-                    ExprType::Int,
+                    SimpleType::Int,
                     (start_num..end_num)
                         .into_iter()
                         .map(ExprValue::Int)
@@ -685,7 +689,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 let objects = T::objects_with_typ(&eval_history.env, &typ_as_str);
 
                 ExprValue::List(
-                    ExprType::from(typ_name.node.clone()),
+                    SimpleType::from(typ_name.node.clone()),
                     objects
                         .iter()
                         .map(|x| ExprValue::Object(x.clone()))
@@ -789,15 +793,15 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 match target {
-                    AnnotatedType::Regular(ExprType::Bool) => {
+                    AnnotatedType::Regular(SimpleType::Bool) => {
                         let value1 = self.eval_expr(eval_history, &*expr1)?;
                         let boolean_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Bool)
+                            .coerce_to(eval_history.env, &SimpleType::Bool)
                             .expect("Coercion should be valid");
 
                         let value2 = self.eval_expr(eval_history, &*expr2)?;
                         let boolean_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Bool)
+                            .coerce_to(eval_history.env, &SimpleType::Bool)
                             .expect("Coercion should be valid");
 
                         let bool1 = match boolean_value1 {
@@ -811,15 +815,15 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::Bool(bool1 && bool2).into()
                     }
-                    AnnotatedType::Regular(ExprType::Constraint) => {
+                    AnnotatedType::Regular(SimpleType::Constraint) => {
                         let value1 = self.eval_expr(eval_history, &*expr1)?;
                         let constraint_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Constraint)
+                            .coerce_to(eval_history.env, &SimpleType::Constraint)
                             .expect("Coercion should be valid");
 
                         let value2 = self.eval_expr(eval_history, &*expr2)?;
                         let constraint_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Constraint)
+                            .coerce_to(eval_history.env, &SimpleType::Constraint)
                             .expect("Coercion should be valid");
 
                         let constraint1 = match constraint_value1 {
@@ -845,12 +849,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Or(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let boolean_value1 = value1
-                    .coerce_to(eval_history.env, &ExprType::Bool)
+                    .coerce_to(eval_history.env, &SimpleType::Bool)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let boolean_value2 = value2
-                    .coerce_to(eval_history.env, &ExprType::Bool)
+                    .coerce_to(eval_history.env, &SimpleType::Bool)
                     .expect("Coercion should be valid");
 
                 let bool1 = match boolean_value1 {
@@ -867,7 +871,7 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Not(not_expr) => {
                 let value = self.eval_expr(eval_history, &*not_expr)?;
                 let boolean_value = value
-                    .coerce_to(eval_history.env, &ExprType::Bool)
+                    .coerce_to(eval_history.env, &SimpleType::Bool)
                     .expect("Coercion should be valid");
 
                 match boolean_value {
@@ -878,12 +882,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::ConstraintEq(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let lin_expr1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let lin_expr2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let lin_expr1 = match lin_expr1_value {
@@ -900,12 +904,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::ConstraintLe(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let lin_expr1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let lin_expr2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let lin_expr1 = match lin_expr1_value {
@@ -922,12 +926,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::ConstraintGe(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let lin_expr1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let lin_expr2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::LinExpr)
+                    .coerce_to(eval_history.env, &SimpleType::LinExpr)
                     .expect("Coercion should be valid");
 
                 let lin_expr1 = match lin_expr1_value {
@@ -994,12 +998,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Lt(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1016,12 +1020,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Le(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1038,12 +1042,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Gt(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1060,12 +1064,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Ge(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1090,12 +1094,12 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value2 = self.eval_expr(eval_history, &*right)?;
 
                 match target {
-                    AnnotatedType::Regular(ExprType::Int) => {
+                    AnnotatedType::Regular(SimpleType::Int) => {
                         let number_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
                         let number_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
 
                         let num1 = match number_value1 {
@@ -1109,12 +1113,12 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::Int(num1 + num2).into()
                     }
-                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                    AnnotatedType::Regular(SimpleType::LinExpr) => {
                         let linexpr1_value = value1
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
                         let linexpr2_value = value2
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
 
                         let linexpr1 = match linexpr1_value {
@@ -1128,7 +1132,7 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::LinExpr(linexpr1 + linexpr2).into()
                     }
-                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                    AnnotatedType::Regular(SimpleType::List(elem_t)) => {
                         let list1 = match value1 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -1169,12 +1173,12 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value2 = self.eval_expr(eval_history, &*right)?;
 
                 match target {
-                    AnnotatedType::Regular(ExprType::Int) => {
+                    AnnotatedType::Regular(SimpleType::Int) => {
                         let number_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
                         let number_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
 
                         let num1 = match number_value1 {
@@ -1188,12 +1192,12 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::Int(num1 - num2).into()
                     }
-                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                    AnnotatedType::Regular(SimpleType::LinExpr) => {
                         let linexpr1_value = value1
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
                         let linexpr2_value = value2
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
 
                         let linexpr1 = match linexpr1_value {
@@ -1208,7 +1212,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         ExprValue::LinExpr(linexpr1 - linexpr2).into()
                     }
                     AnnotatedType::UntypedList => AnnotatedValue::UntypedList,
-                    AnnotatedType::Regular(ExprType::List(elem_t)) => {
+                    AnnotatedType::Regular(SimpleType::List(elem_t)) => {
                         let list1 = match value1 {
                             AnnotatedValue::Forced(ExprValue::List(_elem_t, list))
                             | AnnotatedValue::Regular(ExprValue::List(_elem_t, list)) => list,
@@ -1257,9 +1261,9 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value = self.eval_expr(eval_history, &*term)?;
 
                 match target {
-                    AnnotatedType::Regular(ExprType::Int) => {
+                    AnnotatedType::Regular(SimpleType::Int) => {
                         let number_value = value
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
 
                         let num = match number_value {
@@ -1269,9 +1273,9 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::Int(-num).into()
                     }
-                    AnnotatedType::Regular(ExprType::LinExpr) => {
+                    AnnotatedType::Regular(SimpleType::LinExpr) => {
                         let linexpr_value = value
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
 
                         let linexpr = match linexpr_value {
@@ -1298,12 +1302,12 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("We should have an inner type for multiplication");
 
                 match (&typ1, &typ2) {
-                    (ExprType::Int, ExprType::Int) => {
+                    (SimpleType::Int, SimpleType::Int) => {
                         let number_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
                         let number_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
 
                         let num1 = match number_value1 {
@@ -1317,12 +1321,12 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::Int(num1 * num2).into()
                     }
-                    (ExprType::LinExpr, ExprType::Int) => {
+                    (SimpleType::LinExpr, SimpleType::Int) => {
                         let linexpr1_value = value1
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
                         let number_value2 = value2
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
 
                         let linexpr1 = match linexpr1_value {
@@ -1336,12 +1340,12 @@ impl<T: EvalObject> LocalEnv<T> {
 
                         ExprValue::LinExpr(num2 * linexpr1).into()
                     }
-                    (ExprType::Int, ExprType::LinExpr) => {
+                    (SimpleType::Int, SimpleType::LinExpr) => {
                         let number_value1 = value1
-                            .coerce_to(eval_history.env, &ExprType::Int)
+                            .coerce_to(eval_history.env, &SimpleType::Int)
                             .expect("Coercion should be valid");
                         let linexpr2_value = value2
-                            .coerce_to(eval_history.env, &ExprType::LinExpr)
+                            .coerce_to(eval_history.env, &SimpleType::LinExpr)
                             .expect("Coercion should be valid");
 
                         let num1 = match number_value1 {
@@ -1364,12 +1368,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Div(left, right) => {
                 let value1 = self.eval_expr(eval_history, &*left)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*right)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1386,12 +1390,12 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Mod(left, right) => {
                 let value1 = self.eval_expr(eval_history, &*left)?;
                 let number1_value = value1
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let value2 = self.eval_expr(eval_history, &*right)?;
                 let number2_value = value2
-                    .coerce_to(eval_history.env, &ExprType::Int)
+                    .coerce_to(eval_history.env, &SimpleType::Int)
                     .expect("Coercion should be valid");
 
                 let num1 = match number1_value {
@@ -1426,7 +1430,7 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 let cond_value = self.eval_expr(eval_history, &condition)?;
                 let coerced_cond = cond_value
-                    .coerce_to(eval_history.env, &ExprType::Bool)
+                    .coerce_to(eval_history.env, &SimpleType::Bool)
                     .expect("Coercion should be valid");
 
                 let ExprValue::Bool(cond) = coerced_cond else {
@@ -1459,10 +1463,10 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 let is_lin_expr = match target {
-                    AnnotatedType::Forced(ExprType::LinExpr)
-                    | AnnotatedType::Regular(ExprType::LinExpr) => true,
-                    AnnotatedType::Forced(ExprType::Int)
-                    | AnnotatedType::Regular(ExprType::Int) => false,
+                    AnnotatedType::Forced(SimpleType::LinExpr)
+                    | AnnotatedType::Regular(SimpleType::LinExpr) => true,
+                    AnnotatedType::Forced(SimpleType::Int)
+                    | AnnotatedType::Regular(SimpleType::Int) => false,
                     _ => panic!("Expected Int or LinExpr"),
                 };
 
@@ -1484,7 +1488,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             Some(f) => {
                                 let filter_value = self.eval_expr(eval_history, &f)?;
                                 let coerced_filter = filter_value
-                                    .coerce_to(eval_history.env, &ExprType::Bool)
+                                    .coerce_to(eval_history.env, &SimpleType::Bool)
                                     .expect("Coercion should be valid");
                                 match coerced_filter {
                                     ExprValue::Bool(v) => v,
@@ -1496,7 +1500,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         if cond {
                             let new_value = self.eval_expr(eval_history, &body)?;
                             let coerced_body = new_value
-                                .coerce_to(eval_history.env, &ExprType::LinExpr)
+                                .coerce_to(eval_history.env, &SimpleType::LinExpr)
                                 .expect("Coercion should be valid");
                             let new_lin_expr = match coerced_body {
                                 ExprValue::LinExpr(v) => v,
@@ -1521,7 +1525,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             Some(f) => {
                                 let filter_value = self.eval_expr(eval_history, &f)?;
                                 let coerced_filter = filter_value
-                                    .coerce_to(eval_history.env, &ExprType::Bool)
+                                    .coerce_to(eval_history.env, &SimpleType::Bool)
                                     .expect("Coercion should be valid");
                                 match coerced_filter {
                                     ExprValue::Bool(v) => v,
@@ -1533,7 +1537,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         if cond {
                             let new_value = self.eval_expr(eval_history, &body)?;
                             let coerced_body = new_value
-                                .coerce_to(eval_history.env, &ExprType::Int)
+                                .coerce_to(eval_history.env, &SimpleType::Int)
                                 .expect("Coercion should be valid");
                             let new_int_expr = match coerced_body {
                                 ExprValue::Int(v) => v,
@@ -1599,7 +1603,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         Some(f) => {
                             let filter_value = self.eval_expr(eval_history, &f)?;
                             let coerced_filter = filter_value
-                                .coerce_to(eval_history.env, &ExprType::Bool)
+                                .coerce_to(eval_history.env, &SimpleType::Bool)
                                 .expect("Coercion should be valid");
                             match coerced_filter {
                                 ExprValue::Bool(v) => v,
@@ -1636,10 +1640,10 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 let is_constraint = match target {
-                    AnnotatedType::Forced(ExprType::Constraint)
-                    | AnnotatedType::Regular(ExprType::Constraint) => true,
-                    AnnotatedType::Forced(ExprType::Bool)
-                    | AnnotatedType::Regular(ExprType::Bool) => false,
+                    AnnotatedType::Forced(SimpleType::Constraint)
+                    | AnnotatedType::Regular(SimpleType::Constraint) => true,
+                    AnnotatedType::Forced(SimpleType::Bool)
+                    | AnnotatedType::Regular(SimpleType::Bool) => false,
                     _ => panic!("Expected Constraint or Bool"),
                 };
 
@@ -1661,7 +1665,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             Some(f) => {
                                 let filter_value = self.eval_expr(eval_history, &f)?;
                                 let coerced_filter = filter_value
-                                    .coerce_to(eval_history.env, &ExprType::Bool)
+                                    .coerce_to(eval_history.env, &SimpleType::Bool)
                                     .expect("Coercion should be valid");
                                 match coerced_filter {
                                     ExprValue::Bool(v) => v,
@@ -1673,7 +1677,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         if cond {
                             let new_value = self.eval_expr(eval_history, &body)?;
                             let coerced_body = new_value
-                                .coerce_to(eval_history.env, &ExprType::Constraint)
+                                .coerce_to(eval_history.env, &SimpleType::Constraint)
                                 .expect("Coercion should be valid");
                             let new_constraint = match coerced_body {
                                 ExprValue::Constraint(v) => v,
@@ -1698,7 +1702,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             Some(f) => {
                                 let filter_value = self.eval_expr(eval_history, &f)?;
                                 let coerced_filter = filter_value
-                                    .coerce_to(eval_history.env, &ExprType::Bool)
+                                    .coerce_to(eval_history.env, &SimpleType::Bool)
                                     .expect("Coercion should be valid");
                                 match coerced_filter {
                                     ExprValue::Bool(v) => v,
@@ -1710,7 +1714,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         if cond {
                             let new_value = self.eval_expr(eval_history, &body)?;
                             let coerced_body = new_value
-                                .coerce_to(eval_history.env, &ExprType::Bool)
+                                .coerce_to(eval_history.env, &SimpleType::Bool)
                                 .expect("Coercion should be valid");
                             let new_bool_expr = match coerced_body {
                                 ExprValue::Bool(v) => v,
@@ -1760,12 +1764,12 @@ impl<T: EvalObject> LocalEnv<T> {
                 );
 
                 let constraint_count = match constraints {
-                    ExprValue::List(ExprType::Constraint, list) => list.len(),
+                    ExprValue::List(SimpleType::Constraint, list) => list.len(),
                     _ => panic!("Expected [Constraint]"),
                 };
 
                 ExprValue::List(
-                    ExprType::LinExpr,
+                    SimpleType::LinExpr,
                     (0..constraint_count)
                         .into_iter()
                         .map(|i| {
@@ -1791,7 +1795,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 let inner_typ = match target {
-                    AnnotatedType::Regular(ExprType::List(typ)) => typ.as_ref().clone(),
+                    AnnotatedType::Regular(SimpleType::List(typ)) => typ.as_ref().clone(),
                     _ => panic!("Expected typed list: {:?}", target),
                 };
 
@@ -1833,7 +1837,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 Some(f) => {
                     let filter_value = self.eval_expr(eval_history, &f)?;
                     let coerced_filter = filter_value
-                        .coerce_to(eval_history.env, &ExprType::Bool)
+                        .coerce_to(eval_history.env, &SimpleType::Bool)
                         .expect("Coercion should be valid");
                     match coerced_filter {
                         ExprValue::Bool(v) => v,
@@ -2104,7 +2108,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 .get(&(fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
             let constraints: Vec<_> = match fn_call_result {
-                ExprValue::List(ExprType::Constraint, cs) => cs
+                ExprValue::List(SimpleType::Constraint, cs) => cs
                     .iter()
                     .map(|c| match c {
                         ExprValue::Constraint(c) => c

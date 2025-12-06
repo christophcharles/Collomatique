@@ -84,7 +84,7 @@ fn modulo() {
 
 #[test]
 fn arithmetic_with_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x) + 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
@@ -217,7 +217,7 @@ fn constraint_greater_equal() {
 
 #[test]
 fn constraint_with_linexpr() {
-    let vars = var_with_args("V", vec![ExprType::Int]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 5;";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 

@@ -123,8 +123,8 @@ fn object_type_with_fields() {
     let mut types = object_with_fields(
         "Student",
         vec![
-            ("age", ExprType::Int),
-            ("name", ExprType::Object("String".to_string())),
+            ("age", SimpleType::Int),
+            ("name", SimpleType::Object("String".to_string())),
         ],
     );
     types.insert("String".to_string(), HashMap::new());
@@ -167,13 +167,13 @@ fn nested_field_access() {
     types.insert("String".to_string(), HashMap::new());
 
     let mut address_fields = HashMap::new();
-    address_fields.insert("city".to_string(), ExprType::Object("String".to_string()));
+    address_fields.insert("city".to_string(), SimpleType::Object("String".to_string()));
     types.insert("Address".to_string(), address_fields);
 
     let mut student_fields = HashMap::new();
     student_fields.insert(
         "address".to_string(),
-        ExprType::Object("Address".to_string()),
+        SimpleType::Object("Address".to_string()),
     );
     types.insert("Student".to_string(), student_fields);
 
@@ -264,7 +264,7 @@ fn list_of_objects() {
 
 #[test]
 fn list_of_objects_with_field_access_in_comprehension() {
-    let types = object_with_fields("Student", vec![("age", ExprType::Int)]);
+    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 

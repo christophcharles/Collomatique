@@ -1,5 +1,5 @@
 use crate::eval::{CheckedAST, EvalObject, ExprValue};
-use crate::semantics::ExprType;
+use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
 use std::collections::{BTreeSet, HashMap};
 
@@ -56,7 +56,7 @@ impl EvalObject for SimpleObject {
             SimpleObject::Room1 => match field {
                 "num" => Some(ExprValue::Int(406)),
                 "students" => Some(ExprValue::List(
-                    ExprType::Object("Student".into()),
+                    SimpleType::Object("Student".into()),
                     Vec::from([ExprValue::Object(SimpleObject::Student1)]),
                 )),
                 "first_student" => Some(ExprValue::Object(SimpleObject::Student1)),
@@ -65,7 +65,7 @@ impl EvalObject for SimpleObject {
             SimpleObject::Room2 => match field {
                 "num" => Some(ExprValue::Int(406)),
                 "students" => Some(ExprValue::List(
-                    ExprType::Object("Student".into()),
+                    SimpleType::Object("Student".into()),
                     Vec::from([
                         ExprValue::Object(SimpleObject::Student1),
                         ExprValue::Object(SimpleObject::Student2),
@@ -77,20 +77,20 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, SimpleType>> {
         let student_type = HashMap::from([
-            ("age".to_string(), ExprType::Int),
-            ("enrolled".to_string(), ExprType::Bool),
+            ("age".to_string(), SimpleType::Int),
+            ("enrolled".to_string(), SimpleType::Bool),
         ]);
         let room_type = HashMap::from([
-            ("num".to_string(), ExprType::Int),
+            ("num".to_string(), SimpleType::Int),
             (
                 "students".to_string(),
-                ExprType::List(Box::new(ExprType::Object("Student".into()))),
+                SimpleType::List(Box::new(SimpleType::Object("Student".into()))),
             ),
             (
                 "first_student".to_string(),
-                ExprType::Object("Student".into()),
+                SimpleType::Object("Student".into()),
             ),
         ]);
 
@@ -166,7 +166,7 @@ fn global_list() {
     assert_eq!(
         result,
         ExprValue::List(
-            ExprType::Object("Student".into()),
+            SimpleType::Object("Student".into()),
             Vec::from([
                 ExprValue::Object(SimpleObject::Student1),
                 ExprValue::Object(SimpleObject::Student2),
