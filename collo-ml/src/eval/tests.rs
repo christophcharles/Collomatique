@@ -9,6 +9,7 @@ mod comparisons;
 mod complex_combinations;
 mod constraints;
 mod eval_with_variables;
+mod extra_sum_types;
 mod folds;
 mod functions;
 mod if_branches;
