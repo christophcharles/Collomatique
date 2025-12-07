@@ -599,6 +599,7 @@ impl<
 
         while let Some(script) = current_script_opt {
             let ast = script.get_ast();
+            let ast_funcs = ast.get_functions();
             warnings.insert(script.get_ref().clone(), ast.get_warnings().clone());
 
             let mut uncalled_vars = vec![];
@@ -611,6 +612,22 @@ impl<
             // We start by evaluating the proper constraints if any
             // (this will happen on the first iteration of the loop only)
             while let Some((fn_name, args)) = start_constraints.pop() {
+                let (_params, out_typ) = ast_funcs
+                    .get(&fn_name)
+                    .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
+                if *out_typ != ExprType::simple(SimpleType::Constraint)
+                    && *out_typ
+                        != ExprType::simple(SimpleType::List(ExprType::simple(
+                            SimpleType::Constraint,
+                        )))
+                {
+                    return Err(ProblemError::WrongReturnType {
+                        func: fn_name.clone(),
+                        returned: out_typ.clone(),
+                        expected: ExprType::simple(SimpleType::Constraint),
+                    });
+                }
+
                 let (new_constraints, _origin) = self.eval_constraint_in_history(
                     script.get_ref(),
                     &mut eval_history,
@@ -629,6 +646,17 @@ impl<
             // We then evaluate the objective if any
             // (this will happen on the first iteration of the loop only)
             while let Some((fn_name, args, coef, obj_sense)) = start_obj.pop() {
+                let (_params, out_typ) = ast_funcs
+                    .get(&fn_name)
+                    .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
+                if *out_typ != ExprType::simple(SimpleType::LinExpr) {
+                    return Err(ProblemError::WrongReturnType {
+                        func: fn_name.clone(),
+                        returned: out_typ.clone(),
+                        expected: ExprType::simple(SimpleType::LinExpr),
+                    });
+                }
+
                 let (lin_expr, _origin) = self.eval_lin_expr_in_history(
                     script.get_ref(),
                     &mut eval_history,
@@ -644,6 +672,16 @@ impl<
             let reifications_from_current_script = pending_reification.remove(script.get_ref());
             if let Some(reifications) = reifications_from_current_script {
                 for reification in reifications {
+                    let (_params, out_typ) = ast_funcs
+                        .get(&reification.func)
+                        .ok_or(ProblemError::UnknownFunction(reification.func.clone()))?;
+                    if *out_typ != ExprType::simple(SimpleType::Constraint) {
+                        return Err(ProblemError::WrongReturnType {
+                            func: reification.func.clone(),
+                            returned: out_typ.clone(),
+                            expected: ExprType::simple(SimpleType::Constraint),
+                        });
+                    }
                     let (reification_constraints, new_origin) = self.eval_constraint_in_history(
                         script.get_ref(),
                         &mut eval_history,
