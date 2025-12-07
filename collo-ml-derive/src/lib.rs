@@ -211,7 +211,7 @@ mod view_object;
 ///         // Maps field names to their types
 ///     }
 ///     
-///     fn get_field(&self, field: &str) -> Option<FieldValue<ObjectId>> {
+///     fn get_field(&self, field: &str) -> Option<ExprValue<ObjectId>> {
 ///         // Match on field name and return value
 ///     }
 ///     

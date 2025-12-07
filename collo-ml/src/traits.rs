@@ -131,9 +131,7 @@
 //! - [`SimpleFieldType`]: Building blocks for field types (Int, Bool, Object, List)
 //! - [`FieldType`]: May represent simple types or sum types (unions), using `TypeId` for
 //!   object references
-//! - [`FieldValue`]: Intermediate representation of field values, preserving type info for
-//!   empty collections
-//! - These are converted to [`SimpleType`]/[`ExprType`] and [`ExprValue`] by `EvalObject`
+//! - These are converted to [`SimpleType`]/[`ExprType`] by `EvalObject`
 //!
 //! # Caching
 //!
@@ -562,42 +560,6 @@ impl std::fmt::Display for FieldType {
     }
 }
 
-/// Represents the value of a field from a view object.
-///
-/// This is an intermediate representation between view objects and the final [`ExprValue`] type.
-/// Unlike [`ExprValue`], `FieldValue` includes type information for lists, which is necessary
-/// to handle empty collections correctly.
-///
-/// # Type Parameters
-///
-/// * `T` - The `EvalObject` type that this value belongs to
-///
-/// # Variants
-///
-/// - `Int(i32)`: An integer value
-/// - `Bool(bool)`: A boolean value
-/// - `Object(T)`: A reference to another object
-/// - `List(FieldType, Vec<FieldValue<T>>)`: A collection with its element type
-///
-/// # Conversion to ExprValue
-///
-/// `FieldValue` is converted to [ExprValue] by the [EvalObject] implementation, which resolves
-/// `FieldType::Object(TypeId)` to `ExprType::Object(String)` using the type name mapping.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FieldValue<T: EvalObject> {
-    /// An integer value
-    Int(i32),
-    /// A boolean value
-    Bool(bool),
-    /// A reference to another object
-    Object(T),
-    /// A collection of values with type information
-    ///
-    /// The `FieldType` describes the type of elements in the collection, which is essential
-    /// for handling empty collections where the type cannot be inferred from the elements.
-    List(FieldType, Vec<FieldValue<T>>),
-}
-
 /// Represents a view of an object that can be accessed by the DSL.
 ///
 /// View objects are ephemeral representations of data from the environment. They don't own
@@ -666,9 +628,9 @@ pub trait ViewObject {
     ///
     /// # Returns
     ///
-    /// `Some(FieldValue)` if the field exists, `None` otherwise.
+    /// `Some(ExprValue)` if the field exists, `None` otherwise.
     /// Fields marked with `#[hidden]` return `None` when accessed.
-    fn get_field(&self, field: &str) -> Option<FieldValue<Self::EvalObject>>;
+    fn get_field(&self, field: &str) -> Option<ExprValue<Self::EvalObject>>;
 
     /// Returns a human-readable string representation of this view object.
     ///

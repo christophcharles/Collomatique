@@ -54,7 +54,7 @@ fn option_list_with_value() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Int(2));
@@ -89,7 +89,7 @@ fn list_of_option_values() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::None);
@@ -180,7 +180,7 @@ fn list_of_sum_type_homogeneous() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Int(2));
@@ -202,7 +202,7 @@ fn list_of_sum_type_mixed() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Bool(true));
@@ -223,7 +223,7 @@ fn sum_of_list_types_returns_first() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Int(2));
@@ -243,7 +243,7 @@ fn sum_of_list_types_returns_second() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Bool(true));
             assert_eq!(list[1], ExprValue::Bool(false));
@@ -324,7 +324,7 @@ fn explicit_cast_in_list_of_sum() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Bool(true));
@@ -391,7 +391,7 @@ fn implicit_coercion_empty_list_to_option_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 0);
         }
         _ => panic!("Expected List"),
@@ -410,7 +410,7 @@ fn implicit_coercion_empty_list_to_sum_with_one_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 0);
         }
         _ => panic!("Expected List"),
@@ -484,7 +484,7 @@ fn option_of_list_of_sum_evaluation() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Bool(true));
@@ -504,10 +504,10 @@ fn nested_list_with_sum_types() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, outer_list) => {
+        ExprValue::List(outer_list) => {
             assert_eq!(outer_list.len(), 1);
             match &outer_list[0] {
-                ExprValue::List(_, inner_list) => {
+                ExprValue::List(inner_list) => {
                     assert_eq!(inner_list.len(), 2);
                     assert_eq!(inner_list[0], ExprValue::Int(1));
                     assert_eq!(inner_list[1], ExprValue::Bool(true));

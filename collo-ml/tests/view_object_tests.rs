@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::traits::{FieldConversionError, FieldValue, SimpleFieldType};
+use collo_ml::traits::{FieldConversionError, SimpleFieldType};
 use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -77,8 +77,8 @@ fn test_get_field() {
         enrolled: true,
     };
 
-    assert_eq!(student.get_field("age"), Some(FieldValue::Int(20)));
-    assert_eq!(student.get_field("enrolled"), Some(FieldValue::Bool(true)));
+    assert_eq!(student.get_field("age"), Some(ExprValue::Int(20)));
+    assert_eq!(student.get_field("enrolled"), Some(ExprValue::Bool(true)));
     assert_eq!(student.get_field("nonexistent"), None);
 }
 
@@ -104,7 +104,7 @@ fn test_hidden_fields() {
     };
 
     // Can still access the visible field
-    assert_eq!(student.get_field("age"), Some(FieldValue::Int(25)));
+    assert_eq!(student.get_field("age"), Some(ExprValue::Int(25)));
     // Cannot access hidden field through get_field
     assert_eq!(student.get_field("secret"), None);
     // But the field still exists in the struct for other purposes
@@ -134,10 +134,10 @@ fn test_object_references() {
         room: RoomId(42),
     };
 
-    assert_eq!(student.get_field("age"), Some(FieldValue::Int(20)));
+    assert_eq!(student.get_field("age"), Some(ExprValue::Int(20)));
     assert_eq!(
         student.get_field("room"),
-        Some(FieldValue::Object(TestObjectId))
+        Some(ExprValue::Object(TestObjectId))
     );
 }
 
@@ -168,13 +168,11 @@ fn test_collections_of_ints() {
         grades: grades.clone(),
     };
 
-    if let Some(FieldValue::List(a, values)) = student.get_field("grades") {
-        let inner = a.as_simple().expect("Expected simple type");
-        assert_eq!(inner, &SimpleFieldType::Int, "Expected List of Ints");
+    if let Some(ExprValue::List(values)) = student.get_field("grades") {
         assert_eq!(values.len(), 3);
-        assert!(values.contains(&FieldValue::Int(85)));
-        assert!(values.contains(&FieldValue::Int(90)));
-        assert!(values.contains(&FieldValue::Int(78)));
+        assert!(values.contains(&ExprValue::Int(85)));
+        assert!(values.contains(&ExprValue::Int(90)));
+        assert!(values.contains(&ExprValue::Int(78)));
     } else {
         panic!("Expected List of Ints");
     }
@@ -200,10 +198,10 @@ fn test_collections_of_bools() {
 
     let student = StudentWithFlags { flags };
 
-    if let Some(FieldValue::List(_, values)) = student.get_field("flags") {
+    if let Some(ExprValue::List(values)) = student.get_field("flags") {
         assert_eq!(values.len(), 2);
-        assert!(values.contains(&FieldValue::Bool(true)));
-        assert!(values.contains(&FieldValue::Bool(false)));
+        assert!(values.contains(&ExprValue::Bool(true)));
+        assert!(values.contains(&ExprValue::Bool(false)));
     } else {
         panic!("Expected List of Bools");
     }
@@ -234,10 +232,10 @@ fn test_collections_of_objects() {
 
     let student = StudentWithCourses { age: 20, courses };
 
-    if let Some(FieldValue::List(_, values)) = student.get_field("courses") {
+    if let Some(ExprValue::List(values)) = student.get_field("courses") {
         assert_eq!(values.len(), 2);
-        assert_eq!(values[0], FieldValue::Object(TestObjectId));
-        assert_eq!(values[1], FieldValue::Object(TestObjectId));
+        assert_eq!(values[0], ExprValue::Object(TestObjectId));
+        assert_eq!(values[1], ExprValue::Object(TestObjectId));
     } else {
         panic!("Expected List of Objects");
     }
@@ -469,27 +467,21 @@ fn test_get_field_for_recursive_vecs() {
 
     let student = ComplexStudent { ages, courses };
 
-    if let Some(FieldValue::List(_, values)) = student.get_field("courses") {
+    if let Some(ExprValue::List(values)) = student.get_field("courses") {
         assert_eq!(values.len(), 2);
         assert_eq!(
             values[0],
-            FieldValue::List(
-                SimpleFieldType::Object(TypeId::of::<CourseId>()).into(),
-                Vec::from([
-                    FieldValue::Object(TestObjectId),
-                    FieldValue::Object(TestObjectId)
-                ]),
-            )
+            ExprValue::List(Vec::from([
+                ExprValue::Object(TestObjectId),
+                ExprValue::Object(TestObjectId)
+            ]),)
         );
         assert_eq!(
             values[1],
-            FieldValue::List(
-                SimpleFieldType::Object(TypeId::of::<CourseId>()).into(),
-                Vec::from([
-                    FieldValue::Object(TestObjectId),
-                    FieldValue::Object(TestObjectId)
-                ]),
-            )
+            ExprValue::List(Vec::from([
+                ExprValue::Object(TestObjectId),
+                ExprValue::Object(TestObjectId)
+            ]),)
         );
     } else {
         panic!("Expected List of Objects");

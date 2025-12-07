@@ -38,9 +38,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // Generate helper functions
-    let helper_functions = generate_helper_functions(enum_name);
-
     // Generate EvalObject implementation
     let eval_object_impl =
         generate_eval_object_impl(enum_name, &env_type, &variant_info, &cache_config);
@@ -49,7 +46,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #from_impls
         #cache_struct
-        #helper_functions
         #eval_object_impl
     };
 
@@ -173,28 +169,6 @@ fn generate_from_impls(
 
     quote! {
         #(#impls)*
-    }
-}
-
-fn generate_helper_functions(enum_name: &syn::Ident) -> proc_macro2::TokenStream {
-    quote! {
-        impl #enum_name {
-            #[doc(hidden)]
-            fn __collo_ml_convert_field_value(value: ::collo_ml::traits::FieldValue<Self>) -> ::collo_ml::ExprValue<Self> {
-                match value {
-                    ::collo_ml::traits::FieldValue::Int(i) => ::collo_ml::ExprValue::Int(i),
-                    ::collo_ml::traits::FieldValue::Bool(b) => ::collo_ml::ExprValue::Bool(b),
-                    ::collo_ml::traits::FieldValue::Object(obj) => ::collo_ml::ExprValue::Object(obj),
-                    ::collo_ml::traits::FieldValue::List(field_type, items) => {
-                        let expr_type = field_type.convert_to_expr_type::<Self>().expect("Object type should be known");
-                        let converted_items = items.into_iter()
-                            .map(Self::__collo_ml_convert_field_value)
-                            .collect();
-                        ::collo_ml::ExprValue::List(expr_type, converted_items)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -390,8 +364,7 @@ fn generate_uncached_field_access_arms(
         quote! {
             #enum_name::#variant_name(id) => {
                 let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
-                let field_value = obj.get_field(field)?;
-                Some(Self::__collo_ml_convert_field_value(field_value))
+                Some(obj.get_field(field)?)
             }
         }
     }).collect()
@@ -415,8 +388,7 @@ fn generate_cached_field_access_arms(
             #enum_name::#variant_name(id) => {
                 // Check cache first
                 if let Some(cached_obj) = cache.#cache_field.get(id) {
-                    let field_value = cached_obj.get_field(field)?;
-                    return Some(Self::__collo_ml_convert_field_value(field_value));
+                    return Some(cached_obj.get_field(field)?);
                 }
 
                 // Not in cache, build it
@@ -428,7 +400,7 @@ fn generate_cached_field_access_arms(
                 // Store in cache (requires Clone)
                 cache.#cache_field.insert(id.clone(), obj.clone());
 
-                Some(Self::__collo_ml_convert_field_value(field_value))
+                Some(field_value)
             }
         }
     }).collect()

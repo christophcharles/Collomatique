@@ -70,7 +70,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 schema
             }
 
-            fn get_field(&self, field: &str) -> Option<::collo_ml::traits::FieldValue<Self::EvalObject>> {
+            fn get_field(&self, field: &str) -> Option<::collo_ml::ExprValue<Self::EvalObject>> {
                 match field {
                     #(#field_access_arms)*
                     _ => None,
@@ -176,16 +176,15 @@ fn generate_field_value(
 
             match type_name.as_str() {
                 "i32" => quote! {
-                    ::collo_ml::traits::FieldValue::Int(#field_name.clone()),
+                    ::collo_ml::ExprValue::Int(#field_name.clone()),
                 },
                 "bool" => quote! {
-                    ::collo_ml::traits::FieldValue::Bool(#field_name.clone()),
+                    ::collo_ml::ExprValue::Bool(#field_name.clone()),
                 },
                 "Vec" => {
                     // Need to convert collection elements
                     if let PathArguments::AngleBracketed(args) = &segment.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            let field_type = type_to_field_type(inner_ty);
                             let inner = generate_field_value(
                                 &quote! {
                                     x
@@ -193,8 +192,7 @@ fn generate_field_value(
                                 inner_ty,
                             );
                             return quote! {
-                                ::collo_ml::traits::FieldValue::List(
-                                    #field_type,
+                                ::collo_ml::ExprValue::List(
                                     #field_name.iter().map(|x| #inner).collect(),
                                 )
                             };
@@ -205,7 +203,7 @@ fn generate_field_value(
                 _ => {
                     // It's an object ID - convert using Into
                     quote! {
-                        ::collo_ml::traits::FieldValue::Object(#field_name.clone().into()),
+                        ::collo_ml::ExprValue::Object(#field_name.clone().into()),
                     }
                 }
             }

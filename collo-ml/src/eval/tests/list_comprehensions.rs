@@ -15,10 +15,11 @@ fn list_comp_simple_identity() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -35,10 +36,11 @@ fn list_comp_with_arithmetic() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(4),
+            ExprValue::Int(6)
+        ]))
     );
 }
 
@@ -55,10 +57,11 @@ fn list_comp_with_addition() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(11), ExprValue::Int(12), ExprValue::Int(13)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(11),
+            ExprValue::Int(12),
+            ExprValue::Int(13)
+        ]))
     );
 }
 
@@ -76,15 +79,12 @@ fn list_comp_with_range() {
     // Squares: 1, 4, 9, 16
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(4),
-                ExprValue::Int(9),
-                ExprValue::Int(16),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(4),
+            ExprValue::Int(9),
+            ExprValue::Int(16),
+        ]))
     );
 }
 
@@ -96,20 +96,14 @@ fn list_comp_with_param() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(5), ExprValue::Int(10)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
 
     let result = checked_ast
         .quick_eval_fn("f", vec![list])
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(10), ExprValue::Int(20)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(10), ExprValue::Int(20)]))
     );
 }
 
@@ -126,15 +120,12 @@ fn list_comp_boolean_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Bool.into(),
-            Vec::from([
-                ExprValue::Bool(false),
-                ExprValue::Bool(false),
-                ExprValue::Bool(true),
-                ExprValue::Bool(true)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Bool(false),
+            ExprValue::Bool(false),
+            ExprValue::Bool(true),
+            ExprValue::Bool(true)
+        ]))
     );
 }
 
@@ -152,10 +143,11 @@ fn list_comp_constant_body() {
     // All elements are 42
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(42), ExprValue::Int(42), ExprValue::Int(42)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(42),
+            ExprValue::Int(42),
+            ExprValue::Int(42)
+        ]))
     );
 }
 
@@ -174,10 +166,7 @@ fn list_comp_with_simple_filter() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(4), ExprValue::Int(5)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(5)]))
     );
 }
 
@@ -194,15 +183,12 @@ fn list_comp_filter_even_numbers() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(2),
-                ExprValue::Int(4),
-                ExprValue::Int(6),
-                ExprValue::Int(8),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(4),
+            ExprValue::Int(6),
+            ExprValue::Int(8),
+        ]))
     );
 }
 
@@ -220,16 +206,13 @@ fn list_comp_filter_with_transformation() {
     // Odd numbers: 1, 3, 5, 7, 9 -> doubled: 2, 6, 10, 14, 18
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(2),
-                ExprValue::Int(6),
-                ExprValue::Int(10),
-                ExprValue::Int(14),
-                ExprValue::Int(18),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(6),
+            ExprValue::Int(10),
+            ExprValue::Int(14),
+            ExprValue::Int(18),
+        ]))
     );
 }
 
@@ -244,7 +227,7 @@ fn list_comp_filter_no_matches() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -260,10 +243,11 @@ fn list_comp_filter_all_match() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -280,10 +264,11 @@ fn list_comp_filter_complex_condition() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(4), ExprValue::Int(5), ExprValue::Int(6),])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(4),
+            ExprValue::Int(5),
+            ExprValue::Int(6),
+        ]))
     );
 }
 
@@ -300,15 +285,12 @@ fn list_comp_filter_with_param() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(6),
-                ExprValue::Int(7),
-                ExprValue::Int(8),
-                ExprValue::Int(9),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(6),
+            ExprValue::Int(7),
+            ExprValue::Int(8),
+            ExprValue::Int(9),
+        ]))
     );
 }
 
@@ -328,15 +310,12 @@ fn list_comp_two_vars_simple() {
     // (1+10), (1+20), (2+10), (2+20) = 11, 21, 12, 22
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(11),
-                ExprValue::Int(21),
-                ExprValue::Int(12),
-                ExprValue::Int(22),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(11),
+            ExprValue::Int(21),
+            ExprValue::Int(12),
+            ExprValue::Int(22),
+        ]))
     );
 }
 
@@ -354,15 +333,12 @@ fn list_comp_two_vars_multiplication() {
     // 2*4=8, 2*5=10, 3*4=12, 3*5=15
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(8),
-                ExprValue::Int(10),
-                ExprValue::Int(12),
-                ExprValue::Int(15),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(8),
+            ExprValue::Int(10),
+            ExprValue::Int(12),
+            ExprValue::Int(15),
+        ]))
     );
 }
 
@@ -380,15 +356,12 @@ fn list_comp_two_vars_with_ranges() {
     // (1+10), (1+11), (2+10), (2+11) = 11, 12, 12, 13
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(11),
-                ExprValue::Int(12),
-                ExprValue::Int(12),
-                ExprValue::Int(13)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(11),
+            ExprValue::Int(12),
+            ExprValue::Int(12),
+            ExprValue::Int(13)
+        ]))
     );
 }
 
@@ -408,21 +381,18 @@ fn list_comp_two_vars_with_filter() {
     // 2, 3, 4, 5, 3, 4, 5, 4, 5, 5
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-                ExprValue::Int(5),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-                ExprValue::Int(5),
-                ExprValue::Int(4),
-                ExprValue::Int(5),
-                ExprValue::Int(5)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+            ExprValue::Int(5),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+            ExprValue::Int(5),
+            ExprValue::Int(4),
+            ExprValue::Int(5),
+            ExprValue::Int(5)
+        ]))
     );
 }
 
@@ -441,15 +411,12 @@ fn list_comp_two_vars_filter_on_first() {
     // 3*1=3, 3*2=6, 4*1=4, 4*2=8
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(3),
-                ExprValue::Int(6),
-                ExprValue::Int(4),
-                ExprValue::Int(8),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(3),
+            ExprValue::Int(6),
+            ExprValue::Int(4),
+            ExprValue::Int(8),
+        ]))
     );
 }
 
@@ -468,15 +435,12 @@ fn list_comp_two_vars_filter_on_second() {
     // 1+2=3, 1+4=5, 2+2=4, 2+4=6
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(3),
-                ExprValue::Int(5),
-                ExprValue::Int(4),
-                ExprValue::Int(6),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(3),
+            ExprValue::Int(5),
+            ExprValue::Int(4),
+            ExprValue::Int(6),
+        ]))
     );
 }
 
@@ -496,15 +460,12 @@ fn list_comp_two_vars_filter_on_both() {
     // 3*1=3, 3*2=6, 4*1=4, 4*2=8
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(3),
-                ExprValue::Int(6),
-                ExprValue::Int(4),
-                ExprValue::Int(8),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(3),
+            ExprValue::Int(6),
+            ExprValue::Int(4),
+            ExprValue::Int(8),
+        ]))
     );
 }
 
@@ -523,15 +484,12 @@ fn list_comp_cartesian_product() {
     // Results: 1 (twice), 2 (twice)
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(2)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(2)
+        ]))
     );
 }
 
@@ -548,15 +506,12 @@ fn list_comp_with_dependent_limit() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-                ExprValue::Int(5)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+            ExprValue::Int(5)
+        ]))
     );
 }
 
@@ -575,15 +530,12 @@ fn list_comp_over_union() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(2),
-                ExprValue::Int(4),
-                ExprValue::Int(6),
-                ExprValue::Int(8),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(4),
+            ExprValue::Int(6),
+            ExprValue::Int(8),
+        ]))
     );
 }
 
@@ -601,10 +553,7 @@ fn list_comp_over_difference() {
     // [1, 3] * 2 = [2, 6]
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(2), ExprValue::Int(6)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(6)]))
     );
 }
 
@@ -623,8 +572,9 @@ fn list_comp_linexpr_simple() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -643,8 +593,9 @@ fn list_comp_linexpr_with_coefficient() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
             // Could verify each LinExpr is coef * $V()
         }
         _ => panic!("Expected List of LinExpr"),
@@ -664,9 +615,10 @@ fn list_comp_linexpr_with_filter() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             // Even numbers in [1..6): 2, 4
             assert_eq!(list.len(), 2);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -722,15 +674,12 @@ fn list_comp_with_if_expression_body() {
     // 1->1, 2->2, 3->6, 4->8
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(6),
-                ExprValue::Int(8),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(6),
+            ExprValue::Int(8),
+        ]))
     );
 }
 
@@ -763,17 +712,14 @@ fn list_comp_two_vars_one_used() {
     // Creates 6 copies (2*3)
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(1),
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(2),
-                ExprValue::Int(2)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(1),
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(2),
+            ExprValue::Int(2)
+        ]))
     );
 }
 
@@ -793,9 +739,10 @@ fn list_comp_with_multiple_operations() {
     // x=2,y=4 filtered out (2+4=6, not < 6)
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(8), ExprValue::Int(10), ExprValue::Int(10)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(8),
+            ExprValue::Int(10),
+            ExprValue::Int(10)
+        ]))
     );
 }

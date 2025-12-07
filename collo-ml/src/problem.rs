@@ -111,7 +111,7 @@ pub struct ProblemBuilder<
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
-pub enum ProblemError {
+pub enum ProblemError<T: EvalObject> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
     #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
@@ -138,6 +138,12 @@ pub enum ProblemError {
         returned: ExprType,
         expected: ExprType,
     },
+    #[error("Function {func} has returned {returned:?} instead of type {expected}")]
+    UnexpectedReturnValue {
+        func: String,
+        returned: ExprValue<T>,
+        expected: ExprType,
+    },
 }
 
 impl<
@@ -146,7 +152,7 @@ impl<
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
-    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError> {
+    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T>> {
         V::field_schema()
             .into_iter()
             .map(|(name, typ)| {
@@ -445,7 +451,7 @@ impl<
             Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
             Origin<T>,
         ),
-        ProblemError,
+        ProblemError<T>,
     > {
         let (constraints_expr, origin) =
             eval_history
@@ -469,17 +475,22 @@ impl<
 
         let constraints = match constraints_expr {
             ExprValue::Constraint(constraints) => constraints,
-            ExprValue::List(a, list) if a.is_constraint() && allow_list => list
-                .into_iter()
-                .flat_map(|x| match x {
-                    ExprValue::Constraint(constraints) => constraints.into_iter(),
-                    _ => panic!("Inconsistent ExprValue::List"),
-                })
-                .collect(),
+            ExprValue::List(list)
+                if list.iter().all(|x| matches!(x, ExprValue::Constraint(_))) && allow_list =>
+            {
+                list.into_iter()
+                    .flat_map(|x| match x {
+                        ExprValue::Constraint(constraints) => constraints.into_iter(),
+                        _ => panic!(
+                            "This should be unreachable, we only have constraints at this point"
+                        ),
+                    })
+                    .collect()
+            }
             _ => {
-                return Err(ProblemError::WrongReturnType {
+                return Err(ProblemError::UnexpectedReturnValue {
                     func: fn_name.to_string(),
-                    returned: constraints_expr.get_type(&self.env).into(),
+                    returned: constraints_expr,
                     expected: SimpleType::Constraint.into(),
                 })
             }
@@ -505,7 +516,7 @@ impl<
         eval_history: &mut EvalHistory<'b, T>,
         fn_name: &str,
         args: &Vec<ExprValue<T>>,
-    ) -> Result<(LinExpr<ProblemVar<T, V>>, Origin<T>), ProblemError> {
+    ) -> Result<(LinExpr<ProblemVar<T, V>>, Origin<T>), ProblemError<T>> {
         let (lin_expr_expr, origin) =
             eval_history
                 .eval_fn(fn_name, args.clone())
@@ -529,9 +540,9 @@ impl<
         let lin_expr = match lin_expr_expr {
             ExprValue::LinExpr(lin_expr) => lin_expr,
             _ => {
-                return Err(ProblemError::WrongReturnType {
+                return Err(ProblemError::UnexpectedReturnValue {
                     func: fn_name.to_string(),
-                    returned: lin_expr_expr.get_type(&self.env).into(),
+                    returned: lin_expr_expr,
                     expected: SimpleType::LinExpr.into(),
                 })
             }
@@ -581,7 +592,7 @@ impl<
         script: StoredScript<T>,
         mut start_constraints: Vec<(String, Vec<ExprValue<T>>)>,
         mut start_obj: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError> {
+    ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError<T>> {
         let mut current_script_opt = Some(script);
         let mut pending_reification = HashMap::<ScriptRef, Vec<PendingReification<T>>>::new();
         let mut warnings = HashMap::new();
@@ -782,7 +793,7 @@ impl<
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
-    pub fn new(env: &'a T::Env) -> Result<Self, ProblemError> {
+    pub fn new(env: &'a T::Env) -> Result<Self, ProblemError<T>> {
         let base_vars = Self::build_vars()?;
         let original_var_list =
             V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
@@ -813,14 +824,14 @@ impl<
         &mut self,
         script: Script,
         func_and_names: Vec<(String, String)>,
-    ) -> Result<Vec<SemWarning>, ProblemError> {
+    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let stored_script = self.compile_script(script)?;
         let warnings = stored_script.get_ast().get_warnings().clone();
         self.add_reified_variables_with_compiled_script(stored_script, func_and_names)?;
         Ok(warnings)
     }
 
-    pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError> {
+    pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError<T>> {
         let vars = self.generate_current_vars();
         StoredScript::new(script, vars)
     }
@@ -829,7 +840,7 @@ impl<
         &mut self,
         stored_script: StoredScript<T>,
         func_and_names: Vec<(String, String)>,
-    ) -> Result<(), ProblemError> {
+    ) -> Result<(), ProblemError<T>> {
         for (_func, name) in &func_and_names {
             if self.base_vars.contains_key(name) {
                 return Err(ProblemError::VariableAlreadyDefined(name.clone()));
@@ -880,7 +891,7 @@ impl<
         &mut self,
         script: Script,
         funcs: Vec<(String, Vec<ExprValue<T>>)>,
-    ) -> Result<Vec<SemWarning>, ProblemError> {
+    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let start_funcs = funcs;
@@ -894,7 +905,7 @@ impl<
         &mut self,
         script: Script,
         objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<Vec<SemWarning>, ProblemError> {
+    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let mut warnings = self.evaluate_recursively(script, vec![], objectives)?;
@@ -908,7 +919,7 @@ impl<
         script: Script,
         funcs: Vec<(String, Vec<ExprValue<T>>)>,
         objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<Vec<SemWarning>, ProblemError> {
+    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let mut warnings = self.evaluate_recursively(script, funcs, objectives)?;

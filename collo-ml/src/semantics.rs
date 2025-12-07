@@ -724,6 +724,10 @@ pub enum GlobalEnvError {
 }
 
 impl GlobalEnv {
+    pub fn validate_object_type(&self, obj_name: &str) -> bool {
+        self.defined_types.contains_key(obj_name)
+    }
+
     pub fn validate_simple_type(&self, typ: &SimpleType) -> bool {
         match typ {
             SimpleType::None => true,
@@ -732,7 +736,7 @@ impl GlobalEnv {
             SimpleType::LinExpr => true,
             SimpleType::Constraint => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
-            SimpleType::Object(typ_name) => self.defined_types.contains_key(typ_name),
+            SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
         }
     }
 

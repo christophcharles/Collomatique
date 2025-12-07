@@ -355,14 +355,14 @@ fn eval_with_variables_var_list_in_nested_forall() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
 
-    let xs = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::<NoObject>::Int(1), ExprValue::Int(2)]),
-    );
-    let ys = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::<NoObject>::Int(10), ExprValue::Int(20)]),
-    );
+    let xs = ExprValue::List(Vec::from([
+        ExprValue::<NoObject>::Int(1),
+        ExprValue::Int(2),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        ExprValue::<NoObject>::Int(10),
+        ExprValue::Int(20),
+    ]));
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(&env, "f", vec![xs, ys])

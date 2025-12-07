@@ -40,7 +40,7 @@ impl ScriptRef {
 }
 
 impl<T: EvalObject> StoredScript<T> {
-    pub fn new(script: Script, vars: HashMap<String, ArgsType>) -> Result<Self, ProblemError> {
+    pub fn new(script: Script, vars: HashMap<String, ArgsType>) -> Result<Self, ProblemError<T>> {
         let script_ref = ScriptRef::new(script.name, &script.content);
         let ast = CheckedAST::new(&script.content, vars)?;
         Ok(StoredScript {

@@ -71,19 +71,13 @@ fn in_with_param_list() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list_with = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(5), ExprValue::Int(10)]),
-    );
+    let list_with = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
     let result_true = checked_ast
         .quick_eval_fn("f", vec![list_with])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
-    let list_without = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(10)]),
-    );
+    let list_without = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(10)]));
     let result_false = checked_ast
         .quick_eval_fn("f", vec![list_without])
         .expect("Should evaluate");
@@ -98,10 +92,11 @@ fn in_with_both_params() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+    ]));
 
     let result_true = checked_ast
         .quick_eval_fn("f", vec![ExprValue::Int(2), list.clone()])
@@ -181,17 +176,14 @@ fn union_two_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-                ExprValue::Int(5),
-                ExprValue::Int(6),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+            ExprValue::Int(5),
+            ExprValue::Int(6),
+        ]))
     );
 }
 
@@ -208,17 +200,14 @@ fn union_overlapping_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+        ]))
     );
 }
 
@@ -235,10 +224,11 @@ fn union_with_empty_list_left() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -255,10 +245,11 @@ fn union_with_empty_list_right() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -273,7 +264,7 @@ fn union_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -284,29 +275,20 @@ fn union_with_params() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list1 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
-    let list2 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(3), ExprValue::Int(4)]),
-    );
+    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list2 = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
 
     let result = checked_ast
         .quick_eval_fn("f", vec![list1, list2])
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+        ]))
     );
 }
 
@@ -323,10 +305,11 @@ fn union_chain() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -343,15 +326,12 @@ fn union_with_ranges() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(5),
-                ExprValue::Int(6),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(5),
+            ExprValue::Int(6),
+        ]))
     );
 }
 
@@ -368,10 +348,7 @@ fn union_bool_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Bool.into(),
-            Vec::from([ExprValue::Bool(true), ExprValue::Bool(false)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Bool(true), ExprValue::Bool(false)]))
     );
 }
 
@@ -390,10 +367,11 @@ fn diff_disjoint_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -410,10 +388,7 @@ fn diff_overlapping_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(4)]))
     );
 }
 
@@ -428,7 +403,7 @@ fn diff_identical_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -442,7 +417,7 @@ fn diff_with_empty_list_left() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -458,10 +433,11 @@ fn diff_with_empty_list_right() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 }
 
@@ -476,7 +452,7 @@ fn diff_two_empty_lists() {
     let result = checked_ast
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -487,29 +463,20 @@ fn diff_with_params() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list1 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
-        ]),
-    );
-    let list2 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(2), ExprValue::Int(4)]),
-    );
+    let list1 = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+        ExprValue::Int(4),
+    ]));
+    let list2 = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
 
     let result = checked_ast
         .quick_eval_fn("f", vec![list1, list2])
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(3)]))
     );
 }
 
@@ -526,10 +493,7 @@ fn diff_partial_overlap() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]))
     );
 }
 
@@ -546,10 +510,11 @@ fn diff_with_ranges() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(5)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(5)
+        ]))
     );
 }
 
@@ -566,10 +531,7 @@ fn diff_removing_single_element() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(3)]))
     );
 }
 
@@ -589,10 +551,7 @@ fn union_then_diff() {
     // [1, 2, 3, 4] - [2, 3, 5] = [1, 4]
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(4)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(4)]))
     );
 }
 
@@ -611,17 +570,14 @@ fn union_diff_combination() {
     // [1, 3, 5] + [1, 3, 5] = [1, 3, 5, 1, 3, 5]
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(3),
-                ExprValue::Int(5),
-                ExprValue::Int(1),
-                ExprValue::Int(3),
-                ExprValue::Int(5)
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(3),
+            ExprValue::Int(5),
+            ExprValue::Int(1),
+            ExprValue::Int(3),
+            ExprValue::Int(5)
+        ]))
     );
 }
 
@@ -705,10 +661,11 @@ fn collection_operations_with_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ]))
     );
 
     let result_false = checked_ast
@@ -716,6 +673,6 @@ fn collection_operations_with_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(SimpleType::Int.into(), Vec::from([ExprValue::Int(4)]))
+        ExprValue::List(Vec::from([ExprValue::Int(4)]))
     );
 }

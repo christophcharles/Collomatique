@@ -298,7 +298,7 @@ fn function_option_list_return() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
         }
         _ => panic!("Expected List"),
@@ -387,7 +387,7 @@ fn function_sum_return_list_types() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert_eq!(list[0], ExprValue::Int(1));
             assert_eq!(list[1], ExprValue::Int(2));
@@ -523,7 +523,7 @@ fn nested_option_list_through_functions() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, outer_list) => {
+        ExprValue::List(outer_list) => {
             assert_eq!(outer_list.len(), 3);
             assert_eq!(outer_list[0], ExprValue::Int(1));
             assert_eq!(outer_list[1], ExprValue::None);
@@ -549,7 +549,7 @@ fn function_sum_type_with_list_variants() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(_, list) => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
             assert_eq!(list[0], ExprValue::Int(1));
         }

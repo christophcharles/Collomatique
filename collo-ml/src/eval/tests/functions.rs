@@ -104,10 +104,7 @@ fn fn_multi_call() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(0), ExprValue::Int(42)])
-        )
+        ExprValue::List(Vec::from([ExprValue::Int(0), ExprValue::Int(42)]))
     );
 }
 
@@ -226,15 +223,12 @@ fn fn_returning_list() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3),
+            ExprValue::Int(4),
+        ]))
     );
 }
 
@@ -306,8 +300,9 @@ fn fn_returning_list_of_linexpr() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -541,10 +536,11 @@ fn fn_with_list_comprehension() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(1), ExprValue::Int(4), ExprValue::Int(9)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(1),
+            ExprValue::Int(4),
+            ExprValue::Int(9)
+        ]))
     );
 }
 
@@ -565,10 +561,11 @@ fn fn_with_collection_operations() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(2), ExprValue::Int(4), ExprValue::Int(6)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(2),
+            ExprValue::Int(4),
+            ExprValue::Int(6)
+        ]))
     );
 }
 
@@ -700,10 +697,11 @@ fn helper_fn_for_transformation() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(3), ExprValue::Int(5), ExprValue::Int(7)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(3),
+            ExprValue::Int(5),
+            ExprValue::Int(7)
+        ]))
     );
 }
 
@@ -828,19 +826,17 @@ fn fn_call_in_quantifier() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let all_valid = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(5), ExprValue::Int(9)]),
-    );
+    let all_valid = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(5),
+        ExprValue::Int(9),
+    ]));
     let result_true = checked_ast
         .quick_eval_fn("f", vec![all_valid])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
-    let has_invalid = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(15)]),
-    );
+    let has_invalid = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(15)]));
     let result_false = checked_ast
         .quick_eval_fn("f", vec![has_invalid])
         .expect("Should evaluate");
@@ -858,18 +854,20 @@ fn fn_call_in_list_comprehension() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(2), ExprValue::Int(3), ExprValue::Int(4)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+        ExprValue::Int(4),
+    ]));
     let result = checked_ast
         .quick_eval_fn("f", vec![list])
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            SimpleType::Int.into(),
-            Vec::from([ExprValue::Int(4), ExprValue::Int(9), ExprValue::Int(16)])
-        )
+        ExprValue::List(Vec::from([
+            ExprValue::Int(4),
+            ExprValue::Int(9),
+            ExprValue::Int(16)
+        ]))
     );
 }

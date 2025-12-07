@@ -175,14 +175,8 @@ fn eq_lists_with_params() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list1 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
-    let list2 = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list2 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("f", vec![list1, list2])

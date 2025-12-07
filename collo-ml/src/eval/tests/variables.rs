@@ -292,10 +292,11 @@ fn script_var_with_sum() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("g", vec![list])
@@ -334,10 +335,7 @@ fn script_var_with_forall() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("g", vec![list])
@@ -529,17 +527,18 @@ fn var_list_simple_reify() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list.clone()])
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, linexprs) if a.is_lin_expr() => {
+        ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 3);
 
             // Verify the LinExprs are script vars with from_list set
@@ -575,10 +574,7 @@ fn var_list_in_sum() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("g", vec![list.clone()])
@@ -615,10 +611,11 @@ fn var_list_in_constraint() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("g", vec![list.clone()])
@@ -662,10 +659,7 @@ fn var_list_with_forall() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list.clone()])
@@ -708,10 +702,11 @@ fn var_list_cardinality() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]),
-    );
+    let list = ExprValue::List(Vec::from([
+        ExprValue::Int(1),
+        ExprValue::Int(2),
+        ExprValue::Int(3),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list])
@@ -734,17 +729,14 @@ fn var_list_with_multiple_params() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list.clone(), ExprValue::Int(10)])
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, linexprs) if a.is_lin_expr() => {
+        ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
             let lin_expr1 = ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
                 name: "MyVars".into(),
@@ -775,14 +767,14 @@ fn var_list_empty_input() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let empty_list = ExprValue::List(SimpleType::Int.into(), Vec::new());
+    let empty_list = ExprValue::List(Vec::new());
 
     let result = checked_ast
         .quick_eval_fn("i", vec![empty_list])
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, linexprs) if a.is_lin_expr() => {
+        ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 0);
         }
         _ => panic!("Expected List of LinExpr"),
@@ -801,18 +793,16 @@ fn var_list_in_list_comprehension() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        Vec::from([ExprValue::Int(1), ExprValue::Int(2)]),
-    );
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list])
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, linexprs) if a.is_lin_expr() => {
+        ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
+            assert!(linexprs.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -830,17 +820,18 @@ fn var_list_with_collection_ops() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list1 = ExprValue::List(SimpleType::Int.into(), Vec::from([ExprValue::Int(1)]));
-    let list2 = ExprValue::List(SimpleType::Int.into(), Vec::from([ExprValue::Int(2)]));
+    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1)]));
+    let list2 = ExprValue::List(Vec::from([ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("i", vec![list1, list2])
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, linexprs) if a.is_lin_expr() => {
+        ExprValue::List(linexprs) => {
             // Union of two var lists
             assert!(linexprs.len() >= 2);
+            assert!(linexprs.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -862,7 +853,7 @@ fn nested_reification_usage() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(SimpleType::Int.into(), Vec::from([ExprValue::Int(1)]));
+    let list = ExprValue::List(Vec::from([ExprValue::Int(1)]));
 
     let result = checked_ast
         .quick_eval_fn("final", vec![list])

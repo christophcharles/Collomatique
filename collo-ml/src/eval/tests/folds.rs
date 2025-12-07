@@ -184,10 +184,11 @@ fn fold_with_param_list() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let list = ExprValue::List(
-        SimpleType::Int.into(),
-        vec![ExprValue::Int(10), ExprValue::Int(20), ExprValue::Int(30)],
-    );
+    let list = ExprValue::List(vec![
+        ExprValue::Int(10),
+        ExprValue::Int(20),
+        ExprValue::Int(30),
+    ]);
 
     let result = checked_ast
         .quick_eval_fn("f", vec![list])
@@ -255,8 +256,7 @@ fn fold_building_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 3);
             assert_eq!(elements[0], ExprValue::Int(1));
             assert_eq!(elements[1], ExprValue::Int(2));
@@ -280,8 +280,7 @@ fn fold_reverse_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
             assert_eq!(elements[0], ExprValue::Int(4));
             assert_eq!(elements[1], ExprValue::Int(3));
@@ -305,8 +304,7 @@ fn fold_filter_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
             assert_eq!(elements[0], ExprValue::Int(2));
             assert_eq!(elements[1], ExprValue::Int(4));
@@ -333,8 +331,7 @@ fn fold_conditional_list_building() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
             assert_eq!(elements[0], ExprValue::Int(2));
             assert_eq!(elements[1], ExprValue::Int(4));
@@ -576,8 +573,7 @@ fn rfold_list_building() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
             // Processes right to left, so builds [4, 3, 2, 1]
             assert_eq!(elements[0], ExprValue::Int(4));
@@ -722,8 +718,7 @@ fn fold_flatten_nested_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(typ, elements) => {
-            assert_eq!(typ, SimpleType::Int.into());
+        ExprValue::List(elements) => {
             assert_eq!(elements.len(), 6);
             assert_eq!(elements[0], ExprValue::Int(1));
             assert_eq!(elements[5], ExprValue::Int(6));

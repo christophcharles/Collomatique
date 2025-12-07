@@ -205,8 +205,9 @@ fn coercion_in_list_unification() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -225,8 +226,9 @@ fn coercion_in_list_comprehension() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -324,7 +326,7 @@ fn explicit_cast_list_type() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(SimpleType::Int.into(), Vec::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -340,8 +342,9 @@ fn explicit_cast_list_of_linexpr() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -549,8 +552,9 @@ fn cast_with_collection_operations() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_lin_expr() => {
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 4);
+            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -693,10 +697,7 @@ fn cast_empty_list_typed() {
         .quick_eval_fn("f", vec![])
         .expect("Should evaluate");
 
-    assert_eq!(
-        result,
-        ExprValue::List(SimpleType::LinExpr.into(), Vec::new())
-    );
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
 #[test]
@@ -712,10 +713,16 @@ fn cast_in_nested_list() {
         .expect("Should evaluate");
 
     match result {
-        ExprValue::List(a, list) if a.is_list() => {
-            let inner = a.to_inner_list_type().unwrap();
-            assert_eq!(inner, SimpleType::Int.into());
+        ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
+            assert!(list.iter().all(|inner| {
+                match inner {
+                    ExprValue::List(inner_list) => {
+                        inner_list.iter().all(|x| matches!(x, ExprValue::Int(_)))
+                    }
+                    _ => false,
+                }
+            }));
         }
         _ => panic!("Expected List of List of Int"),
     }

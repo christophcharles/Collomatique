@@ -163,11 +163,7 @@ fn test_collection_field_access() {
     let students_field = teacher.field_access(&env, &mut cache, "students");
 
     // Should be a List of Objects
-    if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(
-            expr_type.to_simple(),
-            Some(SimpleType::Object("Student".to_string()))
-        );
+    if let Some(ExprValue::List(values)) = students_field {
         assert_eq!(values.len(), 2);
         assert!(
             values.contains(&ExprValue::Object(CollectionObjectId::Student(StudentId(
@@ -206,11 +202,7 @@ fn test_empty_collection_field_access() {
     let students_field = teacher.field_access(&env, &mut cache, "students");
 
     // Should be an empty List with correct type
-    if let Some(ExprValue::List(expr_type, values)) = students_field {
-        assert_eq!(
-            expr_type.to_simple(),
-            Some(SimpleType::Object("Student".to_string()))
-        );
+    if let Some(ExprValue::List(values)) = students_field {
         assert_eq!(values.len(), 0);
     } else {
         panic!("Expected empty List of Objects");
@@ -262,20 +254,15 @@ fn test_nested_collection_field_access() {
     let groups_field = course.field_access(&env, &mut cache, "student_groups");
 
     // Should be a List of Lists
-    if let Some(ExprValue::List(outer_type, outer_values)) = groups_field {
-        assert_eq!(
-            outer_type,
-            SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
-        );
+    if let Some(ExprValue::List(outer_values)) = groups_field {
         assert_eq!(outer_values.len(), 2);
 
         // Check that we have nested lists
         for value in outer_values {
-            if let ExprValue::List(inner_type, _inner_values) = value {
-                assert_eq!(
-                    inner_type.to_simple(),
-                    Some(SimpleType::Object("Student".to_string()))
-                );
+            if let ExprValue::List(inner_values) = value {
+                inner_values
+                    .iter()
+                    .all(|x| matches!(x, ExprValue::Object(CollectionObjectId::Student(_))));
             } else {
                 panic!("Expected nested List");
             }
@@ -326,11 +313,7 @@ fn test_empty_nested_collection() {
     let groups_field = course.field_access(&env, &mut cache, "student_groups");
 
     // Should be an empty List with correct nested type
-    if let Some(ExprValue::List(outer_type, values)) = groups_field {
-        assert_eq!(
-            outer_type,
-            SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
-        );
+    if let Some(ExprValue::List(values)) = groups_field {
         assert_eq!(values.len(), 0);
     } else {
         panic!("Expected empty List of Lists");

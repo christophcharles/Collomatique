@@ -284,7 +284,7 @@ fn origin_with_list_param() {
     list_items.push(ExprValue::Int(2));
     list_items.push(ExprValue::Int(3));
 
-    let list_arg = ExprValue::List(SimpleType::Int.into(), list_items.clone());
+    let list_arg = ExprValue::List(list_items.clone());
 
     let result = checked_ast
         .quick_eval_fn("list_constraint", vec![list_arg.clone()])
