@@ -862,7 +862,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     }
                     (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => ExprValue::LinExpr(v1 - v2),
                     (ExprValue::List(list1), ExprValue::List(list2)) => {
-                        let list = list1.into_iter().filter(|x| list2.contains(x)).collect();
+                        let list = list1.into_iter().filter(|x| !list2.contains(x)).collect();
                         ExprValue::List(list)
                     }
                     (value1, value2) => {
