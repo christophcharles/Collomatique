@@ -511,7 +511,7 @@ fn function_with_mixed_sum_and_regular_params() {
 #[test]
 fn nested_option_list_through_functions() {
     let input = r#"
-        let make_list() -> [?Int] = [1 as ?Int, none, 3 as ?Int];
+        let make_list() -> [?Int] = [1, none, 3];
         let wrap(xs: [?Int]) -> ?[?Int] = xs;
         pub let f() -> ?[?Int] = wrap(make_list());
     "#;

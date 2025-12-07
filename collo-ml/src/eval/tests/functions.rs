@@ -314,7 +314,7 @@ fn fn_returning_list_of_linexpr() {
 fn fn_call_int_to_linexpr_coercion() {
     let input = r#"
     let get_int() -> Int = 42;
-    pub let f() -> LinExpr = get_int();
+    pub let f() -> LinExpr = get_int() as LinExpr;
     "#;
 
     let vars = HashMap::new();

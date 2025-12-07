@@ -194,7 +194,7 @@ fn coercion_int_param_to_linexpr() {
 
 #[test]
 fn coercion_in_list_unification() {
-    let input = "pub let f() -> [LinExpr] = [$V(), 5];";
+    let input = "pub let f() -> [LinExpr] = [$V(), 5 as LinExpr];";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -449,7 +449,7 @@ fn explicit_cast_in_if_branches() {
 fn coercion_return_type_int_to_linexpr() {
     let input = r#"
     let helper() -> Int = 42;
-    pub let f() -> LinExpr = helper();
+    pub let f() -> LinExpr = helper() as LinExpr;
     "#;
 
     let vars = HashMap::new();
@@ -472,7 +472,7 @@ fn coercion_return_type_int_to_linexpr() {
 fn coercion_return_type_with_arithmetic() {
     let input = r#"
     let helper() -> Int = 10;
-    pub let f() -> LinExpr = helper() + helper();
+    pub let f() -> LinExpr = (helper() + helper()) as LinExpr;
     "#;
 
     let vars = HashMap::new();
@@ -493,7 +493,7 @@ fn coercion_return_type_with_arithmetic() {
 
 #[test]
 fn coercion_param_to_return_type() {
-    let input = "pub let f(x: Int) -> LinExpr = x;";
+    let input = "pub let f(x: Int) -> LinExpr = x as LinExpr;";
 
     let vars = HashMap::new();
 
@@ -623,7 +623,7 @@ fn coercion_in_forall_body() {
 
 #[test]
 fn coercion_in_sum_to_linexpr() {
-    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x };";
+    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x } as LinExpr;";
 
     let vars = HashMap::new();
 
