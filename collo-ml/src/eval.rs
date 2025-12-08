@@ -414,6 +414,14 @@ impl<T: EvalObject> CheckedAST<T> {
         EvalHistory::new(self, env, cache)
     }
 
+    pub fn start_eval_history_with_cache<'a>(
+        &'a self,
+        env: &'a T::Env,
+        cache: T::Cache,
+    ) -> Result<EvalHistory<'a, T>, EvalError<T>> {
+        EvalHistory::new(self, env, cache)
+    }
+
     pub fn eval_fn(
         &self,
         env: &T::Env,
@@ -1410,7 +1418,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         self.add_fn_to_call_history(fn_name, checked_args.clone(), false)
     }
 
-    pub fn into_var_def(self) -> VariableDefinitions<T> {
+    pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T>, T::Cache) {
         let mut var_def = VariableDefinitions {
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
@@ -1466,7 +1474,11 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 .insert((vl_name, vl_args), (constraints, new_origin.clone()));
         }
 
-        var_def
+        (var_def, self.cache)
+    }
+
+    pub fn into_var_def(self) -> VariableDefinitions<T> {
+        self.into_var_def_and_cache().0
     }
 }
 

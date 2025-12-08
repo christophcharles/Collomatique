@@ -63,6 +63,9 @@ pub struct ProblemBuilder<
     /// Reference to the evaluation environment
     env: &'a T::Env,
 
+    /// Shared cache for evaluation
+    cache: Option<T::Cache>,
+
     /// Variables that define the problem
     /// The set of possible values of these variables is one-to-one with
     /// the set of solutions to our problem
@@ -607,7 +610,7 @@ impl<
                 BTreeMap::<ProblemVar<T, V>, (Vec<Constraint<ProblemVar<T, V>>>, Origin<T>)>::new();
 
             let mut eval_history = ast
-                .start_eval_history(&self.env)
+                .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
                 .expect("Environment should be compatible with AST");
             // We start by evaluating the proper constraints if any
             // (this will happen on the first iteration of the loop only)
@@ -709,7 +712,8 @@ impl<
             }
 
             // We're done evaluating. Let's collect the private reified vars
-            let var_def = eval_history.into_var_def();
+            let (var_def, new_cache) = eval_history.into_var_def_and_cache();
+            self.cache = Some(new_cache);
             for ((var_name, var_args), (constraints, new_origin)) in var_def.vars {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
@@ -846,6 +850,7 @@ impl<
             .collect();
         Ok(ProblemBuilder {
             env,
+            cache: None,
             base_vars,
             reified_vars: HashMap::new(),
             stored_scripts: vec![],
