@@ -670,8 +670,10 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 match (value1, value2) {
                     (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
-                    (ExprValue::Constraint(c1), ExprValue::Constraint(c2)) => {
-                        ExprValue::Constraint(c1.into_iter().chain(c2.into_iter()).collect())
+                    (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
+                        c1.reserve(c2.len());
+                        c1.extend(c2);
+                        ExprValue::Constraint(c1)
                     }
                     (value1, value2) => panic!(
                         "Unexpected types for AND operand: {:?}, {:?}",
@@ -845,9 +847,10 @@ impl<T: EvalObject> LocalEnv<T> {
                         ExprValue::LinExpr(lin_expr_value + new_lin_expr)
                     }
                     (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => ExprValue::LinExpr(v1 + v2),
-                    (ExprValue::List(list1), ExprValue::List(list2)) => {
-                        let list = list1.into_iter().chain(list2.into_iter()).collect();
-                        ExprValue::List(list)
+                    (ExprValue::List(mut list1), ExprValue::List(list2)) => {
+                        list1.reserve(list2.len());
+                        list1.extend(list2);
+                        ExprValue::List(list1)
                     }
                     (value1, value2) => {
                         panic!("Unexpected types for + operand: {:?}, {:?}", value1, value2)
@@ -965,7 +968,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_int() => {
                         ExprValue::Int(0)
                     }
-                    target if target.is_list() => ExprValue::List(vec![]),
+                    target if target.is_list() => ExprValue::List(Vec::with_capacity(list.len())), // Heuristic for length
                     _ => panic!("Expected Int, LinExpr or List output"),
                 };
 
@@ -996,8 +999,9 @@ impl<T: EvalObject> LocalEnv<T> {
                             (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => {
                                 ExprValue::LinExpr(v1 + v2)
                             }
-                            (ExprValue::List(list1), ExprValue::List(list2)) => {
-                                let list = list1.into_iter().chain(list2.into_iter()).collect();
+                            (ExprValue::List(mut list), ExprValue::List(new_list)) => {
+                                list.reserve(new_list.len());
+                                list.extend(new_list);
                                 ExprValue::List(list)
                             }
                             (value1, value2) => panic!(
@@ -1078,7 +1082,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         ExprValue::Bool(true)
                     }
                     AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_constraint() => {
-                        ExprValue::Constraint(vec![])
+                        ExprValue::Constraint(Vec::with_capacity(list.len())) // Heuristic for length
                     }
                     _ => panic!("Expected Bool or Constraint output"),
                 };
@@ -1102,10 +1106,10 @@ impl<T: EvalObject> LocalEnv<T> {
                         let new_value = self.eval_expr(eval_history, &body)?;
                         output = match (output, new_value) {
                             (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
-                            (ExprValue::Constraint(c1), ExprValue::Constraint(c2)) => {
-                                ExprValue::Constraint(
-                                    c1.into_iter().chain(c2.into_iter()).collect(),
-                                )
+                            (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
+                                c1.reserve(c2.len());
+                                c1.extend(c2);
+                                ExprValue::Constraint(c1)
                             }
                             (value1, value2) => panic!(
                                 "Unexpected types for forall operand: {:?}, {:?}",
