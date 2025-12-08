@@ -1240,6 +1240,13 @@ impl<T: EvalObject> LocalEnv<T> {
     }
 }
 
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref RE: regex::Regex =
+        regex::Regex::new(r"@\{([a-zA-Z_][a-zA-Z0-9_]*)\}").expect("Should be a valid regex");
+}
+
 #[derive(Debug)]
 pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST<T>,
@@ -1292,14 +1299,11 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             substitution_values.insert(arg_name.clone(), pretty_value);
         }
 
-        let re =
-            regex::Regex::new(r"@\{([a-zA-Z_][a-zA-Z0-9_]*)\}").expect("Should be a valid regex");
-
         fn_desc
             .docstring
             .iter()
             .map(|d| {
-                re.replace_all(d.trim_start(), |caps: &regex::Captures| {
+                RE.replace_all(d.trim_start(), |caps: &regex::Captures| {
                     let name = &caps[1];
                     substitution_values
                         .get(name)

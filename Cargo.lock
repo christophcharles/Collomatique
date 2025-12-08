@@ -364,6 +364,7 @@ dependencies = [
  "base64",
  "collo-ml-derive",
  "collomatique-ilp",
+ "lazy_static",
  "pest",
  "pest_derive",
  "regex",
