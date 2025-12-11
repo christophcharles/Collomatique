@@ -1,10 +1,17 @@
 use crate::ast::{Expr, Param, Span, Spanned};
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::Deref,
+};
 
 pub mod string_case;
 #[cfg(test)]
 mod tests;
 
+/// Represents a type that appears in a sum type
+///
+/// These can be primitive types (Int, Bool, LinExpr, etc)
+/// or objects or even lists
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleType {
     Int,
@@ -12,10 +19,15 @@ pub enum SimpleType {
     None,
     LinExpr,
     Constraint,
-    List(ExprType),
+    List(Option<ExprType>),
     Object(String),
 }
 
+/// Represents a sum type (or a simple type if there is only one type in it)
+///
+/// Invariants:
+/// - there is always at least one type in it
+/// - no type is the sum is a subtype of another in the sum
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExprType {
     variants: BTreeSet<SimpleType>,
@@ -57,14 +69,14 @@ impl SimpleType {
         matches!(self, SimpleType::Constraint)
     }
 
-    pub fn get_inner_list_type(&self) -> Option<&ExprType> {
+    pub fn get_inner_list_type(&self) -> Option<&Option<ExprType>> {
         match self {
             SimpleType::List(typ) => Some(typ),
             _ => None,
         }
     }
 
-    pub fn to_inner_list_type(self) -> Option<ExprType> {
+    pub fn to_inner_list_type(self) -> Option<Option<ExprType>> {
         match self {
             SimpleType::List(typ) => Some(typ),
             _ => None,
@@ -94,60 +106,104 @@ impl SimpleType {
         matches!(self, SimpleType::Int | SimpleType::LinExpr)
     }
 
-    /// Checks if self can be coerced to target type.
-    /// This is DIRECTIONAL: Int can coerce to LinExpr, but not vice versa.
-    pub fn can_coerce_to(&self, target: &SimpleType) -> bool {
-        match (self, target) {
-            // Exact match always works
+    pub fn is_concrete(&self) -> bool {
+        match self {
+            SimpleType::None => true,
+            SimpleType::Bool => true,
+            SimpleType::Int => true,
+            SimpleType::LinExpr => true,
+            SimpleType::Constraint => true,
+            SimpleType::Object(_) => true,
+            SimpleType::List(Some(inner)) => inner.is_concrete(),
+            SimpleType::List(None) => false,
+        }
+    }
+
+    pub fn into_concrete(self) -> Option<ConcreteType> {
+        if !self.is_concrete() {
+            return None;
+        }
+        Some(ConcreteType { simple_typ: self })
+    }
+
+    pub fn is_subtype_of(&self, other: &Self) -> bool {
+        match (self, other) {
+            // Most types are either equal or distinct
             (a, b) if a == b => true,
-
-            // Int → LinExpr (but NOT LinExpr → Int)
-            (SimpleType::Int, SimpleType::LinExpr) => true,
-
-            // Recursive: [A] → [B] if A can coerce to B
-            (SimpleType::List(a), SimpleType::List(b)) => a.can_coerce_to(b),
-
-            // Everything else: no coercion
+            // For lists we have to recursively check
+            (SimpleType::List(inner1_opt), SimpleType::List(inner2_opt)) => {
+                let Some(inner1) = inner1_opt else {
+                    // if inner1_opt is None, then it is a subtype of any list
+                    return true;
+                };
+                let Some(inner2) = inner2_opt else {
+                    // if however inner2_opt is None, is it only a supertype of [<unknown>]
+                    return false;
+                };
+                // otherwise we defer to the sum types
+                inner1.is_subtype_of(inner2)
+            }
+            // For all other combination, it's not
             _ => false,
         }
     }
 
-    /// Finds a common type that both left and right can coerce to.
-    /// This is BIDIRECTIONAL and SYMMETRIC.
-    pub fn unify(left: &SimpleType, right: &SimpleType) -> Option<SimpleType> {
-        match (left, right) {
-            // Exact match (including both EmptyList)
-            (a, b) if a == b => Some(a.clone()),
-
-            // Int/LinExpr unify to LinExpr (bidirectional)
-            (SimpleType::Int, SimpleType::LinExpr) | (SimpleType::LinExpr, SimpleType::Int) => {
-                Some(SimpleType::LinExpr)
+    pub fn can_convert_to(&self, target: &ConcreteType) -> bool {
+        let target = target.inner();
+        match (self, target) {
+            // Can convert (and this is a no-op) if we have the same as target typ
+            (a, b) if a == b => true,
+            // Int can be converted to LinExpr
+            (SimpleType::Int, SimpleType::LinExpr) => true,
+            // For list, we have to do that recursively
+            (SimpleType::List(inner1_opt), SimpleType::List(inner2_opt)) => {
+                let inner2 = inner2_opt
+                    .as_ref()
+                    .expect("target should be concrete and so fixed");
+                let inner2_simple = inner2
+                    .as_simple()
+                    .expect("target type should be concrete and so simple");
+                let inner2_concrete = inner2_simple
+                    .clone()
+                    .into_concrete()
+                    .expect("target type should be concrete");
+                let Some(inner1) = inner1_opt else {
+                    // At this point, we're doing [] -> [A] where A is some concrete type, so OK
+                    return true;
+                };
+                inner1.can_convert_to(&inner2_concrete)
             }
+            // Anything else: no conversion
+            _ => false,
+        }
+    }
 
-            // Lists: unify element types recursively
-            (SimpleType::List(l), SimpleType::List(r)) => {
-                ExprType::unify(l, r).map(|unified| SimpleType::List(unified))
-            }
+    pub fn is_complete(&self) -> bool {
+        match self {
+            SimpleType::None => true,
+            SimpleType::Bool => true,
+            SimpleType::Int => true,
+            SimpleType::LinExpr => true,
+            SimpleType::Constraint => true,
+            SimpleType::Object(_) => true,
+            SimpleType::List(Some(inner)) => inner.is_complete(),
+            SimpleType::List(None) => false,
+        }
+    }
 
-            // No unification possible
-            _ => None,
+    pub fn make_complete_example(&self) -> SimpleType {
+        match self {
+            SimpleType::List(None) => SimpleType::List(Some(SimpleType::Int.into())),
+            SimpleType::List(Some(inner)) => SimpleType::List(Some(inner.make_complete_example())),
+            _ => self.clone(),
         }
     }
 }
 
-impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
-    type Error = TypeNameError;
-
-    fn try_from(value: crate::ast::SimpleTypeName) -> Result<Self, TypeNameError> {
-        use crate::ast::SimpleTypeName;
-        match value {
-            SimpleTypeName::None => Ok(SimpleType::None),
-            SimpleTypeName::Bool => Ok(SimpleType::Bool),
-            SimpleTypeName::Int => Ok(SimpleType::Int),
-            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
-            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
-            SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
-            SimpleTypeName::List(sub_typ) => Ok(SimpleType::List(sub_typ.try_into()?)),
+impl SimpleType {
+    fn assert_invariant(&self) {
+        if let SimpleType::List(Some(inner)) = self {
+            inner.assert_invariant();
         }
     }
 }
@@ -160,9 +216,157 @@ impl std::fmt::Display for SimpleType {
             SimpleType::Int => write!(f, "Int"),
             SimpleType::LinExpr => write!(f, "LinExpr"),
             SimpleType::Constraint => write!(f, "Constraint"),
-            SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
+            SimpleType::List(sub_type) => match sub_type {
+                Some(t) => write!(f, "[{}]", t),
+                None => write!(f, "[<unknown>]"),
+            },
             SimpleType::Object(typ) => write!(f, "{}", typ),
         }
+    }
+}
+
+impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
+    type Error = SemError;
+
+    fn try_from(value: crate::ast::SimpleTypeName) -> Result<Self, Self::Error> {
+        use crate::ast::SimpleTypeName;
+        match value {
+            SimpleTypeName::None => Ok(SimpleType::None),
+            SimpleTypeName::Bool => Ok(SimpleType::Bool),
+            SimpleTypeName::Int => Ok(SimpleType::Int),
+            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
+            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
+            SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::List(inner) => Ok(SimpleType::List(Some(inner.try_into()?))),
+        }
+    }
+}
+
+impl TryFrom<crate::ast::Spanned<crate::ast::TypeName>> for ExprType {
+    type Error = SemError;
+
+    fn try_from(value: crate::ast::Spanned<crate::ast::TypeName>) -> Result<Self, SemError> {
+        Ok(CompleteType::try_from(value)?.into_inner())
+    }
+}
+
+impl TryFrom<crate::ast::Spanned<crate::ast::TypeName>> for CompleteType {
+    type Error = SemError;
+
+    fn try_from(value: crate::ast::Spanned<crate::ast::TypeName>) -> Result<Self, SemError> {
+        if value.node.types.is_empty() {
+            panic!("It should not be possible to form 0-length typenames");
+        }
+        let mut flattened = Vec::with_capacity(value.node.types.len());
+        for typ in value.node.types {
+            let inner_typ = SimpleType::try_from(typ.node.inner)?;
+            let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
+            match typ.node.maybe_count {
+                0 => flattened.push(spanned_inner),
+                1 => {
+                    if spanned_inner.node.is_none() {
+                        return Err(SemError::OptionMarkerOnNone(spanned_inner.span));
+                    }
+                    flattened.push(crate::ast::Spanned::new(
+                        SimpleType::None,
+                        spanned_inner.span.clone(),
+                    ));
+                    flattened.push(spanned_inner);
+                }
+                _ => {
+                    return Err(SemError::MultipleOptionMarkers {
+                        typ: spanned_inner.node,
+                        span: spanned_inner.span,
+                    });
+                }
+            };
+        }
+        use std::collections::BTreeMap;
+        let mut span_map = BTreeMap::new();
+        for spanned_typ in flattened {
+            let current_span = spanned_typ.span.clone();
+            let old_span_opt = span_map.insert(spanned_typ.node.clone(), spanned_typ.span);
+            if let Some(old_span) = old_span_opt {
+                return Err(SemError::MultipleTypeInSum {
+                    typ: spanned_typ.node,
+                    span1: current_span,
+                    span2: old_span,
+                    sum_span: value.span,
+                });
+            }
+        }
+        let variants: BTreeSet<_> = span_map.keys().cloned().collect();
+        if let Some((variant1, variant2)) = ExprType::check_subtypes(&variants) {
+            let span1 = span_map.remove(variant1).unwrap();
+            let span2 = span_map.remove(variant2).unwrap();
+            return Err(SemError::SubtypeAndTypePresent {
+                typ1: variant1.clone(),
+                span1,
+                typ2: variant2.clone(),
+                span2,
+                sum_span: value.span,
+            });
+        }
+        Ok(CompleteType {
+            expr_typ: ExprType { variants }.assert_before_return(),
+        })
+    }
+}
+
+impl From<SimpleType> for ExprType {
+    fn from(value: SimpleType) -> Self {
+        ExprType::simple(value)
+    }
+}
+
+impl std::fmt::Display for ExprType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let types: Vec<_> = self.variants.iter().map(|t| t.to_string()).collect();
+        write!(f, "{}", types.join(" | "))
+    }
+}
+
+impl ExprType {
+    fn check_subtypes(variants: &BTreeSet<SimpleType>) -> Option<(&SimpleType, &SimpleType)> {
+        for variant1 in variants {
+            for variant2 in variants {
+                if variant1 == variant2 {
+                    continue;
+                }
+                if variant1.is_subtype_of(variant2) {
+                    return Some((variant1, variant2));
+                }
+            }
+        }
+        None
+    }
+
+    fn clean_subtypes(variants: &mut BTreeSet<SimpleType>) {
+        while let Some((variant1, _variant2)) = Self::check_subtypes(variants) {
+            let v = variant1.clone();
+            variants.remove(&v);
+        }
+    }
+
+    fn assert_invariant(&self) {
+        assert!(
+            self.variants.len() >= 1,
+            "ExprType should always have at least one variant"
+        );
+        if let Some((variant1, variant2)) = Self::check_subtypes(&self.variants) {
+            panic!(
+                "{} is a subtype of {} and both present in ExprType; this is forbidden",
+                variant1, variant2,
+            );
+        }
+        for variant in &self.variants {
+            variant.assert_invariant();
+        }
+    }
+
+    fn assert_before_return(self) -> Self {
+        self.assert_invariant();
+        self
     }
 }
 
@@ -171,25 +375,29 @@ impl ExprType {
         ExprType {
             variants: BTreeSet::from([typ]),
         }
+        .assert_before_return()
     }
 
     pub fn maybe(typ: SimpleType) -> Option<ExprType> {
         if typ.is_none() {
             return None;
         }
-        Some(ExprType {
-            variants: BTreeSet::from([SimpleType::None, typ]),
-        })
+        Some(
+            ExprType {
+                variants: BTreeSet::from([SimpleType::None, typ]),
+            }
+            .assert_before_return(),
+        )
     }
 
     pub fn sum(types: impl IntoIterator<Item = SimpleType>) -> Option<Self> {
-        let variants: BTreeSet<_> = types.into_iter().collect();
+        let mut variants: BTreeSet<_> = types.into_iter().collect();
 
         if variants.is_empty() {
             return None;
         }
-
-        Some(ExprType { variants })
+        Self::clean_subtypes(&mut variants);
+        Some(Self { variants }.assert_before_return())
     }
 
     pub fn is_simple(&self) -> bool {
@@ -230,27 +438,23 @@ impl ExprType {
             .unwrap_or(false)
     }
 
-    pub fn contains_one_list(&self) -> bool {
-        self.variants.iter().filter(|x| x.is_list()).count() == 1
+    pub fn is_concrete(&self) -> bool {
+        assert!(
+            self.variants.len() >= 1,
+            "ExprType should always carry at least one type"
+        );
+        if self.variants.len() != 1 {
+            return false;
+        }
+        let variant = self.variants.iter().next().unwrap();
+        variant.is_concrete()
     }
 
-    pub fn get_contained_inner_list_type(&self) -> Option<&ExprType> {
-        if !self.contains_one_list() {
-            return None;
-        }
-        for variant in &self.variants {
-            if variant.is_list() {
-                return variant.get_inner_list_type();
-            }
-        }
-        None
-    }
-
-    pub fn get_inner_list_type(&self) -> Option<&ExprType> {
+    pub fn get_inner_list_type(&self) -> Option<&Option<ExprType>> {
         self.as_simple().map(|x| x.get_inner_list_type()).flatten()
     }
 
-    pub fn to_inner_list_type(self) -> Option<ExprType> {
+    pub fn to_inner_list_type(self) -> Option<Option<ExprType>> {
         self.to_simple().map(|x| x.to_inner_list_type()).flatten()
     }
 
@@ -311,316 +515,144 @@ impl ExprType {
         &self.variants
     }
 
-    pub fn can_coerce_to(&self, target: &ExprType) -> bool {
-        match (self, target) {
-            // For SimpleType, we defer to SimpleType::can_coerce_to
-            (a, b) if a.is_simple() && b.is_simple() => {
-                let typ_a = a.as_simple().unwrap();
-                let typ_b = b.as_simple().unwrap();
+    pub fn into_variants(self) -> BTreeSet<SimpleType> {
+        self.variants
+    }
 
-                typ_a.can_coerce_to(typ_b)
+    pub fn is_subtype_of(&self, other: &Self) -> bool {
+        for variant in &self.variants {
+            if other.variants.iter().all(|x| !variant.is_subtype_of(x)) {
+                return false;
             }
+        }
+        true
+    }
 
-            // If we have sum types, we can only coerce from one sum type to another
-            // if the first is included in the other
-            //
-            // This covers the case of one simple type into a sum type
-            (a, b) => a.variants.is_subset(&b.variants),
+    pub fn can_convert_to(&self, target: &ConcreteType) -> bool {
+        self.variants.iter().all(|x| x.can_convert_to(target))
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.variants.iter().all(|x| x.is_complete())
+    }
+
+    pub fn into_complete(self) -> Option<CompleteType> {
+        if !self.is_complete() {
+            return None;
+        }
+        Some(CompleteType { expr_typ: self })
+    }
+
+    pub fn make_complete_example(&self) -> Self {
+        Self {
+            variants: self
+                .variants
+                .iter()
+                .map(|x| x.make_complete_example())
+                .collect(),
         }
     }
 
-    pub fn unify(left: &ExprType, right: &ExprType) -> Option<ExprType> {
-        match (left, right) {
-            // For SimpleType, we defer to SimpleType::unify
-            (a, b) if a.is_simple() && b.is_simple() => {
-                let typ_a = a.as_simple().unwrap();
-                let typ_b = b.as_simple().unwrap();
-
-                SimpleType::unify(typ_a, typ_b).map(ExprType::simple)
-            }
-
-            // If we have sum types, we unify to the union of types
-            //
-            // This covers the case of one simple type with a sum type (this coerces to the sum type)
-            (a, b) => Some(ExprType {
-                variants: a.variants.union(&b.variants).cloned().collect(),
-            }),
-        }
+    pub fn unify_with(&self, other: &ExprType) -> ExprType {
+        Self::sum(self.variants.union(&other.variants).cloned())
+            .expect("There should be at least one variant")
     }
-}
 
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
-pub enum TypeNameError {
-    #[error("Only one option marker '?' is allowed on types")]
-    MultipleOptionMarkers,
-    #[error("Option types are not allowed in sum types")]
-    OptionTypeInSumType,
-    #[error("All types in sum types should appear once")]
-    DuplicatedTypeInSumType,
-    #[error("Option marker '?' is forbidden on None")]
-    OptionMarkerOnNone,
-}
-
-impl TryFrom<crate::ast::TypeName> for ExprType {
-    type Error = TypeNameError;
-
-    fn try_from(value: crate::ast::TypeName) -> Result<Self, TypeNameError> {
-        match value.types.len() {
-            0 => panic!("It should not be possible to form 0-length typenames"),
-            1 => {
-                let maybe_type = value.types.into_iter().next().unwrap();
-                match maybe_type.maybe_count {
-                    0 => Ok(ExprType::simple(SimpleType::try_from(maybe_type.inner)?)),
-                    1 => Ok(ExprType::maybe(SimpleType::try_from(maybe_type.inner)?)
-                        .ok_or(TypeNameError::OptionMarkerOnNone)?),
-                    _ => Err(TypeNameError::MultipleOptionMarkers),
+    pub fn cross_check<F: FnMut(&SimpleType, &SimpleType) -> Result<SimpleType, SemError>>(
+        &self,
+        other: &ExprType,
+        errors: &mut Vec<SemError>,
+        mut f: F,
+    ) -> Option<ExprType> {
+        let mut variants = BTreeSet::new();
+        for v1 in &self.variants {
+            for v2 in &other.variants {
+                match f(v1, v2) {
+                    Ok(t) => {
+                        variants.insert(t);
+                    }
+                    Err(e) => {
+                        errors.push(e);
+                        return None;
+                    }
                 }
-            }
-            _ => {
-                if value.types.iter().any(|x| x.maybe_count > 0) {
-                    return Err(TypeNameError::OptionTypeInSumType);
-                }
-
-                let init_count = value.types.len();
-                let expr_type = ExprType::sum(
-                    value
-                        .types
-                        .into_iter()
-                        .map(|x| SimpleType::try_from(x.inner))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-                .expect("There should be more than 0 variants");
-
-                if expr_type.variants.len() != init_count {
-                    return Err(TypeNameError::DuplicatedTypeInSumType);
-                }
-
-                Ok(expr_type)
             }
         }
+        assert!(
+            !variants.is_empty(),
+            "There should be at least one variant in the output"
+        );
+
+        Self::sum(variants)
+    }
+
+    pub fn overlaps_with(&self, other: &ExprType) -> bool {
+        todo!()
     }
 }
 
-impl From<SimpleType> for ExprType {
-    fn from(value: SimpleType) -> Self {
-        ExprType::simple(value)
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ConcreteType {
+    simple_typ: SimpleType,
+}
+
+impl ConcreteType {
+    pub fn inner(&self) -> &SimpleType {
+        &self.simple_typ
+    }
+
+    pub fn into_inner(self) -> SimpleType {
+        self.simple_typ
     }
 }
 
-impl std::fmt::Display for ExprType {
+impl Deref for ConcreteType {
+    type Target = SimpleType;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
+impl std::fmt::Display for ConcreteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.variants.len() == 1 {
-            write!(f, "{}", self.variants.iter().next().unwrap())
-        } else {
-            let types: Vec<_> = self.variants.iter().map(|t| t.to_string()).collect();
-            write!(f, "{}", types.join(" | "))
-        }
+        write!(f, "{}", self.inner())
     }
 }
 
-/// Represents an annotated type
-///
-/// When exploring the AST, we might need more precise information than just types.
-/// There are two main cases:
-/// - types might be not completely determined. This is the case for [AnnotatedType::UntypedList].
-///   This happens for instance with empty lists ("[]") for which we of course do not know the types
-///   of the elements.
-/// - types might also be forced. This means the coercion rules are made more stringent for such types.
-///   This happens for instance after a type coercion ("as") as the user has clearly set an intent on
-///   the type and it should be fulfilled.
-///   Forced typed have some expiration date: forced caracter is lost when unifying types.
-///   Coercion is possible after the next operation but forced type can be reintroduced
-///   with a new 'as'. So for instance  in "if cond() { 5 as Int } else { g() } + $Var(x)"
-///   "g()" must return a type coercible to Int otherwise this fails. However the result of
-///   the "if" branches is coercible to a LinExpr.
-///   To reenforce the "Int" we should write : "if cond() { 5 as Int } else { g() } as Int"
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotatedType {
-    Forced(ExprType),
-    Regular(ExprType),
-    UntypedList,
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CompleteType {
+    expr_typ: ExprType,
 }
 
-impl AnnotatedType {
-    pub fn is_primitive_type(&self) -> bool {
-        match self {
-            AnnotatedType::Forced(typ) => typ.is_primitive_type(),
-            AnnotatedType::Regular(typ) => typ.is_primitive_type(),
-            AnnotatedType::UntypedList => false,
-        }
+impl CompleteType {
+    pub fn inner(&self) -> &ExprType {
+        &self.expr_typ
     }
 
-    pub fn is_list(&self) -> bool {
-        match self {
-            AnnotatedType::Forced(typ) => typ.is_list(),
-            AnnotatedType::Regular(typ) => typ.is_list(),
-            AnnotatedType::UntypedList => true,
-        }
-    }
-
-    /// Checks if type is valid for arithmetic operations
-    pub fn is_arithmetic(&self) -> bool {
-        match self {
-            AnnotatedType::Forced(typ) => typ.is_arithmetic(),
-            AnnotatedType::Regular(typ) => typ.is_arithmetic(),
-            AnnotatedType::UntypedList => false,
-        }
-    }
-
-    pub fn is_forced(&self) -> bool {
-        match self {
-            AnnotatedType::Forced(_) => true,
-            AnnotatedType::Regular(_) => false,
-            AnnotatedType::UntypedList => false,
-        }
-    }
-
-    pub fn matches(&self, target: &ExprType) -> bool {
-        match self {
-            AnnotatedType::Forced(typ) => *typ == *target,
-            AnnotatedType::Regular(typ) => *typ == *target,
-            AnnotatedType::UntypedList => false,
-        }
-    }
-
-    pub fn inner(&self) -> Option<&ExprType> {
-        match self {
-            AnnotatedType::Forced(typ) => Some(&typ),
-            AnnotatedType::Regular(typ) => Some(&typ),
-            AnnotatedType::UntypedList => None,
-        }
-    }
-
-    pub fn into_inner(self) -> Option<ExprType> {
-        match self {
-            AnnotatedType::Forced(typ) => Some(typ),
-            AnnotatedType::Regular(typ) => Some(typ),
-            AnnotatedType::UntypedList => None,
-        }
-    }
-
-    pub fn can_coerce_to(&self, target: &ExprType) -> bool {
-        match self {
-            // Force types don't coerce if these are simple types
-            AnnotatedType::Forced(typ) if target.is_simple() => typ == target,
-            // But force types still coerce to sum types
-            AnnotatedType::Forced(typ) => typ.can_coerce_to(target),
-            AnnotatedType::Regular(typ) => typ.can_coerce_to(target),
-            // We can automatically cast an empty list to a sum type if
-            // exactly one variant is a list
-            AnnotatedType::UntypedList => target.contains_one_list(),
-        }
-    }
-
-    pub fn unify(left: &AnnotatedType, right: &AnnotatedType) -> Option<AnnotatedType> {
-        match (left, right) {
-            // Force typed don't coerce if these are simple types
-            (AnnotatedType::Forced(a), AnnotatedType::Forced(b))
-                if a.is_simple() && b.is_simple() =>
-            {
-                if a == b {
-                    Some(AnnotatedType::Regular(a.clone()))
-                } else {
-                    None
-                }
-            }
-            // If one of the type is not simple (it is a sum type), then we can unify to the union of the sum
-            (AnnotatedType::Forced(a), AnnotatedType::Forced(b)) => {
-                ExprType::unify(a, b).map(AnnotatedType::Regular)
-            }
-            (AnnotatedType::Regular(a), AnnotatedType::Regular(b)) => {
-                ExprType::unify(a, b).map(AnnotatedType::Regular)
-            }
-            (AnnotatedType::UntypedList, AnnotatedType::UntypedList) => {
-                Some(AnnotatedType::UntypedList)
-            }
-            // Force type does not coerce if simple, but regular type can
-            (AnnotatedType::Forced(a), AnnotatedType::Regular(b))
-            | (AnnotatedType::Regular(b), AnnotatedType::Forced(a))
-                if a.is_simple() && b.is_simple() =>
-            {
-                if b.can_coerce_to(a) {
-                    Some(AnnotatedType::Regular(a.clone()))
-                } else {
-                    None
-                }
-            }
-            // If at least one of them is not simple (it is a sum type), we can fall back
-            // to standard behavior and unify to the union.
-            (AnnotatedType::Forced(a), AnnotatedType::Regular(b))
-            | (AnnotatedType::Regular(b), AnnotatedType::Forced(a)) => {
-                ExprType::unify(a, b).map(AnnotatedType::Regular)
-            }
-            // We can unify untyped list to sum types if there is a single list type in
-            // the sum type.
-            (AnnotatedType::UntypedList, AnnotatedType::Forced(a))
-            | (AnnotatedType::Forced(a), AnnotatedType::UntypedList) => {
-                if a.contains_one_list() {
-                    Some(AnnotatedType::Regular(a.clone()))
-                } else {
-                    None
-                }
-            }
-            (AnnotatedType::UntypedList, AnnotatedType::Regular(a))
-            | (AnnotatedType::Regular(a), AnnotatedType::UntypedList) => {
-                if a.contains_one_list() {
-                    Some(AnnotatedType::Regular(a.clone()))
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
-    pub fn loosen(&self) -> AnnotatedType {
-        match self {
-            AnnotatedType::Forced(a) => AnnotatedType::Regular(a.clone()),
-            AnnotatedType::Regular(a) => AnnotatedType::Regular(a.clone()),
-            AnnotatedType::UntypedList => AnnotatedType::UntypedList,
-        }
-    }
-
-    pub fn enforce(&self) -> AnnotatedType {
-        match self {
-            AnnotatedType::Forced(a) => AnnotatedType::Forced(a.clone()),
-            AnnotatedType::Regular(a) => AnnotatedType::Forced(a.clone()),
-            AnnotatedType::UntypedList => AnnotatedType::UntypedList,
-        }
+    pub fn into_inner(self) -> ExprType {
+        self.expr_typ
     }
 }
 
-impl std::fmt::Display for AnnotatedType {
+impl Deref for CompleteType {
+    type Target = ExprType;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
+impl std::fmt::Display for CompleteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnnotatedType::Forced(typ) => {
-                write!(f, "{} (coercion forbidden)", typ)
-            }
-            AnnotatedType::Regular(typ) => {
-                write!(f, "{}", typ)
-            }
-            AnnotatedType::UntypedList => {
-                write!(f, "[<unknown>]")
-            }
-        }
-    }
-}
-
-impl From<ExprType> for AnnotatedType {
-    fn from(value: ExprType) -> Self {
-        AnnotatedType::Regular(value)
-    }
-}
-
-impl From<SimpleType> for AnnotatedType {
-    fn from(value: SimpleType) -> Self {
-        AnnotatedType::Regular(value.into())
+        write!(f, "{}", self.inner())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionType {
     pub args: ArgsType,
-    pub output: ExprType,
+    pub output: CompleteType,
 }
 
 impl std::fmt::Display for FunctionType {
@@ -630,9 +662,9 @@ impl std::fmt::Display for FunctionType {
     }
 }
 
-pub type ArgsType = Vec<ExprType>;
+pub type ArgsType = Vec<CompleteType>;
 
-pub type ObjectFields = HashMap<String, ExprType>;
+pub type ObjectFields = HashMap<String, CompleteType>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDesc {
@@ -735,7 +767,8 @@ impl GlobalEnv {
             SimpleType::Int => true,
             SimpleType::LinExpr => true,
             SimpleType::Constraint => true,
-            SimpleType::List(sub_typ) => self.validate_type(sub_typ),
+            SimpleType::List(Some(sub_typ)) => self.validate_type(sub_typ),
+            SimpleType::List(None) => true,
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
         }
     }
@@ -866,7 +899,7 @@ impl GlobalEnv {
         type_info.types.insert(span, args_typ.into());
     }
 
-    fn lookup_field(&self, obj_type: &str, field: &str) -> Option<ExprType> {
+    fn lookup_field(&self, obj_type: &str, field: &str) -> Option<CompleteType> {
         self.defined_types.get(obj_type)?.get(field).cloned()
     }
 }
@@ -898,14 +931,27 @@ pub enum SemError {
     },
     #[error("Type {typ} at {span:?} is unknown")]
     UnknownType { typ: String, span: Span },
-    #[error("TMultiple option markers '?' in type at {span:?}")]
-    MultipleOptionMarkers { span: Span },
-    #[error("Option types ('?') in sum type defined at {span:?}")]
-    OptionTypeInSumType { span: Span },
-    #[error("Sum type at {span:?} has multiple copies of the same type")]
-    DuplicatedTypeInSumType { span: Span },
-    #[error("Option type at {span:?} has an option marker on None")]
-    OptionMarkerOnNone { span: Span },
+    #[error("Multiple option markers '?' on {typ} (at {span:?}) - only one option marker '?' is allowed")]
+    MultipleOptionMarkers { typ: SimpleType, span: Span },
+    #[error("Type {typ} appears multiple time in the sum (at {span1:?} and {span2:?} in sum at {sum_span:?})")]
+    MultipleTypeInSum {
+        typ: SimpleType,
+        span1: Span,
+        span2: Span,
+        sum_span: Span,
+    },
+    #[error(
+        "Type {typ1} (at {span1:?}) is a subtype of {typ2} (at {span2:?} in sum at {sum_span:?})"
+    )]
+    SubtypeAndTypePresent {
+        typ1: SimpleType,
+        span1: Span,
+        typ2: SimpleType,
+        span2: Span,
+        sum_span: Span,
+    },
+    #[error("Option marker '?' is forbidden on None (at {0:?})")]
+    OptionMarkerOnNone(Span),
     #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
     GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
@@ -918,14 +964,14 @@ pub enum SemError {
     BodyTypeMismatch {
         func: String,
         span: Span,
-        expected: ExprType,
-        found: AnnotatedType,
+        expected: CompleteType,
+        found: ExprType,
     },
     #[error("Type mismatch at {span:?}: expected {expected} but found {found} ({context})")]
     TypeMismatch {
         span: Span,
-        expected: AnnotatedType,
-        found: AnnotatedType,
+        expected: ExprType,
+        found: ExprType,
         context: String,
     },
     #[error("Argument count mismatch for \"{identifier}\" at {span:?}: expected {expected} arguments but found {found}")]
@@ -943,9 +989,21 @@ pub enum SemError {
     },
     #[error("Cannot access field \"{field}\" on non-object type {typ} at {span:?}")]
     FieldAccessOnNonObject {
-        typ: AnnotatedType,
+        typ: ExprType,
         field: String,
         span: Span,
+    },
+    #[error("Type at {span:?}: found {found} which is not a concrete type ({context})")]
+    NonConcreteType {
+        span: Span,
+        found: ExprType,
+        context: String,
+    },
+    #[error("Type at {span:?}: found {found} which cannot be converted into {target}")]
+    ImpossibleConversion {
+        span: Span,
+        found: ExprType,
+        target: ConcreteType,
     },
 }
 
@@ -994,8 +1052,8 @@ pub enum SemWarning {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct LocalEnv {
-    scopes: Vec<HashMap<String, (ExprType, Span, bool)>>,
-    pending_scope: HashMap<String, (ExprType, Span, bool)>,
+    scopes: Vec<HashMap<String, (CompleteType, Span, bool)>>,
+    pending_scope: HashMap<String, (CompleteType, Span, bool)>,
 }
 
 fn should_be_used_by_default(ident: &str) -> bool {
@@ -1009,13 +1067,13 @@ impl LocalEnv {
         LocalEnv::default()
     }
 
-    fn lookup_in_pending_scope(&self, ident: &str) -> Option<(ExprType, Span)> {
+    fn lookup_in_pending_scope(&self, ident: &str) -> Option<(CompleteType, Span)> {
         self.pending_scope
             .get(ident)
             .map(|(typ, span, _used)| (typ.clone(), span.clone()))
     }
 
-    fn lookup_ident(&mut self, ident: &str) -> Option<(ExprType, Span)> {
+    fn lookup_ident(&mut self, ident: &str) -> Option<(CompleteType, Span)> {
         // We don't look in pending scope as these variables are not yet accessible
         for scope in self.scopes.iter_mut().rev() {
             let Some((typ, span, used)) = scope.get_mut(ident) else {
@@ -1055,7 +1113,7 @@ impl LocalEnv {
         &mut self,
         ident: &str,
         span: Span,
-        typ: ExprType,
+        typ: CompleteType,
         type_info: &mut TypeInfo,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -1073,7 +1131,7 @@ impl LocalEnv {
             ident.to_string(),
             (typ.clone(), span.clone(), should_be_used_by_default(ident)),
         );
-        type_info.types.insert(span, typ.into());
+        type_info.types.insert(span, typ.into_inner().into());
     }
 
     fn check_expr(
@@ -1082,10 +1140,10 @@ impl LocalEnv {
         expr: &crate::ast::Expr,
         span: &Span,
         type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, AnnotatedType>,
+        expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
-    ) -> Option<AnnotatedType> {
+    ) -> Option<ExprType> {
         let result =
             self.check_expr_internal(global_env, expr, type_info, expr_types, errors, warnings);
         if let Some(typ) = &result {
@@ -1099,10 +1157,10 @@ impl LocalEnv {
         global_env: &mut GlobalEnv,
         expr: &crate::ast::Expr,
         type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, AnnotatedType>,
+        expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
-    ) -> Option<AnnotatedType> {
+    ) -> Option<ExprType> {
         use crate::ast::Expr;
 
         match expr {
@@ -1128,48 +1186,18 @@ impl LocalEnv {
                 .map(|x| x.into()),
 
             // ========== As construct ==========
-            Expr::ExplicitType { expr, typ } => {
+            Expr::TypeConversion { expr, typ } => {
                 // Check the inner expression
                 let expr_type = self.check_expr(
                     global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
                 );
-                // 'as' is forcing explicitly a coercion. So we don't care if we are
-                // getting a forced type.
-                //
-                // This means that chained 'as' are valid (even if a bit odd):
-                // "5 as Int as LinExpr"
-                let loose_type = expr_type.map(|x| x.loosen());
 
                 // Convert the declared type
-                let target_type = match ExprType::try_from(typ.node.clone()) {
+                let target_type = match ExprType::try_from(typ.clone()) {
                     Ok(t) => t,
-                    Err(TypeNameError::MultipleOptionMarkers) => {
-                        errors.push(SemError::MultipleOptionMarkers {
-                            span: typ.span.clone(),
-                        });
-                        return loose_type; // Fallback to inferred type
-                                           // We don't make it forced as it might not correspond to desired type
-                    }
-                    Err(TypeNameError::OptionTypeInSumType) => {
-                        errors.push(SemError::OptionTypeInSumType {
-                            span: typ.span.clone(),
-                        });
-                        return loose_type; // Fallback to inferred type
-                                           // We don't make it forced as it might not correspond to desired type
-                    }
-                    Err(TypeNameError::DuplicatedTypeInSumType) => {
-                        errors.push(SemError::DuplicatedTypeInSumType {
-                            span: typ.span.clone(),
-                        });
-                        return loose_type; // Fallback to inferred type
-                                           // We don't make it forced as it might not correspond to desired type
-                    }
-                    Err(TypeNameError::OptionMarkerOnNone) => {
-                        errors.push(SemError::OptionMarkerOnNone {
-                            span: typ.span.clone(),
-                        });
-                        return loose_type; // Fallback to inferred type
-                                           // We don't make it forced as it might not correspond to desired type
+                    Err(e) => {
+                        errors.push(e);
+                        return expr_type; // Fallback to inferred type
                     }
                 };
 
@@ -1179,40 +1207,38 @@ impl LocalEnv {
                         typ: target_type.to_string(),
                         span: typ.span.clone(),
                     });
-                    return loose_type; // Fallback to inferred type
-                                       // We don't make it forced as it might not correspond to desired type
+                    return expr_type; // Fallback to inferred type
                 }
 
-                match loose_type {
-                    Some(inferred) => {
-                        // Check if the inferred type can coerce to the target type
-                        if inferred.can_coerce_to(&target_type) {
-                            // Success: use the target type
-                            Some(AnnotatedType::Forced(target_type))
-                        } else {
-                            // Error: can't coerce
-                            errors.push(SemError::TypeMismatch {
-                                span: expr.span.clone(),
-                                expected: target_type.clone().into(),
-                                found: inferred,
-                                context: "explicit type annotation".to_string(),
-                            });
-                            // Return target type anyway (user's intent is clear)
-                            Some(AnnotatedType::Forced(target_type))
-                        }
-                    }
-                    None => {
-                        // Expression failed to type-check, but we have explicit type
-                        // Use the explicit type as a hint for recovery
-                        Some(AnnotatedType::Forced(target_type))
+                // Validate that the target type is concrete for type conversion
+                if !target_type.is_concrete() {
+                    errors.push(SemError::NonConcreteType {
+                        span: typ.span.clone(),
+                        found: target_type,
+                        context: "Type conversion requires a concrete target type".to_string(),
+                    });
+                    return expr_type; // Fallback to inferred type
+                }
+                let concrete_target = target_type.to_simple().unwrap().into_concrete().unwrap();
+
+                if let Some(inferred) = expr_type {
+                    // Check if the inferred type can convert to the target type
+                    if !inferred.can_convert_to(&concrete_target) {
+                        // Error: can't convert
+                        errors.push(SemError::ImpossibleConversion {
+                            span: expr.span.clone(),
+                            found: inferred,
+                            target: concrete_target.clone(),
+                        });
                     }
                 }
+                Some(concrete_target.into_inner().into()) // Propagate concrete target in all cases
             }
 
             // ========== Arithmetic Operations ==========
             // Int + Int -> Int
-            // LinExpr + Int -> LinExpr (coerce Int to LinExpr)
-            // Int + LinExpr -> LinExpr (coerce Int to LinExpr)
+            // LinExpr + Int -> LinExpr (auto convert Int to LinExpr)
+            // Int + LinExpr -> LinExpr (auto convert Int to LinExpr)
             // LinExpr + LinExpr -> LinExpr
             // [Type] + [Type] -> [Type]
             Expr::Add(left, right) | Expr::Sub(left, right) => {
@@ -1229,44 +1255,83 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type.clone(), right_type) {
-                    (Some(l), Some(r)) => match AnnotatedType::unify(&l, &r) {
-                        Some(unified) if unified.is_arithmetic() || unified.is_list() => {
-                            Some(unified)
-                        }
-                        _ => {
+                match (&left_type, &right_type) {
+                    (None, None) => None,
+                    (Some(t), None) |
+                    (None, Some(t)) => {
+                        if t.is_int() || t.is_lin_expr() || t.is_list() {
+                            Some(t.clone())
+                        } else if t.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap()) {
+                            Some(SimpleType::LinExpr.into())
+                        } else {
+                            let span = if left_type.is_some() {
+                                left.span.clone()
+                            } else {
+                                right.span.clone()
+                            };
                             errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: l.clone(),
-                                found: r.clone(),
-                                context: format!(
-                                    "addition/subtraction/concatenation requires Int, LinExpr or List, got {} and {}",
-                                    l, r
-                                ),
+                                span,
+                                expected: SimpleType::Int.into(),
+                                found: t.clone(),
+                                context:
+                                    "addition/subtraction/concatenation requires Int or LinExpr or List"
+                                        .to_string(),
                             });
                             None
                         }
-                    },
-                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() || t.is_list() => {
-                        Some(t)
                     }
-                    (Some(t), None) | (None, Some(t)) => {
-                        let span = if left_type.is_some() {
-                            left.span.clone()
-                        } else {
-                            right.span.clone()
-                        };
-                        errors.push(SemError::TypeMismatch {
-                            span,
-                            expected: SimpleType::Int.into(),
-                            found: t.clone(),
-                            context:
-                                "addition/subtraction/concatenation requires Int or LinExpr or List"
-                                    .to_string(),
-                        });
-                        None
+                    (Some(l), Some(r)) => {
+                        l.cross_check(
+                            &r,
+                            errors,
+                            |v1,v2| match (v1,v2) {
+                                (SimpleType::Int, SimpleType::Int) => Ok(SimpleType::Int),
+                                (SimpleType::LinExpr, SimpleType::Int) |
+                                (SimpleType::Int, SimpleType::LinExpr) |
+                                (SimpleType::LinExpr, SimpleType::LinExpr) => Ok(SimpleType::LinExpr),
+                                (SimpleType::List(None), SimpleType::List(None)) => Ok(SimpleType::List(None)),
+                                (SimpleType::List(Some(inner)), SimpleType::List(None)) |
+                                (SimpleType::List(None), SimpleType::List(Some(inner))) => Ok(
+                                    SimpleType::List(Some(inner.clone()))
+                                ),
+                                (SimpleType::List(Some(inner1)), SimpleType::List(Some(inner2))) => {
+                                    Ok(SimpleType::List(
+                                        Some(inner1.unify_with(inner2))
+                                    ))
+                                }
+                                (a,b) => {
+                                    let is_a_valid = a.is_arithmetic() || a.is_list();
+                                    let is_b_valid = b.is_arithmetic() || b.is_list();
+                                    let span = if is_a_valid {
+                                        right.span.clone()
+                                    } else {
+                                        left.span.clone()
+                                    };
+                                    let expected = if is_a_valid {
+                                        a.clone()
+                                    } else if is_b_valid {
+                                        b.clone()
+                                    } else {
+                                        SimpleType::Int
+                                    };
+                                    let found = if is_a_valid {
+                                        b.clone()
+                                    } else {
+                                        a.clone()
+                                    };
+                                    Err(SemError::TypeMismatch {
+                                        span,
+                                        expected: expected.into(),
+                                        found: found.into(),
+                                        context: format!(
+                                            "addition/subtraction/concatenation requires Int, LinExpr or List, got {} and {}",
+                                            a, b
+                                        ),
+                                    })
+                                }
+                            }
+                        )
                     }
-                    (None, None) => None,
                 }
             }
             // Unary negation - for LinExpr and Int
@@ -1306,59 +1371,66 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type.clone(), right_type) {
-                    (Some(l), Some(r)) => {
-                        // Special case: LinExpr * LinExpr is non-linear
-                        if l.matches(&SimpleType::LinExpr.into())
-                            && r.matches(&SimpleType::LinExpr.into())
-                        {
-                            errors.push(SemError::TypeMismatch {
-                                span: left.span.clone(),
-                                expected: SimpleType::Int.into(),
-                                found: SimpleType::LinExpr.into(),
-                                context: "cannot multiply two linear expressions (non-linear)"
-                                    .to_string(),
-                            });
-                            return Some(SimpleType::LinExpr.into()); // Fallback
-                        }
-
-                        // Try to unify (handles Int * Int, Int * LinExpr, LinExpr * Int)
-                        match AnnotatedType::unify(&l, &r) {
-                            Some(unified) if unified.is_arithmetic() => Some(unified),
-                            _ => {
-                                errors.push(SemError::TypeMismatch {
-                                    span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r.clone(),
-                                    context: format!(
-                                        "multiplication requires Int or LinExpr, got {} and {}",
-                                        l, r
-                                    ),
-                                });
-                                if l.is_arithmetic() {
-                                    Some(l)
-                                } else {
-                                    Some(SimpleType::Int.into())
-                                }
-                            }
-                        }
-                    }
-                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
-                    (Some(t), None) | (None, Some(t)) => {
-                        let span = if left_type.is_some() {
-                            left.span.clone()
-                        } else {
-                            right.span.clone()
-                        };
-                        errors.push(SemError::TypeMismatch {
-                            span,
-                            expected: SimpleType::Int.into(),
-                            found: t.clone(),
-                            context: "multiplication requires Int or LinExpr".to_string(),
-                        });
-                        Some(t) // Fallback
-                    }
+                match (&left_type, &right_type) {
                     (None, None) => None,
+                    (Some(t), None) | (None, Some(t)) => {
+                        if t.is_int() || t.is_lin_expr() {
+                            Some(t.clone())
+                        } else if t.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap()) {
+                            Some(SimpleType::LinExpr.into())
+                        } else {
+                            let span = if left_type.is_some() {
+                                left.span.clone()
+                            } else {
+                                right.span.clone()
+                            };
+                            errors.push(SemError::TypeMismatch {
+                                span,
+                                expected: SimpleType::Int.into(),
+                                found: t.clone(),
+                                context: "multiplication requires Int or LinExpr".to_string(),
+                            });
+                            None
+                        }
+                    }
+                    (Some(l), Some(r)) => l.cross_check(&r, errors, |v1, v2| match (v1, v2) {
+                        (SimpleType::Int, SimpleType::Int) => Ok(SimpleType::Int),
+                        (SimpleType::LinExpr, SimpleType::Int)
+                        | (SimpleType::Int, SimpleType::LinExpr) => Ok(SimpleType::LinExpr),
+                        (SimpleType::LinExpr, SimpleType::LinExpr) => Err(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: SimpleType::Int.into(),
+                            found: SimpleType::LinExpr.into(),
+                            context: "cannot multiply two linear expressions (non-linear)"
+                                .to_string(),
+                        }),
+                        (a, b) => {
+                            let is_a_valid = a.is_arithmetic();
+                            let is_b_valid = b.is_arithmetic();
+                            let span = if is_a_valid {
+                                right.span.clone()
+                            } else {
+                                left.span.clone()
+                            };
+                            let expected = if is_a_valid {
+                                a.clone()
+                            } else if is_b_valid {
+                                b.clone()
+                            } else {
+                                SimpleType::Int
+                            };
+                            let found = if is_a_valid { b.clone() } else { a.clone() };
+                            Err(SemError::TypeMismatch {
+                                span,
+                                expected: expected.into(),
+                                found: found.into(),
+                                context: format!(
+                                    "multiplication requires Int or LinExpr, got {} and {}",
+                                    a, b
+                                ),
+                            })
+                        }
+                    }),
                 }
             }
             // Division and modulo: Int // Int -> Int, Int % Int -> Int
@@ -1379,9 +1451,9 @@ impl LocalEnv {
 
                 match (left_type, right_type) {
                     (Some(l), Some(r)) => {
-                        // Check if both can coerce to Int
-                        let l_ok = l.can_coerce_to(&SimpleType::Int.into());
-                        let r_ok = r.can_coerce_to(&SimpleType::Int.into());
+                        // Check if both are Int
+                        let l_ok = l.is_int();
+                        let r_ok = r.is_int();
 
                         if !l_ok {
                             errors.push(SemError::TypeMismatch {
@@ -1407,7 +1479,7 @@ impl LocalEnv {
                         }
                     }
                     (Some(t), None) => {
-                        if !t.can_coerce_to(&SimpleType::Int.into()) {
+                        if !t.is_int() {
                             errors.push(SemError::TypeMismatch {
                                 span: left.span.clone(),
                                 expected: SimpleType::Int.into(),
@@ -1420,7 +1492,7 @@ impl LocalEnv {
                         }
                     }
                     (None, Some(t)) => {
-                        if !t.can_coerce_to(&SimpleType::Int.into()) {
+                        if !t.is_int() {
                             errors.push(SemError::TypeMismatch {
                                 span: right.span.clone(),
                                 expected: SimpleType::Int.into(),
@@ -1453,45 +1525,36 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type, right_type) {
-                    (Some(l), Some(r)) => {
-                        // Check if both can coerce to LinExpr
-                        let l_ok = l.can_coerce_to(&SimpleType::LinExpr.into());
-                        let r_ok = r.can_coerce_to(&SimpleType::LinExpr.into());
+                if let (Some(l), Some(r)) = (left_type, right_type) {
+                    // Check if both can convert to LinExpr
+                    let l_ok = l.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap());
+                    let r_ok = r.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap());
 
-                        if !l_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: left.span.clone(),
-                                expected: SimpleType::LinExpr.into(),
-                                found: l,
-                                context: "constraint operator requires LinExpr or Int operands"
-                                    .to_string(),
-                            });
-                        }
-                        if !r_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: SimpleType::LinExpr.into(),
-                                found: r,
-                                context: "constraint operator requires LinExpr or Int operands"
-                                    .to_string(),
-                            });
-                        }
-
-                        // Always return Constraint (even on error, intent is clear)
-                        Some(SimpleType::Constraint.into())
+                    if !l_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: SimpleType::LinExpr.into(),
+                            found: l,
+                            context: "constraint operator requires LinExpr or Int operands"
+                                .to_string(),
+                        });
                     }
-                    _ => {
-                        // Something failed, but we know user wanted a constraint
-                        Some(SimpleType::Constraint.into())
+                    if !r_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: SimpleType::LinExpr.into(),
+                            found: r,
+                            context: "constraint operator requires LinExpr or Int operands"
+                                .to_string(),
+                        });
                     }
                 }
+
+                // Always return Constraint (even on error, intent is clear)
+                Some(SimpleType::Constraint.into())
             }
 
             // ========== Comparison Operations ==========
-            // Int == Int -> Bool
-            // LinExpr == LinExpr -> Constraint
-            // LinExpr == Int -> Constraint (coerce Int to LinExpr)
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
                 let left_type = self.check_expr(
                     global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
@@ -1506,27 +1569,18 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type, right_type) {
-                    (Some(l), Some(r)) => {
-                        // Try to unify the types
-                        match AnnotatedType::unify(&l, &r) {
-                            Some(_unified) => Some(SimpleType::Bool.into()),
-                            None => {
-                                // Types don't unify - incompatible
-                                errors.push(SemError::TypeMismatch {
-                                    span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
-                                    context: "equality comparison requires compatible types"
-                                        .to_string(),
-                                });
-                                Some(SimpleType::Bool.into()) // Fallback
-                            }
-                        }
+                if let (Some(l), Some(r)) = (left_type, right_type) {
+                    if !l.overlaps_with(&r) {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: l.clone(),
+                            found: r.clone(),
+                            context: "equality can never happens with incompatible types"
+                                .to_string(),
+                        });
                     }
-                    (Some(_), None) | (None, Some(_)) => Some(SimpleType::Bool.into()), // One side failed
-                    (None, None) => None,
                 }
+                Some(SimpleType::Bool.into())
             }
 
             // Relational: Int < Int -> Bool
@@ -1547,35 +1601,29 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type, right_type) {
-                    (Some(l), Some(r)) => {
-                        // Check if both can coerce to Int
-                        let l_ok = l.can_coerce_to(&SimpleType::Int.into());
-                        let r_ok = r.can_coerce_to(&SimpleType::Int.into());
+                if let (Some(l), Some(r)) = (left_type, right_type) {
+                    // Check if both can coerce to Int
+                    let l_ok = l.can_convert_to(&SimpleType::Int.into_concrete().unwrap());
+                    let r_ok = r.can_convert_to(&SimpleType::Int.into_concrete().unwrap());
 
-                        if !l_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: left.span.clone(),
-                                expected: SimpleType::Int.into(),
-                                found: l,
-                                context: "relational comparison requires Int operands".to_string(),
-                            });
-                        }
-                        if !r_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: right.span.clone(),
-                                expected: SimpleType::Int.into(),
-                                found: r,
-                                context: "relational comparison requires Int operands".to_string(),
-                            });
-                        }
-
-                        // Always return Bool (even on error, intent is clear)
-                        Some(SimpleType::Bool.into())
+                    if !l_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: SimpleType::Int.into(),
+                            found: l,
+                            context: "relational comparison requires Int operands".to_string(),
+                        });
                     }
-                    (Some(_), None) | (None, Some(_)) => Some(SimpleType::Bool.into()),
-                    (None, None) => None,
+                    if !r_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: SimpleType::Int.into(),
+                            found: r,
+                            context: "relational comparison requires Int operands".to_string(),
+                        });
+                    }
                 }
+                Some(SimpleType::Bool.into())
             }
 
             // ========== Boolean Operations ==========
@@ -1594,63 +1642,61 @@ impl LocalEnv {
                     warnings,
                 );
 
-                match (left_type, right_type) {
+                match (&left_type, &right_type) {
                     (Some(l), Some(r)) => {
-                        // Try to unify the types
-                        match AnnotatedType::unify(&l, &r) {
-                            Some(t) if t.matches(&SimpleType::Bool.into()) => {
+                        if l.is_bool() {
+                            if r.is_bool() {
                                 Some(SimpleType::Bool.into())
-                            }
-                            Some(t) if t.matches(&SimpleType::Constraint.into()) => {
-                                Some(SimpleType::Constraint.into())
-                            }
-                            Some(unified) => {
-                                // Unified to something else - not valid for and/or
+                            } else {
                                 errors.push(SemError::TypeMismatch {
-                                    span: left.span.clone(),
+                                    span: right.span.clone(),
                                     expected: SimpleType::Bool.into(),
-                                    found: unified,
+                                    found: r.clone(),
                                     context: "and/or requires Bool or Constraint operands"
                                         .to_string(),
                                 });
                                 None
                             }
-                            None => {
-                                // Can't unify - incompatible types
+                        } else if l.is_constraint() {
+                            if r.is_constraint() {
+                                Some(SimpleType::Constraint.into())
+                            } else {
                                 errors.push(SemError::TypeMismatch {
                                     span: right.span.clone(),
-                                    expected: l.clone(),
-                                    found: r,
-                                    context: "and/or requires both operands to have the same type (both Bool or both Constraint)".to_string(),
+                                    expected: SimpleType::Constraint.into(),
+                                    found: r.clone(),
+                                    context: "and/or requires Bool or Constraint operands"
+                                        .to_string(),
                                 });
-                                // Return whatever the left side was if valid
-                                if l.matches(&SimpleType::Bool.into())
-                                    || l.matches(&SimpleType::Constraint.into())
-                                {
-                                    Some(l)
-                                } else {
-                                    None
-                                }
+                                None
                             }
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: left.span.clone(),
+                                expected: SimpleType::Bool.into(),
+                                found: l.clone(),
+                                context: "and/or requires Bool or Constraint operands".to_string(),
+                            });
+                            None
                         }
                     }
-                    (Some(t), None) | (None, Some(t)) if t.matches(&SimpleType::Bool.into()) => {
-                        Some(SimpleType::Bool.into())
-                    }
-                    (Some(t), None) | (None, Some(t))
-                        if t.matches(&SimpleType::Constraint.into()) =>
-                    {
-                        Some(SimpleType::Constraint.into())
-                    }
                     (Some(t), None) | (None, Some(t)) => {
-                        // One side is not Bool/Constraint
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: SimpleType::Bool.into(),
-                            found: t.clone(),
-                            context: "and/or requires Bool or Constraint operands".to_string(),
-                        });
-                        None
+                        if t.is_bool() || t.is_constraint() {
+                            Some(t.clone())
+                        } else {
+                            let span = if left_type.is_some() {
+                                left.span.clone()
+                            } else {
+                                right.span.clone()
+                            };
+                            errors.push(SemError::TypeMismatch {
+                                span,
+                                expected: SimpleType::Bool.into(),
+                                found: t.clone(),
+                                context: "and/or requires Bool or Constraint operands".to_string(),
+                            });
+                            None
+                        }
                     }
                     (None, None) => None,
                 }
@@ -1662,9 +1708,7 @@ impl LocalEnv {
                 );
 
                 match expr_type {
-                    Some(typ) if typ.can_coerce_to(&SimpleType::Bool.into()) => {
-                        Some(SimpleType::Bool.into())
-                    }
+                    Some(typ) if typ.is_bool() => Some(SimpleType::Bool.into()),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: expr.span.clone(),
@@ -1695,36 +1739,27 @@ impl LocalEnv {
                 );
 
                 match coll_type {
-                    Some(AnnotatedType::Forced(a)) | Some(AnnotatedType::Regular(a))
-                        if a.is_list() =>
-                    {
-                        let elem_t = a.to_inner_list_type().unwrap();
-                        if let Some(item_t) = item_type {
-                            // Check if item can coerce to the element type
-                            if !item_t.can_coerce_to(&elem_t) {
-                                errors.push(SemError::TypeMismatch {
-                                    span: item.span.clone(),
-                                    expected: elem_t.into(),
-                                    found: item_t,
-                                    context: "item type must match collection element type"
-                                        .to_string(),
-                                });
+                    Some(a) if a.is_list() => {
+                        let elem_t_opt = a.to_inner_list_type().unwrap();
+                        if let Some(elem_t) = elem_t_opt {
+                            if let Some(item_t) = item_type {
+                                if !item_t.overlaps_with(&elem_t) {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: item.span.clone(),
+                                        expected: elem_t.into(),
+                                        found: item_t,
+                                        context: "item type must match collection element type"
+                                            .to_string(),
+                                    });
+                                }
                             }
                         }
-                    }
-                    Some(AnnotatedType::UntypedList) => {
-                        // Can't check anything - we don't know the element type
-                        // But it does not matter, an element is never in an empty collection
-                        // So this will be false and the types don't matter.
                     }
                     Some(t) => {
                         // Not a list at all
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            )
-                            .into(),
+                            expected: SimpleType::List(Some(t.clone())).into(),
                             found: t,
                             context: "membership test requires a list".to_string(),
                         });
@@ -1769,41 +1804,39 @@ impl LocalEnv {
 
                 // Extract element type from collection
                 match coll_type {
-                    Some(AnnotatedType::Forced(a)) | Some(AnnotatedType::Regular(a))
-                        if a.is_list() =>
-                    {
-                        let elem_t = a.to_inner_list_type().unwrap();
+                    Some(a) if a.is_list() && a.is_complete() => {
+                        let elem_t = a.to_inner_list_type().unwrap().unwrap();
                         // Register the loop variable with the element type
                         self.register_identifier(
                             &var.node,
                             var.span.clone(),
-                            elem_t,
+                            elem_t
+                                .into_complete()
+                                .expect("inner type should also be complete at this point"),
                             type_info,
                             warnings,
                         );
                     }
-                    Some(AnnotatedType::UntypedList) => {
+                    Some(a) if a.is_list() => {
+                        let expected = a.make_complete_example();
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
+                            expected,
+                            found: a.clone(),
                             context: "forall collection type must be known (use 'as' for explicit typing)".to_string(),
                         });
-                        return Some(SimpleType::Constraint.into()); // Return early
+                        return None; // Return early
                     }
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            )
-                            .into(),
+                            expected: SimpleType::List(Some(t.clone())).into(),
                             found: t,
                             context: "forall collection must be a list".to_string(),
                         });
-                        return Some(SimpleType::Constraint.into()); // Return early
+                        return None; // Return early
                     }
-                    None => return None,
+                    None => return None, // Return early
                 }
 
                 self.push_scope();
@@ -1821,7 +1854,7 @@ impl LocalEnv {
                     );
 
                     if let Some(typ) = filter_type {
-                        if !typ.can_coerce_to(&SimpleType::Bool.into()) {
+                        if !typ.is_bool() {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: SimpleType::Bool.into(),
@@ -1840,12 +1873,8 @@ impl LocalEnv {
                 self.pop_scope(warnings);
 
                 match body_type {
-                    Some(typ) if typ.can_coerce_to(&SimpleType::Constraint.into()) => {
-                        Some(SimpleType::Constraint.into())
-                    }
-                    Some(typ) if typ.can_coerce_to(&SimpleType::Bool.into()) => {
-                        Some(SimpleType::Bool.into())
-                    }
+                    Some(typ) if typ.is_constraint() => Some(SimpleType::Constraint.into()),
+                    Some(typ) if typ.is_bool() => Some(SimpleType::Bool.into()),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
@@ -1889,24 +1918,25 @@ impl LocalEnv {
 
                 // Extract element type from collection
                 match coll_type {
-                    Some(AnnotatedType::Forced(a)) | Some(AnnotatedType::Regular(a))
-                        if a.is_list() =>
-                    {
-                        let elem_t = a.to_inner_list_type().unwrap();
+                    Some(a) if a.is_list() && a.is_complete() => {
+                        let elem_t = a.to_inner_list_type().unwrap().unwrap();
                         // Register the loop variable with the element type
                         self.register_identifier(
                             &var.node,
                             var.span.clone(),
-                            elem_t,
+                            elem_t
+                                .into_complete()
+                                .expect("inner type should also be complete at this point"),
                             type_info,
                             warnings,
                         );
                     }
-                    Some(AnnotatedType::UntypedList) => {
+                    Some(a) if a.is_list() => {
+                        let expected = a.make_complete_example();
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
+                            expected,
+                            found: a.clone(),
                             context:
                                 "sum collection type must be known (use 'as' for explicit typing)"
                                     .to_string(),
@@ -1916,16 +1946,13 @@ impl LocalEnv {
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            )
-                            .into(),
+                            expected: SimpleType::List(Some(t.clone())).into(),
                             found: t,
                             context: "sum collection must be a list".to_string(),
                         });
                         return None; // Return early
                     }
-                    None => return None,
+                    None => return None, // Return early
                 }
 
                 self.push_scope();
@@ -1943,7 +1970,7 @@ impl LocalEnv {
                     );
 
                     if let Some(typ) = filter_type {
-                        if !typ.can_coerce_to(&SimpleType::Bool.into()) {
+                        if !typ.is_bool() {
                             errors.push(SemError::TypeMismatch {
                                 span: filter_expr.span.clone(),
                                 expected: SimpleType::Bool.into(),
@@ -1962,13 +1989,13 @@ impl LocalEnv {
                 self.pop_scope(warnings);
 
                 match body_type {
-                    Some(typ) if typ.is_arithmetic() => Some(typ), // Return Int or LinExpr
+                    Some(typ) if typ.is_arithmetic() || typ.is_list() => Some(typ),
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: SimpleType::Int.into(),
                             found: typ,
-                            context: "sum body must be Int or LinExpr".to_string(),
+                            context: "sum body must be Int or LinExpr or list".to_string(),
                         });
                         None
                     }
@@ -1995,7 +2022,7 @@ impl LocalEnv {
                     warnings,
                 );
 
-                let annotated_acc_type = self.check_expr(
+                let acc_type = self.check_expr(
                     global_env,
                     &init_value.node,
                     &init_value.span,
@@ -2030,117 +2057,123 @@ impl LocalEnv {
 
                 // Extract type info
                 match coll_type {
-                    Some(AnnotatedType::Forced(a)) | Some(AnnotatedType::Regular(a))
-                        if a.is_list() =>
-                    {
-                        let elem_t = a.to_inner_list_type().unwrap();
+                    Some(a) if a.is_list() && a.is_complete() => {
+                        let elem_t = a.to_inner_list_type().unwrap().unwrap();
                         // Register the loop variable with the element type
                         self.register_identifier(
                             &var.node,
                             var.span.clone(),
-                            elem_t,
+                            elem_t
+                                .into_complete()
+                                .expect("inner type should also be complete at this point"),
                             type_info,
                             warnings,
                         );
                     }
-                    Some(AnnotatedType::UntypedList) => {
+                    Some(a) if a.is_list() => {
+                        let expected = a.make_complete_example();
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
-                            context:
-                                "sum collection type must be known (use 'as' for explicit typing)"
-                                    .to_string(),
+                            expected,
+                            found: a.clone(),
+                            context: "fold|rfold collection type must be known (use 'as' for explicit typing)".to_string(),
                         });
                         return None; // Return early
                     }
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            )
-                            .into(),
+                            expected: SimpleType::List(Some(t.clone())).into(),
                             found: t,
-                            context: "sum collection must be a list".to_string(),
+                            context: "fold|rfold collection must be a list".to_string(),
                         });
                         return None; // Return early
                     }
-                    None => return None,
+                    None => return None, // Return early
                 }
-
-                let acc_type = match annotated_acc_type {
-                    Some(AnnotatedType::Forced(t)) | Some(AnnotatedType::Regular(t)) => {
-                        // Register the acc variable with the init_value type
-                        self.register_identifier(
-                            &accumulator.node,
-                            accumulator.span.clone(),
-                            t.clone(),
-                            type_info,
-                            warnings,
-                        );
-                        t
-                    }
-                    Some(AnnotatedType::UntypedList) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: accumulator.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
-                            context:
-                                "accumulator type must be known (use 'as' for explicit typing)"
-                                    .to_string(),
-                        });
-                        return None; // Return early
-                    }
-                    None => return None,
-                };
 
                 self.push_scope();
 
-                // Check filter (must be Bool)
-                if let Some(filter_expr) = filter {
-                    let filter_type = self.check_expr(
-                        global_env,
-                        &filter_expr.node,
-                        &filter_expr.span,
+                let mut current_acc_type = match acc_type {
+                    Some(t) => t,
+                    None => return None,
+                };
+                let mut has_to_iterate = true;
+                while has_to_iterate {
+                    if !current_acc_type.is_complete() {
+                        let expected = current_acc_type.make_complete_example();
+                        errors.push(SemError::TypeMismatch {
+                            span: accumulator.span.clone(),
+                            expected,
+                            found: current_acc_type.clone(),
+                            context:
+                                "fold|rfold accumulator type must be known (use 'as' for explicit typing)"
+                                    .to_string(),
+                        });
+                        self.pop_scope(warnings);
+                        return None;
+                    }
+
+                    let complete_acc_type = current_acc_type.clone().into_complete().unwrap();
+                    self.register_identifier(
+                        &accumulator.node,
+                        accumulator.span.clone(),
+                        complete_acc_type.clone(),
                         type_info,
-                        expr_types,
-                        errors,
                         warnings,
                     );
 
-                    if let Some(typ) = filter_type {
-                        if !typ.can_coerce_to(&SimpleType::Bool.into()) {
-                            errors.push(SemError::TypeMismatch {
-                                span: filter_expr.span.clone(),
-                                expected: SimpleType::Bool.into(),
-                                found: typ,
-                                context: "sum filter must be Bool".to_string(),
-                            });
+                    self.push_scope();
+
+                    // Check filter (must be Bool)
+                    if let Some(filter_expr) = filter {
+                        let filter_type = self.check_expr(
+                            global_env,
+                            &filter_expr.node,
+                            &filter_expr.span,
+                            type_info,
+                            expr_types,
+                            errors,
+                            warnings,
+                        );
+
+                        if let Some(typ) = filter_type {
+                            if !typ.is_bool() {
+                                errors.push(SemError::TypeMismatch {
+                                    span: filter_expr.span.clone(),
+                                    expected: SimpleType::Bool.into(),
+                                    found: typ,
+                                    context: "fold|rfold filter must be Bool".to_string(),
+                                });
+                            }
+                        }
+                    }
+
+                    // Check body (must match accumulator)
+                    let body_type = self.check_expr(
+                        global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                    );
+
+                    self.pop_scope(warnings);
+
+                    match body_type {
+                        Some(typ) => {
+                            has_to_iterate = !typ.is_subtype_of(&current_acc_type);
+                            if has_to_iterate {
+                                current_acc_type = current_acc_type.unify_with(&typ);
+                            }
+                        }
+                        None => {
+                            // This will end the loop and return the last known type
+                            // for the accumulator
+                            has_to_iterate = false;
                         }
                     }
                 }
 
-                // Check body (must match accumulator)
-                let body_type = self.check_expr(
-                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
-                );
-
                 self.pop_scope(warnings);
 
-                match body_type {
-                    Some(typ) if typ.can_coerce_to(&acc_type) => Some(acc_type.into()),
-                    Some(typ) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: body.span.clone(),
-                            expected: acc_type.clone().into(),
-                            found: typ,
-                            context: "fold|rfold body must match accumulator type".to_string(),
-                        });
-                        Some(acc_type.into())
-                    }
-                    None => Some(acc_type.into()), // Intent is expressed by accumulator
-                }
+                Some(current_acc_type)
             }
 
             // ========== If Expression ==========
@@ -2160,7 +2193,7 @@ impl LocalEnv {
                 );
 
                 if let Some(typ) = cond_type {
-                    if !typ.can_coerce_to(&SimpleType::Bool.into()) {
+                    if !typ.is_bool() {
                         errors.push(SemError::TypeMismatch {
                             span: condition.span.clone(),
                             expected: SimpleType::Bool.into(),
@@ -2190,20 +2223,7 @@ impl LocalEnv {
                 );
 
                 match (then_type, else_type) {
-                    (Some(t), Some(e)) => {
-                        match AnnotatedType::unify(&t, &e) {
-                            Some(unified) => Some(unified),
-                            None => {
-                                errors.push(SemError::TypeMismatch {
-                                    span: else_expr.span.clone(),
-                                    expected: t.clone(),
-                                    found: e,
-                                    context: "if branches must have compatible types".to_string(),
-                                });
-                                Some(t) // Fallback to then type
-                            }
-                        }
-                    }
+                    (Some(t), Some(e)) => Some(t.unify_with(&e)),
                     (Some(t), None) | (None, Some(t)) => Some(t),
                     (None, None) => None,
                 }
@@ -2241,10 +2261,10 @@ impl LocalEnv {
                             );
 
                             if let Some(found_type) = arg_type {
-                                if !found_type.can_coerce_to(expected_type) {
+                                if !found_type.is_subtype_of(expected_type.inner()) {
                                     errors.push(SemError::TypeMismatch {
                                         span: arg.span.clone(),
-                                        expected: expected_type.clone().into(),
+                                        expected: expected_type.clone().into_inner(),
                                         found: found_type,
                                         context: format!(
                                             "argument {} to variable ${}",
@@ -2268,7 +2288,7 @@ impl LocalEnv {
                             var: name.node.clone(),
                             span: name.span.clone(),
                         });
-                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
+                        Some(SimpleType::List(Some(SimpleType::LinExpr.into())).into())
                         // Syntax indicates [LinExpr] intent
                     }
                     Some((var_args, _)) => {
@@ -2293,10 +2313,10 @@ impl LocalEnv {
                             );
 
                             if let Some(found_type) = arg_type {
-                                if !found_type.can_coerce_to(expected_type) {
+                                if !found_type.is_subtype_of(expected_type.inner()) {
                                     errors.push(SemError::TypeMismatch {
                                         span: arg.span.clone(),
-                                        expected: expected_type.clone().into(),
+                                        expected: expected_type.clone().into_inner(),
                                         found: found_type,
                                         context: format!(
                                             "argument {} to variable ${}",
@@ -2308,7 +2328,7 @@ impl LocalEnv {
                             }
                         }
 
-                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
+                        Some(SimpleType::List(Some(SimpleType::LinExpr.into())).into())
                     }
                 }
             }
@@ -2344,10 +2364,10 @@ impl LocalEnv {
                         );
 
                         if let Some(found_type) = arg_type {
-                            if !found_type.can_coerce_to(expected_type) {
+                            if !found_type.is_subtype_of(expected_type.inner()) {
                                 errors.push(SemError::TypeMismatch {
                                     span: arg.span.clone(),
-                                    expected: expected_type.clone().into(),
+                                    expected: expected_type.clone().into_inner(),
                                     found: found_type,
                                     context: format!(
                                         "argument {} to function {}",
@@ -2359,36 +2379,16 @@ impl LocalEnv {
                         }
                     }
 
-                    Some(fn_type.output.into())
+                    Some(fn_type.output.into_inner())
                 }
             },
 
             // ========== Collections ==========
             Expr::GlobalList(type_name) => {
-                let typ = match ExprType::try_from(type_name.node.clone()) {
+                let typ = match ExprType::try_from(type_name.clone()) {
                     Ok(t) => t,
-                    Err(TypeNameError::MultipleOptionMarkers) => {
-                        errors.push(SemError::MultipleOptionMarkers {
-                            span: type_name.span.clone(),
-                        });
-                        return None;
-                    }
-                    Err(TypeNameError::OptionTypeInSumType) => {
-                        errors.push(SemError::OptionTypeInSumType {
-                            span: type_name.span.clone(),
-                        });
-                        return None;
-                    }
-                    Err(TypeNameError::DuplicatedTypeInSumType) => {
-                        errors.push(SemError::DuplicatedTypeInSumType {
-                            span: type_name.span.clone(),
-                        });
-                        return None;
-                    }
-                    Err(TypeNameError::OptionMarkerOnNone) => {
-                        errors.push(SemError::OptionMarkerOnNone {
-                            span: type_name.span.clone(),
-                        });
+                    Err(e) => {
+                        errors.push(e);
                         return None;
                     }
                 };
@@ -2405,13 +2405,13 @@ impl LocalEnv {
                     });
                     None
                 } else {
-                    Some(SimpleType::List(typ).into())
+                    Some(SimpleType::List(Some(typ)).into())
                 }
             }
 
             Expr::ListLiteral { elements } => {
                 if elements.is_empty() {
-                    return Some(AnnotatedType::UntypedList);
+                    return Some(SimpleType::List(None).into());
                 }
 
                 // Check all elements and unify their types
@@ -2432,19 +2432,7 @@ impl LocalEnv {
 
                     match (unified_type.clone(), item_type) {
                         (Some(u), Some(i)) => {
-                            match AnnotatedType::unify(&u, &i) {
-                                Some(new_unified) => unified_type = Some(new_unified),
-                                None => {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: item.span.clone(),
-                                        expected: u.clone(),
-                                        found: i,
-                                        context: "all list elements must have compatible types"
-                                            .to_string(),
-                                    });
-                                    // Keep the current unified type for further checking
-                                }
-                            }
+                            unified_type = Some(u.unify_with(&i));
                         }
                         (Some(u), None) => {
                             // Item failed to type-check, keep unified type
@@ -2462,21 +2450,8 @@ impl LocalEnv {
                 }
 
                 match unified_type {
-                    Some(AnnotatedType::UntypedList) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: elements[0].span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
-                            context:
-                                "inner elements type must be known (use 'as' for explicit typing)"
-                                    .to_string(),
-                        });
-                        None
-                    }
-                    Some(AnnotatedType::Forced(t)) | Some(AnnotatedType::Regular(t)) => {
-                        Some(SimpleType::List(t).into())
-                    }
-                    None => None,
+                    Some(t) => Some(SimpleType::List(Some(t)).into()),
+                    None => None, // Inner None does not imply [<unknown>] because this is reserved for empty lists
                 }
             }
 
@@ -2494,37 +2469,30 @@ impl LocalEnv {
                     global_env, &end.node, &end.span, type_info, expr_types, errors, warnings,
                 );
 
-                match (start_type, end_type) {
-                    (Some(s), Some(e)) => {
-                        // Check if both can coerce to Int
-                        let s_ok = s.can_coerce_to(&SimpleType::Int.into());
-                        let e_ok = e.can_coerce_to(&SimpleType::Int.into());
+                if let (Some(s), Some(e)) = (start_type, end_type) {
+                    // Check if both can coerce to Int
+                    let s_ok = s.is_int();
+                    let e_ok = e.is_int();
 
-                        if !s_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: start.span.clone(),
-                                expected: SimpleType::Int.into(),
-                                found: s,
-                                context: "list range requires Int limits".to_string(),
-                            });
-                        }
-                        if !e_ok {
-                            errors.push(SemError::TypeMismatch {
-                                span: end.span.clone(),
-                                expected: SimpleType::Int.into(),
-                                found: e,
-                                context: "list range requires Int limits".to_string(),
-                            });
-                        }
-
-                        // Always return [Int] (even on error, intent is clear)
-                        Some(SimpleType::List(SimpleType::Int.into()).into())
+                    if !s_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: start.span.clone(),
+                            expected: SimpleType::Int.into(),
+                            found: s,
+                            context: "list range requires Int limits".to_string(),
+                        });
                     }
-                    (Some(_), None) | (None, Some(_)) => {
-                        Some(SimpleType::List(SimpleType::Int.into()).into())
+                    if !e_ok {
+                        errors.push(SemError::TypeMismatch {
+                            span: end.span.clone(),
+                            expected: SimpleType::Int.into(),
+                            found: e,
+                            context: "list range requires Int limits".to_string(),
+                        });
                     }
-                    (None, None) => None,
                 }
+                // Always return [Int] (even on error, intent is clear)
+                Some(SimpleType::List(Some(SimpleType::Int.into())).into())
             }
 
             Expr::ListComprehension {
@@ -2532,8 +2500,9 @@ impl LocalEnv {
                 vars_and_collections,
                 filter,
             } => {
-                let mut typ_error = false;
-                for (var, collection) in vars_and_collections {
+                for (i, (var, collection)) in vars_and_collections.iter().enumerate() {
+                    let mut typ_error = false;
+
                     let coll_type = self.check_expr(
                         global_env,
                         &collection.node,
@@ -2558,24 +2527,25 @@ impl LocalEnv {
 
                     // Extract element type from collection
                     match coll_type {
-                        Some(AnnotatedType::Forced(a)) | Some(AnnotatedType::Regular(a))
-                            if a.is_list() =>
-                        {
-                            let elem_t = a.to_inner_list_type().unwrap();
+                        Some(a) if a.is_list() && a.is_complete() => {
+                            let elem_t = a.to_inner_list_type().unwrap().unwrap();
                             // Register the loop variable with the element type
                             self.register_identifier(
                                 &var.node,
                                 var.span.clone(),
-                                elem_t,
+                                elem_t
+                                    .into_complete()
+                                    .expect("inner type should also be complete at this point"),
                                 type_info,
                                 warnings,
                             );
                         }
-                        Some(AnnotatedType::UntypedList) => {
+                        Some(a) if a.is_list() => {
+                            let expected = a.make_complete_example();
                             errors.push(SemError::TypeMismatch {
                                 span: collection.span.clone(),
-                                expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                                found: AnnotatedType::UntypedList,
+                                expected,
+                                found: a.clone(),
                                 context: "list comprehension collection type must be known (use 'as' for explicit typing)".to_string(),
                             });
                             typ_error = true;
@@ -2583,10 +2553,7 @@ impl LocalEnv {
                         Some(t) => {
                             errors.push(SemError::TypeMismatch {
                                 span: collection.span.clone(),
-                                expected: SimpleType::List(
-                                    t.inner().expect("UntypedList case already handled").clone(),
-                                )
-                                .into(),
+                                expected: SimpleType::List(Some(t.clone())).into(),
                                 found: t,
                                 context: "list comprehension collection must be a list".to_string(),
                             });
@@ -2595,62 +2562,53 @@ impl LocalEnv {
                         None => typ_error = true,
                     }
 
+                    if typ_error {
+                        for _j in 0..i {
+                            let mut ignored_warnings = vec![];
+                            self.pop_scope(&mut ignored_warnings);
+                        }
+                        return None;
+                    }
+
                     self.push_scope();
                 }
 
-                let elem_type = if !typ_error {
-                    // Check filter (must be Bool)
-                    if let Some(filter_expr) = filter {
-                        let filter_type = self.check_expr(
-                            global_env,
-                            &filter_expr.node,
-                            &filter_expr.span,
-                            type_info,
-                            expr_types,
-                            errors,
-                            warnings,
-                        );
+                // Check filter (must be Bool)
+                if let Some(filter_expr) = filter {
+                    let filter_type = self.check_expr(
+                        global_env,
+                        &filter_expr.node,
+                        &filter_expr.span,
+                        type_info,
+                        expr_types,
+                        errors,
+                        warnings,
+                    );
 
-                        if let Some(typ) = filter_type {
-                            if !typ.can_coerce_to(&SimpleType::Bool.into()) {
-                                errors.push(SemError::TypeMismatch {
-                                    span: filter_expr.span.clone(),
-                                    expected: SimpleType::Bool.into(),
-                                    found: typ,
-                                    context: "list comprehension filter must be Bool".to_string(),
-                                });
-                            }
+                    if let Some(typ) = filter_type {
+                        if !typ.is_bool() {
+                            errors.push(SemError::TypeMismatch {
+                                span: filter_expr.span.clone(),
+                                expected: SimpleType::Bool.into(),
+                                found: typ,
+                                context: "list comprehension filter must be Bool".to_string(),
+                            });
                         }
                     }
+                }
 
-                    // Check the output expression - this determines the result element type
-                    self.check_expr(
-                        global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
-                    )
-                } else {
-                    None
-                };
+                // Check the output expression - this determines the result element type
+                let elem_type = self.check_expr(
+                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                );
 
                 for (_var, _collection) in vars_and_collections {
                     self.pop_scope(warnings);
                 }
 
                 match elem_type {
-                    Some(AnnotatedType::UntypedList) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: expr.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
-                            context:
-                                "inner elements type must be known (use 'as' for explicit typing)"
-                                    .to_string(),
-                        });
-                        None
-                    }
-                    Some(AnnotatedType::Forced(t)) | Some(AnnotatedType::Regular(t)) => {
-                        Some(SimpleType::List(t).into())
-                    }
-                    None => None,
+                    Some(t) => Some(SimpleType::List(Some(t)).into()),
+                    None => None, // Inner None does not imply [<unknown>] because this is reserved for empty lists
                 }
             }
 
@@ -2671,10 +2629,7 @@ impl LocalEnv {
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
-                            expected: SimpleType::List(
-                                t.inner().expect("UntypedList case already handled").clone(),
-                            )
-                            .into(),
+                            expected: SimpleType::List(Some(t.clone())).into(),
                             found: t,
                             context: "cardinality is always computed on a collection".to_string(),
                         });
@@ -2709,20 +2664,22 @@ impl LocalEnv {
 
                 // Extract element type from collection
                 match value_type {
-                    Some(AnnotatedType::Forced(typ)) | Some(AnnotatedType::Regular(typ)) => {
+                    Some(typ) if typ.is_complete() => {
+                        let complete_typ = typ.into_complete().unwrap();
                         self.register_identifier(
                             &var.node,
                             var.span.clone(),
-                            typ,
+                            complete_typ,
                             type_info,
                             warnings,
                         );
                     }
-                    Some(AnnotatedType::UntypedList) => {
+                    Some(typ) => {
+                        let expected = typ.make_complete_example();
                         errors.push(SemError::TypeMismatch {
                             span: value.span.clone(),
-                            expected: SimpleType::List(SimpleType::Int.into()).into(), // placeholder
-                            found: AnnotatedType::UntypedList,
+                            expected,
+                            found: typ,
                             context: "variable type must be known (use 'as' for explicit typing)"
                                 .to_string(),
                         });
@@ -2764,7 +2721,7 @@ impl LocalEnv {
             }
         };
 
-        Some(typ)
+        Some(typ.into_inner())
     }
 
     fn check_path(
@@ -2773,14 +2730,14 @@ impl LocalEnv {
         object: &Spanned<Expr>,
         segments: &Vec<Spanned<String>>,
         type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, AnnotatedType>,
+        expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         assert!(!segments.is_empty(), "Path must have at least one segment");
 
         // First segment can be an expression
-        let initial_expr_type = self.check_expr(
+        let mut current_type = self.check_expr(
             global_env,
             &object.node,
             &object.span,
@@ -2790,49 +2747,40 @@ impl LocalEnv {
             warnings,
         )?;
 
-        let mut current_type = match initial_expr_type {
-            AnnotatedType::Forced(t) | AnnotatedType::Regular(t) => t,
-            AnnotatedType::UntypedList => {
-                // Can't access fields on non-object types
-                errors.push(SemError::FieldAccessOnNonObject {
-                    typ: AnnotatedType::UntypedList,
-                    field: segments[0].node.clone(),
-                    span: segments[0].span.clone(),
-                });
-                return None;
-            }
-        };
-
         // Follow the path through fields
         for segment in segments {
-            match &current_type {
-                a if a.is_object() => {
-                    let type_name = a.get_inner_object_type().unwrap();
-                    // Look up the field in this object type
-                    match global_env.lookup_field(type_name, &segment.node) {
-                        Some(field_type) => {
-                            current_type = field_type;
-                        }
-                        None => {
-                            errors.push(SemError::UnknownField {
-                                object_type: type_name.clone(),
-                                field: segment.node.clone(),
-                                span: segment.span.clone(),
-                            });
-                            return None;
+            let mut variants = BTreeSet::new();
+            for variant in current_type.get_variants() {
+                match variant {
+                    a if a.is_object() => {
+                        let type_name = a.get_inner_object_type().unwrap();
+                        // Look up the field in this object type
+                        match global_env.lookup_field(type_name, &segment.node) {
+                            Some(field_type) => {
+                                variants.extend(field_type.into_inner().into_variants());
+                            }
+                            None => {
+                                errors.push(SemError::UnknownField {
+                                    object_type: type_name.clone(),
+                                    field: segment.node.clone(),
+                                    span: segment.span.clone(),
+                                });
+                                return None;
+                            }
                         }
                     }
-                }
-                _ => {
-                    // Can't access fields on non-object types
-                    errors.push(SemError::FieldAccessOnNonObject {
-                        typ: current_type.clone().into(),
-                        field: segment.node.clone(),
-                        span: segment.span.clone(),
-                    });
-                    return None;
+                    _ => {
+                        // Can't access fields on non-object types
+                        errors.push(SemError::FieldAccessOnNonObject {
+                            typ: current_type.clone().into(),
+                            field: segment.node.clone(),
+                            span: segment.span.clone(),
+                        });
+                        return None;
+                    }
                 }
             }
+            current_type = ExprType::sum(variants).expect("There should be at least one variant");
         }
 
         Some(current_type)
@@ -2854,7 +2802,7 @@ impl GlobalEnv {
         (
             Self,
             TypeInfo,
-            HashMap<Span, AnnotatedType>,
+            HashMap<Span, ExprType>,
             Vec<SemError>,
             Vec<SemWarning>,
         ),
@@ -2951,7 +2899,7 @@ impl GlobalEnv {
         &mut self,
         statement: &crate::ast::Statement,
         type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, AnnotatedType>,
+        expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -3000,7 +2948,7 @@ impl GlobalEnv {
         body: &Spanned<Expr>,
         docstring: &Vec<String>,
         type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, AnnotatedType>,
+        expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -3028,29 +2976,9 @@ impl GlobalEnv {
                 let mut error_in_typs = false;
                 let mut params_typ = vec![];
                 for param in params {
-                    match ExprType::try_from(param.typ.node.clone()) {
-                        Err(TypeNameError::MultipleOptionMarkers) => {
-                            errors.push(SemError::MultipleOptionMarkers {
-                                span: param.typ.span.clone(),
-                            });
-                            error_in_typs = true;
-                        }
-                        Err(TypeNameError::OptionTypeInSumType) => {
-                            errors.push(SemError::OptionTypeInSumType {
-                                span: param.typ.span.clone(),
-                            });
-                            error_in_typs = true;
-                        }
-                        Err(TypeNameError::DuplicatedTypeInSumType) => {
-                            errors.push(SemError::DuplicatedTypeInSumType {
-                                span: param.typ.span.clone(),
-                            });
-                            error_in_typs = true;
-                        }
-                        Err(TypeNameError::OptionMarkerOnNone) => {
-                            errors.push(SemError::OptionMarkerOnNone {
-                                span: param.typ.span.clone(),
-                            });
+                    match CompleteType::try_from(param.typ.clone()) {
+                        Err(e) => {
+                            errors.push(e);
                             error_in_typs = true;
                         }
                         Ok(param_typ) => {
@@ -3100,26 +3028,9 @@ impl GlobalEnv {
                 );
                 local_env.pop_scope(warnings);
 
-                match ExprType::try_from(output_type.node.clone()) {
-                    Err(TypeNameError::MultipleOptionMarkers) => {
-                        errors.push(SemError::MultipleOptionMarkers {
-                            span: output_type.span.clone(),
-                        });
-                    }
-                    Err(TypeNameError::OptionTypeInSumType) => {
-                        errors.push(SemError::OptionTypeInSumType {
-                            span: output_type.span.clone(),
-                        });
-                    }
-                    Err(TypeNameError::DuplicatedTypeInSumType) => {
-                        errors.push(SemError::DuplicatedTypeInSumType {
-                            span: output_type.span.clone(),
-                        });
-                    }
-                    Err(TypeNameError::OptionMarkerOnNone) => {
-                        errors.push(SemError::OptionMarkerOnNone {
-                            span: output_type.span.clone(),
-                        });
+                match CompleteType::try_from(output_type.clone()) {
+                    Err(e) => {
+                        errors.push(e);
                     }
                     Ok(out_typ) => {
                         if !self.validate_type(&out_typ) {
@@ -3129,9 +3040,9 @@ impl GlobalEnv {
                             });
                         } else {
                             if let Some(body_type) = body_type_opt {
-                                // Allow coercion
+                                // Allow subtyping
                                 let types_match = match (out_typ.clone(), body_type.clone()) {
-                                    (a, b) if b.can_coerce_to(&a) => true,
+                                    (a, b) if b.is_subtype_of(&a) => true,
                                     _ => false,
                                 };
 
@@ -3183,13 +3094,14 @@ impl GlobalEnv {
                 span: constraint_name.span.clone(),
             }),
             Some(fn_type) => {
-                let needed_output_type = if var_list {
-                    SimpleType::List(SimpleType::Constraint.into())
+                let needed_output_type = ExprType::simple(if var_list {
+                    SimpleType::List(Some(SimpleType::Constraint.into()))
                 } else {
                     SimpleType::Constraint
-                }
-                .into();
-                let correct_type = fn_type.0.output.can_coerce_to(&needed_output_type);
+                })
+                .into_complete()
+                .unwrap();
+                let correct_type = fn_type.0.output == needed_output_type;
                 if !correct_type {
                     let expected_type = FunctionType {
                         output: needed_output_type,

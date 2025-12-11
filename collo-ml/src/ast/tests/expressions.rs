@@ -404,7 +404,7 @@ fn parse_explicit_type_annotation() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ExplicitType { expr, typ } => {
+            Expr::TypeConversion { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Ident(_)));
                 assert_eq!(
                     typ.node,
@@ -430,7 +430,7 @@ fn parse_explicit_type_with_number() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ExplicitType { expr, typ } => {
+            Expr::TypeConversion { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Number(5)));
                 assert_eq!(
                     typ.node,
@@ -456,7 +456,7 @@ fn parse_explicit_type_with_list() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ExplicitType { typ, .. } => {
+            Expr::TypeConversion { typ, .. } => {
                 assert_eq!(
                     typ.node,
                     TypeName {

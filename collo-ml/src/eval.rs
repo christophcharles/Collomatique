@@ -140,7 +140,7 @@ impl<T: EvalObject> ExprValue<T> {
         matches!(self, Self::Int(_) | Self::LinExpr(_))
     }
 
-    pub fn fits_in_typ(&self, env: &T::Env, target: &ExprType) -> bool {
+    pub fn fits_in_typ(&self, env: &T::Env, target: &CompleteType) -> bool {
         match self {
             // for non-list, it is just of matter of checking that the typ is in the sum
             Self::None => target.get_variants().contains(&SimpleType::None),
@@ -154,11 +154,14 @@ impl<T: EvalObject> ExprValue<T> {
             // for list, we have to check recursively for all list types in the sum
             Self::List(list) => {
                 for variant in target.get_variants() {
-                    let SimpleType::List(inner_typ) = variant else {
+                    let SimpleType::List(inner_typ_opt) = variant else {
                         continue;
                     };
+                    let inner_typ = inner_typ_opt.clone().expect("Type should be complete");
+                    let complete_inner =
+                        inner_typ.into_complete().expect("Type should be complete");
 
-                    if list.iter().all(|x| x.fits_in_typ(env, inner_typ)) {
+                    if list.iter().all(|x| x.fits_in_typ(env, &complete_inner)) {
                         return true;
                     }
                 }
@@ -167,8 +170,8 @@ impl<T: EvalObject> ExprValue<T> {
         }
     }
 
-    pub fn can_convert_to(&self, env: &T::Env, target: &SimpleType) -> bool {
-        match (self, target) {
+    pub fn can_convert_to(&self, env: &T::Env, target: &ConcreteType) -> bool {
+        match (self, target.inner()) {
             // Can always convert to its own type
             (Self::None, SimpleType::None) => true,
             (Self::Int(_), SimpleType::Int) => true,
@@ -178,12 +181,13 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
             // For lists, we can convert to another if all the elements are
             // convertible.
-            (Self::List(list), SimpleType::List(inner_typ)) => {
-                if !inner_typ.is_simple() {
-                    return false; // Can't convert to a sum type, we need a concrete type
-                }
-                let inner_target = inner_typ.as_simple().unwrap();
-                list.iter().all(|x| x.can_convert_to(env, inner_target))
+            (Self::List(list), SimpleType::List(inner_typ_opt)) => {
+                let inner_typ = inner_typ_opt.clone().expect("Type should be concrete");
+                let inner_target = inner_typ.to_simple().expect("Type should be concrete");
+                let concrete_inner = inner_target
+                    .into_concrete()
+                    .expect("Type should be concrete");
+                list.iter().all(|x| x.can_convert_to(env, &concrete_inner))
             }
             // Special cases: we can convert from Int to LinExpr
             (Self::Int(_), SimpleType::LinExpr) => true,
@@ -192,19 +196,23 @@ impl<T: EvalObject> ExprValue<T> {
         }
     }
 
-    pub fn convert_to(self, env: &T::Env, target: &SimpleType) -> Option<ExprValue<T>> {
+    pub fn convert_to(self, env: &T::Env, target: &ConcreteType) -> Option<ExprValue<T>> {
         if !self.can_convert_to(env, target) {
             return None;
         }
 
-        Some(match (self, target) {
-            (Self::List(list), SimpleType::List(inner_typ)) => {
+        Some(match (self, target.inner()) {
+            (Self::List(list), SimpleType::List(inner_typ_opt)) => {
+                let inner_typ = inner_typ_opt.clone().expect("Type should be concrete");
                 let inner_target = inner_typ
-                    .as_simple()
+                    .to_simple()
                     .expect("Inner list target type should have already been checked");
+                let concrete_inner = inner_target
+                    .into_concrete()
+                    .expect("Type should be concrete");
                 Self::List(
                     list.into_iter()
-                        .map(|x| x.convert_to(env, inner_target))
+                        .map(|x| x.convert_to(env, &concrete_inner))
                         .collect::<Option<_>>()?,
                 )
             }
@@ -246,7 +254,7 @@ impl EvalObject for NoObject {
         None
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, CompleteType>> {
         HashMap::new()
     }
 }
@@ -255,7 +263,7 @@ impl EvalObject for NoObject {
 pub struct CheckedAST<T: EvalObject = NoObject> {
     global_env: GlobalEnv,
     type_info: TypeInfo,
-    expr_types: HashMap<crate::ast::Span, AnnotatedType>,
+    expr_types: HashMap<crate::ast::Span, ExprType>,
     warnings: Vec<SemWarning>,
     _phantom: std::marker::PhantomData<T>,
 }
@@ -374,7 +382,7 @@ impl<T: EvalObject> CheckedAST<T> {
         &self.warnings
     }
 
-    pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
+    pub fn get_functions(&self) -> HashMap<String, (ArgsType, CompleteType)> {
         self.global_env
             .get_functions()
             .iter()
@@ -538,15 +546,18 @@ impl<T: EvalObject> LocalEnv<T> {
                     i32::try_from(count).expect("List length should not exceed i32 capacity"),
                 )
             }
-            Expr::ExplicitType { expr, typ } => {
+            Expr::TypeConversion { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = ExprType::try_from(typ.node.clone())
+                let target_type = ExprType::try_from(typ.clone())
                     .expect("At this point types should be valid")
                     .to_simple()
                     .expect("as should have a simple type as operand");
+                let concrete_target = target_type
+                    .into_concrete()
+                    .expect("Should be concrete at this point");
 
                 let coerced_value = value
-                    .convert_to(eval_history.env, &target_type)
+                    .convert_to(eval_history.env, &concrete_target)
                     .expect("Resulting expression should be convertible to target type");
 
                 coerced_value
@@ -563,18 +574,11 @@ impl<T: EvalObject> LocalEnv<T> {
                 let start_value = self.eval_expr(eval_history, &start)?;
                 let end_value = self.eval_expr(eval_history, &end)?;
 
-                let coerced_start = start_value
-                    .convert_to(eval_history.env, &SimpleType::Int)
-                    .expect("Int expected");
-                let coerced_end = end_value
-                    .convert_to(eval_history.env, &SimpleType::Int)
-                    .expect("Int expected");
-
-                let start_num = match coerced_start {
+                let start_num = match start_value {
                     ExprValue::Int(v) => v,
                     _ => panic!("Int expected"),
                 };
-                let end_num = match coerced_end {
+                let end_num = match end_value {
                     ExprValue::Int(v) => v,
                     _ => panic!("Int expected"),
                 };
@@ -587,7 +591,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 )
             }
             Expr::GlobalList(typ_name) => {
-                let expr_type = ExprType::try_from(typ_name.node.clone())
+                let expr_type = ExprType::try_from(typ_name.clone())
                     .expect("At this point, types should be valid");
 
                 let mut collection = vec![];
@@ -705,21 +709,22 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                if !value1.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
+                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value1);
                 }
-                if !value2.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value2);
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -731,21 +736,22 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                if !value1.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
+                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value1);
                 }
-                if !value2.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value2);
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -757,21 +763,22 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                if !value1.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
+                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value1);
                 }
-                if !value2.can_convert_to(&eval_history.env, &SimpleType::LinExpr) {
+                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
                     panic!("Operand for === does not convert to LinExpr: {:?}", value2);
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &SimpleType::LinExpr)
+                    .convert_to(&eval_history.env, &concrete_lin_expr)
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -962,13 +969,9 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 let mut output = match target {
-                    AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_lin_expr() => {
-                        ExprValue::LinExpr(LinExpr::constant(0.))
-                    }
-                    AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_int() => {
-                        ExprValue::Int(0)
-                    }
-                    target if target.is_list() => ExprValue::List(Vec::with_capacity(list.len())), // Heuristic for length
+                    a if a.is_lin_expr() => ExprValue::LinExpr(LinExpr::constant(0.)),
+                    a if a.is_int() => ExprValue::Int(0),
+                    a if a.is_list() => ExprValue::List(Vec::with_capacity(list.len())), // Heuristic for length
                     _ => panic!("Expected Int, LinExpr or List output"),
                 };
 
@@ -1078,12 +1081,8 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Semantic analysis should have given a target type");
 
                 let mut output = match target {
-                    AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_bool() => {
-                        ExprValue::Bool(true)
-                    }
-                    AnnotatedType::Forced(a) | AnnotatedType::Regular(a) if a.is_constraint() => {
-                        ExprValue::Constraint(Vec::with_capacity(list.len())) // Heuristic for length
-                    }
+                    a if a.is_bool() => ExprValue::Bool(true),
+                    a if a.is_constraint() => ExprValue::Constraint(Vec::with_capacity(list.len())), // Heuristic for length
                     _ => panic!("Expected Bool or Constraint output"),
                 };
 
@@ -1356,7 +1355,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             if !arg.fits_in_typ(&self.env, arg_typ) {
                 return Err(EvalError::TypeMismatch {
                     param: param,
-                    expected: arg_typ.clone(),
+                    expected: arg_typ.inner().clone(),
                     found: arg.clone(),
                 });
             }

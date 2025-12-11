@@ -26,7 +26,7 @@ impl Span {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Spanned<T> {
     pub node: T,
     pub span: Span,
@@ -75,26 +75,26 @@ pub struct Param {
     pub typ: Spanned<TypeName>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeName {
-    pub types: Vec<MaybeTypeName>,
+    pub types: Vec<Spanned<MaybeTypeName>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MaybeTypeName {
     pub maybe_count: usize,
     pub inner: SimpleTypeName,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimpleTypeName {
     LinExpr,
     Constraint,
     None,
     Int,
     Bool,
-    Object(String), // Student, Week, etc
-    List(TypeName), // [Student], [[Int]], etc.
+    Object(String),          // Student, Week, etc
+    List(Spanned<TypeName>), // [Student], [[Int]], etc.
 }
 
 // ============= Expressions =============
@@ -211,7 +211,7 @@ pub enum Expr {
     Cardinality(Box<Spanned<Expr>>),
 
     // Typed term
-    ExplicitType {
+    TypeConversion {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
     },
@@ -462,7 +462,7 @@ impl TypeName {
 }
 
 impl MaybeTypeName {
-    fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+    fn from_pest(pair: Pair<Rule>) -> Result<Spanned<Self>, AstError> {
         let span = Span::from_pest(&pair);
         if pair.as_rule() != Rule::maybe_type {
             return Err(AstError::UnexpectedRule {
@@ -499,7 +499,7 @@ impl MaybeTypeName {
         let list_type_pair = list_type_pair.ok_or(AstError::MissingTypeName(span.clone()))?;
         let inner = SimpleTypeName::from_pest(list_type_pair)?;
 
-        Ok(MaybeTypeName { maybe_count, inner })
+        Ok(Spanned::new(MaybeTypeName { maybe_count, inner }, span))
     }
 }
 
@@ -523,7 +523,11 @@ impl SimpleTypeName {
             Rule::primitive_type => Self::from_primitive_type(inner),
             Rule::type_name => {
                 // It's a list type: [type_name]
-                Ok(SimpleTypeName::List(TypeName::from_pest(inner)?))
+                let inner_span = Span::from_pest(&inner);
+                Ok(SimpleTypeName::List(Spanned::new(
+                    TypeName::from_pest(inner)?,
+                    inner_span,
+                )))
             }
             _ => Err(AstError::UnexpectedRule {
                 expected: "primitive_type or type_name",
@@ -869,7 +873,7 @@ impl Expr {
             let type_span = Span::from_pest(&type_pair);
             let typ = TypeName::from_pest(type_pair)?;
 
-            Ok(Expr::ExplicitType {
+            Ok(Expr::TypeConversion {
                 expr: Box::new(Spanned::new(expr, expr_span)),
                 typ: Spanned::new(typ, type_span),
             })
