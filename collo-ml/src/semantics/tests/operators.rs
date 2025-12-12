@@ -12,7 +12,7 @@ fn addition_int() {
 
 #[test]
 fn addition_produces_linexpr() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = x + y;";
+    let input = "pub let f(x: LinExpr, y: LinExpr) -> LinExpr = x + y;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -32,7 +32,7 @@ fn negation_int() {
 
 #[test]
 fn negation_produces_linexpr() {
-    let input = "pub let f(x: Int) -> LinExpr = -x;";
+    let input = "pub let f(x: LinExpr) -> LinExpr = -x;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -44,7 +44,7 @@ fn negation_produces_linexpr() {
 
 #[test]
 fn subtraction() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = x - y;";
+    let input = "pub let f(x: Int, y: Int) -> Int = x - y;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(errors.is_empty(), "Subtraction should work: {:?}", errors);
@@ -52,7 +52,7 @@ fn subtraction() {
 
 #[test]
 fn multiplication() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = x * y;";
+    let input = "pub let f(x: Int, y: Int) -> Int = x * y;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -105,7 +105,7 @@ fn arithmetic_with_bool_should_fail() {
 
 #[test]
 fn chained_arithmetic() {
-    let input = "pub let f(a: Int, b: Int, c: Int) -> LinExpr = a + b - c * 2;";
+    let input = "pub let f(a: Int, b: Int, c: Int) -> Int = a + b - c * 2;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -369,7 +369,7 @@ fn collection_ops_must_have_same_element_type() {
 
 #[test]
 fn collection_ops_unify_int_linexpr() {
-    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs + ys;";
+    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [Int | LinExpr] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -410,8 +410,8 @@ fn in_operator_type_mismatch() {
 }
 
 #[test]
-fn in_operator_with_coercion() {
-    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = x in xs;";
+fn in_operator_with_conversion() {
+    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = (x into LinExpr) in xs;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
