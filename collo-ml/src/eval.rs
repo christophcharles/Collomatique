@@ -549,6 +549,12 @@ impl<T: EvalObject> LocalEnv<T> {
                     i32::try_from(count).expect("List length should not exceed i32 capacity"),
                 )
             }
+            Expr::ExplicitType { expr, typ: _ } => {
+                let value = self.eval_expr(eval_history, &expr)?;
+                // we do nothing: the semantic analysis has already checked everything
+                // and types are relevant only in the semantic phase
+                value
+            }
             Expr::TypeConversion { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
                 let target_type = ExprType::try_from(typ.clone())

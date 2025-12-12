@@ -216,6 +216,10 @@ pub enum Expr {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
     },
+    ExplicitType {
+        expr: Box<Spanned<Expr>>,
+        typ: Spanned<TypeName>,
+    },
 }
 
 // ============= Error Type =============
@@ -824,11 +828,11 @@ impl Expr {
         let mut inner = pair.into_inner();
 
         let first = inner.next().unwrap();
-        let mut result = Self::from_explicit_type(first)?;
+        let mut result = Self::from_type_conversion(first)?;
 
         while let Some(op_pair) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_explicit_type(right_pair)?;
+            let right = Self::from_type_conversion(right_pair)?;
 
             let result_span = span.clone();
             result = match op_pair.as_rule() {
@@ -857,6 +861,39 @@ impl Expr {
         Ok(result)
     }
 
+    fn from_type_conversion(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::type_conversion {
+            return Err(AstError::UnexpectedRule {
+                expected: "type_conversion",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
+        let mut inner = pair.into_inner();
+
+        // First is always path
+        let expr_pair = inner.next().unwrap();
+        let expr_span = Span::from_pest(&expr_pair);
+        let expr = Self::from_explicit_type(expr_pair)?;
+
+        // Check if there's a type annotation
+        if let Some(type_pair) = inner.next() {
+            // This is the type_name after "as"
+            let type_span = Span::from_pest(&type_pair);
+            let typ = TypeName::from_pest(type_pair)?;
+
+            Ok(Expr::TypeConversion {
+                expr: Box::new(Spanned::new(expr, expr_span)),
+                typ: Spanned::new(typ, type_span),
+            })
+        } else {
+            // No type annotation, just return the expression
+            Ok(expr)
+        }
+    }
+
     fn from_explicit_type(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         if pair.as_rule() != Rule::explicit_type {
@@ -880,7 +917,7 @@ impl Expr {
             let type_span = Span::from_pest(&type_pair);
             let typ = TypeName::from_pest(type_pair)?;
 
-            Ok(Expr::TypeConversion {
+            Ok(Expr::ExplicitType {
                 expr: Box::new(Spanned::new(expr, expr_span)),
                 typ: Spanned::new(typ, type_span),
             })

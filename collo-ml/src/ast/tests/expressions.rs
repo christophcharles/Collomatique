@@ -404,7 +404,7 @@ fn parse_explicit_type_annotation() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::TypeConversion { expr, typ } => {
+            Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Ident(_)));
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(
@@ -429,7 +429,7 @@ fn parse_explicit_type_with_number() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::TypeConversion { expr, typ } => {
+            Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Number(5)));
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(
@@ -449,6 +449,89 @@ fn parse_explicit_type_with_number() {
 #[test]
 fn parse_explicit_type_with_list() {
     let input = "let f() -> [Int] = x as [Int];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ExplicitType { typ, .. } => {
+                assert_eq!(typ.node.types.len(), 1);
+                assert_eq!(typ.node.types[0].node.maybe_count, 0);
+                match &typ.node.types[0].node.inner {
+                    SimpleTypeName::List(typ_name) => {
+                        assert_eq!(typ_name.node.types.len(), 1);
+                        assert_eq!(
+                            typ_name.node.types[0].node,
+                            MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Int,
+                            }
+                        );
+                    }
+                    _ => panic!("Expected List type"),
+                }
+            }
+            _ => panic!("Expected ExplicitType"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+// ============= Type Conversions =============
+
+#[test]
+fn parse_type_conversion_annotation() {
+    let input = "let f() -> LinExpr = x into LinExpr;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::TypeConversion { expr, typ } => {
+                assert!(matches!(expr.node, Expr::Ident(_)));
+                assert_eq!(typ.node.types.len(), 1);
+                assert_eq!(
+                    typ.node.types[0].node,
+                    MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::LinExpr,
+                    }
+                );
+            }
+            _ => panic!("Expected ExplicitType"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_type_conversion_with_number() {
+    let input = "let f() -> Int = 5 into Int;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::TypeConversion { expr, typ } => {
+                assert!(matches!(expr.node, Expr::Number(5)));
+                assert_eq!(typ.node.types.len(), 1);
+                assert_eq!(
+                    typ.node.types[0].node,
+                    MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Int,
+                    }
+                );
+            }
+            _ => panic!("Expected ExplicitType"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_type_conversion_with_list() {
+    let input = "let f() -> [Int] = x into [Int];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

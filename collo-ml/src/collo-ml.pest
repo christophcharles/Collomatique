@@ -32,6 +32,7 @@ reserved_keyword = {
     "Bool" |
     "None" |
     "none" |
+    "into" |
     "sum" |
     "Int" |
     "let" |
@@ -86,8 +87,9 @@ relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 
 // Arithmetic
 add_sub_expr = { mul_div_mod_expr ~ ((add_op | sub_op) ~ mul_div_mod_expr)* }
-mul_div_mod_expr = { explicit_type ~ ((mul_op | div_op | mod_op) ~ explicit_type)* }
+mul_div_mod_expr = { type_conversion ~ ((mul_op | div_op | mod_op) ~ type_conversion)* }
 
+type_conversion = { explicit_type ~ ( "into" ~ type_name)? }
 explicit_type = { path ~ ( "as" ~ type_name)? }
 
 path = { primary_expr ~ ("." ~ ident)* }

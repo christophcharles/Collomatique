@@ -1165,7 +1165,7 @@ impl LocalEnv {
                 )
                 .map(|x| x.into()),
 
-            // ========== As construct ==========
+            // ========== Into construct ==========
             Expr::TypeConversion { expr, typ } => {
                 // Check the inner expression
                 let expr_type = self.check_expr(
@@ -1213,6 +1213,45 @@ impl LocalEnv {
                     }
                 }
                 Some(concrete_target.into_inner().into()) // Propagate concrete target in all cases
+            }
+            // ========== As construct ==========
+            Expr::ExplicitType { expr, typ } => {
+                // Check the inner expression
+                let expr_type = self.check_expr(
+                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                );
+
+                // Convert the declared type
+                let target_type = match ExprType::try_from(typ.clone()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        errors.push(e);
+                        return expr_type; // Fallback to inferred type
+                    }
+                };
+
+                // Validate that the target type is actually valid
+                if !global_env.validate_type(&target_type) {
+                    errors.push(SemError::UnknownType {
+                        typ: target_type.to_string(),
+                        span: typ.span.clone(),
+                    });
+                    return expr_type; // Fallback to inferred type
+                }
+
+                if let Some(inferred) = expr_type {
+                    // Check if the inferred type can convert to the target type
+                    if !inferred.is_subtype_of(&target_type) {
+                        // Error: can't convert
+                        errors.push(SemError::TypeMismatch {
+                            span: expr.span.clone(),
+                            expected: inferred,
+                            found: target_type.clone(),
+                            context: "Type coercion can only be done to super-types".into(),
+                        });
+                    }
+                }
+                Some(target_type) // Propagate target in all cases
             }
 
             // ========== Arithmetic Operations ==========
