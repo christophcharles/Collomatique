@@ -984,6 +984,7 @@ impl Expr {
             Rule::fold => Self::from_fold(inner, false),
             Rule::rfold => Self::from_fold(inner, true),
             Rule::cardinality => Self::from_cardinality(inner),
+            Rule::empty_typed_list => Self::from_empty_typed_list(inner),
             Rule::list_comprehension => Self::from_list_comprehension(inner),
             Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
@@ -1194,6 +1195,20 @@ impl Expr {
         let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
 
         Ok(Expr::Neg(term))
+    }
+
+    fn from_empty_typed_list(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // empty_typed_list = { "[" ~ "<" ~ type_name ">" ~ "]" }
+        let span = Span::from_pest(&pair);
+        let inner = pair.into_inner().next().unwrap();
+
+        let typ_span = Span::from_pest(&inner);
+        let typ = Spanned::new(TypeName::from_pest(inner)?, typ_span);
+
+        Ok(Expr::ExplicitType {
+            expr: Box::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
+            typ,
+        })
     }
 
     fn from_list_literal(pair: Pair<Rule>) -> Result<Self, AstError> {
