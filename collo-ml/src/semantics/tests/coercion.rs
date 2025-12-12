@@ -3,13 +3,13 @@ use super::*;
 // ========== Basic Coercion Tests ==========
 
 #[test]
-fn int_coerces_to_linexpr_in_return() {
+fn int_does_not_coerce_to_linexpr_in_return() {
     let input = "pub let f() -> LinExpr = 5;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        errors.is_empty(),
-        "Int should coerce to LinExpr: {:?}",
+        !errors.is_empty(),
+        "Int should not coerce to LinExpr: {:?}",
         errors
     );
 }
@@ -28,7 +28,7 @@ fn int_coerces_to_linexpr_in_arithmetic() {
 }
 
 #[test]
-fn int_coerces_to_linexpr_in_function_argument() {
+fn int_does_not_coerce_to_linexpr_in_function_argument() {
     let input = r#"
         pub let double(x: LinExpr) -> LinExpr = x + x;
         pub let f() -> LinExpr = double(5);
@@ -36,8 +36,8 @@ fn int_coerces_to_linexpr_in_function_argument() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        errors.is_empty(),
-        "Int should coerce to LinExpr in function arg: {:?}",
+        !errors.is_empty(),
+        "Int should not coerce to LinExpr in function arg: {:?}",
         errors
     );
 }
@@ -159,12 +159,12 @@ fn constraint_in_logical_and() {
 #[test]
 fn if_unifies_int_and_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { 5 } else { $V(x) };";
+    let input = "pub let f(x: Int, flag: Bool) -> Int | LinExpr = if flag { 5 } else { $V(x) };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "If should unify Int and LinExpr to LinExpr: {:?}",
+        "If should unify Int and LinExpr to Int | LinExpr: {:?}",
         errors
     );
 }
@@ -172,12 +172,12 @@ fn if_unifies_int_and_linexpr() {
 #[test]
 fn if_unifies_linexpr_and_int() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { $V(x) } else { 5 };";
+    let input = "pub let f(x: Int, flag: Bool) -> Int | LinExpr = if flag { $V(x) } else { 5 };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "If should unify LinExpr and Int to LinExpr: {:?}",
+        "If should unify LinExpr and Int to Int | LinExpr: {:?}",
         errors
     );
 }
@@ -217,12 +217,12 @@ fn if_cannot_unify_incompatible_types() {
 #[test]
 fn list_literal_unifies_mixed_types() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5, $V(x), 10];";
+    let input = "pub let f(x: Int) -> [Int | LinExpr] = [5, $V(x), 10];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "List should unify Int and LinExpr to [LinExpr]: {:?}",
+        "List should unify Int and LinExpr to [Int | LinExpr]: {:?}",
         errors
     );
 }
@@ -240,29 +240,93 @@ fn list_literal_with_emptylist() {
 }
 
 #[test]
-fn collection_union_unifies_types() {
+fn collection_sum_unifies_types() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5] + [$V(x)];";
+    let input = "pub let f(x: Int) -> [Int | LinExpr] = [5] + [$V(x)];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "Union should unify [Int] and [LinExpr]: {:?}",
+        "Sum should unify [Int] and [LinExpr]: {:?}",
         errors
     );
 }
 
 #[test]
-fn collection_diff_unifies_types() {
+fn collection_diff_does_not_unify_types() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5, 10] - [$V(x)];";
+    let input = "pub let f(x: Int) -> [Int] = [5, 10] - [$V(x) as Int | LinExpr];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "Diff should unify [Int] and [LinExpr]: {:?}",
+        "Diff should not unify [Int] and [LinExpr]: {:?}",
         errors
     );
+}
+
+#[test]
+fn collection_diff_checks_overlapping_types() {
+    let vars = var_with_args("V", vec![SimpleType::Int]);
+    let input = "pub let f(x: Int) -> [Int] = [5, 10] - [$V(x)];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Diff should check overlapping types between [Int] and [LinExpr]: {:?}",
+        errors
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn collection_diff_checks_not_from_empty() {
+    let vars = var_with_args("V", vec![SimpleType::Int]);
+    let input = "pub let f(x: Int) -> [Int] = [] - [5];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Diff should check overlapping types between [] and [Int]: {:?}",
+        errors
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn collection_diff_checks_not_by_empty() {
+    let vars = var_with_args("V", vec![SimpleType::Int]);
+    let input = "pub let f(x: Int) -> [Int] = [5] - [];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Diff should check overlapping types between [] and [Int]: {:?}",
+        errors
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn collection_diff_checks_not_by_and_no_from_empty() {
+    let vars = var_with_args("V", vec![SimpleType::Int]);
+    let input = "pub let f(x: Int) -> [Int] = [] - [];";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        !errors.is_empty(),
+        "Diff should check that we are not doing [] - []: {:?}",
+        errors
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
 }
 
 // ========== Forced Type (as) Prevents Coercion ==========
@@ -282,37 +346,8 @@ fn forced_type_prohibits_coercion_in_return() {
 }
 
 #[test]
-fn forced_type_prohibits_coercion_in_constraint() {
-    let input = "pub let f() -> Constraint = 5 as Int === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        !errors.is_empty(),
-        "Forced Int should not coerce to LinExpr in constraint"
-    );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
-}
-
-#[test]
-fn forced_type_prohibits_coercion_in_list() {
-    let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [$V(x), 5 as Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
-
-    assert!(
-        !errors.is_empty(),
-        "Forced Int should not coerce to LinExpr in list"
-    );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
-}
-
-#[test]
-fn forced_type_allows_recast() {
-    let input = "pub let f() -> LinExpr = (5 as Int) as LinExpr;";
+fn coerced_type_allows_recast() {
+    let input = "pub let f() -> Int | LinExpr = (5 as Int) as Int | LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -323,13 +358,13 @@ fn forced_type_allows_recast() {
 }
 
 #[test]
-fn forced_type_in_arithmetic_operation() {
-    let input = "pub let f() -> LinExpr = (5 as Int) + 10;";
+fn coerced_type_in_arithmetic_operation() {
+    let input = "pub let f() -> Int = (5 as Int) + 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Forced type should loosen after operation: {:?}",
+        "Coerced type should be allowed in operation: {:?}",
         errors
     );
 }
@@ -337,25 +372,25 @@ fn forced_type_in_arithmetic_operation() {
 // ========== Nested List Coercion ==========
 
 #[test]
-fn nested_list_int_coerces_to_nested_list_linexpr() {
-    let input = "pub let f() -> [[LinExpr]] = [[1, 2], [3, 4]];";
+fn nested_list_int_converts_to_nested_list_linexpr() {
+    let input = "pub let f() -> [[LinExpr]] = [[1, 2], [3, 4]] into [[LinExpr]];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "[[Int]] should coerce to [[LinExpr]]: {:?}",
+        "[[Int]] should convert to [[LinExpr]]: {:?}",
         errors
     );
 }
 
 #[test]
-fn nested_emptylist_coercion_should_fail_without_annotation() {
+fn nested_emptylist_coercion_should_not_fail_without_annotation() {
     let input = "pub let f() -> [[Int]] = [[], [], []];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
-        "Nested empty lists should not coerce without type annotation: {:?}",
+        errors.is_empty(),
+        "Nested empty lists should coerce even without type annotation: {:?}",
         errors
     );
 }
