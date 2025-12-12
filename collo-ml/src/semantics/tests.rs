@@ -48,10 +48,7 @@ pub(crate) fn object_with_fields(
     let mut types = HashMap::new();
     let mut field_map = HashMap::new();
     for (field_name, field_type) in fields {
-        field_map.insert(
-            field_name.to_string(),
-            ExprType::simple(field_type).into_complete().unwrap(),
-        );
+        field_map.insert(field_name.to_string(), ExprType::simple(field_type));
     }
     types.insert(name.to_string(), field_map);
     types
@@ -63,7 +60,7 @@ pub(crate) fn var_with_args(name: &str, args: Vec<SimpleType>) -> HashMap<String
     vars.insert(
         name.to_string(),
         args.into_iter()
-            .map(|x| ExprType::simple(x).into_complete().unwrap())
+            .map(|x| ExprType::simple(x))
             .collect::<Vec<_>>(),
     );
     vars

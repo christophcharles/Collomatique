@@ -140,7 +140,7 @@ impl<T: EvalObject> ExprValue<T> {
         matches!(self, Self::Int(_) | Self::LinExpr(_))
     }
 
-    pub fn fits_in_typ(&self, env: &T::Env, target: &CompleteType) -> bool {
+    pub fn fits_in_typ(&self, env: &T::Env, target: &ExprType) -> bool {
         match self {
             // for non-list, it is just of matter of checking that the typ is in the sum
             Self::None => target.get_variants().contains(&SimpleType::None),
@@ -151,17 +151,16 @@ impl<T: EvalObject> ExprValue<T> {
             Self::Object(obj) => target
                 .get_variants()
                 .contains(&SimpleType::Object(obj.typ_name(env))),
-            // for list, we have to check recursively for all list types in the sum
+            // if we have an empty list, we just need to check that ExprType is a list
+            Self::List(list) if list.is_empty() => target.is_list(),
+            // if not empty, we have to check recursively for all list types in the sum
             Self::List(list) => {
                 for variant in target.get_variants() {
-                    let SimpleType::List(inner_typ_opt) = variant else {
+                    let SimpleType::List(inner_typ) = variant else {
                         continue;
                     };
-                    let inner_typ = inner_typ_opt.clone().expect("Type should be complete");
-                    let complete_inner =
-                        inner_typ.into_complete().expect("Type should be complete");
 
-                    if list.iter().all(|x| x.fits_in_typ(env, &complete_inner)) {
+                    if list.iter().all(|x| x.fits_in_typ(env, &inner_typ)) {
                         return true;
                     }
                 }
@@ -179,12 +178,15 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::LinExpr(_), SimpleType::LinExpr) => true,
             (Self::Constraint(_), SimpleType::Constraint) => true,
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
+            // For empty list, we can convert to any list type
+            (Self::List(list), SimpleType::EmptyList) if list.is_empty() => true,
+            (Self::List(list), SimpleType::List(_)) if list.is_empty() => true,
             // For lists, we can convert to another if all the elements are
             // convertible.
-            (Self::List(list), SimpleType::List(inner_typ_opt)) => {
-                let inner_typ = inner_typ_opt.clone().expect("Type should be concrete");
-                let inner_target = inner_typ.to_simple().expect("Type should be concrete");
+            (Self::List(list), SimpleType::List(inner_typ)) => {
+                let inner_target = inner_typ.as_simple().expect("Type should be concrete");
                 let concrete_inner = inner_target
+                    .clone()
                     .into_concrete()
                     .expect("Type should be concrete");
                 list.iter().all(|x| x.can_convert_to(env, &concrete_inner))
@@ -202,12 +204,13 @@ impl<T: EvalObject> ExprValue<T> {
         }
 
         Some(match (self, target.inner()) {
-            (Self::List(list), SimpleType::List(inner_typ_opt)) => {
-                let inner_typ = inner_typ_opt.clone().expect("Type should be concrete");
+            // This should also work for empty lists as the iterator will be empty
+            (Self::List(list), SimpleType::List(inner_typ)) => {
                 let inner_target = inner_typ
-                    .to_simple()
+                    .as_simple()
                     .expect("Inner list target type should have already been checked");
                 let concrete_inner = inner_target
+                    .clone()
                     .into_concrete()
                     .expect("Type should be concrete");
                 Self::List(
@@ -254,7 +257,7 @@ impl EvalObject for NoObject {
         None
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, CompleteType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()
     }
 }
@@ -382,7 +385,7 @@ impl<T: EvalObject> CheckedAST<T> {
         &self.warnings
     }
 
-    pub fn get_functions(&self) -> HashMap<String, (ArgsType, CompleteType)> {
+    pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
         self.global_env
             .get_functions()
             .iter()
@@ -1355,7 +1358,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             if !arg.fits_in_typ(&self.env, arg_typ) {
                 return Err(EvalError::TypeMismatch {
                     param: param,
-                    expected: arg_typ.inner().clone(),
+                    expected: arg_typ.clone(),
                     found: arg.clone(),
                 });
             }

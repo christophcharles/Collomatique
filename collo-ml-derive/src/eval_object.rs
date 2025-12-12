@@ -244,8 +244,6 @@ fn generate_eval_object_impl(
                         k,
                         v.convert_to_expr_type::<#enum_name>()
                             .expect("Object type should be known")
-                            .into_complete()
-                            .expect("Object type should be complete")
                     ))
                     .collect();
                 map.insert(#dsl_name.to_string(), expr_schema);
@@ -291,7 +289,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::CompleteType>> {
+            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::ExprType>> {
                 let mut map = ::std::collections::HashMap::new();
                 #(#type_schemas_entries)*
                 map

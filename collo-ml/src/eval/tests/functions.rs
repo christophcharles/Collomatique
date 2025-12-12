@@ -239,10 +239,7 @@ fn fn_returning_linexpr() {
     pub let f() -> LinExpr = get_var(10);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -271,10 +268,7 @@ fn fn_returning_constraint() {
     pub let f() -> Constraint = make_constraint(5);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -297,10 +291,7 @@ fn fn_returning_list_of_linexpr() {
     pub let f() -> [LinExpr] = get_vars([1, 2, 3]);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -587,10 +578,7 @@ fn fn_using_base_var() {
     pub let f() -> LinExpr = make_linexpr(10);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -619,10 +607,7 @@ fn fn_using_reified_var() {
     pub let f() -> LinExpr = use_var(5);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -653,10 +638,7 @@ fn fn_calling_fn_with_reified_var() {
     pub let f() -> LinExpr = user(10);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

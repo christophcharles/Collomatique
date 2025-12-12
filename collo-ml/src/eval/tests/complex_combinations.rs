@@ -10,10 +10,7 @@ fn forall_with_reified_var_and_filter() {
     pub let f(xs: [Int]) -> Constraint = forall x in xs where x > 0 { $MyVar(x) === 1 };
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -63,10 +60,7 @@ fn sum_with_var_list_and_comprehension() {
     pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs + ys) { v };
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -198,8 +192,8 @@ fn nested_list_comp_with_reified_vars() {
     let vars = HashMap::from([(
         "V".to_string(),
         vec![
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+            ExprType::simple(SimpleType::Int),
+            ExprType::simple(SimpleType::Int),
         ],
     )]);
 
@@ -352,10 +346,7 @@ fn nested_if_with_variables() {
         };
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -396,10 +387,7 @@ fn function_returning_constraint_system() {
         var_sum_constraint(xs, total) and var_bound_constraints(xs);
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -468,8 +456,8 @@ fn function_composition_with_reified_vars() {
     let vars = HashMap::from([(
         "V".to_string(),
         vec![
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+            ExprType::simple(SimpleType::Int),
+            ExprType::simple(SimpleType::Int),
         ],
     )]);
 
@@ -525,8 +513,8 @@ fn assignment_constraint_pattern() {
     let vars = HashMap::from([(
         "Assigned".to_string(),
         vec![
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+            ExprType::simple(SimpleType::Int),
+            ExprType::simple(SimpleType::Int),
         ],
     )]);
 
@@ -610,15 +598,15 @@ fn conditional_constraint_with_reification() {
         (
             "Available".to_string(),
             vec![
-                ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-                ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+                ExprType::simple(SimpleType::Int),
+                ExprType::simple(SimpleType::Int),
             ],
         ),
         (
             "Assigned".to_string(),
             vec![
-                ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-                ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+                ExprType::simple(SimpleType::Int),
+                ExprType::simple(SimpleType::Int),
             ],
         ),
     ]);
@@ -665,17 +653,12 @@ fn aggregation_with_filtering() {
         };
     "#;
     let vars = HashMap::from([
-        (
-            "Score".to_string(),
-            vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-        ),
+        ("Score".to_string(), vec![ExprType::simple(SimpleType::Int)]),
         (
             "Assigned".to_string(),
             vec![
-                ExprType::simple(SimpleType::Object("Student".into()))
-                    .into_complete()
-                    .unwrap(),
-                ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+                ExprType::simple(SimpleType::Object("Student".into())),
+                ExprType::simple(SimpleType::Int),
             ],
         ),
     ]);
@@ -716,13 +699,10 @@ fn aggregation_with_filtering() {
                 Student::Student2 => ExprValue::Int(100),
             })
         }
-        fn type_schemas() -> HashMap<String, HashMap<String, CompleteType>> {
+        fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
             HashMap::from([(
                 "Student".to_string(),
-                HashMap::from([(
-                    "score".to_string(),
-                    ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-                )]),
+                HashMap::from([("score".to_string(), ExprType::simple(SimpleType::Int))]),
             )])
         }
     }
@@ -841,10 +821,7 @@ fn union_of_var_lists() {
         sum v in ($[Vars](xs) + $[Vars](ys)) { v };
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -927,10 +904,7 @@ fn mixed_coercion_in_complex_expression() {
         sum x in xs { get_coefficient(x) * $V(x) };
     "#;
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -1021,8 +995,8 @@ fn all_features_combined() {
     let vars = HashMap::from([(
         "V".to_string(),
         vec![
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+            ExprType::simple(SimpleType::Int),
+            ExprType::simple(SimpleType::Int),
         ],
     )]);
 
@@ -1132,8 +1106,8 @@ fn all_features_combined_with_let() {
     let vars = HashMap::from([(
         "V".to_string(),
         vec![
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
-            ExprType::simple(SimpleType::Int).into_complete().unwrap(),
+            ExprType::simple(SimpleType::Int),
+            ExprType::simple(SimpleType::Int),
         ],
     )]);
 

@@ -563,10 +563,7 @@ fn list_comp_over_difference() {
 fn list_comp_linexpr_simple() {
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1, 2, 3]];";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -609,10 +606,7 @@ fn list_comp_linexpr_with_coefficient() {
 fn list_comp_linexpr_with_filter() {
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1..6] where x % 2 == 0];";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

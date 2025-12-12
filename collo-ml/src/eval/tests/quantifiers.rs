@@ -193,10 +193,7 @@ fn sum_with_explicit_list() {
 fn sum_linexpr_simple() {
     let input = "pub let f() -> LinExpr = sum x in [1..3] { $V(x) };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -224,10 +221,7 @@ fn sum_linexpr_simple() {
 fn sum_linexpr_empty_list() {
     let input = "pub let f() -> LinExpr = sum x in [] as [Int] { $V(x) };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -273,10 +267,7 @@ fn sum_linexpr_with_coefficient() {
 fn sum_linexpr_with_constant() {
     let input = "pub let f() -> LinExpr = sum x in [1..4] { $V(x) + 10 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -307,10 +298,7 @@ fn sum_linexpr_with_constant() {
 fn sum_linexpr_with_filter() {
     let input = "pub let f() -> LinExpr = sum x in [1..5] where x % 2 == 1 { $V(x) };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -339,14 +327,8 @@ fn sum_linexpr_multiple_vars() {
     let input = "pub let f() -> LinExpr = sum x in [1..3] { $V1(x) + $V2(x) };";
 
     let vars = HashMap::from([
-        (
-            "V1".to_string(),
-            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-        ),
-        (
-            "V2".to_string(),
-            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-        ),
+        ("V1".to_string(), vec![ExprType::simple(SimpleType::Int)]),
+        ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -380,10 +362,7 @@ fn sum_linexpr_multiple_vars() {
 fn sum_linexpr_with_param() {
     let input = "pub let f(coef: Int) -> LinExpr = sum x in [1..3] { coef * $V(x) };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -581,10 +560,7 @@ fn forall_bool_with_complex_condition() {
 fn forall_constraint_simple() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) === 1 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -623,10 +599,7 @@ fn forall_constraint_simple() {
 fn forall_constraint_empty_list() {
     let input = "pub let f() -> Constraint = forall x in [] as [Int] { $V(x) === 1 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -647,10 +620,7 @@ fn forall_constraint_empty_list() {
 fn forall_constraint_with_inequality() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) <== 10 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -686,10 +656,7 @@ fn forall_constraint_with_inequality() {
 fn forall_constraint_with_filter() {
     let input = "pub let f() -> Constraint = forall x in [1..6] where x % 2 == 0 { $V(x) === 1 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -725,10 +692,7 @@ fn forall_constraint_with_filter() {
 fn forall_constraint_with_filter_no_matches() {
     let input = "pub let f() -> Constraint = forall x in [1..5] where x > 10 { $V(x) === 1 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -749,10 +713,7 @@ fn forall_constraint_with_filter_no_matches() {
 fn forall_constraint_with_arithmetic() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { 2 * $V(x) + 5 === 15 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -789,14 +750,8 @@ fn forall_constraint_multiple_vars() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V1(x) + $V2(x) === 10 };";
 
     let vars = HashMap::from([
-        (
-            "V1".to_string(),
-            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-        ),
-        (
-            "V2".to_string(),
-            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-        ),
+        ("V1".to_string(), vec![ExprType::simple(SimpleType::Int)]),
+        ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -838,10 +793,7 @@ fn forall_constraint_multiple_vars() {
 fn forall_constraint_with_param() {
     let input = "pub let f(value: Int) -> Constraint = forall x in [1..3] { $V(x) === value };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -877,10 +829,7 @@ fn forall_constraint_with_param() {
 fn forall_constraint_mixed_types() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) === 1 and $V(x) <== 10 };";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -904,10 +853,7 @@ fn forall_constraint_nested() {
 
     let vars = HashMap::from([(
         "V".to_string(),
-        vec![
-            SimpleType::Int.try_into().unwrap(),
-            SimpleType::Int.try_into().unwrap(),
-        ],
+        vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -934,10 +880,7 @@ fn sum_inside_forall() {
 
     let vars = HashMap::from([(
         "V".to_string(),
-        vec![
-            SimpleType::Int.try_into().unwrap(),
-            SimpleType::Int.try_into().unwrap(),
-        ],
+        vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");

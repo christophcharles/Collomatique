@@ -117,10 +117,7 @@ fn constraint_eq_with_arithmetic() {
 fn constraint_eq_with_params() {
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 1;";
 
-    let vars = HashMap::from([(
-        "V".to_string(),
-        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
-    )]);
+    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

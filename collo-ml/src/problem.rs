@@ -3,7 +3,7 @@ use crate::eval::{
 };
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
-use crate::{CompleteType, EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
+use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -155,18 +155,14 @@ impl<
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
-    fn build_vars() -> Result<HashMap<String, Vec<CompleteType>>, ProblemError<T>> {
+    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T>> {
         V::field_schema()
             .into_iter()
             .map(|(name, typ)| {
                 Ok((
                     name,
                     typ.into_iter()
-                        .map(|x| {
-                            Ok(x.convert_to_expr_type::<T>()?
-                                .into_complete()
-                                .expect("The type should always be complete"))
-                        })
+                        .map(|x| Ok(x.convert_to_expr_type::<T>()?))
                         .collect::<Result<_, _>>()
                         .map_err(|e| match e {
                             FieldConversionError::UnknownTypeId(type_id) => {
@@ -604,18 +600,6 @@ impl<
         let mut pending_reification = HashMap::<ScriptRef, Vec<PendingReification<T>>>::new();
         let mut warnings = HashMap::new();
 
-        let constraint_typ = ExprType::simple(SimpleType::Constraint)
-            .into_complete()
-            .unwrap();
-        let constraint_list_typ = ExprType::simple(SimpleType::List(Some(ExprType::simple(
-            SimpleType::Constraint,
-        ))))
-        .into_complete()
-        .unwrap();
-        let lin_expr_typ = ExprType::simple(SimpleType::LinExpr)
-            .into_complete()
-            .unwrap();
-
         while let Some(script) = current_script_opt {
             let ast = script.get_ast();
             let ast_funcs = ast.get_functions();
@@ -634,10 +618,10 @@ impl<
                 let (_params, out_typ) = ast_funcs
                     .get(&fn_name)
                     .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-                if *out_typ != constraint_typ && *out_typ != constraint_list_typ {
+                if !out_typ.is_constraint() && !out_typ.is_list_of_constraints() {
                     return Err(ProblemError::WrongReturnType {
                         func: fn_name.clone(),
-                        returned: out_typ.inner().clone(),
+                        returned: out_typ.clone(),
                         expected: ExprType::simple(SimpleType::Constraint),
                     });
                 }
@@ -663,10 +647,10 @@ impl<
                 let (_params, out_typ) = ast_funcs
                     .get(&fn_name)
                     .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-                if *out_typ != lin_expr_typ {
+                if !out_typ.is_lin_expr() {
                     return Err(ProblemError::WrongReturnType {
                         func: fn_name.clone(),
-                        returned: out_typ.inner().clone(),
+                        returned: out_typ.clone(),
                         expected: ExprType::simple(SimpleType::LinExpr),
                     });
                 }
@@ -689,10 +673,10 @@ impl<
                     let (_params, out_typ) = ast_funcs
                         .get(&reification.func)
                         .ok_or(ProblemError::UnknownFunction(reification.func.clone()))?;
-                    if *out_typ != constraint_typ {
+                    if !out_typ.is_constraint() {
                         return Err(ProblemError::WrongReturnType {
                             func: reification.func.clone(),
-                            returned: out_typ.inner().clone(),
+                            returned: out_typ.clone(),
                             expected: ExprType::simple(SimpleType::Constraint),
                         });
                     }
@@ -914,19 +898,15 @@ impl<
 
         let func_map = ast.get_functions();
 
-        let constraint_typ = ExprType::simple(SimpleType::Constraint)
-            .into_complete()
-            .unwrap();
-
         for (func, name) in func_and_names {
             let Some((args, expr_type)) = func_map.get(&func) else {
                 return Err(ProblemError::UnknownFunction(func));
             };
 
-            if *expr_type != constraint_typ {
+            if !expr_type.is_constraint() {
                 return Err(ProblemError::WrongReturnType {
                     func,
-                    returned: expr_type.inner().clone(),
+                    returned: expr_type.clone(),
                     expected: SimpleType::Constraint.into(),
                 });
             }
