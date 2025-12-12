@@ -194,7 +194,7 @@ fn coercion_int_param_to_linexpr() {
 
 #[test]
 fn coercion_in_list_unification() {
-    let input = "pub let f() -> [LinExpr] = [$V(), 5 as LinExpr];";
+    let input = "pub let f() -> [Int | LinExpr] = [$V(), 5];";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -207,15 +207,17 @@ fn coercion_in_list_unification() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list
+                .iter()
+                .all(|x| matches!(x, ExprValue::LinExpr(_) | ExprValue::Int(_))));
         }
-        _ => panic!("Expected List of LinExpr"),
+        _ => panic!("Expected List of Int | LinExpr"),
     }
 }
 
 #[test]
 fn coercion_in_list_comprehension() {
-    let input = "pub let f() -> [LinExpr] = [x for x in [1, 2, 3]] as [LinExpr];";
+    let input = "pub let f() -> [Int | LinExpr] = [x as Int | LinExpr for x in [1, 2, 3]];";
 
     let vars = HashMap::new();
 
@@ -228,14 +230,14 @@ fn coercion_in_list_comprehension() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(x, ExprValue::Int(_))));
         }
-        _ => panic!("Expected List of LinExpr"),
+        _ => panic!("Expected List of Int"),
     }
 }
 
 #[test]
-fn coercion_in_sum_body() {
+fn conversion_in_sum_body() {
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) + x };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
@@ -252,11 +254,11 @@ fn coercion_in_sum_body() {
     }
 }
 
-// ========== Explicit Type Casting with 'as' ==========
+// ========== Explicit Type Casting with 'into' ==========
 
 #[test]
 fn explicit_cast_int_to_linexpr() {
-    let input = "pub let f() -> LinExpr = 42 as LinExpr;";
+    let input = "pub let f() -> LinExpr = 42 into LinExpr;";
 
     let vars = HashMap::new();
 
@@ -276,7 +278,7 @@ fn explicit_cast_int_to_linexpr() {
 
 #[test]
 fn explicit_cast_in_expression() {
-    let input = "pub let f() -> LinExpr = (5 as LinExpr) + (10 as LinExpr);";
+    let input = "pub let f() -> LinExpr = (5 into LinExpr) + (10 into LinExpr);";
 
     let vars = HashMap::new();
 
@@ -296,7 +298,7 @@ fn explicit_cast_in_expression() {
 
 #[test]
 fn explicit_cast_param() {
-    let input = "pub let f(x: Int) -> LinExpr = x as LinExpr;";
+    let input = "pub let f(x: Int) -> LinExpr = x into LinExpr;";
 
     let vars = HashMap::new();
 
@@ -316,7 +318,7 @@ fn explicit_cast_param() {
 
 #[test]
 fn explicit_cast_list_type() {
-    let input = "pub let f() -> [Int] = [] as [Int];";
+    let input = "pub let f() -> [Int] = [] into [Int];";
 
     let vars = HashMap::new();
 
@@ -331,7 +333,7 @@ fn explicit_cast_list_type() {
 
 #[test]
 fn explicit_cast_list_of_linexpr() {
-    let input = "pub let f() -> [LinExpr] = [1, 2, 3] as [LinExpr];";
+    let input = "pub let f() -> [LinExpr] = [1, 2, 3] into [LinExpr];";
 
     let vars = HashMap::new();
 
@@ -352,7 +354,7 @@ fn explicit_cast_list_of_linexpr() {
 
 #[test]
 fn explicit_cast_in_sum() {
-    let input = "pub let f() -> LinExpr = sum x in ([1, 2, 3] as [Int]) { x as LinExpr };";
+    let input = "pub let f() -> LinExpr = sum x in [1 into LinExpr, 2, 3] { x into LinExpr };";
 
     let vars = HashMap::new();
 
@@ -373,7 +375,7 @@ fn explicit_cast_in_sum() {
 
 #[test]
 fn explicit_cast_in_forall() {
-    let input = "pub let f() -> Constraint = forall x in ([1, 2] as [Int]) { (x as LinExpr) === (1 as LinExpr) };";
+    let input = "pub let f() -> Constraint = forall x in ([1, 2] into [LinExpr]) { x === (1 into LinExpr) };";
 
     let vars = HashMap::new();
 
@@ -393,7 +395,7 @@ fn explicit_cast_in_forall() {
 
 #[test]
 fn explicit_cast_complex_expression() {
-    let input = "pub let f(x: Int) -> LinExpr = ((x + 5) * 2) as LinExpr;";
+    let input = "pub let f(x: Int) -> LinExpr = ((x + 5) * 2) into LinExpr;";
 
     let vars = HashMap::new();
 
@@ -414,7 +416,8 @@ fn explicit_cast_complex_expression() {
 
 #[test]
 fn explicit_cast_in_if_branches() {
-    let input = "pub let f(x: Int) -> LinExpr = if x > 0 { x as LinExpr } else { 0 as LinExpr };";
+    let input =
+        "pub let f(x: Int) -> LinExpr = if x > 0 { x into LinExpr } else { 0 into LinExpr };";
 
     let vars = HashMap::new();
 
@@ -446,10 +449,10 @@ fn explicit_cast_in_if_branches() {
 // ========== Coercion in Function Return Types ==========
 
 #[test]
-fn coercion_return_type_int_to_linexpr() {
+fn conversion_return_type_int_to_linexpr() {
     let input = r#"
     let helper() -> Int = 42;
-    pub let f() -> LinExpr = helper() as LinExpr;
+    pub let f() -> LinExpr = helper() into LinExpr;
     "#;
 
     let vars = HashMap::new();
@@ -469,10 +472,10 @@ fn coercion_return_type_int_to_linexpr() {
 }
 
 #[test]
-fn coercion_return_type_with_arithmetic() {
+fn conversion_return_type_with_arithmetic() {
     let input = r#"
     let helper() -> Int = 10;
-    pub let f() -> LinExpr = (helper() + helper()) as LinExpr;
+    pub let f() -> LinExpr = (helper() + helper()) into LinExpr;
     "#;
 
     let vars = HashMap::new();
@@ -492,8 +495,8 @@ fn coercion_return_type_with_arithmetic() {
 }
 
 #[test]
-fn coercion_param_to_return_type() {
-    let input = "pub let f(x: Int) -> LinExpr = x as LinExpr;";
+fn conversion_param_to_return_type() {
+    let input = "pub let f(x: Int) -> LinExpr = x into LinExpr;";
 
     let vars = HashMap::new();
 
@@ -514,8 +517,8 @@ fn coercion_param_to_return_type() {
 // ========== Mixed Coercion and Casting ==========
 
 #[test]
-fn mixed_implicit_and_explicit() {
-    let input = "pub let f() -> LinExpr = (5 as LinExpr) + $V() + 10;";
+fn mixed_implicit_and_explicit_conversion() {
+    let input = "pub let f() -> LinExpr = (5 into LinExpr) + $V() + 10;";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -540,8 +543,8 @@ fn mixed_implicit_and_explicit() {
 }
 
 #[test]
-fn cast_with_collection_operations() {
-    let input = "pub let f() -> [LinExpr] = ([1, 2] as [LinExpr]) + ([3, 4] as [LinExpr]);";
+fn conversion_with_collection_operations() {
+    let input = "pub let f() -> [LinExpr] = ([1, 2] into [LinExpr]) + ([3, 4] into [LinExpr]);";
 
     let vars = HashMap::new();
 
@@ -562,7 +565,7 @@ fn cast_with_collection_operations() {
 
 #[test]
 fn nested_casts() {
-    let input = "pub let f() -> LinExpr = ((5 as LinExpr) as LinExpr);";
+    let input = "pub let f() -> LinExpr = ((5 into LinExpr) into LinExpr);";
 
     let vars = HashMap::new();
 
@@ -581,8 +584,8 @@ fn nested_casts() {
 }
 
 #[test]
-fn cast_in_comparison() {
-    let input = "pub let f() -> Bool = (5 as LinExpr) == ($V() as LinExpr);";
+fn conversion_in_comparison() {
+    let input = "pub let f() -> Bool = (5 into LinExpr) == ($V() into LinExpr);";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -594,7 +597,7 @@ fn cast_in_comparison() {
 
     // LinExpr values can be compared for equality
     match result {
-        ExprValue::Bool(_) => assert!(true),
+        ExprValue::Bool(val) => assert!(!val, "The condition should have failed"),
         _ => panic!("Expected Bool"),
     }
 }
@@ -602,7 +605,7 @@ fn cast_in_comparison() {
 // ========== Coercion with Quantifiers ==========
 
 #[test]
-fn coercion_in_forall_body() {
+fn implicit_conversion_in_forall_body() {
     let input = "pub let f() -> Constraint = forall x in [1, 2, 3] { x === 1 };";
 
     let vars = HashMap::new();
@@ -622,8 +625,8 @@ fn coercion_in_forall_body() {
 }
 
 #[test]
-fn coercion_in_sum_to_linexpr() {
-    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x } as LinExpr;";
+fn conversion_in_sum_to_linexpr() {
+    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x } into LinExpr;";
 
     let vars = HashMap::new();
 
@@ -686,8 +689,64 @@ fn cast_linexpr_identity() {
 }
 
 #[test]
+fn conversion_identity() {
+    let input = "pub let f(x: Int) -> Int = x into Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(42));
+}
+
+#[test]
+fn conversion_linexpr_identity() {
+    let input = "pub let f() -> LinExpr = $V() into LinExpr;";
+
+    let vars = HashMap::from([("V".to_string(), vec![])]);
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::LinExpr(lin_expr) => {
+            assert_eq!(
+                lin_expr,
+                LinExpr::var(IlpVar::Base(ExternVar {
+                    name: "V".into(),
+                    params: vec![]
+                }))
+            );
+        }
+        _ => panic!("Expected LinExpr"),
+    }
+}
+
+#[test]
 fn cast_empty_list_typed() {
     let input = "pub let f() -> [LinExpr] = [] as [LinExpr];";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::List(Vec::new()));
+}
+
+#[test]
+fn cast_empty_list_with_special_syntax() {
+    let input = "pub let f() -> [LinExpr] = [<LinExpr>];";
 
     let vars = HashMap::new();
 
