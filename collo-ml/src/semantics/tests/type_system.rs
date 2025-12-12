@@ -28,7 +28,7 @@ fn bool_type() {
 
 #[test]
 fn linexpr_type_from_arithmetic() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = x + y;";
+    let input = "pub let f(x: Int, y: Int) -> LinExpr = (x + y) as LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -36,6 +36,17 @@ fn linexpr_type_from_arithmetic() {
         "Arithmetic should produce LinExpr: {:?}",
         errors
     );
+}
+
+#[test]
+fn linexpr_type_from_arithmetic_no_automatic_coercion() {
+    let input = "pub let f(x: Int, y: Int) -> LinExpr = x + y;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Int should not autoconvert",);
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
 }
 
 #[test]
@@ -94,13 +105,24 @@ fn empty_list() {
 
 #[test]
 fn list_type_mismatch_in_elements() {
+    let input = "pub let f() -> [Int | Bool] = [1, true, 3];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Mixed type list should work");
+}
+
+#[test]
+fn list_type_mismatch_with_output() {
     let input = "pub let f() -> [Int] = [1, true, 3];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
-    assert!(!errors.is_empty(), "Mixed type list should error");
+    assert!(
+        !errors.is_empty(),
+        "Mixed type list should not work if incompatible with output"
+    );
     assert!(errors
         .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
 }
 
 // ========== Object Type Tests ==========
@@ -239,7 +261,7 @@ fn type_annotation_invalid_cast() {
     assert!(!errors.is_empty(), "Invalid type cast should error");
     assert!(errors
         .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+        .any(|e| matches!(e, SemError::ImpossibleConversion { .. })));
 }
 
 #[test]
