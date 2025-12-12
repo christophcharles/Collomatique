@@ -28,7 +28,7 @@ fn bool_type() {
 
 #[test]
 fn linexpr_type_from_arithmetic() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = (x + y) as LinExpr;";
+    let input = "pub let f(x: Int, y: Int) -> LinExpr = (x + y) into LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -242,20 +242,20 @@ fn explicit_type_annotation_valid() {
 }
 
 #[test]
-fn type_annotation_upcast() {
-    let input = "pub let f() -> LinExpr = 5 as LinExpr;";
+fn type_conversion_to_linexpr() {
+    let input = "pub let f() -> LinExpr = 5 into LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Type annotation to LinExpr should be valid: {:?}",
+        "Conversion to LinExpr should be valid: {:?}",
         errors
     );
 }
 
 #[test]
-fn type_annotation_invalid_cast() {
-    let input = "pub let f() -> Int = true as Int;";
+fn type_conversion_invalid_cast() {
+    let input = "pub let f() -> Int = true into Int;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(!errors.is_empty(), "Invalid type cast should error");
@@ -265,13 +265,13 @@ fn type_annotation_invalid_cast() {
 }
 
 #[test]
-fn chained_type_annotations() {
-    let input = "pub let f() -> LinExpr = (5 as Int) as LinExpr;";
+fn chained_type_conversions() {
+    let input = "pub let f() -> LinExpr = (5 into Int) into LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Chained type annotations should be valid: {:?}",
+        "Chained type conversions should be valid: {:?}",
         errors
     );
 }
