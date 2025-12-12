@@ -1260,7 +1260,7 @@ impl LocalEnv {
             // Int + LinExpr -> LinExpr (auto convert Int to LinExpr)
             // LinExpr + LinExpr -> LinExpr
             // [Type] + [Type] -> [Type]
-            Expr::Add(left, right) | Expr::Sub(left, right) => {
+            Expr::Add(left, right) => {
                 let left_type = self.check_expr(
                     global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
                 );
@@ -1293,7 +1293,7 @@ impl LocalEnv {
                                 expected: SimpleType::Int.into(),
                                 found: t.clone(),
                                 context:
-                                    "addition/subtraction/concatenation requires Int or LinExpr or List"
+                                    "addition/concatenation requires Int or LinExpr or List"
                                         .to_string(),
                             });
                             None
@@ -1341,7 +1341,125 @@ impl LocalEnv {
                                         expected: expected.into(),
                                         found: found.into(),
                                         context: format!(
-                                            "addition/subtraction/concatenation requires Int, LinExpr or List, got {} and {}",
+                                            "addition/concatenation requires Int, LinExpr or List, got {} and {}",
+                                            a, b
+                                        ),
+                                    })
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            // Int - Int -> Int
+            // LinExpr - Int -> LinExpr (auto convert Int to LinExpr)
+            // Int - LinExpr -> LinExpr (auto convert Int to LinExpr)
+            // LinExpr - LinExpr -> LinExpr
+            // [Type1] - [Type2] -> [Type1] if Type1 and Type2 overlap
+            Expr::Sub(left, right) => {
+                let left_type = self.check_expr(
+                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                );
+                let right_type = self.check_expr(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
+                );
+
+                match (&left_type, &right_type) {
+                    (None, None) => None,
+                    (Some(t), None) |
+                    (None, Some(t)) => {
+                        if t.is_int() || t.is_lin_expr() || t.is_list() {
+                            Some(t.clone())
+                        } else if t.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap()) {
+                            Some(SimpleType::LinExpr.into())
+                        } else {
+                            let span = if left_type.is_some() {
+                                left.span.clone()
+                            } else {
+                                right.span.clone()
+                            };
+                            errors.push(SemError::TypeMismatch {
+                                span,
+                                expected: SimpleType::Int.into(),
+                                found: t.clone(),
+                                context:
+                                    "substraction/difference requires Int or LinExpr or List"
+                                        .to_string(),
+                            });
+                            None
+                        }
+                    }
+                    (Some(l), Some(r)) => {
+                        l.cross_check(
+                            &r,
+                            errors,
+                            |v1,v2| match (v1,v2) {
+                                (SimpleType::Int, SimpleType::Int) => Ok(SimpleType::Int),
+                                (SimpleType::LinExpr, SimpleType::Int) |
+                                (SimpleType::Int, SimpleType::LinExpr) |
+                                (SimpleType::LinExpr, SimpleType::LinExpr) => Ok(SimpleType::LinExpr),
+                                (SimpleType::EmptyList, _) => Err(SemError::TypeMismatch {
+                                    span: left.span.clone(),
+                                    expected: SimpleType::List(SimpleType::Int.into()).into(),
+                                    found: SimpleType::EmptyList.into(),
+                                    context: format!(
+                                        "Cannot remove elements from empty list",
+                                    ),
+                                }),
+                                (SimpleType::List(_inner), SimpleType::EmptyList) => Err(SemError::TypeMismatch {
+                                    span: right.span.clone(),
+                                    expected: SimpleType::List(SimpleType::Int.into()).into(),
+                                    found: SimpleType::EmptyList.into(),
+                                    context: format!(
+                                        "Removing empty list is a no-op",
+                                    ),
+                                }),
+                                (SimpleType::List(inner1), SimpleType::List(inner2)) => {
+                                    if inner1.overlaps_with(inner2) {
+                                        Ok(SimpleType::List(inner1.clone()))
+                                    } else {
+                                        Err(SemError::TypeMismatch {
+                                            span: right.span.clone(),
+                                            expected: inner1.clone(),
+                                            found: inner2.clone(),
+                                            context: format!(
+                                                "Types must overlap in set difference",
+                                            ),
+                                        })
+                                    }
+                                }
+                                (a,b) => {
+                                    let is_a_valid = a.is_arithmetic() || a.is_list();
+                                    let is_b_valid = b.is_arithmetic() || b.is_list();
+                                    let span = if is_a_valid {
+                                        right.span.clone()
+                                    } else {
+                                        left.span.clone()
+                                    };
+                                    let expected = if is_a_valid {
+                                        a.clone()
+                                    } else if is_b_valid {
+                                        b.clone()
+                                    } else {
+                                        SimpleType::Int
+                                    };
+                                    let found = if is_a_valid {
+                                        b.clone()
+                                    } else {
+                                        a.clone()
+                                    };
+                                    Err(SemError::TypeMismatch {
+                                        span,
+                                        expected: expected.into(),
+                                        found: found.into(),
+                                        context: format!(
+                                            "subtraction/difference requires Int, LinExpr or List, got {} and {}",
                                             a, b
                                         ),
                                     })
