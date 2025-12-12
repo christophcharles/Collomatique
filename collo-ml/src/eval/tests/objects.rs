@@ -1,7 +1,7 @@
 use crate::eval::{CheckedAST, EvalObject, ExprValue};
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
-use crate::ExprType;
+use crate::{CompleteType, ExprType};
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -74,20 +74,26 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
+    fn type_schemas() -> HashMap<String, HashMap<String, CompleteType>> {
         let student_type = HashMap::from([
-            ("age".to_string(), SimpleType::Int.into()),
-            ("enrolled".to_string(), SimpleType::Bool.into()),
+            ("age".to_string(), SimpleType::Int.try_into().unwrap()),
+            ("enrolled".to_string(), SimpleType::Bool.try_into().unwrap()),
         ]);
         let room_type = HashMap::from([
-            ("num".to_string(), SimpleType::Int.into()),
+            ("num".to_string(), SimpleType::Int.try_into().unwrap()),
             (
                 "students".to_string(),
-                SimpleType::List(SimpleType::Object("Student".into()).into()).into(),
+                ExprType::simple(SimpleType::List(Some(
+                    SimpleType::Object("Student".into()).into(),
+                )))
+                .into_complete()
+                .unwrap(),
             ),
             (
                 "first_student".to_string(),
-                SimpleType::Object("Student".into()).into(),
+                ExprType::simple(SimpleType::Object("Student".into()))
+                    .into_complete()
+                    .unwrap(),
             ),
         ]);
 

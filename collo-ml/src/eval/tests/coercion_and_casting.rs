@@ -238,7 +238,10 @@ fn coercion_in_list_comprehension() {
 fn coercion_in_sum_body() {
     let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { $V(x) + x };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

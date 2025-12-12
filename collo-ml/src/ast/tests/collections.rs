@@ -313,13 +313,12 @@ fn parse_global_collection() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
+                assert_eq!(name.node.types.len(), 1);
                 assert_eq!(
-                    name.node,
-                    TypeName {
-                        types: vec![MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Object("Student".into()),
-                        }]
+                    name.node.types[0].node,
+                    MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Object("Student".into()),
                     }
                 );
             }
@@ -338,13 +337,12 @@ fn parse_global_collection_with_builtin_type() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
+                assert_eq!(name.node.types.len(), 1);
                 assert_eq!(
-                    name.node,
-                    TypeName {
-                        types: vec![MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Int,
-                        }]
+                    name.node.types[0].node,
+                    MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::Int,
                     }
                 );
             }

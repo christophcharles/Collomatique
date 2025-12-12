@@ -169,14 +169,18 @@ fn nested_field_access() {
     let mut address_fields = HashMap::new();
     address_fields.insert(
         "city".to_string(),
-        ExprType::simple(SimpleType::Object("String".to_string())),
+        ExprType::simple(SimpleType::Object("String".to_string()))
+            .try_into()
+            .unwrap(),
     );
     types.insert("Address".to_string(), address_fields);
 
     let mut student_fields = HashMap::new();
     student_fields.insert(
         "address".to_string(),
-        ExprType::simple(SimpleType::Object("Address".to_string())),
+        ExprType::simple(SimpleType::Object("Address".to_string()))
+            .try_into()
+            .unwrap(),
     );
     types.insert("Student".to_string(), student_fields);
 

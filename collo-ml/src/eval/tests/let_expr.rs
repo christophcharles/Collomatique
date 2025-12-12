@@ -175,7 +175,10 @@ fn let_expr_with_sum_body() {
 fn let_expr_with_forall_generating_constraints() {
     let input = "pub let f(n: Int) -> Constraint = let bound = n * 2 { forall i in [0..bound] { $V(i) === 1 } };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -212,7 +215,10 @@ fn let_expr_using_bound_var_multiple_times() {
 fn let_expr_with_constraint_value() {
     let input = "pub let f(x: Int) -> Constraint = let c = $V(x) === 1 { c };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -241,7 +247,10 @@ fn let_expr_with_constraint_value() {
 fn let_expr_with_linexpr_arithmetic() {
     let input = "pub let f(x: Int) -> Constraint = let expr = $V(x) + 5 { expr === 10 };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -270,7 +279,10 @@ fn let_expr_with_linexpr_arithmetic() {
 fn let_expr_with_constraint_combination() {
     let input = "pub let f(x: Int) -> Constraint = let c1 = $V(x) === 1 { let c2 = $V(x) <== 10 { c1 and c2 } };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

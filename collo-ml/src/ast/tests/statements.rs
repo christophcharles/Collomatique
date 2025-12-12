@@ -23,22 +23,20 @@ fn parse_simple_let_statement() {
             assert_eq!(name.node, "f");
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].name.node, "x");
+            assert_eq!(params[0].typ.node.types.len(), 1);
             assert_eq!(
-                params[0].typ.node,
-                TypeName {
-                    types: vec![MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Int,
-                    }]
+                params[0].typ.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::Int,
                 }
             );
+            assert_eq!(output_type.node.types.len(), 1);
             assert_eq!(
-                output_type.node,
-                TypeName {
-                    types: vec![MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::LinExpr,
-                    }]
+                output_type.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::LinExpr,
                 }
             );
             assert!(matches!(body.node, Expr::Number(5)));
@@ -59,33 +57,30 @@ fn parse_let_with_multiple_params() {
         Statement::Let { params, .. } => {
             assert_eq!(params.len(), 3);
             assert_eq!(params[0].name.node, "x");
+            assert_eq!(params[0].typ.node.types.len(), 1);
             assert_eq!(
-                params[0].typ.node,
-                TypeName {
-                    types: vec![MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Int,
-                    }]
+                params[0].typ.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::Int,
                 }
             );
             assert_eq!(params[1].name.node, "y");
+            assert_eq!(params[1].typ.node.types.len(), 1);
             assert_eq!(
-                params[1].typ.node,
-                TypeName {
-                    types: vec![MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Bool,
-                    }]
+                params[1].typ.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::Bool,
                 }
             );
             assert_eq!(params[2].name.node, "z");
+            assert_eq!(params[2].typ.node.types.len(), 1);
             assert_eq!(
-                params[2].typ.node,
-                TypeName {
-                    types: vec![MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Object("Student".into()),
-                    }]
+                params[2].typ.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::Object("Student".into()),
                 }
             );
         }

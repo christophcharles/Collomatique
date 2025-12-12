@@ -234,19 +234,30 @@ fn list_comprehension_multiple_for_typechecks_correctly() {
     types.insert(
         "Student".to_string(),
         HashMap::from([
-            ("age".to_string(), ExprType::simple(SimpleType::Int)),
-            ("enroled".to_string(), ExprType::simple(SimpleType::Bool)),
+            (
+                "age".to_string(),
+                ExprType::simple(SimpleType::Int).try_into().unwrap(),
+            ),
+            (
+                "enroled".to_string(),
+                ExprType::simple(SimpleType::Bool).try_into().unwrap(),
+            ),
         ]),
     );
     types.insert(
         "Class".to_string(),
         HashMap::from([
-            ("num".to_string(), ExprType::simple(SimpleType::Int)),
+            (
+                "num".to_string(),
+                ExprType::simple(SimpleType::Int).try_into().unwrap(),
+            ),
             (
                 "students".to_string(),
-                ExprType::simple(SimpleType::List(
+                ExprType::simple(SimpleType::List(Some(
                     SimpleType::Object("Student".into()).into(),
-                )),
+                )))
+                .try_into()
+                .unwrap(),
             ),
         ]),
     );
@@ -274,8 +285,14 @@ fn list_comprehension_where_can_reference_all_for_variables() {
     types.insert(
         "Person".to_string(),
         HashMap::from([
-            ("id".to_string(), ExprType::simple(SimpleType::Int)),
-            ("active".to_string(), ExprType::simple(SimpleType::Bool)),
+            (
+                "id".to_string(),
+                ExprType::simple(SimpleType::Int).try_into().unwrap(),
+            ),
+            (
+                "active".to_string(),
+                ExprType::simple(SimpleType::Bool).try_into().unwrap(),
+            ),
         ]),
     );
     types.insert(
@@ -283,9 +300,14 @@ fn list_comprehension_where_can_reference_all_for_variables() {
         HashMap::from([
             (
                 "members".to_string(),
-                ExprType::simple(SimpleType::List(SimpleType::Object("Person".into()).into())),
+                SimpleType::List(Some(SimpleType::Object("Person".into()).into()))
+                    .try_into()
+                    .unwrap(),
             ),
-            ("min_age".to_string(), ExprType::simple(SimpleType::Int)),
+            (
+                "min_age".to_string(),
+                ExprType::simple(SimpleType::Int).try_into().unwrap(),
+            ),
         ]),
     );
 

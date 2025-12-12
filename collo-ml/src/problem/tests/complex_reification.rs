@@ -76,8 +76,8 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-        let student_type = HashMap::from([("id".to_string(), SimpleType::Int.into())]);
+    fn type_schemas() -> HashMap<String, HashMap<String, CompleteType>> {
+        let student_type = HashMap::from([("id".to_string(), SimpleType::Int.try_into().unwrap())]);
         HashMap::from([("Student".into(), student_type)])
     }
 }

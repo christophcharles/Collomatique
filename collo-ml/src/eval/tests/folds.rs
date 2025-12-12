@@ -428,7 +428,10 @@ fn fold_with_let_in_body() {
 fn fold_linexpr_simple() {
     let input = "pub let f() -> LinExpr = fold x in [1..3] with acc = $V(0) { acc + $V(x) };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
@@ -486,7 +489,10 @@ fn fold_linexpr_empty_list() {
     let input =
         "pub let f() -> LinExpr = fold x in [] as [Int] with acc = 5 as LinExpr { acc + $V(x) };";
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).into_complete().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

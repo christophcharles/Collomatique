@@ -8,7 +8,10 @@ fn eval_with_variables_simple_reified_var() {
     pub let f(n: Int) -> Constraint = $MyVar(n) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -52,7 +55,10 @@ fn eval_with_variables_multiple_calls_same_var() {
     pub let f() -> Constraint = $MyVar(3) <== 1 and $MyVar(7) <== 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::<NoObject>::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -106,7 +112,10 @@ fn eval_with_variables_in_forall() {
     pub let f(n: Int) -> Constraint = forall i in [0..n] { $MyVar(i) <== 1 };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -159,8 +168,14 @@ fn eval_with_variables_multiple_vars() {
     "#;
 
     let vars = HashMap::from([
-        ("V1".to_string(), vec![ExprType::simple(SimpleType::Int)]),
-        ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
+        (
+            "V1".to_string(),
+            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+        ),
+        (
+            "V2".to_string(),
+            vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+        ),
     ]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -220,7 +235,10 @@ fn eval_with_variables_var_with_multiple_params() {
 
     let vars = HashMap::from([(
         "V".to_string(),
-        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+        vec![
+            SimpleType::Int.try_into().unwrap(),
+            SimpleType::Int.try_into().unwrap(),
+        ],
     )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -272,7 +290,10 @@ fn eval_with_variables_simple_var_list() {
 
     let vars = HashMap::from([(
         "V".to_string(),
-        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+        vec![
+            SimpleType::Int.try_into().unwrap(),
+            SimpleType::Int.try_into().unwrap(),
+        ],
     )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -349,7 +370,10 @@ fn eval_with_variables_var_list_in_nested_forall() {
 
     let vars = HashMap::from([(
         "V".to_string(),
-        vec![SimpleType::Int.into(), SimpleType::Int.into()],
+        vec![
+            SimpleType::Int.try_into().unwrap(),
+            SimpleType::Int.try_into().unwrap(),
+        ],
     )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
@@ -424,7 +448,10 @@ fn eval_with_variables_with_let_expr() {
         };
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};
@@ -462,7 +489,10 @@ fn eval_with_variables_no_reified_vars() {
     pub let f(x: Int) -> Constraint = $V(x) === 1;
     "#;
 
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
+    let vars = HashMap::from([(
+        "V".to_string(),
+        vec![ExprType::simple(SimpleType::Int).try_into().unwrap()],
+    )]);
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
     let env = NoObjectEnv {};

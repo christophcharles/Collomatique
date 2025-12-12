@@ -256,8 +256,8 @@ fn duplicate_types_in_sum_error() {
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::DuplicatedTypeInSumType { .. })),
-        "Should have DuplicatedTypeInSumType error: {:?}",
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
         errors
     );
 }
@@ -272,8 +272,8 @@ fn triplicate_types_in_sum_error() {
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::DuplicatedTypeInSumType { .. })),
-        "Should have DuplicatedTypeInSumType error: {:?}",
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
         errors
     );
 }
@@ -288,8 +288,8 @@ fn triplicate_types_in_sum_error_with_extra_error() {
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::DuplicatedTypeInSumType { .. })),
-        "Should have DuplicatedTypeInSumType error: {:?}",
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
         errors
     );
 }
@@ -307,8 +307,8 @@ fn duplicate_after_flattening_error() {
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::DuplicatedTypeInSumType { .. })),
-        "Should have DuplicatedTypeInSumType error: {:?}",
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
         errors
     );
 }
@@ -316,22 +316,6 @@ fn duplicate_after_flattening_error() {
 // =============================================================================
 // OPTION IN SUM TYPE - SEMANTIC ERRORS
 // =============================================================================
-
-#[test]
-fn option_in_sum_type_error() {
-    // ?Int | Bool should error - should be None | Int | Bool
-    let input = "pub let f() -> ?Int | Bool = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(!errors.is_empty(), "Option in sum type should error");
-    assert!(
-        errors
-            .iter()
-            .any(|e| matches!(e, SemError::OptionTypeInSumType { .. })),
-        "Should have OptionTypeInSumType error: {:?}",
-        errors
-    );
-}
 
 #[test]
 fn multiple_options_in_sum_type_error() {
@@ -345,8 +329,8 @@ fn multiple_options_in_sum_type_error() {
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::OptionTypeInSumType { .. })),
-        "Should have OptionTypeInSumType error: {:?}",
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
         errors
     );
 }
@@ -358,7 +342,13 @@ fn option_with_none_in_sum_error() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(!errors.is_empty(), "Option with None in sum should error");
-    // Could be either OptionTypeInSumType or DuplicatedTypeInSumType after flattening
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
+        "Should have MultipleTypeInSum error: {:?}",
+        errors
+    );
 }
 
 // =============================================================================

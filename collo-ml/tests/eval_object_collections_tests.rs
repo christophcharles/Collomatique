@@ -133,7 +133,11 @@ fn test_collection_field_schema() {
     // BTreeSet<StudentId> should become List(Object("Student"))
     assert_eq!(
         teacher_schema.get("students"),
-        Some(&SimpleType::List(SimpleType::Object("Student".to_string()).into()).into())
+        Some(
+            &SimpleType::List(Some(SimpleType::Object("Student".to_string()).into()))
+                .try_into()
+                .unwrap()
+        )
     );
 }
 
@@ -218,10 +222,11 @@ fn test_nested_collection_schema() {
     assert_eq!(
         course_schema.get("student_groups"),
         Some(
-            &SimpleType::List(
-                SimpleType::List(SimpleType::Object("Student".to_string()).into()).into()
-            )
-            .into()
+            &SimpleType::List(Some(
+                SimpleType::List(Some(SimpleType::Object("Student".to_string()).into())).into()
+            ))
+            .try_into()
+            .unwrap()
         )
     );
 }

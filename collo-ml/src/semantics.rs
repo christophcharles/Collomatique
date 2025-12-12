@@ -357,6 +357,20 @@ impl From<SimpleType> for ExprType {
     }
 }
 
+impl TryFrom<SimpleType> for CompleteType {
+    type Error = ();
+    fn try_from(value: SimpleType) -> Result<Self, Self::Error> {
+        ExprType::simple(value).into_complete().ok_or(())
+    }
+}
+
+impl TryFrom<ExprType> for CompleteType {
+    type Error = ();
+    fn try_from(value: ExprType) -> Result<Self, Self::Error> {
+        value.into_complete().ok_or(())
+    }
+}
+
 impl std::fmt::Display for ExprType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let types: Vec<_> = self.variants.iter().map(|t| t.to_string()).collect();
