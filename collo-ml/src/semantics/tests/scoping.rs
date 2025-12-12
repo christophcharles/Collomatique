@@ -171,7 +171,7 @@ fn sum_where_clause_can_access_variable() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> LinExpr = 
-            sum s in @[Student] where s.age > 18 { 1 };
+            sum s in @[Student] where s.age > 18 { 1 into LinExpr };
     "#;
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
