@@ -45,7 +45,7 @@ fn if_branches_must_have_same_type() {
 #[test]
 fn if_unifies_int_and_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int, flag: Bool) -> LinExpr = if flag { 5 } else { $V(x) };";
+    let input = "pub let f(x: Int, flag: Bool) -> Int | LinExpr = if flag { 5 } else { $V(x) };";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
