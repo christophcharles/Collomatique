@@ -24,7 +24,7 @@ fn all_scripts_should_compile() {
         let to_reify = funcs
             .into_iter()
             .filter_map(|(name, (_args, output))| {
-                if output != SimpleType::Constraint.into() {
+                if output.is_constraint() {
                     return None;
                 }
                 let var_name = collo_ml::string_case::to_pascal_case(&name);
@@ -69,7 +69,7 @@ fn all_scripts_should_compile_without_warnings() {
         let to_reify = funcs
             .into_iter()
             .filter_map(|(name, (_args, output))| {
-                if output != SimpleType::Constraint.into() {
+                if output.is_constraint() {
                     return None;
                 }
                 let var_name = collo_ml::string_case::to_pascal_case(&name);

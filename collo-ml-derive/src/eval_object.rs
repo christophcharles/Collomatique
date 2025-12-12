@@ -240,7 +240,13 @@ fn generate_eval_object_impl(
             {
                 let field_schema = <<#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object as ::collo_ml::ViewObject>::field_schema();
                 let expr_schema = field_schema.into_iter()
-                    .map(|(k, v)| (k, v.convert_to_expr_type::<#enum_name>().expect("Object type should be known")))
+                    .map(|(k, v)| (
+                        k,
+                        v.convert_to_expr_type::<#enum_name>()
+                            .expect("Object type should be known")
+                            .into_complete()
+                            .expect("Object type should be complete")
+                    ))
                     .collect();
                 map.insert(#dsl_name.to_string(), expr_schema);
             }
@@ -285,7 +291,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::ExprType>> {
+            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::CompleteType>> {
                 let mut map = ::std::collections::HashMap::new();
                 #(#type_schemas_entries)*
                 map

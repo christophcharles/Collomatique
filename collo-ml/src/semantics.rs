@@ -198,6 +198,44 @@ impl SimpleType {
             _ => self.clone(),
         }
     }
+
+    pub fn overlaps_with(&self, other: &SimpleType) -> bool {
+        match (self, other) {
+            // Same primitive types always overlap
+            (SimpleType::Int, SimpleType::Int)
+            | (SimpleType::Bool, SimpleType::Bool)
+            | (SimpleType::None, SimpleType::None)
+            | (SimpleType::LinExpr, SimpleType::LinExpr)
+            | (SimpleType::Constraint, SimpleType::Constraint) => true,
+
+            // Same object type overlaps
+            (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
+
+            // Different primitive types don't overlap
+            (SimpleType::Int, _)
+            | (_, SimpleType::Int)
+            | (SimpleType::Bool, _)
+            | (_, SimpleType::Bool)
+            | (SimpleType::None, _)
+            | (_, SimpleType::None)
+            | (SimpleType::LinExpr, _)
+            | (_, SimpleType::LinExpr)
+            | (SimpleType::Constraint, _)
+            | (_, SimpleType::Constraint)
+            | (SimpleType::Object(_), _)
+            | (_, SimpleType::Object(_)) => false,
+
+            // List overlap logic
+            (SimpleType::List(s_inner), SimpleType::List(o_inner)) => {
+                match (s_inner, o_inner) {
+                    // Both have known types: check if inner types overlap
+                    (Some(s_type), Some(o_type)) => s_type.overlaps_with(o_type),
+                    // Empty lists are type infered to the other list so they do overlap
+                    _ => true,
+                }
+            }
+        }
+    }
 }
 
 impl SimpleType {
@@ -587,7 +625,12 @@ impl ExprType {
     }
 
     pub fn overlaps_with(&self, other: &ExprType) -> bool {
-        todo!()
+        for variant in &self.variants {
+            if other.variants.iter().any(|o| variant.overlaps_with(o)) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -1005,6 +1048,12 @@ pub enum SemError {
         found: ExprType,
         target: ConcreteType,
     },
+    #[error("Local variable \"{identifier}\" at {span:?} is already defined in the same scope ({here:?})")]
+    LocalIdentAlreadyDeclared {
+        identifier: String,
+        span: Span,
+        here: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -1116,8 +1165,14 @@ impl LocalEnv {
         typ: CompleteType,
         type_info: &mut TypeInfo,
         warnings: &mut Vec<SemWarning>,
-    ) {
-        assert!(!self.pending_scope.contains_key(ident));
+    ) -> Result<(), SemError> {
+        if let Some((_, old_ident_span, _)) = self.pending_scope.get(ident) {
+            return Err(SemError::LocalIdentAlreadyDeclared {
+                identifier: ident.to_string(),
+                span,
+                here: old_ident_span.clone(),
+            });
+        }
 
         if let Some((_typ, old_span)) = self.lookup_ident(ident) {
             warnings.push(SemWarning::IdentifierShadowed {
@@ -1132,6 +1187,8 @@ impl LocalEnv {
             (typ.clone(), span.clone(), should_be_used_by_default(ident)),
         );
         type_info.types.insert(span, typ.into_inner().into());
+
+        Ok(())
     }
 
     fn check_expr(
@@ -1807,7 +1864,7 @@ impl LocalEnv {
                     Some(a) if a.is_list() && a.is_complete() => {
                         let elem_t = a.to_inner_list_type().unwrap().unwrap();
                         // Register the loop variable with the element type
-                        self.register_identifier(
+                        if let Err(e) = self.register_identifier(
                             &var.node,
                             var.span.clone(),
                             elem_t
@@ -1815,7 +1872,10 @@ impl LocalEnv {
                                 .expect("inner type should also be complete at this point"),
                             type_info,
                             warnings,
-                        );
+                        ) {
+                            errors.push(e);
+                            return None;
+                        }
                     }
                     Some(a) if a.is_list() => {
                         let expected = a.make_complete_example();
@@ -1921,7 +1981,7 @@ impl LocalEnv {
                     Some(a) if a.is_list() && a.is_complete() => {
                         let elem_t = a.to_inner_list_type().unwrap().unwrap();
                         // Register the loop variable with the element type
-                        self.register_identifier(
+                        if let Err(e) = self.register_identifier(
                             &var.node,
                             var.span.clone(),
                             elem_t
@@ -1929,7 +1989,10 @@ impl LocalEnv {
                                 .expect("inner type should also be complete at this point"),
                             type_info,
                             warnings,
-                        );
+                        ) {
+                            errors.push(e);
+                            return None;
+                        }
                     }
                     Some(a) if a.is_list() => {
                         let expected = a.make_complete_example();
@@ -2055,20 +2118,13 @@ impl LocalEnv {
                     });
                 }
 
-                // Extract type info
-                match coll_type {
+                // Extract type info for elements in the collection
+                let complete_elem_t = match coll_type {
                     Some(a) if a.is_list() && a.is_complete() => {
                         let elem_t = a.to_inner_list_type().unwrap().unwrap();
-                        // Register the loop variable with the element type
-                        self.register_identifier(
-                            &var.node,
-                            var.span.clone(),
-                            elem_t
-                                .into_complete()
-                                .expect("inner type should also be complete at this point"),
-                            type_info,
-                            warnings,
-                        );
+                        elem_t
+                            .into_complete()
+                            .expect("inner type should also be complete at this point")
                     }
                     Some(a) if a.is_list() => {
                         let expected = a.make_complete_example();
@@ -2090,9 +2146,7 @@ impl LocalEnv {
                         return None; // Return early
                     }
                     None => return None, // Return early
-                }
-
-                self.push_scope();
+                };
 
                 let mut current_acc_type = match acc_type {
                     Some(t) => t,
@@ -2114,14 +2168,28 @@ impl LocalEnv {
                         return None;
                     }
 
+                    // Register the loop variable with the element type
+                    if let Err(e) = self.register_identifier(
+                        &var.node,
+                        var.span.clone(),
+                        complete_elem_t.clone(),
+                        type_info,
+                        warnings,
+                    ) {
+                        errors.push(e);
+                    }
+
+                    // Register the loop variable with the element type
                     let complete_acc_type = current_acc_type.clone().into_complete().unwrap();
-                    self.register_identifier(
+                    if let Err(e) = self.register_identifier(
                         &accumulator.node,
                         accumulator.span.clone(),
                         complete_acc_type.clone(),
                         type_info,
                         warnings,
-                    );
+                    ) {
+                        errors.push(e);
+                    }
 
                     self.push_scope();
 
@@ -2170,8 +2238,6 @@ impl LocalEnv {
                         }
                     }
                 }
-
-                self.pop_scope(warnings);
 
                 Some(current_acc_type)
             }
@@ -2530,7 +2596,7 @@ impl LocalEnv {
                         Some(a) if a.is_list() && a.is_complete() => {
                             let elem_t = a.to_inner_list_type().unwrap().unwrap();
                             // Register the loop variable with the element type
-                            self.register_identifier(
+                            if let Err(e) = self.register_identifier(
                                 &var.node,
                                 var.span.clone(),
                                 elem_t
@@ -2538,7 +2604,10 @@ impl LocalEnv {
                                     .expect("inner type should also be complete at this point"),
                                 type_info,
                                 warnings,
-                            );
+                            ) {
+                                errors.push(e);
+                                typ_error = true;
+                            }
                         }
                         Some(a) if a.is_list() => {
                             let expected = a.make_complete_example();
@@ -2666,13 +2735,16 @@ impl LocalEnv {
                 match value_type {
                     Some(typ) if typ.is_complete() => {
                         let complete_typ = typ.into_complete().unwrap();
-                        self.register_identifier(
+                        if let Err(e) = self.register_identifier(
                             &var.node,
                             var.span.clone(),
                             complete_typ,
                             type_info,
                             warnings,
-                        );
+                        ) {
+                            errors.push(e);
+                            return None;
+                        }
                     }
                     Some(typ) => {
                         let expected = typ.make_complete_example();
@@ -3010,13 +3082,15 @@ impl GlobalEnv {
                                         suggestion,
                                     });
                                 }
-                                local_env.register_identifier(
+                                if let Err(e) = local_env.register_identifier(
                                     &param.name.node,
                                     param.name.span.clone(),
                                     param_typ,
                                     type_info,
                                     warnings,
-                                );
+                                ) {
+                                    errors.push(e);
+                                }
                             }
                         }
                     }
