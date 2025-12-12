@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn simple_function_with_arithmetic() {
-    let input = "pub let add(x: Int, y: Int) -> LinExpr = x + y;";
+    let input = "pub let add(x: Int, y: Int) -> Int = x + y;";
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 0, "Should have no errors: {:?}", errors);
@@ -49,7 +49,7 @@ fn private_function_definition() {
 
 #[test]
 fn function_with_multiple_parameters() {
-    let input = "pub let complex(a: Int, b: Int, c: Int, d: Int) -> LinExpr = a + b + c + d;";
+    let input = "pub let complex(a: Int, b: Int, c: Int, d: Int) -> Int = a + b + c + d;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -133,7 +133,7 @@ fn duplicate_function_definition() {
 
 #[test]
 fn duplicate_parameter_names() {
-    let input = "pub let f(x: Int, x: Int) -> LinExpr = x;";
+    let input = "pub let f(x: Int, x: Int) -> Int = x;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 1, "Should have exactly one error");
@@ -145,7 +145,7 @@ fn duplicate_parameter_names() {
 
 #[test]
 fn unknown_type_in_parameter() {
-    let input = "pub let f(x: UnknownType) -> LinExpr = 5;";
+    let input = "pub let f(x: UnknownType) -> LinExpr = 5 into LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 1);
