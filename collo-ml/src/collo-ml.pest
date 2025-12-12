@@ -62,7 +62,7 @@ type_name = { maybe_type ~ ( "|" ~ maybe_type )* }
 maybe_type = { maybe_op* ~ list_type }
 maybe_op = @{ "?" }
 list_type = {
-    "[" ~ type_name ~ "]" |
+    "[" ~ type_name? ~ "]" |
     primitive_type
 }
 

@@ -93,7 +93,8 @@ pub enum SimpleTypeName {
     None,
     Int,
     Bool,
-    Object(String),          // Student, Week, etc
+    Object(String), // Student, Week, etc
+    EmptyList,
     List(Spanned<TypeName>), // [Student], [[Int]], etc.
 }
 
@@ -514,26 +515,32 @@ impl SimpleTypeName {
             });
         }
 
-        let inner = pair
-            .into_inner()
-            .next()
-            .ok_or(AstError::MissingTypeName(span))?;
+        let mut inner_pairs = pair.into_inner();
+        let inner = inner_pairs.next();
 
-        match inner.as_rule() {
-            Rule::primitive_type => Self::from_primitive_type(inner),
-            Rule::type_name => {
-                // It's a list type: [type_name]
-                let inner_span = Span::from_pest(&inner);
-                Ok(SimpleTypeName::List(Spanned::new(
-                    TypeName::from_pest(inner)?,
-                    inner_span,
-                )))
+        match inner {
+            None => {
+                // No inner content means we have "[]" - empty list
+                Ok(SimpleTypeName::EmptyList)
             }
-            _ => Err(AstError::UnexpectedRule {
-                expected: "primitive_type or type_name",
-                found: inner.as_rule(),
-                span: Span::from_pest(&inner),
-            }),
+            Some(inner_pair) => {
+                match inner_pair.as_rule() {
+                    Rule::primitive_type => Self::from_primitive_type(inner_pair),
+                    Rule::type_name => {
+                        // It's a list type: [type_name]
+                        let inner_span = Span::from_pest(&inner_pair);
+                        Ok(SimpleTypeName::List(Spanned::new(
+                            TypeName::from_pest(inner_pair)?,
+                            inner_span,
+                        )))
+                    }
+                    _ => Err(AstError::UnexpectedRule {
+                        expected: "primitive_type or type_name",
+                        found: inner_pair.as_rule(),
+                        span: Span::from_pest(&inner_pair),
+                    }),
+                }
+            }
         }
     }
 

@@ -242,6 +242,7 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
             SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
             SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
             SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),
         }
     }
