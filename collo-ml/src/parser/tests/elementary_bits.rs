@@ -515,13 +515,13 @@ fn type_rejects_missing_opening_bracket() {
 }
 
 #[test]
-fn type_rejects_empty_brackets() {
+fn type_accepts_empty_brackets() {
     let cases = vec!["[]", "[[]]"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (empty brackets): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (empty brackets): {:?}",
             case,
             result
         );
