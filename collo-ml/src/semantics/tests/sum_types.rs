@@ -78,8 +78,16 @@ fn none_literal_valid() {
 }
 
 #[test]
-fn option_type_conversion_invalid() {
+fn option_type_annotation_valid() {
     let input = "pub let f() -> ?Int = 5 as ?Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Option type annotation should be valid",);
+}
+
+#[test]
+fn option_type_conversion_invalid() {
+    let input = "pub let f() -> ?Int = 5 into ?Int;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -420,27 +428,27 @@ fn coercion_to_sum_type_valid() {
 }
 
 #[test]
-fn coercion_within_sum_type_explicit() {
-    // 5 as LinExpr should work when target is LinExpr | Bool
-    let input = "pub let f() -> LinExpr | Bool = 5 as LinExpr;";
+fn conversion_within_sum_type_explicit() {
+    // 5 into LinExpr should work when target is LinExpr | Bool
+    let input = "pub let f() -> LinExpr | Bool = 5 into LinExpr;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Explicit coercion should work: {:?}",
+        "Type conversion should work: {:?}",
         errors
     );
 }
 
 #[test]
-fn implicit_coercion_not_allowed() {
-    // 5 should NOT implicitly coerce to LinExpr | Bool (Int not in sum)
+fn implicit_conversion_not_allowed() {
+    // 5 should NOT implicitly convert to LinExpr | Bool (Int not in sum)
     let input = "pub let f() -> LinExpr | Bool = 5;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         !errors.is_empty(),
-        "Implicit coercion should not work without explicit cast"
+        "Implicit conversion should not work without explicit cast"
     );
 }
 
@@ -459,13 +467,12 @@ fn empty_list_coercion_to_sum_with_one_list() {
 
 #[test]
 fn empty_list_ambiguous_with_multiple_lists() {
-    // [] should NOT coerce to [Int] | [Bool] (ambiguous)
     let input = "pub let f() -> [Int] | [Bool] = [];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
-        "Empty list should be ambiguous with multiple list types"
+        errors.is_empty(),
+        "Empty list should concerce to super-type even if ambiguous"
     );
 }
 
