@@ -477,6 +477,37 @@ fn parse_explicit_type_with_list() {
     }
 }
 
+#[test]
+fn parse_explicit_type_for_empty_typed_list() {
+    let input = "let f() -> [Int] = [<Int>];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ExplicitType { typ, .. } => {
+                assert_eq!(typ.node.types.len(), 1);
+                assert_eq!(typ.node.types[0].node.maybe_count, 0);
+                match &typ.node.types[0].node.inner {
+                    SimpleTypeName::List(typ_name) => {
+                        assert_eq!(typ_name.node.types.len(), 1);
+                        assert_eq!(
+                            typ_name.node.types[0].node,
+                            MaybeTypeName {
+                                maybe_count: 0,
+                                inner: SimpleTypeName::Int,
+                            }
+                        );
+                    }
+                    _ => panic!("Expected List type"),
+                }
+            }
+            _ => panic!("Expected ExplicitType"),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
 // ============= Type Conversions =============
 
 #[test]

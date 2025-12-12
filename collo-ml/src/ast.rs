@@ -1203,7 +1203,22 @@ impl Expr {
         let inner = pair.into_inner().next().unwrap();
 
         let typ_span = Span::from_pest(&inner);
-        let typ = Spanned::new(TypeName::from_pest(inner)?, typ_span);
+        let inner_typ = Spanned::new(TypeName::from_pest(inner)?, typ_span.clone());
+
+        let list_typ = SimpleTypeName::List(inner_typ);
+        let maybe_typ = Spanned::new(
+            MaybeTypeName {
+                maybe_count: 0,
+                inner: list_typ,
+            },
+            typ_span.clone(),
+        );
+        let typ = Spanned::new(
+            TypeName {
+                types: vec![maybe_typ],
+            },
+            typ_span,
+        );
 
         Ok(Expr::ExplicitType {
             expr: Box::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
