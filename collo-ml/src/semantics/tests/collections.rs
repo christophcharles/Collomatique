@@ -82,7 +82,7 @@ fn nested_lists_with_empty() {
 #[test]
 fn list_with_coercion() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
-    let input = "pub let f(x: Int) -> [LinExpr] = [5, $V(x), 10];";
+    let input = "pub let f(x: Int) -> [Int | LinExpr] = [5, $V(x), 10];";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
@@ -446,7 +446,7 @@ fn difference_of_lists() {
 
 #[test]
 fn union_with_coercion() {
-    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [LinExpr] = xs + ys;";
+    let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [Int | LinExpr] = xs + ys;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -584,8 +584,8 @@ fn element_in_global_collection() {
 }
 
 #[test]
-fn membership_with_coercion() {
-    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = x in xs;";
+fn membership_with_conversion() {
+    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = x into LinExpr in xs;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
