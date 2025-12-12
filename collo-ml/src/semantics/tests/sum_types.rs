@@ -55,26 +55,13 @@ fn option_list_type_valid() {
 
 #[test]
 fn list_of_option_type_valid() {
-    // Elements must explicitly cast to ?Int since Int and None don't unify
-    let input = "pub let f() -> [?Int] = [1 as ?Int, none];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        errors.is_empty(),
-        "List of option should be valid with explicit cast: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn list_of_option_type_without_cast_error() {
-    // [1, none] won't work because Int and None don't unify
     let input = "pub let f() -> [?Int] = [1, none];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
-        "List of option without explicit cast should error"
+        errors.is_empty(),
+        "List of option should be valid: {:?}",
+        errors
     );
 }
 
@@ -91,15 +78,17 @@ fn none_literal_valid() {
 }
 
 #[test]
-fn option_type_annotation_valid() {
+fn option_type_conversion_invalid() {
     let input = "pub let f() -> ?Int = 5 as ?Int;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        errors.is_empty(),
-        "Option type annotation should be valid: {:?}",
-        errors
+        !errors.is_empty(),
+        "Option type conversion should be invalid",
     );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::NonConcreteType { .. })),);
 }
 
 // =============================================================================
@@ -208,26 +197,13 @@ fn sum_type_custom_objects_valid() {
 
 #[test]
 fn list_of_sum_type_valid() {
-    // Elements must cast explicitly since Int and Bool don't unify
-    let input = "pub let f() -> [Int | Bool] = [1 as Int | Bool, true as Int | Bool];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        errors.is_empty(),
-        "List of sum type should be valid with explicit casts: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn list_of_sum_type_without_cast_error() {
-    // [1, true] won't work because Int and Bool don't unify
     let input = "pub let f() -> [Int | Bool] = [1, true];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
-        "List of sum type without explicit cast should error"
+        errors.is_empty(),
+        "List of sum type should be valid: {:?}",
+        errors
     );
 }
 
@@ -512,12 +488,12 @@ fn explicit_empty_list_cast_valid() {
 #[test]
 fn option_of_list_of_sum_valid() {
     // Elements in [Int | Bool] need explicit casts
-    let input = "pub let f() -> ?[Int | Bool] = [1 as Int | Bool, true as Int | Bool];";
+    let input = "pub let f() -> ?[Int | Bool] = [1, true];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Option of list of sum should be valid with explicit casts: {:?}",
+        "Option of list of sum should be valid: {:?}",
         errors
     );
 }
@@ -525,12 +501,12 @@ fn option_of_list_of_sum_valid() {
 #[test]
 fn list_of_option_valid() {
     // [?Int] where elements are explicitly cast
-    let input = "pub let f() -> [?Int] = [1 as ?Int, none];";
+    let input = "pub let f() -> [?Int] = [1, none];";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "List of option should be valid with explicit cast: {:?}",
+        "List of option should be valid: {:?}",
         errors
     );
 }
