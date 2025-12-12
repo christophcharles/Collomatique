@@ -311,10 +311,10 @@ fn fn_returning_list_of_linexpr() {
 // ========== Return Type Coercion ==========
 
 #[test]
-fn fn_call_int_to_linexpr_coercion() {
+fn fn_call_int_to_linexpr_conversion() {
     let input = r#"
     let get_int() -> Int = 42;
-    pub let f() -> LinExpr = get_int() as LinExpr;
+    pub let f() -> LinExpr = get_int() into LinExpr;
     "#;
 
     let vars = HashMap::new();

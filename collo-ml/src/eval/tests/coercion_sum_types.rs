@@ -283,8 +283,8 @@ fn explicit_cast_to_sum_type() {
 }
 
 #[test]
-fn explicit_cast_int_to_linexpr_in_sum() {
-    let input = "pub let f() -> LinExpr | Bool = 5 as LinExpr;";
+fn conversion_int_to_linexpr_in_sum() {
+    let input = "pub let f() -> LinExpr | Bool = 5 into LinExpr;";
     let vars = HashMap::new();
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 

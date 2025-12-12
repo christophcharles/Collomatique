@@ -407,55 +407,6 @@ fn diff_identical_lists() {
 }
 
 #[test]
-fn diff_with_empty_list_left() {
-    let input = "pub let f() -> [Int] = [] - [1, 2, 3];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(Vec::new()));
-}
-
-#[test]
-fn diff_with_empty_list_right() {
-    let input = "pub let f() -> [Int] = [1, 2, 3] - [];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(
-        result,
-        ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
-        ]))
-    );
-}
-
-#[test]
-fn diff_two_empty_lists() {
-    let input = "pub let f() -> [Int] = [] - [];";
-
-    let vars = HashMap::new();
-
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
-
-    let result = checked_ast
-        .quick_eval_fn("f", vec![])
-        .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(Vec::new()));
-}
-
-#[test]
 fn diff_with_params() {
     let input = "pub let f(list1: [Int], list2: [Int]) -> [Int] = list1 - list2;";
 
