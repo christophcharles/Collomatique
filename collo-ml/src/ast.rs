@@ -99,10 +99,15 @@ pub enum SimpleTypeName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchBranch {
-    pub typ: Option<Spanned<TypeName>>, // If None, this is an else clause
+pub struct MatchBranchPattern {
+    pub typ: Spanned<TypeName>,
     pub into_typ: Option<Spanned<TypeName>>,
     pub filter: Option<Spanned<Expr>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchBranch {
+    pub pattern: Option<MatchBranchPattern>, // If None, this is an else clause
     pub body: Spanned<Expr>,
 }
 
@@ -1061,7 +1066,7 @@ impl Expr {
     }
 
     fn from_match_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // match_expr = { "match" ~ expr ~ "{" ~ match_branch* ~ "}" }
+        // match_expr = { "match" ~ expr ~ "{" ~ (type_branch | else_branch)* ~ "}" }
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
@@ -1070,35 +1075,34 @@ impl Expr {
         let expr_span = Span::from_pest(&expr_pair);
         let expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
 
-        // Remaining elements are match branches
+        // Remaining elements are match branches (type_branch or else_branch)
         let mut branches = Vec::new();
         for branch_pair in inner {
-            if branch_pair.as_rule() == Rule::match_branch {
-                branches.push(Self::from_match_branch(branch_pair)?);
+            match branch_pair.as_rule() {
+                Rule::type_branch => {
+                    branches.push(Self::from_type_branch(branch_pair)?);
+                }
+                Rule::else_branch => {
+                    branches.push(Self::from_else_branch(branch_pair)?);
+                }
+                _ => {}
             }
         }
 
         Ok(Expr::Match { expr, branches })
     }
 
-    fn from_match_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
-        // match_branch = { (else_clause | type_name) ~ ("into" ~ type_name)? ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
+    fn from_type_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
+        // type_branch = { type_name ~ ("into" ~ type_name)? ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
-        // First element is either else_clause or type_name
-        let first_pair = inner
+        // First element is the type_name
+        let type_pair = inner
             .next()
             .ok_or(AstError::MissingTypeName(span.clone()))?;
-
-        let typ = if first_pair.as_rule() == Rule::else_clause {
-            // For "else" clause, we set a None option
-            None
-        } else {
-            // Regular type_name
-            let type_span = Span::from_pest(&first_pair);
-            Some(Spanned::new(TypeName::from_pest(first_pair)?, type_span))
-        };
+        let type_span = Span::from_pest(&type_pair);
+        let typ = Spanned::new(TypeName::from_pest(type_pair)?, type_span);
 
         let mut into_typ = None;
         let mut filter = None;
@@ -1139,10 +1143,31 @@ impl Expr {
         }
 
         Ok(MatchBranch {
-            typ,
-            into_typ,
-            filter,
+            pattern: Some(MatchBranchPattern {
+                typ,
+                into_typ,
+                filter,
+            }),
             body: body.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
+    fn from_else_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
+        // else_branch = { else_clause ~ "{" ~ expr ~ "}" }
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        // First element is else_clause
+        let _else_pair = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
+
+        // Second element is the body expression
+        let body_pair = inner.next().ok_or(AstError::MissingBody(span.clone()))?;
+        let body_span = Span::from_pest(&body_pair);
+        let body = Spanned::new(Expr::from_pest(body_pair)?, body_span);
+
+        Ok(MatchBranch {
+            pattern: None, // else branch has no type pattern
+            body,
         })
     }
 

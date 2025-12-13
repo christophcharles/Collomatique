@@ -376,3 +376,41 @@ fn match_complex_real_world_examples() {
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
+
+#[test]
+fn match_rejects_else_with_into() {
+    let cases = vec![
+        "match x { else into Int { 10 } }",
+        "match x { Int { 1 } else into Bool { true } }",
+        "match x { else into LinExpr { $V(x) } }",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should reject '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn match_rejects_else_with_where() {
+    let cases = vec![
+        "match x { else where x > 5 { 10 } }",
+        "match x { Int { 1 } else where condition { 0 } }",
+        "match x { else where true { 1 } }",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should reject '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn match_rejects_else_with_into_and_where() {
+    let cases = vec![
+        "match x { else into Int where x > 5 { 10 } }",
+        "match x { else where x > 5 into Bool { true } }",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should reject '{}': {:?}", case, result);
+    }
+}
