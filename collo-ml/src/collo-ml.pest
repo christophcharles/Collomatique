@@ -25,6 +25,7 @@ reserved_keyword = {
     "reify" |
     "where" |
     "rfold" |
+    "match" |
     "fold" |
     "with" |
     "else" |
@@ -39,7 +40,7 @@ reserved_keyword = {
     "pub" |
     "not" |
     "and" |
-    "for" |   // NEW: for comprehensions
+    "for" |
     "or" |
     "as" |
     "if" |
@@ -98,6 +99,7 @@ path = { primary_expr ~ ("." ~ ident)* }
 primary_expr = {
     let_expr |
     if_expr |
+    match_expr |
     sum |
     fold |
     rfold |
@@ -120,6 +122,8 @@ primary_expr = {
 
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
+match_expr = { "match" ~ expr ~ "{" ~ match_branch* ~ "}" }
+match_branch = { type_name ~ ("into" ~ type_name)? ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
 sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 fold = { "fold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 rfold = { "rfold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
