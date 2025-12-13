@@ -5,6 +5,7 @@ mod collections;
 mod expressions;
 mod extra_sum_types;
 mod folds;
+mod match_branching;
 mod operators;
 mod quantifiers;
 mod statements;

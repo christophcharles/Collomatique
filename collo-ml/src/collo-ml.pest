@@ -123,7 +123,7 @@ primary_expr = {
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
 match_expr = { "match" ~ expr ~ "{" ~ (type_branch | else_branch)* ~ "}" }
-type_branch = { type_name ~ ("into" ~ type_name)? ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
+type_branch = { type_name ~ ("into" ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 else_branch = { else_clause ~ "{" ~ expr ~ "}" }
 else_clause = @{ "else" ~ !ident_char }
 sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }

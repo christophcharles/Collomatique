@@ -1130,12 +1130,18 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&element);
-                    let parsed_expr = Spanned::new(Expr::from_pest(element)?, expr_span);
+                    let parsed_expr = Spanned::new(Expr::from_pest(element.clone())?, expr_span);
 
                     if has_filter && filter.is_none() {
                         filter = Some(parsed_expr);
                     } else if body.is_none() {
                         body = Some(parsed_expr);
+                    } else {
+                        return Err(AstError::UnexpectedRule {
+                            expected: "extra expr rule",
+                            found: element.as_rule(),
+                            span: Span::from_pest(&element),
+                        });
                     }
                 }
                 _ => {}
