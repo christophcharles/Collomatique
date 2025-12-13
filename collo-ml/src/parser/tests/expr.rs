@@ -31,5 +31,6 @@ mod folds;
 mod let_expr;
 mod literals;
 mod logical;
+mod match_expr;
 mod semantic_invalid;
 mod type_annotations;
