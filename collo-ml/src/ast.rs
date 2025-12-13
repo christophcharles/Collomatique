@@ -98,6 +98,14 @@ pub enum SimpleTypeName {
     List(Spanned<TypeName>), // [Student], [[Int]], etc.
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchBranch {
+    pub typ: Spanned<TypeName>,
+    pub into_typ: Option<Spanned<TypeName>>,
+    pub filter: Option<Spanned<Expr>>,
+    pub body: Spanned<Expr>,
+}
+
 // ============= Expressions =============
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,6 +138,10 @@ pub enum Expr {
         condition: Box<Spanned<Expr>>,
         then_expr: Box<Spanned<Expr>>,
         else_expr: Box<Spanned<Expr>>,
+    },
+    Match {
+        expr: Box<Spanned<Expr>>,
+        branches: Vec<MatchBranch>,
     },
 
     // Expression Let

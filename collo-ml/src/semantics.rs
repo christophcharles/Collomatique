@@ -2353,6 +2353,9 @@ impl LocalEnv {
                     (None, None) => None,
                 }
             }
+            Expr::Match { expr, branches } => {
+                todo!("match not implemented yet")
+            }
 
             // ========== ILP Variables ==========
             Expr::VarCall { name, args } => {

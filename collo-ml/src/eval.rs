@@ -960,6 +960,9 @@ impl<T: EvalObject> LocalEnv<T> {
                     self.eval_expr(eval_history, &else_expr)?
                 }
             }
+            Expr::Match { expr, branches } => {
+                todo!("match not implemented yet")
+            }
             Expr::Sum {
                 var,
                 collection,
