@@ -584,6 +584,11 @@ impl ExprType {
         }
         false
     }
+
+    pub fn substract(&self, other: &ExprType) -> Option<ExprType> {
+        let variants = self.variants.difference(&other.variants).cloned();
+        ExprType::sum(variants)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -977,6 +982,17 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
+    #[error("Branch for match at {span:?} has a too large type ({found:?}). Maximum type is {expected:?}")]
+    OverMatching {
+        span: Span,
+        expected: Option<ExprType>,
+        found: Option<ExprType>,
+    },
+    #[error("Match at {span:?} does not have exhaustive checking. The case {remaining_types} is not covered")]
+    NonExhaustiveMatching {
+        span: Span,
+        remaining_types: ExprType,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -1134,8 +1150,9 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
-        let result =
-            self.check_expr_internal(global_env, expr, type_info, expr_types, errors, warnings);
+        let result = self.check_expr_internal(
+            global_env, expr, span, type_info, expr_types, errors, warnings,
+        );
         if let Some(typ) = &result {
             expr_types.insert(span.clone(), typ.clone());
         }
@@ -1146,6 +1163,7 @@ impl LocalEnv {
         &mut self,
         global_env: &mut GlobalEnv,
         expr: &crate::ast::Expr,
+        global_span: &Span,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
@@ -2364,7 +2382,182 @@ impl LocalEnv {
                 }
             }
             Expr::Match { expr, branches } => {
-                todo!("match not implemented yet")
+                let Some(expr_type) = self.check_expr(
+                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                ) else {
+                    // Cannot type check anything, propagate underspecified type
+                    return None;
+                };
+
+                let mut output = None;
+                let mut current_type = Some(expr_type);
+
+                for branch in branches {
+                    let as_type = if let Some(bt) = &branch.as_typ {
+                        match ExprType::try_from(bt.clone()) {
+                            Ok(t) => {
+                                if !global_env.validate_type(&t) {
+                                    errors.push(SemError::UnknownType {
+                                        typ: t.to_string(),
+                                        span: bt.span.clone(),
+                                    });
+                                    continue;
+                                }
+                                Some(t)
+                            }
+                            Err(e) => {
+                                errors.push(e);
+                                continue; // Can't evaluate branch
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let into_type = if let Some(it) = &branch.into_typ {
+                        match ExprType::try_from(it.clone()) {
+                            Ok(t) => {
+                                if !global_env.validate_type(&t) {
+                                    errors.push(SemError::UnknownType {
+                                        typ: t.to_string(),
+                                        span: it.span.clone(),
+                                    });
+                                    // We could ignore the branch but we try to continue without type conversion
+                                    None
+                                } else if !t.is_concrete() {
+                                    errors.push(SemError::NonConcreteType {
+                                        span: it.span.clone(),
+                                        found: t,
+                                        context: "Type conversion requires a concrete target type"
+                                            .to_string(),
+                                    });
+                                    None
+                                } else {
+                                    let concrete_target =
+                                        t.to_simple().unwrap().into_concrete().unwrap();
+                                    Some(concrete_target)
+                                }
+                            }
+                            Err(e) => {
+                                errors.push(e);
+                                // Probably can't evaluate branch, but continue anyway without type conversion
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let bad_branch_typ = match &current_type {
+                        Some(typ) => match &as_type {
+                            Some(b_typ) => !b_typ.is_subtype_of(typ),
+                            None => false,
+                        },
+                        None => true,
+                    };
+
+                    if bad_branch_typ {
+                        errors.push(SemError::OverMatching {
+                            span: match &branch.as_typ {
+                                Some(t) => t.span.clone(),
+                                None => branch.ident.span.clone(),
+                            },
+                            expected: current_type.clone(),
+                            found: as_type.clone(),
+                        });
+                    }
+
+                    let actual_branch_typ_opt = match as_type {
+                        Some(typ) => Some(typ),
+                        None => current_type.clone(),
+                    };
+
+                    if let Some(actual_branch_typ) = actual_branch_typ_opt {
+                        let typ_in_branch = if let Some(concrete_target) = into_type {
+                            if !actual_branch_typ.can_convert_to(&concrete_target) {
+                                // Error: can't convert
+                                errors.push(SemError::ImpossibleConversion {
+                                    span: expr.span.clone(),
+                                    found: actual_branch_typ.clone(),
+                                    target: concrete_target.clone(),
+                                });
+                                actual_branch_typ.clone()
+                            } else {
+                                concrete_target.into_inner().into()
+                            }
+                        } else {
+                            actual_branch_typ.clone()
+                        };
+
+                        if let Err(e) = self.register_identifier(
+                            &branch.ident.node,
+                            branch.ident.span.clone(),
+                            typ_in_branch,
+                            type_info,
+                            warnings,
+                        ) {
+                            panic!("There should be no other identifier in the current scope. But got: {:?}", e);
+                        }
+
+                        self.push_scope();
+
+                        if let Some(filter_expr) = &branch.filter {
+                            let filter_type = self.check_expr(
+                                global_env,
+                                &filter_expr.node,
+                                &filter_expr.span,
+                                type_info,
+                                expr_types,
+                                errors,
+                                warnings,
+                            );
+
+                            if let Some(typ) = filter_type {
+                                if !typ.is_bool() {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: filter_expr.span.clone(),
+                                        expected: SimpleType::Bool.into(),
+                                        found: typ,
+                                        context: "where filter must be Bool".to_string(),
+                                    });
+                                }
+                            }
+                        }
+
+                        let body_typ = self.check_expr(
+                            global_env,
+                            &branch.body.node,
+                            &branch.body.span,
+                            type_info,
+                            expr_types,
+                            errors,
+                            warnings,
+                        );
+
+                        self.pop_scope(warnings);
+
+                        // Update output type
+                        if let Some(typ) = body_typ {
+                            output = output.map(|x: ExprType| x.unify_with(&typ));
+                        }
+
+                        // Update remaining type
+                        if branch.filter.is_none() {
+                            if let Some(typ) = current_type {
+                                current_type = typ.substract(&actual_branch_typ);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(remaining_types) = current_type {
+                    errors.push(SemError::NonExhaustiveMatching {
+                        span: global_span.clone(),
+                        remaining_types,
+                    });
+                }
+
+                output
             }
 
             // ========== ILP Variables ==========
