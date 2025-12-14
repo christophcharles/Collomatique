@@ -457,6 +457,10 @@ impl ExprType {
         }
     }
 
+    pub fn has_list(&self) -> bool {
+        self.variants.iter().any(|x| x.is_list())
+    }
+
     pub fn is_list(&self) -> bool {
         self.variants.iter().all(|x| x.is_list())
     }

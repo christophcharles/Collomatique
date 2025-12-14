@@ -152,7 +152,7 @@ impl<T: EvalObject> ExprValue<T> {
                 .get_variants()
                 .contains(&SimpleType::Object(obj.typ_name(env))),
             // if we have an empty list, we just need to check that ExprType is a list
-            Self::List(list) if list.is_empty() => target.is_list(),
+            Self::List(list) if list.is_empty() => target.has_list(),
             // if not empty, we have to check recursively for all list types in the sum
             Self::List(list) => {
                 for variant in target.get_variants() {
