@@ -99,15 +99,11 @@ pub enum SimpleTypeName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchBranchPattern {
-    pub typ: Spanned<TypeName>,
+pub struct MatchBranch {
+    pub ident: Spanned<String>,
+    pub as_typ: Option<Spanned<TypeName>>,
     pub into_typ: Option<Spanned<TypeName>>,
     pub filter: Option<Spanned<Expr>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchBranch {
-    pub pattern: Option<MatchBranchPattern>, // If None, this is an else clause
     pub body: Spanned<Expr>,
 }
 
@@ -1066,7 +1062,7 @@ impl Expr {
     }
 
     fn from_match_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // match_expr = { "match" ~ expr ~ "{" ~ (type_branch | else_branch)* ~ "}" }
+        // match_expr = { "match" ~ expr ~ "{" ~ match_branch* ~ "}" }
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
@@ -1075,73 +1071,72 @@ impl Expr {
         let expr_span = Span::from_pest(&expr_pair);
         let expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
 
-        // Remaining elements are match branches (type_branch or else_branch)
+        // Remaining elements are match branches
         let mut branches = Vec::new();
         for branch_pair in inner {
-            match branch_pair.as_rule() {
-                Rule::type_branch => {
-                    branches.push(Self::from_type_branch(branch_pair)?);
-                }
-                Rule::else_branch => {
-                    branches.push(Self::from_else_branch(branch_pair)?);
-                }
-                _ => {}
+            if branch_pair.as_rule() == Rule::match_branch {
+                branches.push(Self::from_match_branch(branch_pair)?);
             }
         }
 
         Ok(Expr::Match { expr, branches })
     }
 
-    fn from_type_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
-        // type_branch = { type_name ~ ("into" ~ type_name)? ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
+    fn from_match_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
+        // match_branch = { ident ~ (as_op ~ type_name)? ~ (into_op ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
-        // First element is the type_name
-        let type_pair = inner
-            .next()
-            .ok_or(AstError::MissingTypeName(span.clone()))?;
-        let type_span = Span::from_pest(&type_pair);
-        let typ = Spanned::new(TypeName::from_pest(type_pair)?, type_span);
+        // First element is always the identifier
+        let ident_pair = inner.next().ok_or(AstError::MissingName(span.clone()))?;
+        let ident_span = Span::from_pest(&ident_pair);
+        let ident = Spanned::new(ident_pair.as_str().to_string(), ident_span);
 
+        let mut as_typ = None;
         let mut into_typ = None;
         let mut filter = None;
         let mut body = None;
         let mut has_filter = false;
 
+        // Track which operator we just saw
+        let mut last_op_was_as = false;
+        let mut last_op_was_into = false;
+
         for element in inner {
             match element.as_rule() {
+                Rule::as_op => {
+                    last_op_was_as = true;
+                    last_op_was_into = false;
+                }
+                Rule::into_op => {
+                    last_op_was_into = true;
+                    last_op_was_as = false;
+                }
                 Rule::where_op => {
                     has_filter = true;
+                    last_op_was_as = false;
+                    last_op_was_into = false;
                 }
                 Rule::type_name => {
-                    if has_filter {
-                        // This shouldn't happen based on grammar, but handle it
-                        return Err(AstError::UnexpectedRule {
-                            expected: "expr after where",
-                            found: element.as_rule(),
-                            span: Span::from_pest(&element),
-                        });
-                    } else if into_typ.is_none() {
-                        // This is the "into" type
-                        let type_span = Span::from_pest(&element);
-                        into_typ = Some(Spanned::new(TypeName::from_pest(element)?, type_span));
+                    let type_span = Span::from_pest(&element);
+                    let parsed_type = Spanned::new(TypeName::from_pest(element)?, type_span);
+
+                    if last_op_was_as {
+                        as_typ = Some(parsed_type);
+                        last_op_was_as = false;
+                    } else if last_op_was_into {
+                        into_typ = Some(parsed_type);
+                        last_op_was_into = false;
                     }
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&element);
-                    let parsed_expr = Spanned::new(Expr::from_pest(element.clone())?, expr_span);
+                    let parsed_expr = Spanned::new(Expr::from_pest(element)?, expr_span);
 
                     if has_filter && filter.is_none() {
                         filter = Some(parsed_expr);
                     } else if body.is_none() {
                         body = Some(parsed_expr);
-                    } else {
-                        return Err(AstError::UnexpectedRule {
-                            expected: "extra expr rule",
-                            found: element.as_rule(),
-                            span: Span::from_pest(&element),
-                        });
                     }
                 }
                 _ => {}
@@ -1149,31 +1144,11 @@ impl Expr {
         }
 
         Ok(MatchBranch {
-            pattern: Some(MatchBranchPattern {
-                typ,
-                into_typ,
-                filter,
-            }),
+            ident,
+            as_typ,
+            into_typ,
+            filter,
             body: body.ok_or(AstError::MissingBody(span))?,
-        })
-    }
-
-    fn from_else_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
-        // else_branch = { else_clause ~ "{" ~ expr ~ "}" }
-        let span = Span::from_pest(&pair);
-        let mut inner = pair.into_inner();
-
-        // First element is else_clause
-        let _else_pair = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
-
-        // Second element is the body expression
-        let body_pair = inner.next().ok_or(AstError::MissingBody(span.clone()))?;
-        let body_span = Span::from_pest(&body_pair);
-        let body = Spanned::new(Expr::from_pest(body_pair)?, body_span);
-
-        Ok(MatchBranch {
-            pattern: None, // else branch has no type pattern
-            body,
         })
     }
 
