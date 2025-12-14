@@ -155,6 +155,37 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                     }
                     panic!("Vec must have a type parameter");
                 }
+                "Option" => {
+                    // Extract the inner type from Option<T>
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                            if let Type::Path(path) = inner_ty {
+                                if path
+                                    .path
+                                    .segments
+                                    .last()
+                                    .unwrap()
+                                    .ident
+                                    .to_string()
+                                    .as_str()
+                                    == "Option"
+                                {
+                                    panic!("Nested Option are not supported");
+                                }
+                            }
+                            let inner_expr_type = type_to_field_type(inner_ty);
+                            return quote! {
+                                ::collo_ml::traits::FieldType::sum(
+                                    [
+                                        ::collo_ml::traits::SimpleFieldType::None,
+                                        #inner_expr_type
+                                    ]
+                                ).expect("Sum type should be valid")
+                            };
+                        }
+                    }
+                    panic!("Vec must have a type parameter");
+                }
                 _ => {
                     // Assume this is an object
                     quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#type_name>()).into() }
@@ -199,6 +230,39 @@ fn generate_field_value(
                         }
                     }
                     panic!("Vec must have type parameter");
+                }
+                "Option" => {
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                            if let Type::Path(path) = inner_ty {
+                                if path
+                                    .path
+                                    .segments
+                                    .last()
+                                    .unwrap()
+                                    .ident
+                                    .to_string()
+                                    .as_str()
+                                    == "Option"
+                                {
+                                    panic!("Nested Option are not supported");
+                                }
+                            }
+                            let inner = generate_field_value(
+                                &quote! {
+                                    x
+                                },
+                                inner_ty,
+                            );
+                            return quote! {
+                                match #field_name {
+                                    Some(x) => #inner,
+                                    None => ::collo_ml::ExprValue::None,
+                                }
+                            };
+                        }
+                    }
+                    panic!("Vec must have a type parameter");
                 }
                 _ => {
                     // It's an object ID - convert using Into
