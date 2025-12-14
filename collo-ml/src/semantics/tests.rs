@@ -10,6 +10,7 @@ mod collections;
 mod control_flow;
 mod folds;
 mod let_expr;
+mod match_expr;
 mod operators;
 mod scoping;
 mod statements;
