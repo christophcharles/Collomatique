@@ -1028,10 +1028,18 @@ struct LocalEnv {
     pending_scope: HashMap<String, (ExprType, Span, bool)>,
 }
 
-fn should_be_used_by_default(ident: &str) -> bool {
+fn ident_can_be_unused(ident: &str) -> bool {
     assert!(ident.len() > 0);
 
     ident.chars().next().unwrap() == '_'
+}
+
+fn should_be_used_by_default(ident: &str) -> bool {
+    ident_can_be_unused(ident)
+}
+
+fn ident_can_be_shadowed(ident: &str) -> bool {
+    ident_can_be_unused(ident)
 }
 
 impl LocalEnv {
@@ -1098,11 +1106,13 @@ impl LocalEnv {
         }
 
         if let Some((_typ, old_span)) = self.lookup_ident(ident) {
-            warnings.push(SemWarning::IdentifierShadowed {
-                identifier: ident.to_string(),
-                span: span.clone(),
-                previous: old_span,
-            });
+            if !ident_can_be_shadowed(ident) {
+                warnings.push(SemWarning::IdentifierShadowed {
+                    identifier: ident.to_string(),
+                    span: span.clone(),
+                    previous: old_span,
+                });
+            }
         }
 
         self.pending_scope.insert(
