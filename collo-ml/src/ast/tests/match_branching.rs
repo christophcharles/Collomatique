@@ -6,7 +6,7 @@ use pest::Parser;
 
 #[test]
 fn parse_simple_match_with_one_type_branch() {
-    let input = "let f(x: Int) -> Int = match x { Int { 10 } };";
+    let input = "let f(x: Int) -> Int = match x { y as Int { 10 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -37,7 +37,7 @@ fn parse_simple_match_with_one_type_branch() {
 
 #[test]
 fn parse_match_with_else_branch() {
-    let input = "let f(x: Int | Bool) -> Int = match x { Int { 1 } else { 0 } };";
+    let input = "let f(x: Int | Bool) -> Int = match x { i as Int { 1 } other { 0 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -62,7 +62,7 @@ fn parse_match_with_else_branch() {
 
 #[test]
 fn parse_match_with_into_conversion() {
-    let input = "let f(x: Int) -> Bool = match x { Int into Bool { true } };";
+    let input = "let f(x: Int) -> Bool = match x { y as Int into Bool { true } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -88,7 +88,7 @@ fn parse_match_with_into_conversion() {
 
 #[test]
 fn parse_match_with_where_filter() {
-    let input = "let f(x: Int) -> Int = match x { Int where x > 5 { 10 } };";
+    let input = "let f(x: Int) -> Int = match x { y as Int where x > 5 { 10 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -114,7 +114,7 @@ fn parse_match_with_where_filter() {
 
 #[test]
 fn parse_match_with_into_and_where() {
-    let input = "let f(x: Int) -> Bool = match x { Int into Bool where x > 0 { true } };";
+    let input = "let f(x: Int) -> Bool = match x { y as Int into Bool where x > 0 { true } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -143,7 +143,7 @@ fn parse_match_with_into_and_where() {
 
 #[test]
 fn parse_match_with_multiple_type_branches() {
-    let input = "let f(x: Int | Bool | None) -> Int = match x { Int { 1 } Bool { 2 } None { 0 } };";
+    let input = "let f(x: Int | Bool | None) -> Int = match x { i as Int { 1 } b as Bool { 2 } n as None { 0 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -170,7 +170,7 @@ fn parse_match_with_multiple_type_branches() {
 
 #[test]
 fn parse_match_with_union_type_pattern() {
-    let input = "let f(x: Int | Bool) -> Int = match x { Int | Bool { 1 } };";
+    let input = "let f(x: Int | Bool) -> Int = match x { y as Int | Bool { 1 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -190,7 +190,7 @@ fn parse_match_with_union_type_pattern() {
 
 #[test]
 fn parse_match_with_maybe_type() {
-    let input = "let f(x: ?Int) -> Int = match x { ?Int { 10 } else { 0 } };";
+    let input = "let f(x: ?Int) -> Int = match x { y as ?Int { 10 } other { 0 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -215,7 +215,7 @@ fn parse_match_with_maybe_type() {
 
 #[test]
 fn parse_match_with_list_type() {
-    let input = "let f(x: [Int]) -> Int = match x { [Int] { |x| } };";
+    let input = "let f(x: [Int]) -> Int = match x { lst as [Int] { |x| } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -241,7 +241,7 @@ fn parse_match_with_list_type() {
 
 #[test]
 fn parse_match_with_arithmetic_body() {
-    let input = "let f(x: Int) -> Int = match x { Int { x * 2 + 1 } };";
+    let input = "let f(x: Int) -> Int = match x { y as Int { x * 2 + 1 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -261,7 +261,7 @@ fn parse_match_with_arithmetic_body() {
 
 #[test]
 fn parse_match_with_path_in_body() {
-    let input = "let f(s: Student) -> Int = match s { Student { s.age } };";
+    let input = "let f(s: Student) -> Int = match s { st as Student { s.age } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -287,7 +287,7 @@ fn parse_match_with_path_in_body() {
 
 #[test]
 fn parse_match_with_variable_call_body() {
-    let input = "let f(x: Int) -> Constraint = match x { Int { $V(x) === 1 } };";
+    let input = "let f(x: Int) -> Constraint = match x { i as Int { $V(x) === 1 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -307,7 +307,7 @@ fn parse_match_with_variable_call_body() {
 
 #[test]
 fn parse_match_with_if_in_body() {
-    let input = "let f(x: Int) -> Int = match x { Int { if x > 0 { x } else { 0 } } };";
+    let input = "let f(x: Int) -> Int = match x { i as Int { if x > 0 { x } else { 0 } } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -327,7 +327,8 @@ fn parse_match_with_if_in_body() {
 
 #[test]
 fn parse_match_with_quantifier_in_body() {
-    let input = "let f(items: [Int]) -> Int = match items { [Int] { sum i in items { i } } };";
+    let input =
+        "let f(items: [Int]) -> Int = match items { lst as [Int] { sum i in items { i } } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -352,7 +353,8 @@ fn parse_match_with_quantifier_in_body() {
 
 #[test]
 fn parse_nested_match_expressions() {
-    let input = "let f(x: Int) -> Int = match x { Int { match x { Int { 1 } else { 0 } } } };";
+    let input =
+        "let f(x: Int) -> Int = match x { i as Int { match x { j as Int { 1 } other { 0 } } } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -382,7 +384,7 @@ fn parse_nested_match_expressions() {
 
 #[test]
 fn parse_match_with_let_in_body() {
-    let input = "let f(x: Int) -> Int = match x { Int { let y = x * 2 { y + 1 } } };";
+    let input = "let f(x: Int) -> Int = match x { i as Int { let y = x * 2 { y + 1 } } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -409,7 +411,7 @@ fn parse_match_with_let_in_body() {
 
 #[test]
 fn parse_match_in_arithmetic_context() {
-    let input = "let f(x: Int) -> Int = (match x { Int { 10 } else { 0 } }) + 5;";
+    let input = "let f(x: Int) -> Int = (match x { i as Int { 10 } other { 0 } }) + 5;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -432,7 +434,8 @@ fn parse_match_in_arithmetic_context() {
 
 #[test]
 fn parse_match_with_list_comprehension_body() {
-    let input = "let f(items: [Int]) -> [Int] = match items { [Int] { [x for x in items] } };";
+    let input =
+        "let f(items: [Int]) -> [Int] = match items { lst as [Int] { [x for x in items] } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -455,7 +458,8 @@ fn parse_match_with_list_comprehension_body() {
 
 #[test]
 fn parse_match_with_cardinality_in_filter() {
-    let input = "let f(items: [Int]) -> Int = match items { [Int] where |items| > 0 { |items| } };";
+    let input =
+        "let f(items: [Int]) -> Int = match items { lst as [Int] where |items| > 0 { |items| } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -482,7 +486,7 @@ fn parse_match_with_cardinality_in_filter() {
 
 #[test]
 fn parse_match_with_boolean_filter() {
-    let input = "let f(x: Int) -> Int = match x { Int where x > 5 and x < 10 { x } };";
+    let input = "let f(x: Int) -> Int = match x { i as Int where x > 5 and x < 10 { x } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -507,7 +511,7 @@ fn parse_match_with_boolean_filter() {
 
 #[test]
 fn parse_match_with_path_in_filter() {
-    let input = "let f(s: Student) -> Int = match s { Student where s.age > 18 { 1 } };";
+    let input = "let f(s: Student) -> Int = match s { st as Student where s.age > 18 { 1 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -534,7 +538,7 @@ fn parse_match_with_path_in_filter() {
 
 #[test]
 fn parse_match_only_else_branch() {
-    let input = "let f(x: Int) -> Int = match x { else { 42 } };";
+    let input = "let f(x: Int) -> Int = match x { y { 42 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -555,7 +559,7 @@ fn parse_match_only_else_branch() {
 
 #[test]
 fn parse_match_multiple_conditions_same_type() {
-    let input = "let f(x: Int) -> Int = match x { Int where x > 0 { 1 } Int where x < 0 { -1 } else { 0 } };";
+    let input = "let f(x: Int) -> Int = match x { i as Int where x > 0 { 1 } j as Int where x < 0 { -1 } other { 0 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -584,9 +588,9 @@ fn parse_match_multiple_conditions_same_type() {
 fn parse_complex_match_real_world() {
     let input = r#"let f(x: Int | Bool) -> Constraint = 
         match x { 
-            Int into LinExpr where x > 0 { $V(x) === x } 
-            Bool { if x { $V(1) === 1 } else { $V(0) === 0 } } 
-            else { $V(0) === 0 } 
+            i as Int into LinExpr where x > 0 { $V(x) === x } 
+            b as Bool { if x { $V(1) === 1 } else { $V(0) === 0 } } 
+            other { $V(0) === 0 } 
         };"#;
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
