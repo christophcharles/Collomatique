@@ -12,7 +12,10 @@ fn parse_simple_match_with_one_type_branch() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Match { expr, branches } => {
+            Expr::Match {
+                match_expr: expr,
+                branches,
+            } => {
                 // Check matched expression
                 match &expr.node {
                     Expr::Ident(name) => assert_eq!(name.node, "x"),
@@ -43,7 +46,10 @@ fn parse_match_with_else_branch() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Match { expr: _, branches } => {
+            Expr::Match {
+                match_expr: _,
+                branches,
+            } => {
                 assert_eq!(branches.len(), 2);
 
                 // First branch: Int { 1 }

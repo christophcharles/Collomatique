@@ -1771,9 +1771,18 @@ impl LocalEnv {
                     (None, None) => None,
                 }
             }
-            Expr::Match { expr, branches } => {
+            Expr::Match {
+                match_expr,
+                branches,
+            } => {
                 let Some(expr_type) = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &match_expr.node,
+                    &match_expr.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
                 ) else {
                     // Cannot type check anything, propagate underspecified type
                     return None;
@@ -1867,7 +1876,7 @@ impl LocalEnv {
                             if !actual_branch_typ.can_convert_to(&concrete_target) {
                                 // Error: can't convert
                                 errors.push(SemError::ImpossibleConversion {
-                                    span: expr.span.clone(),
+                                    span: match_expr.span.clone(),
                                     found: actual_branch_typ.clone(),
                                     target: concrete_target.clone(),
                                 });

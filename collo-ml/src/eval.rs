@@ -565,11 +565,11 @@ impl<T: EvalObject> LocalEnv<T> {
                     .into_concrete()
                     .expect("Should be concrete at this point");
 
-                let coerced_value = value
+                let converted_value = value
                     .convert_to(eval_history.env, &concrete_target)
                     .expect("Resulting expression should be convertible to target type");
 
-                coerced_value
+                converted_value
             }
             Expr::ListLiteral { elements } => {
                 let element_values: Vec<_> = elements
@@ -960,8 +960,71 @@ impl<T: EvalObject> LocalEnv<T> {
                     self.eval_expr(eval_history, &else_expr)?
                 }
             }
-            Expr::Match { expr, branches } => {
-                todo!("match not implemented yet")
+            Expr::Match {
+                match_expr,
+                branches,
+            } => {
+                let value = self.eval_expr(eval_history, match_expr)?;
+
+                for branch in branches {
+                    let does_typ_match = match &branch.as_typ {
+                        Some(t) => {
+                            let target_type = ExprType::try_from(t.clone())
+                                .expect("At this point types should be valid");
+                            value.fits_in_typ(&eval_history.env, &target_type)
+                        }
+                        None => true,
+                    };
+
+                    if !does_typ_match {
+                        continue;
+                    }
+
+                    // At this point we have a valid type. We convert if needed
+                    let converted_value = match &branch.into_typ {
+                        Some(t) => {
+                            let target_type = ExprType::try_from(t.clone())
+                                .expect("At this point types should be valid")
+                                .to_simple()
+                                .expect("as should have a simple type as operand");
+                            let concrete_target = target_type
+                                .into_concrete()
+                                .expect("Should be concrete at this point");
+
+                            value
+                                .clone()
+                                .convert_to(eval_history.env, &concrete_target)
+                                .expect("Resulting expression should be convertible to target type")
+                        }
+                        None => value.clone(),
+                    };
+
+                    // Let's add the identifier to the scope
+                    self.register_identifier(&branch.ident.node, converted_value);
+                    self.push_scope();
+
+                    // Now we check the where clause
+                    let where_clause_passes = match &branch.filter {
+                        None => true,
+                        Some(filter_expr) => {
+                            let cond_value = self.eval_expr(eval_history, &filter_expr)?;
+                            let ExprValue::Bool(cond) = cond_value else {
+                                panic!("Expected Bool for where clause");
+                            };
+                            cond
+                        }
+                    };
+
+                    if !where_clause_passes {
+                        // Where clause failed, we remove the scope and move to the next branch
+                        self.pop_scope();
+                        continue;
+                    }
+
+                    return self.eval_expr(eval_history, &branch.body);
+                }
+
+                panic!("Match should be exhaustive during evaluation");
             }
             Expr::Sum {
                 var,

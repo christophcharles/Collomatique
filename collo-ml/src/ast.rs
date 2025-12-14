@@ -141,7 +141,7 @@ pub enum Expr {
         else_expr: Box<Spanned<Expr>>,
     },
     Match {
-        expr: Box<Spanned<Expr>>,
+        match_expr: Box<Spanned<Expr>>,
         branches: Vec<MatchBranch>,
     },
 
@@ -1069,7 +1069,7 @@ impl Expr {
         // First inner element is the expression being matched
         let expr_pair = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
         let expr_span = Span::from_pest(&expr_pair);
-        let expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
+        let match_expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
 
         // Remaining elements are match branches
         let mut branches = Vec::new();
@@ -1079,7 +1079,10 @@ impl Expr {
             }
         }
 
-        Ok(Expr::Match { expr, branches })
+        Ok(Expr::Match {
+            match_expr,
+            branches,
+        })
     }
 
     fn from_match_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
