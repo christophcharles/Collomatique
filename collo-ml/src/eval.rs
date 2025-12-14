@@ -1027,16 +1027,10 @@ impl<T: EvalObject> LocalEnv<T> {
                         continue;
                     }
 
-                    let output = match self.eval_expr(eval_history, &branch.body) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            self.pop_scope();
-                            return Err(e);
-                        }
-                    };
+                    let output = self.eval_expr(eval_history, &branch.body);
 
                     self.pop_scope();
-                    return Ok(output);
+                    return output;
                 }
 
                 panic!("Match should be exhaustive during evaluation");
@@ -1072,7 +1066,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = self.eval_expr(eval_history, &f)?;
+                            let filter_value = match self.eval_expr(eval_history, &f) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    self.pop_scope();
+                                    return Err(e);
+                                }
+                            };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1081,7 +1081,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     };
 
                     if cond {
-                        let new_value = self.eval_expr(eval_history, &body)?;
+                        let new_value = match self.eval_expr(eval_history, &body) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                self.pop_scope();
+                                return Err(e);
+                            }
+                        };
                         output = match (output, new_value) {
                             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                             (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
@@ -1136,7 +1142,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = self.eval_expr(eval_history, &f)?;
+                            let filter_value = match self.eval_expr(eval_history, &f) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    self.pop_scope();
+                                    return Err(e);
+                                }
+                            };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1145,7 +1157,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     };
 
                     if cond {
-                        output = self.eval_expr(eval_history, &body)?;
+                        output = match self.eval_expr(eval_history, &body) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                self.pop_scope();
+                                return Err(e);
+                            }
+                        };
                     }
 
                     self.pop_scope();
@@ -1183,7 +1201,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = self.eval_expr(eval_history, &f)?;
+                            let filter_value = match self.eval_expr(eval_history, &f) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    self.pop_scope();
+                                    return Err(e);
+                                }
+                            };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1192,7 +1216,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     };
 
                     if cond {
-                        let new_value = self.eval_expr(eval_history, &body)?;
+                        let new_value = match self.eval_expr(eval_history, &body) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                self.pop_scope();
+                                return Err(e);
+                            }
+                        };
                         output = match (output, new_value) {
                             (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
                             (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
@@ -1270,11 +1300,11 @@ impl<T: EvalObject> LocalEnv<T> {
                 self.register_identifier(&var.node, value_value);
                 self.push_scope();
 
-                let body_value = self.eval_expr(eval_history, &body)?;
+                let body_value = self.eval_expr(eval_history, &body);
 
                 self.pop_scope();
 
-                body_value
+                body_value?
             }
         })
     }
@@ -1319,14 +1349,16 @@ impl<T: EvalObject> LocalEnv<T> {
             self.register_identifier(&var.node, elem);
             self.push_scope();
 
-            output.extend(self.build_naked_list_for_list_comprehension(
+            let extension = self.build_naked_list_for_list_comprehension(
                 eval_history,
                 body,
                 remaining_v_and_c,
                 filter,
-            )?);
+            );
 
             self.pop_scope();
+
+            output.extend(extension?);
         }
 
         Ok(output)
@@ -1457,8 +1489,9 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         }
 
         local_env.push_scope();
-        let naked_result = local_env.eval_expr(self, &fn_desc.body)?;
+        let naked_result = local_env.eval_expr(self, &fn_desc.body);
         local_env.pop_scope();
+        let naked_result = naked_result?;
 
         let origin = Origin {
             fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
