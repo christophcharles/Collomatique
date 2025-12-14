@@ -586,7 +586,11 @@ impl ExprType {
     }
 
     pub fn substract(&self, other: &ExprType) -> Option<ExprType> {
-        let variants = self.variants.difference(&other.variants).cloned();
+        let variants = self
+            .variants
+            .iter()
+            .filter(|x| !other.variants.iter().any(|y| x.is_subtype_of(y)))
+            .cloned();
         ExprType::sum(variants)
     }
 }
