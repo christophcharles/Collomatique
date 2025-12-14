@@ -16,6 +16,7 @@ mod if_branches;
 mod let_expr;
 mod list_comprehensions;
 mod literals;
+mod match_branches;
 mod objects;
 mod origins;
 mod quantifiers;
