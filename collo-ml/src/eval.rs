@@ -1007,7 +1007,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     let where_clause_passes = match &branch.filter {
                         None => true,
                         Some(filter_expr) => {
-                            let cond_value = self.eval_expr(eval_history, &filter_expr)?;
+                            let cond_value = match self.eval_expr(eval_history, &filter_expr) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    self.pop_scope();
+                                    return Err(e);
+                                }
+                            };
                             let ExprValue::Bool(cond) = cond_value else {
                                 panic!("Expected Bool for where clause");
                             };
@@ -1021,7 +1027,16 @@ impl<T: EvalObject> LocalEnv<T> {
                         continue;
                     }
 
-                    return self.eval_expr(eval_history, &branch.body);
+                    let output = match self.eval_expr(eval_history, &branch.body) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            self.pop_scope();
+                            return Err(e);
+                        }
+                    };
+
+                    self.pop_scope();
+                    return Ok(output);
                 }
 
                 panic!("Match should be exhaustive during evaluation");
