@@ -23,11 +23,10 @@ fn parse_simple_match_with_one_type_branch() {
                 assert_eq!(branches.len(), 1);
 
                 // First branch: Int { 10 }
-                assert!(branches[0].pattern.is_some());
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert_eq!(pattern.typ.node.types.len(), 1);
-                assert!(pattern.into_typ.is_none());
-                assert!(pattern.filter.is_none());
+                assert!(branches[0].as_typ.is_some());
+                assert_eq!(branches[0].as_typ.as_ref().unwrap().node.types.len(), 1);
+                assert!(branches[0].into_typ.is_none());
+                assert!(branches[0].filter.is_none());
                 assert!(matches!(branches[0].body.node, Expr::Number(10)));
             }
             _ => panic!("Expected Match expression"),
@@ -48,11 +47,11 @@ fn parse_match_with_else_branch() {
                 assert_eq!(branches.len(), 2);
 
                 // First branch: Int { 1 }
-                assert!(branches[0].pattern.is_some());
+                assert!(branches[0].as_typ.is_some());
                 assert!(matches!(branches[0].body.node, Expr::Number(1)));
 
-                // Second branch: else { 0 }
-                assert!(branches[1].pattern.is_none()); // else has no pattern
+                // Second branch: else { 0 } - in new grammar this would be: x { 0 } with no as_typ
+                assert!(branches[1].as_typ.is_none());
                 assert!(matches!(branches[1].body.node, Expr::Number(0)));
             }
             _ => panic!("Expected Match expression"),
@@ -72,14 +71,13 @@ fn parse_match_with_into_conversion() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(pattern.into_typ.is_some());
+                assert!(branches[0].into_typ.is_some());
 
                 // Check the "into" type is Bool
-                let into_typ = pattern.into_typ.as_ref().unwrap();
+                let into_typ = branches[0].into_typ.as_ref().unwrap();
                 assert_eq!(into_typ.node.types.len(), 1);
 
-                assert!(pattern.filter.is_none());
+                assert!(branches[0].filter.is_none());
                 assert!(matches!(branches[0].body.node, Expr::Boolean(true)));
             }
             _ => panic!("Expected Match expression"),
@@ -99,12 +97,11 @@ fn parse_match_with_where_filter() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(pattern.into_typ.is_none());
-                assert!(pattern.filter.is_some());
+                assert!(branches[0].into_typ.is_none());
+                assert!(branches[0].filter.is_some());
 
                 // Check the filter is a comparison
-                let filter = pattern.filter.as_ref().unwrap();
+                let filter = branches[0].filter.as_ref().unwrap();
                 assert!(matches!(filter.node, Expr::Gt(_, _)));
 
                 assert!(matches!(branches[0].body.node, Expr::Number(10)));
@@ -126,15 +123,13 @@ fn parse_match_with_into_and_where() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-
                 // Check both into and where are present
-                assert!(pattern.into_typ.is_some());
-                assert!(pattern.filter.is_some());
+                assert!(branches[0].into_typ.is_some());
+                assert!(branches[0].filter.is_some());
 
                 // Verify the filter is a comparison
                 assert!(matches!(
-                    pattern.filter.as_ref().unwrap().node,
+                    branches[0].filter.as_ref().unwrap().node,
                     Expr::Gt(_, _)
                 ));
 
@@ -157,10 +152,10 @@ fn parse_match_with_multiple_type_branches() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 3);
 
-                // All branches should have patterns
-                assert!(branches[0].pattern.is_some());
-                assert!(branches[1].pattern.is_some());
-                assert!(branches[2].pattern.is_some());
+                // All branches should have as_typ
+                assert!(branches[0].as_typ.is_some());
+                assert!(branches[1].as_typ.is_some());
+                assert!(branches[2].as_typ.is_some());
 
                 // Check bodies
                 assert!(matches!(branches[0].body.node, Expr::Number(1)));
@@ -184,9 +179,8 @@ fn parse_match_with_union_type_pattern() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
                 // Union type should have 2 types
-                assert_eq!(pattern.typ.node.types.len(), 2);
+                assert_eq!(branches[0].as_typ.as_ref().unwrap().node.types.len(), 2);
             }
             _ => panic!("Expected Match expression"),
         },
@@ -205,9 +199,13 @@ fn parse_match_with_maybe_type() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 2);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
                 // Check it's a maybe type
-                assert_eq!(pattern.typ.node.types[0].node.maybe_count, 1);
+                assert_eq!(
+                    branches[0].as_typ.as_ref().unwrap().node.types[0]
+                        .node
+                        .maybe_count,
+                    1
+                );
             }
             _ => panic!("Expected Match expression"),
         },
@@ -226,9 +224,11 @@ fn parse_match_with_list_type() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
                 // Check it's a list type
-                match &pattern.typ.node.types[0].node.inner {
+                match &branches[0].as_typ.as_ref().unwrap().node.types[0]
+                    .node
+                    .inner
+                {
                     SimpleTypeName::List(_) => {} // Success
                     _ => panic!("Expected list type"),
                 }
@@ -368,8 +368,8 @@ fn parse_nested_match_expressions() {
                         ..
                     } => {
                         assert_eq!(inner_branches.len(), 2);
-                        assert!(inner_branches[0].pattern.is_some());
-                        assert!(inner_branches[1].pattern.is_none()); // else
+                        assert!(inner_branches[0].as_typ.is_some());
+                        assert!(inner_branches[1].as_typ.is_none()); // catch-all
                     }
                     _ => panic!("Expected nested Match in body"),
                 }
@@ -464,11 +464,10 @@ fn parse_match_with_cardinality_in_filter() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(pattern.filter.is_some());
+                assert!(branches[0].filter.is_some());
 
                 // Filter should contain a cardinality check
-                match &pattern.filter.as_ref().unwrap().node {
+                match &branches[0].filter.as_ref().unwrap().node {
                     Expr::Gt(left, _) => {
                         assert!(matches!(left.node, Expr::Cardinality(_)));
                     }
@@ -492,12 +491,11 @@ fn parse_match_with_boolean_filter() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(pattern.filter.is_some());
+                assert!(branches[0].filter.is_some());
 
                 // Filter should be an And expression
                 assert!(matches!(
-                    pattern.filter.as_ref().unwrap().node,
+                    branches[0].filter.as_ref().unwrap().node,
                     Expr::And(_, _)
                 ));
             }
@@ -518,11 +516,10 @@ fn parse_match_with_path_in_filter() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                let pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(pattern.filter.is_some());
+                assert!(branches[0].filter.is_some());
 
                 // Filter should be a comparison with a path
-                match &pattern.filter.as_ref().unwrap().node {
+                match &branches[0].filter.as_ref().unwrap().node {
                     Expr::Gt(left, _) => {
                         assert!(matches!(left.node, Expr::Path { .. }));
                     }
@@ -546,8 +543,8 @@ fn parse_match_only_else_branch() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                // Should be an else branch (no pattern)
-                assert!(branches[0].pattern.is_none());
+                // Should be a catch-all branch (no as_typ)
+                assert!(branches[0].as_typ.is_none());
                 assert!(matches!(branches[0].body.node, Expr::Number(42)));
             }
             _ => panic!("Expected Match expression"),
@@ -567,15 +564,15 @@ fn parse_match_multiple_conditions_same_type() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 3);
 
-                // First two branches have patterns and filters
-                assert!(branches[0].pattern.is_some());
-                assert!(branches[0].pattern.as_ref().unwrap().filter.is_some());
+                // First two branches have as_typ and filters
+                assert!(branches[0].as_typ.is_some());
+                assert!(branches[0].filter.is_some());
 
-                assert!(branches[1].pattern.is_some());
-                assert!(branches[1].pattern.as_ref().unwrap().filter.is_some());
+                assert!(branches[1].as_typ.is_some());
+                assert!(branches[1].filter.is_some());
 
-                // Last branch is else
-                assert!(branches[2].pattern.is_none());
+                // Last branch is catch-all (no as_typ)
+                assert!(branches[2].as_typ.is_none());
             }
             _ => panic!("Expected Match expression"),
         },
@@ -600,18 +597,17 @@ fn parse_complex_match_real_world() {
                 assert_eq!(branches.len(), 3);
 
                 // First branch: Int with into and where
-                let first_pattern = branches[0].pattern.as_ref().unwrap();
-                assert!(first_pattern.into_typ.is_some());
-                assert!(first_pattern.filter.is_some());
+                assert!(branches[0].into_typ.is_some());
+                assert!(branches[0].filter.is_some());
 
                 // Second branch: Bool
-                assert!(branches[1].pattern.is_some());
-                assert!(branches[1].pattern.as_ref().unwrap().into_typ.is_none());
-                assert!(branches[1].pattern.as_ref().unwrap().filter.is_none());
+                assert!(branches[1].as_typ.is_some());
+                assert!(branches[1].into_typ.is_none());
+                assert!(branches[1].filter.is_none());
                 assert!(matches!(branches[1].body.node, Expr::If { .. }));
 
-                // Third branch: else
-                assert!(branches[2].pattern.is_none());
+                // Third branch: catch-all
+                assert!(branches[2].as_typ.is_none());
             }
             _ => panic!("Expected Match expression"),
         },
