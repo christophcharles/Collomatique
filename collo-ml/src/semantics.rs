@@ -1087,7 +1087,7 @@ impl LocalEnv {
         span: Span,
         typ: ExprType,
         type_info: &mut TypeInfo,
-        warnings: &mut Vec<SemWarning>,
+        warnings_opt: Option<&mut Vec<SemWarning>>,
     ) -> Result<(), SemError> {
         if let Some((_, old_ident_span, _)) = self.pending_scope.get(ident) {
             return Err(SemError::LocalIdentAlreadyDeclared {
@@ -1098,11 +1098,13 @@ impl LocalEnv {
         }
 
         if let Some((_typ, old_span)) = self.lookup_ident(ident) {
-            warnings.push(SemWarning::IdentifierShadowed {
-                identifier: ident.to_string(),
-                span: span.clone(),
-                previous: old_span,
-            });
+            if let Some(warnings) = warnings_opt {
+                warnings.push(SemWarning::IdentifierShadowed {
+                    identifier: ident.to_string(),
+                    span: span.clone(),
+                    previous: old_span,
+                });
+            }
         }
 
         self.pending_scope.insert(
@@ -1959,7 +1961,7 @@ impl LocalEnv {
                             var.span.clone(),
                             elem_t,
                             type_info,
-                            warnings,
+                            Some(warnings),
                         ) {
                             errors.push(e);
                             return None;
@@ -2078,7 +2080,7 @@ impl LocalEnv {
                             var.span.clone(),
                             elem_t,
                             type_info,
-                            warnings,
+                            Some(warnings),
                         ) {
                             errors.push(e);
                             return None;
@@ -2234,7 +2236,7 @@ impl LocalEnv {
                         var.span.clone(),
                         elem_t.clone(),
                         type_info,
-                        warnings,
+                        Some(warnings),
                     ) {
                         errors.push(e);
                     }
@@ -2245,7 +2247,7 @@ impl LocalEnv {
                         accumulator.span.clone(),
                         current_acc_type.clone(),
                         type_info,
-                        warnings,
+                        Some(warnings),
                     ) {
                         errors.push(e);
                     }
@@ -2674,7 +2676,7 @@ impl LocalEnv {
                                 var.span.clone(),
                                 elem_t,
                                 type_info,
-                                warnings,
+                                Some(warnings),
                             ) {
                                 errors.push(e);
                                 typ_error = true;
@@ -2800,7 +2802,7 @@ impl LocalEnv {
                             var.span.clone(),
                             typ,
                             type_info,
-                            warnings,
+                            Some(warnings),
                         ) {
                             errors.push(e);
                             return None;
@@ -3136,7 +3138,7 @@ impl GlobalEnv {
                                     param.name.span.clone(),
                                     param_typ,
                                     type_info,
-                                    warnings,
+                                    Some(warnings),
                                 ) {
                                     errors.push(e);
                                 }
