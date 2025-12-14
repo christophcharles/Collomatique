@@ -2,6 +2,9 @@ use super::SemError;
 
 use std::{collections::BTreeSet, ops::Deref};
 
+#[cfg(test)]
+mod tests;
+
 /// Represents a type that appears in a sum type
 ///
 /// These can be primitive types (Int, Bool, LinExpr, etc)
