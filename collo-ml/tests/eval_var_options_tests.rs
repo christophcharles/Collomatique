@@ -373,7 +373,7 @@ fn test_student_with_optional_mentor_vars_generation() {
     let env = TestEnv::simple_env();
     let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
 
-    // StudentWithMentor: 3 students × (None + 3 mentors) = 3 × 4 = 12 vars
+    // StudentWithMentor: 3 students x (None + 3 mentors) = 3 x 4 = 12 vars
     let mentor_vars: Vec<_> = vars
         .keys()
         .filter(|v| matches!(v, OptionVar::StudentWithMentor { .. }))
@@ -382,7 +382,7 @@ fn test_student_with_optional_mentor_vars_generation() {
     assert_eq!(
         mentor_vars.len(),
         12,
-        "Should have 3 students × 4 mentor options"
+        "Should have 3 students x 4 mentor options"
     );
 
     // Check that each student has None mentor option
@@ -409,13 +409,13 @@ fn test_both_optional_vars_generation() {
     let env = TestEnv::simple_env();
     let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
 
-    // BothOptional: (None + 3 students) × (None + 3 subjects) = 4 × 4 = 16 vars
+    // BothOptional: (None + 3 students) x (None + 3 subjects) = 4 x 4 = 16 vars
     let both_opt_vars: Vec<_> = vars
         .keys()
         .filter(|v| matches!(v, OptionVar::BothOptional(_, _)))
         .collect();
 
-    assert_eq!(both_opt_vars.len(), 16, "Should have 4 × 4 combinations");
+    assert_eq!(both_opt_vars.len(), 16, "Should have 4 x 4 combinations");
 
     // Check None, None
     assert!(both_opt_vars
@@ -444,13 +444,13 @@ fn test_multiple_optionals_vars_generation() {
     let env = TestEnv::simple_env();
     let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
 
-    // MultipleOptionals: 4 students × 4 subjects × 4 weeks = 64 vars
+    // MultipleOptionals: 4 students x 4 subjects x 4 weeks = 64 vars
     let multi_vars: Vec<_> = vars
         .keys()
         .filter(|v| matches!(v, OptionVar::MultipleOptionals { .. }))
         .collect();
 
-    assert_eq!(multi_vars.len(), 64, "Should have 4 × 4 × 4 combinations");
+    assert_eq!(multi_vars.len(), 64, "Should have 4 x 4 x 4 combinations");
 
     // Check all None
     assert!(multi_vars.iter().any(
