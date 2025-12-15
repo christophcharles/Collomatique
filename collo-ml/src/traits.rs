@@ -389,6 +389,8 @@ pub trait EvalObject: UsableData {
 /// of the complete object hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleFieldType {
+    /// A none field
+    None,
     /// An integer field
     Int,
     /// A boolean field
@@ -402,6 +404,7 @@ pub enum SimpleFieldType {
 impl SimpleFieldType {
     pub fn convert_to_simple_type<T: EvalObject>(self) -> Result<SimpleType, FieldConversionError> {
         match self {
+            SimpleFieldType::None => Ok(SimpleType::None),
             SimpleFieldType::Bool => Ok(SimpleType::Bool),
             SimpleFieldType::Int => Ok(SimpleType::Int),
             SimpleFieldType::List(typ) => Ok(SimpleType::List(typ.convert_to_expr_type::<T>()?)),
@@ -415,6 +418,7 @@ impl SimpleFieldType {
 impl std::fmt::Display for SimpleFieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SimpleFieldType::None => write!(f, "None"),
             SimpleFieldType::Bool => write!(f, "Bool"),
             SimpleFieldType::Int => write!(f, "Int"),
             SimpleFieldType::List(typ) => write!(f, "[{}]", typ),
