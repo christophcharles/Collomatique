@@ -225,7 +225,7 @@ fn generate_field_value(
                             return quote! {
                                 ::collo_ml::ExprValue::List(
                                     #field_name.iter().map(|x| #inner).collect(),
-                                )
+                                ),
                             };
                         }
                     }
@@ -255,10 +255,10 @@ fn generate_field_value(
                                 inner_ty,
                             );
                             return quote! {
-                                match #field_name {
-                                    Some(x) => #inner,
+                                match #field_name.clone() {
+                                    Some(x) => #inner
                                     None => ::collo_ml::ExprValue::None,
-                                }
+                                },
                             };
                         }
                     }
