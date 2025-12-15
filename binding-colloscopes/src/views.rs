@@ -97,6 +97,7 @@ pub struct Subject {
 pub struct SubjectPeriod {
     subject: SubjectId,
     period: PeriodId,
+    group_list: Option<GroupListId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -768,10 +769,20 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
         output
     }
 
-    fn build(_env: &Env, id: &SubjectPeriodData) -> Option<Self::Object> {
+    fn build(env: &Env, id: &SubjectPeriodData) -> Option<Self::Object> {
+        let group_list_id = env
+            .data
+            .get_inner_data()
+            .params
+            .group_lists
+            .subjects_associations
+            .get(&id.period)
+            .expect("Period ID should be valid")
+            .get(&id.subject);
         Some(SubjectPeriod {
             subject: id.subject,
             period: id.period,
+            group_list: group_list_id.cloned(),
         })
     }
 }
