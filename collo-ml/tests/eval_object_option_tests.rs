@@ -23,9 +23,9 @@ struct CourseData {
 }
 
 struct ProjectData {
-    leader_id: Option<usize>,          // Optional leader
-    members: Vec<Option<usize>>,       // List with optional elements
-    team_ids: Option<Vec<usize>>,      // Optional list
+    leader_id: Option<usize>,     // Optional leader
+    members: Vec<Option<usize>>,  // List with optional elements
+    team_ids: Option<Vec<usize>>, // Optional list
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -72,7 +72,7 @@ struct OptionCourse {
 struct OptionProject {
     leader: Option<StudentId>,
     members: Vec<Option<StudentId>>, // List of optional students
-    teams: Option<Vec<StudentId>>,    // Optional list of students
+    teams: Option<Vec<StudentId>>,   // Optional list of students
 }
 
 // ============================================================================
@@ -122,8 +122,15 @@ impl ViewBuilder<OptionTestEnv, ProjectId> for OptionObjectId {
         let data = env.projects.get(&id.0)?;
         Some(OptionProject {
             leader: data.leader_id.map(StudentId),
-            members: data.members.iter().map(|&opt_id| opt_id.map(StudentId)).collect(),
-            teams: data.team_ids.as_ref().map(|ids| ids.iter().map(|&id| StudentId(id)).collect()),
+            members: data
+                .members
+                .iter()
+                .map(|&opt_id| opt_id.map(StudentId))
+                .collect(),
+            teams: data
+                .team_ids
+                .as_ref()
+                .map(|ids| ids.iter().map(|&id| StudentId(id)).collect()),
         })
     }
 }
@@ -140,7 +147,7 @@ fn test_option_field_schema() {
     // Option<StudentId> should become ?Object("Student")
     // Which is SimpleType::None | SimpleType::Object("Student")
     let mentor_type = student_schema.get("mentor").unwrap();
-    
+
     // Should be a union type containing None and Student
     assert!(mentor_type.contains(&SimpleType::None));
     assert!(mentor_type.contains(&SimpleType::Object("Student".to_string())));
@@ -149,8 +156,20 @@ fn test_option_field_schema() {
 #[test]
 fn test_option_field_access_some() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: Some(2) });
-    students.insert(2, StudentData { age: 25, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: Some(2),
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 25,
+            mentor_id: None,
+        },
+    );
 
     let env = OptionTestEnv {
         students,
@@ -173,7 +192,13 @@ fn test_option_field_access_some() {
 #[test]
 fn test_option_field_access_none() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: None,
+        },
+    );
 
     let env = OptionTestEnv {
         students,
@@ -205,7 +230,13 @@ fn test_multiple_optional_fields() {
     );
 
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 30, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 30,
+            mentor_id: None,
+        },
+    );
 
     let env = OptionTestEnv {
         students,
@@ -215,7 +246,7 @@ fn test_multiple_optional_fields() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let course = OptionObjectId::Course(CourseId(100));
-    
+
     // Check instructor (Some)
     let instructor_field = course.field_access(&env, &mut cache, "instructor");
     if let Some(ExprValue::Object(OptionObjectId::Student(StudentId(id)))) = instructor_field {
@@ -245,10 +276,12 @@ fn test_list_of_options_schema() {
     // Vec<Option<StudentId>> should become [?Student]
     // Which is List(None | Object("Student"))
     let members_type = project_schema.get("members").unwrap();
-    
+
     // Should be a List
-    let inner_type = members_type.get_inner_list_type().expect("Should be a list");
-    
+    let inner_type = members_type
+        .get_inner_list_type()
+        .expect("Should be a list");
+
     // Inner type should be None | Student
     assert!(inner_type.contains(&SimpleType::None));
     assert!(inner_type.contains(&SimpleType::Object("Student".to_string())));
@@ -257,8 +290,20 @@ fn test_list_of_options_schema() {
 #[test]
 fn test_list_of_options_field_access_mixed() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: None });
-    students.insert(2, StudentData { age: 22, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 22,
+            mentor_id: None,
+        },
+    );
 
     let mut projects = HashMap::new();
     projects.insert(
@@ -283,16 +328,16 @@ fn test_list_of_options_field_access_mixed() {
     // Should be a List with 3 elements: Some, None, Some
     if let Some(ExprValue::List(values)) = members_field {
         assert_eq!(values.len(), 3);
-        
+
         // First element: Some(Student(1))
         assert!(matches!(
             values[0],
             ExprValue::Object(OptionObjectId::Student(StudentId(1)))
         ));
-        
+
         // Second element: None
         assert!(matches!(values[1], ExprValue::None));
-        
+
         // Third element: Some(Student(2))
         assert!(matches!(
             values[2],
@@ -337,9 +382,27 @@ fn test_list_of_options_all_none() {
 #[test]
 fn test_list_of_options_all_some() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: None });
-    students.insert(2, StudentData { age: 22, mentor_id: None });
-    students.insert(3, StudentData { age: 24, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 22,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        3,
+        StudentData {
+            age: 24,
+            mentor_id: None,
+        },
+    );
 
     let mut projects = HashMap::new();
     projects.insert(
@@ -414,24 +477,26 @@ fn test_option_of_primitives_schema() {
     }
 
     let schema = StudentWithOptionalGrade::field_schema();
-    
+
     // Option<i32> should be ?Int (None | Int)
     let grade_type = schema.get("grade").unwrap();
-    assert!(matches!(
-        grade_type,
-        collo_ml::traits::FieldType::Simple(
-            collo_ml::traits::SimpleFieldType::Union(_)
-        )
-    ));
-    
+    assert_eq!(grade_type.get_variants().len(), 2);
+    assert!(grade_type
+        .get_variants()
+        .contains(&collo_ml::traits::SimpleFieldType::None));
+    assert!(grade_type
+        .get_variants()
+        .contains(&collo_ml::traits::SimpleFieldType::Int));
+
     // Option<bool> should be ?Bool (None | Bool)
     let passing_type = schema.get("passing").unwrap();
-    assert!(matches!(
-        passing_type,
-        collo_ml::traits::FieldType::Simple(
-            collo_ml::traits::SimpleFieldType::Union(_)
-        )
-    ));
+    assert_eq!(passing_type.get_variants().len(), 2);
+    assert!(passing_type
+        .get_variants()
+        .contains(&collo_ml::traits::SimpleFieldType::None));
+    assert!(passing_type
+        .get_variants()
+        .contains(&collo_ml::traits::SimpleFieldType::Bool));
 }
 
 #[test]
@@ -443,14 +508,14 @@ fn test_list_of_optional_primitives() {
     }
 
     let schema = GradeSheet::field_schema();
-    
+
     // Vec<Option<i32>> should be [?Int]
     let grades_type = schema.get("grades").unwrap();
+    assert_eq!(grades_type.get_variants().len(), 1);
+    let variant = grades_type.get_variants().iter().next().unwrap();
     assert!(matches!(
-        grades_type,
-        collo_ml::traits::FieldType::Simple(
-            collo_ml::traits::SimpleFieldType::List(_)
-        )
+        variant,
+        collo_ml::traits::SimpleFieldType::List(_)
     ));
 }
 
@@ -466,10 +531,10 @@ fn test_option_of_vec_schema() {
     // Option<Vec<StudentId>> should become ?[Student]
     // Which is None | List(Object("Student"))
     let teams_type = project_schema.get("teams").unwrap();
-    
+
     // Should contain None
     assert!(teams_type.contains(&SimpleType::None));
-    
+
     // Should contain List(Student)
     assert!(teams_type.contains(&SimpleType::List(
         SimpleType::Object("Student".to_string()).into()
@@ -479,9 +544,27 @@ fn test_option_of_vec_schema() {
 #[test]
 fn test_option_of_vec_field_access_some() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: None });
-    students.insert(2, StudentData { age: 22, mentor_id: None });
-    students.insert(3, StudentData { age: 24, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 22,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        3,
+        StudentData {
+            age: 24,
+            mentor_id: None,
+        },
+    );
 
     let mut projects = HashMap::new();
     projects.insert(
@@ -592,23 +675,42 @@ fn test_option_of_vec_of_primitives() {
     }
 
     let schema = TestScores::field_schema();
-    
+
     // Option<Vec<i32>> should be ?[Int]
     let scores_type = schema.get("scores").unwrap();
-    assert!(matches!(
-        scores_type,
-        collo_ml::traits::FieldType::Simple(
-            collo_ml::traits::SimpleFieldType::Union(_)
-        )
-    ));
+    assert_eq!(scores_type.get_variants().len(), 2);
+    for variant in scores_type.get_variants() {
+        assert!(matches!(
+            variant,
+            collo_ml::traits::SimpleFieldType::None | collo_ml::traits::SimpleFieldType::List(_)
+        ));
+    }
 }
 
 #[test]
 fn test_combined_optional_patterns() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: None });
-    students.insert(2, StudentData { age: 22, mentor_id: None });
-    students.insert(3, StudentData { age: 24, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 22,
+            mentor_id: None,
+        },
+    );
+    students.insert(
+        3,
+        StudentData {
+            age: 24,
+            mentor_id: None,
+        },
+    );
 
     let mut projects = HashMap::new();
     projects.insert(
@@ -628,14 +730,14 @@ fn test_combined_optional_patterns() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    
+
     // Check leader (Option<T>)
     let leader = project.field_access(&env, &mut cache, "leader");
     assert!(matches!(
         leader,
         Some(ExprValue::Object(OptionObjectId::Student(StudentId(1))))
     ));
-    
+
     // Check members (Vec<Option<T>>)
     let members = project.field_access(&env, &mut cache, "members");
     if let Some(ExprValue::List(values)) = members {
@@ -646,7 +748,7 @@ fn test_combined_optional_patterns() {
     } else {
         panic!("Expected List for members");
     }
-    
+
     // Check teams (Option<Vec<T>>)
     let teams = project.field_access(&env, &mut cache, "teams");
     if let Some(ExprValue::List(values)) = teams {
@@ -665,7 +767,13 @@ fn test_combined_optional_patterns() {
 fn test_option_field_with_nonexistent_reference() {
     // Student references mentor ID that doesn't exist
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: Some(999) }); // ID 999 doesn't exist
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: Some(999),
+        },
+    ); // ID 999 doesn't exist
 
     let env = OptionTestEnv {
         students,
@@ -686,8 +794,20 @@ fn test_option_field_with_nonexistent_reference() {
 #[test]
 fn test_option_in_multiple_objects() {
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: Some(2) });
-    students.insert(2, StudentData { age: 25, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: Some(2),
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 25,
+            mentor_id: None,
+        },
+    );
 
     let mut courses = HashMap::new();
     courses.insert(
@@ -719,7 +839,7 @@ fn test_option_in_multiple_objects() {
     let course = OptionObjectId::Course(CourseId(100));
     let instructor = course.field_access(&env, &mut cache, "instructor");
     assert!(matches!(instructor, Some(ExprValue::Object(_))));
-    
+
     let ta = course.field_access(&env, &mut cache, "ta");
     assert!(matches!(ta, Some(ExprValue::Object(_))));
 }
@@ -728,7 +848,13 @@ fn test_option_in_multiple_objects() {
 fn test_option_self_reference() {
     // Student can be their own mentor (self-reference)
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: Some(1) }); // Self-reference
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: Some(1),
+        },
+    ); // Self-reference
 
     let env = OptionTestEnv {
         students,
@@ -752,9 +878,27 @@ fn test_option_self_reference() {
 fn test_option_chain() {
     // Student 1 -> mentor is Student 2 -> mentor is Student 3 -> mentor is None
     let mut students = HashMap::new();
-    students.insert(1, StudentData { age: 20, mentor_id: Some(2) });
-    students.insert(2, StudentData { age: 25, mentor_id: Some(3) });
-    students.insert(3, StudentData { age: 30, mentor_id: None });
+    students.insert(
+        1,
+        StudentData {
+            age: 20,
+            mentor_id: Some(2),
+        },
+    );
+    students.insert(
+        2,
+        StudentData {
+            age: 25,
+            mentor_id: Some(3),
+        },
+    );
+    students.insert(
+        3,
+        StudentData {
+            age: 30,
+            mentor_id: None,
+        },
+    );
 
     let env = OptionTestEnv {
         students,
