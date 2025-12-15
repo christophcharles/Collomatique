@@ -17,6 +17,9 @@ pub const ONE_INTERROGATION_AT_ONCE: &'static str =
 
 pub const LIMITS: &'static str = include_str!("constraints/limits.collo-ml");
 
+pub const STUDENTS_PER_GROUP_FOR_SUBJECT: &'static str =
+    include_str!("constraints/students_per_group_for_subject.collo-ml");
+
 pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
     (
         "group_count_per_interrogation",
@@ -31,4 +34,8 @@ pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
     ("sealed_groups", SEALED_GROUPS),
     ("one_interrogation_at_once", ONE_INTERROGATION_AT_ONCE),
     ("limits", LIMITS),
+    (
+        "students_per_group_for_subject",
+        STUDENTS_PER_GROUP_FOR_SUBJECT,
+    ),
 ];

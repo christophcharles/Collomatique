@@ -90,6 +90,8 @@ pub struct Subject {
     has_interrogations: bool,
     duration: i32,
     periods_data: Vec<SubjectPeriodData>,
+    min_student_per_group: i32,
+    max_student_per_group: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -98,6 +100,7 @@ pub struct SubjectPeriod {
     subject: SubjectId,
     period: PeriodId,
     group_list: Option<GroupListId>,
+    students: Vec<StudentId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -434,10 +437,14 @@ impl ViewBuilder<Env, SubjectId> for ObjectId {
                 duration: params.duration.get().get() as i32,
                 has_interrogations: true,
                 periods_data,
+                min_student_per_group: params.students_per_group.start().get() as i32,
+                max_student_per_group: params.students_per_group.end().get() as i32,
             },
             None => Subject {
                 max_group_per_interrogation: 0,
                 min_group_per_interrogation: 0,
+                min_student_per_group: 0,
+                max_student_per_group: 0,
                 take_into_account: false,
                 duration: 60,
                 has_interrogations: false,
@@ -779,10 +786,25 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
             .get(&id.period)
             .expect("Period ID should be valid")
             .get(&id.subject);
+        let subject_assignments = env
+            .data
+            .get_inner_data()
+            .params
+            .assignments
+            .period_map
+            .get(&id.period)
+            .expect("Period ID should be valid")
+            .subject_map
+            .get(&id.subject);
+        let students = match subject_assignments {
+            Some(assignments) => assignments.iter().cloned().collect(),
+            None => vec![],
+        };
         Some(SubjectPeriod {
             subject: id.subject,
             period: id.period,
             group_list: group_list_id.cloned(),
+            students,
         })
     }
 }
