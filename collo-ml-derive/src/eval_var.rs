@@ -1,7 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, Lit, Meta, Type, Variant,
+    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta,
+    PathArguments, Type, Variant,
 };
 
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -63,6 +64,35 @@ struct FieldInfo {
     name: Option<syn::Ident>, // Field name if named struct
     ty: Type,                 // Field type
     range: Option<syn::Expr>, // Optional range for i32 fields
+}
+
+/// Check if a type is Option<T> and return the inner type T
+fn unwrap_option_type(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        let segment = type_path.path.segments.last()?;
+        if segment.ident == "Option" {
+            if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                    return Some(inner_ty);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if type is Option<Option<T>> (nested options - not allowed)
+fn is_nested_option(ty: &Type) -> bool {
+    if let Some(inner) = unwrap_option_type(ty) {
+        unwrap_option_type(inner).is_some()
+    } else {
+        false
+    }
+}
+
+/// Get the core type, unwrapping Option if present
+fn get_core_type(ty: &Type) -> &Type {
+    unwrap_option_type(ty).unwrap_or(ty)
 }
 
 // Helper function to extract #[env(Type)]
@@ -182,6 +212,15 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
             .map(|f| {
                 let name = f.ident.clone();
                 let ty = f.ty.clone();
+
+                // Check for nested options
+                if is_nested_option(&ty) {
+                    panic!(
+                        "Nested Option<Option<T>> is not supported in variant {} field {:?}",
+                        variant_name, name
+                    );
+                }
+
                 let range = extract_range_attribute(&f.attrs);
                 FieldInfo { name, ty, range }
             })
@@ -189,8 +228,18 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
         Fields::Unnamed(fields) => fields
             .unnamed
             .iter()
-            .map(|f| {
+            .enumerate()
+            .map(|(idx, f)| {
                 let ty = f.ty.clone();
+
+                // Check for nested options
+                if is_nested_option(&ty) {
+                    panic!(
+                        "Nested Option<Option<T>> is not supported in variant {} field {}",
+                        variant_name, idx
+                    );
+                }
+
                 let range = extract_range_attribute(&f.attrs);
                 FieldInfo {
                     name: None,
@@ -253,11 +302,13 @@ fn generate_eval_var_impl(
     let mut object_types = std::collections::HashSet::new();
     for variant in variants {
         for field in &variant.fields {
-            if let Type::Path(type_path) = &field.ty {
+            let core_ty = get_core_type(&field.ty); // unwrap Option if present
+            if let Type::Path(type_path) = core_ty {
+                // check core_ty
                 let segment = type_path.path.segments.last().unwrap();
                 let type_name = segment.ident.to_string();
                 if type_name != "i32" && type_name != "bool" {
-                    object_types.insert(field.ty.clone());
+                    object_types.insert(core_ty.clone()); // insert core type
                 }
             }
         }
@@ -354,6 +405,24 @@ fn generate_eval_var_impl(
 }
 
 fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
+    // Check if it's Option<T>
+    if let Some(inner_ty) = unwrap_option_type(ty) {
+        // For Option<T>, we need to generate: FieldType::sum(vec![SimpleFieldType::None, <inner type>])
+        let inner_type_expr = generate_field_type_expr_core(inner_ty);
+
+        return quote! {
+            ::collo_ml::traits::FieldType::sum(vec![
+                ::collo_ml::traits::SimpleFieldType::None,
+                #inner_type_expr
+            ]).expect("Should have at least one variant")
+        };
+    }
+
+    // Not an Option, generate as before
+    generate_field_type_expr_core(ty)
+}
+
+fn generate_field_type_expr_core(ty: &Type) -> proc_macro2::TokenStream {
     match ty {
         Type::Path(type_path) => {
             let segment = type_path.path.segments.last().unwrap();
@@ -363,6 +432,7 @@ fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
                 "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
                 "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
                 "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
+                "Option" => panic!("Should not reach here - Option should be handled by caller"),
                 _ => {
                     // It's an object type - use TypeId
                     quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into() }
@@ -492,7 +562,29 @@ fn generate_field_loop(
     var_name: &syn::Ident,
     range: &Option<syn::Expr>,
 ) -> proc_macro2::TokenStream {
-    match ty {
+    let iterator_expr = generate_field_iterator(ty, range);
+
+    // Check if it's Option<T>
+    if let Some(_inner_ty) = unwrap_option_type(ty) {
+        // For Option, chain None with Some(inner values)
+        quote! {
+            for #var_name in ::std::iter::once(None).chain(
+                (#iterator_expr).map(Some)
+            )
+        }
+    } else {
+        // For non-Option, just iterate normally
+        quote! {
+            for #var_name in #iterator_expr
+        }
+    }
+}
+
+fn generate_field_iterator(ty: &Type, range: &Option<syn::Expr>) -> proc_macro2::TokenStream {
+    // Get the core type (unwrap Option if present)
+    let core_ty = get_core_type(ty);
+
+    match core_ty {
         Type::Path(type_path) => {
             let segment = type_path.path.segments.last().unwrap();
             let type_name = segment.ident.to_string();
@@ -500,9 +592,7 @@ fn generate_field_loop(
             match type_name.as_str() {
                 "i32" => {
                     if let Some(range_expr) = range {
-                        quote! {
-                            for #var_name in #range_expr
-                        }
+                        quote! { #range_expr }
                     } else {
                         panic!("i32 fields must have a #[range(...)] attribute");
                     }
@@ -511,24 +601,24 @@ fn generate_field_loop(
                     if range.is_some() {
                         panic!("#[range(...)] attribute is not supported for bool type");
                     }
-                    quote! {
-                        for #var_name in [false, true]
-                    }
+                    quote! { [false, true] }
+                }
+                "Option" => {
+                    panic!("Should not reach here - Option should be handled by caller")
                 }
                 _ => {
                     if range.is_some() {
                         panic!("#[range(...)] attribute is not supported for object types");
                     }
                     // It's an object type
-                    // Get the type name from TypeId, then get all objects of that type
                     quote! {
-                        for #var_name in {
-                            let type_id = ::std::any::TypeId::of::<#ty>();
+                        {
+                            let type_id = ::std::any::TypeId::of::<#core_ty>();
                             let type_name = __T::type_id_to_name(type_id.clone())
                                 .map_err(|_| type_id)?;
                             __T::objects_with_typ(env, &type_name)
                                 .into_iter()
-                                .map(|obj| <#ty>::try_from(obj).expect("Consistent TryFrom implementation with type_id_to_name"))
+                                .map(|obj| <#core_ty>::try_from(obj).expect("Consistent TryFrom implementation with type_id_to_name"))
                         }
                     }
                 }
@@ -594,18 +684,34 @@ fn generate_fix_pattern_and_checks_and_output(
                     None => syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site()),
                 };
 
-                // Generate range check for i32 fields
-                if let Type::Path(type_path) = &field.ty {
+                // Generate range check for i32 fields (including Option<i32>)
+                let core_ty = get_core_type(&field.ty);
+                let is_option = unwrap_option_type(&field.ty).is_some();
+
+                if let Type::Path(type_path) = core_ty {
                     let segment = type_path.path.segments.last().unwrap();
                     let type_name = segment.ident.to_string();
 
                     if type_name == "i32" {
                         if let Some(range_expr) = &field.range {
-                            checks.push(quote! {
-                                if !(#range_expr).contains(#var_name) {
-                                    return Some(#fix_with);
+                            let check = if is_option {
+                                // For Option<i32>, check if Some and in range
+                                quote! {
+                                    if let Some(val) = #var_name {
+                                        if !(#range_expr).contains(&val) {
+                                            return Some(#fix_with);
+                                        }
+                                    }
                                 }
-                            });
+                            } else {
+                                // For i32, check if in range
+                                quote! {
+                                    if !(#range_expr).contains(#var_name) {
+                                        return Some(#fix_with);
+                                    }
+                                }
+                            };
+                            checks.push(check);
                         }
                     }
                 }
@@ -652,11 +758,12 @@ fn generate_try_from_impl(
     let mut object_types = std::collections::HashSet::new();
     for variant in variants {
         for field in &variant.fields {
-            if let Type::Path(type_path) = &field.ty {
+            let core_ty = get_core_type(&field.ty); // Unwrap Option if present
+            if let Type::Path(type_path) = core_ty {
                 let segment = type_path.path.segments.last().unwrap();
                 let type_name = segment.ident.to_string();
                 if type_name != "i32" && type_name != "bool" {
-                    object_types.insert(field.ty.clone());
+                    object_types.insert(core_ty.clone()); // Insert core type
                 }
             }
         }
@@ -733,16 +840,31 @@ fn generate_param_extraction(
     param_name: &syn::Ident,
     dsl_name: &str,
 ) -> proc_macro2::TokenStream {
-    match ty {
+    let is_option = unwrap_option_type(ty).is_some();
+    let core_ty = get_core_type(ty);
+
+    let none_arm = if is_option {
+        quote! { ::collo_ml::ExprValue::None => None, }
+    } else {
+        quote! {}
+    };
+
+    match core_ty {
         Type::Path(type_path) => {
             let segment = type_path.path.segments.last().unwrap();
             let type_name = segment.ident.to_string();
 
             match type_name.as_str() {
                 "i32" => {
+                    let opt_output = if is_option {
+                        quote! { Some(*i) }
+                    } else {
+                        quote! { *i }
+                    };
                     quote! {
                         let #param_name = match &value.params[#idx] {
-                            ::collo_ml::ExprValue::Int(i) => *i,
+                            #none_arm
+                            ::collo_ml::ExprValue::Int(i) => #opt_output,
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
@@ -754,9 +876,15 @@ fn generate_param_extraction(
                     }
                 }
                 "bool" => {
+                    let opt_output = if is_option {
+                        quote! { Some(*b) }
+                    } else {
+                        quote! { *b }
+                    };
                     quote! {
                         let #param_name = match &value.params[#idx] {
-                            ::collo_ml::ExprValue::Bool(b) => *b,
+                            #none_arm
+                            ::collo_ml::ExprValue::Bool(b) => #opt_output,
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
@@ -767,23 +895,35 @@ fn generate_param_extraction(
                         };
                     }
                 }
+                "Option" => {
+                    panic!("Should not reach here - Option should be handled by caller")
+                }
                 _ => {
-                    // It's an object type - use the where clause constraint
+                    // It's an object type
+                    let output = quote! {
+                        <#core_ty>::try_from(obj.clone())
+                            .map_err(|_| ::collo_ml::traits::VarConversionError::WrongParameterType {
+                                name: #dsl_name.into(),
+                                param: #idx,
+                                expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
+                            })?
+                    };
+                    let opt_output = if is_option {
+                        quote! { Some(#output) }
+                    } else {
+                        quote! { #output }
+                    };
                     quote! {
                         let #param_name = match &value.params[#idx] {
+                            #none_arm
                             ::collo_ml::ExprValue::Object(obj) => {
-                                <#ty>::try_from(obj.clone())
-                                    .map_err(|_| ::collo_ml::traits::VarConversionError::WrongParameterType {
-                                        name: #dsl_name.into(),
-                                        param: #idx,
-                                        expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into(),
-                                    })?
+                                #opt_output
                             }
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into(),
+                                    expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
                                 })
                             }
                         };
