@@ -1788,7 +1788,7 @@ impl LocalEnv {
                     return None;
                 };
 
-                let mut output = None;
+                let mut output = Option::<ExprType>::None;
                 let mut current_type = Some(expr_type);
 
                 for branch in branches {
@@ -1937,7 +1937,10 @@ impl LocalEnv {
 
                         // Update output type
                         if let Some(typ) = body_typ {
-                            output = output.map(|x: ExprType| x.unify_with(&typ));
+                            output = Some(match output {
+                                Some(x) => x.unify_with(&typ),
+                                None => typ,
+                            });
                         }
 
                         // Update remaining type
