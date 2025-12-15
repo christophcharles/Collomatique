@@ -698,7 +698,7 @@ fn generate_fix_pattern_and_checks_and_output(
                                 // For Option<i32>, check if Some and in range
                                 quote! {
                                     if let Some(val) = #var_name {
-                                        if !(#range_expr).contains(&val) {
+                                        if !(#range_expr).contains(val) {
                                             return Some(#fix_with);
                                         }
                                     }
