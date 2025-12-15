@@ -8,20 +8,20 @@ let group_has_students_for_subject(group: Group, subject_period: SubjectPeriod) 
 
 reify group_has_students_for_subject as $GroupHasStudentsForSubject;
 
-let enforce_min_student_per_group(group: Group, subject_period: SubjectPeriod) -> Constraint =
+let enforce_min_students_per_group(group: Group, subject_period: SubjectPeriod) -> Constraint =
     count_students_in_group(group, subject_period) >==
-        subject_period.subject.min_student_per_group * $GroupHasStudentsForSubject(group, subject_period);
+        subject_period.subject.min_students_per_group * $GroupHasStudentsForSubject(group, subject_period);
 
-let enforce_max_student_per_group(group: Group, subject_period: SubjectPeriod) -> Constraint =
-    count_students_in_group(group, subject_period) <== subject_period.subject.max_student_per_group;
+let enforce_max_students_per_group(group: Group, subject_period: SubjectPeriod) -> Constraint =
+    count_students_in_group(group, subject_period) <== subject_period.subject.max_students_per_group;
 
 pub let constraint() -> Constraint =
     forall subject_period in @[SubjectPeriod] where subject_period.group_list != none {
         match subject_period.group_list {
             group_list as GroupList {
                 forall group in group_list.groups {
-                    enforce_min_student_per_group(group, subject_period) and
-                    enforce_max_student_per_group(group, subject_period)
+                    enforce_min_students_per_group(group, subject_period) and
+                    enforce_max_students_per_group(group, subject_period)
                 }
             }
             _ as None {
