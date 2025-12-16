@@ -966,6 +966,16 @@ impl<
             .expect("There should be warnings (maybe empty) for the initial script"))
     }
 
+    pub fn add_constraints_and_objectives_with_compiled_script(
+        &mut self,
+        stored_script: StoredScript<T>,
+        funcs: Vec<(String, Vec<ExprValue<T>>)>,
+        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+    ) -> Result<(), ProblemError<T>> {
+        let _warnings = self.evaluate_recursively(stored_script, funcs, objectives)?;
+        Ok(())
+    }
+
     pub fn build(mut self) -> Problem<T, V> {
         for (constraint, _desc) in self.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();

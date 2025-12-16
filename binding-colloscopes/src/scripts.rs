@@ -3,6 +3,7 @@ use super::{
     views::{Env, ObjectId},
 };
 use collo_ml::problem::{Problem, ProblemBuilder, Script};
+use collomatique_ilp::ObjectiveSense;
 
 mod constraints;
 mod reifications;
@@ -39,13 +40,33 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
             ));
     }
     for (name, script) in constraints::DEFAULT_CONSTRAINT_LIST {
-        let _warnings = builder
-            .add_constraints(
-                Script {
-                    name: name.to_string(),
-                    content: script.to_string(),
-                },
-                vec![("constraint".to_string(), vec![])],
+        let stored_script = builder
+            .compile_script(Script {
+                name: name.to_string(),
+                content: script.to_string(),
+            })
+            .expect(&format!("Should compile: {}\n\n{}", name, script));
+        let pub_funcs = stored_script.get_ast().get_functions();
+        let funcs = if pub_funcs.contains_key("constraint") {
+            vec![("constraint".to_string(), vec![])]
+        } else {
+            vec![]
+        };
+        let objectives = if pub_funcs.contains_key("objective") {
+            vec![(
+                "objective".to_string(),
+                vec![],
+                1.0,
+                ObjectiveSense::Minimize,
+            )]
+        } else {
+            vec![]
+        };
+        builder
+            .add_constraints_and_objectives_with_compiled_script(
+                stored_script.clone(),
+                funcs,
+                objectives,
             )
             .expect(&format!("Should compile: {}\n\n{}", name, script));
     }
