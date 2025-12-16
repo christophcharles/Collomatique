@@ -20,6 +20,9 @@ pub const LIMITS: &'static str = include_str!("constraints/limits.collo-ml");
 pub const STUDENTS_PER_GROUP_FOR_SUBJECT: &'static str =
     include_str!("constraints/students_per_group_for_subject.collo-ml");
 
+pub const INTERROGATION_COST: &'static str =
+    include_str!("constraints/interrogation_cost.collo-ml");
+
 pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
     (
         "group_count_per_interrogation",
@@ -38,4 +41,5 @@ pub const DEFAULT_CONSTRAINT_LIST: &'static [(&'static str, &'static str)] = &[
         "students_per_group_for_subject",
         STUDENTS_PER_GROUP_FOR_SUBJECT,
     ),
+    ("interrogation_cost", INTERROGATION_COST),
 ];

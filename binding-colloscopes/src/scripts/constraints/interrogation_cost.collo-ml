@@ -1,0 +1,4 @@
+pub let objective() -> LinExpr =
+    sum interrogation in @[Interrogation] where interrogation.cost != 0 {
+        interrogation.cost * $InterrogationHasGroups(interrogation)
+    };

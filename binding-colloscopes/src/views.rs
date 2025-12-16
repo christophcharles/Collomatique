@@ -48,6 +48,7 @@ pub struct Interrogation {
     week: WeekId,
     group_list: GroupListId,
     students: Vec<StudentId>,
+    cost: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -217,11 +218,20 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
             None => vec![],
         };
 
+        let slot = env
+            .data
+            .get_inner_data()
+            .params
+            .slots
+            .find_slot(id.slot)
+            .expect("Slot ID should be valid");
+
         Some(Interrogation {
             subject: subject_id,
             week: WeekId(id.week),
             group_list: *group_list_id,
             students,
+            cost: slot.cost,
         })
     }
 }
