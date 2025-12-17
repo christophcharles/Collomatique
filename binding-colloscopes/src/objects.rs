@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::{GroupListId, PeriodId, SlotId, SubjectId};
+use collomatique_state_colloscopes::{GroupListId, IncompatId, PeriodId, SlotId, SubjectId};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct WeekId(pub usize);
@@ -36,4 +36,17 @@ pub struct WeekdayData {
 pub struct SubjectPeriodData {
     pub subject: SubjectId,
     pub period: PeriodId,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub struct IncompatSlotData {
+    pub incompat: IncompatId,
+    pub week: WeekId,
+    pub slot_num: usize,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub struct IncompatWeekData {
+    pub incompat: IncompatId,
+    pub week: WeekId,
 }

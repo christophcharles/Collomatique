@@ -1,3 +1,4 @@
+use crate::objects::{IncompatSlotData, IncompatWeekData};
 use crate::tools;
 
 use super::objects::{
@@ -5,8 +6,10 @@ use super::objects::{
 };
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
-use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, StudentId, SubjectId};
-use collomatique_time::{NonZeroMinutes, WholeMinuteTime};
+use collomatique_state_colloscopes::{
+    Data, GroupListId, IncompatId, PeriodId, StudentId, SubjectId,
+};
+use collomatique_time::{NonZeroMinutes, SlotWithDuration, WholeMinuteTime};
 use std::collections::BTreeSet;
 
 #[derive(Debug)]
@@ -39,6 +42,9 @@ pub enum ObjectId {
     Day(DayData),
     TimeSlot(TimeSlotData),
     SubjectPeriod(SubjectPeriodData),
+    Incompat(IncompatId),
+    IncompatWeek(IncompatWeekData),
+    IncompatSlot(IncompatSlotData),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -148,6 +154,29 @@ pub struct Weekday {
 pub struct Day {
     weekday: WeekdayData,
     week: WeekId,
+    time_slots: Vec<TimeSlotData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct Incompat {
+    subject: SubjectId,
+    by_weeks: Vec<IncompatWeekData>,
+    minimum_free_slots: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct IncompatWeek {
+    incompat: IncompatId,
+    week: WeekId,
+    slots: Vec<IncompatSlotData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
+#[eval_object(ObjectId)]
+pub struct IncompatSlot {
+    incompat_week: IncompatWeekData,
     time_slots: Vec<TimeSlotData>,
 }
 
@@ -816,5 +845,186 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
             group_list: group_list_id.cloned(),
             students,
         })
+    }
+}
+
+impl ViewBuilder<Env, IncompatId> for ObjectId {
+    type Object = Incompat;
+
+    fn enumerate(env: &Env) -> BTreeSet<IncompatId> {
+        env.data
+            .get_inner_data()
+            .params
+            .incompats
+            .incompat_map
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    fn build(env: &Env, id: &IncompatId) -> Option<Self::Object> {
+        let incompat_data = env
+            .data
+            .get_inner_data()
+            .params
+            .incompats
+            .incompat_map
+            .get(id)
+            .expect("Incompat ID should be valid");
+
+        let week_pattern = extract_week_pattern(&env.data, incompat_data.week_pattern_id);
+
+        Some(Incompat {
+            subject: incompat_data.subject_id,
+            minimum_free_slots: incompat_data.minimum_free_slots.get() as i32,
+            by_weeks: week_pattern
+                .into_iter()
+                .enumerate()
+                .filter_map(|(week, status)| {
+                    if !status {
+                        return None;
+                    }
+                    Some(IncompatWeekData {
+                        incompat: id.clone(),
+                        week: WeekId(week),
+                    })
+                })
+                .collect(),
+        })
+    }
+}
+
+impl ViewBuilder<Env, IncompatWeekData> for ObjectId {
+    type Object = IncompatWeek;
+
+    fn enumerate(env: &Env) -> BTreeSet<IncompatWeekData> {
+        let mut output = BTreeSet::new();
+        for (incompat_id, incompat) in &env.data.get_inner_data().params.incompats.incompat_map {
+            let week_pattern = extract_week_pattern(&env.data, incompat.week_pattern_id);
+            for (week, status) in week_pattern.into_iter().enumerate() {
+                if !status {
+                    continue;
+                }
+                output.insert(IncompatWeekData {
+                    incompat: *incompat_id,
+                    week: WeekId(week),
+                });
+            }
+        }
+        output
+    }
+
+    fn build(env: &Env, id: &IncompatWeekData) -> Option<Self::Object> {
+        let incompat_data = env
+            .data
+            .get_inner_data()
+            .params
+            .incompats
+            .incompat_map
+            .get(&id.incompat)
+            .expect("Incompat ID should be valid");
+
+        Some(IncompatWeek {
+            incompat: id.incompat,
+            week: id.week,
+            slots: incompat_data
+                .slots
+                .iter()
+                .enumerate()
+                .map(|(num, _slot)| IncompatSlotData {
+                    incompat: id.incompat,
+                    week: id.week,
+                    slot_num: num,
+                })
+                .collect(),
+        })
+    }
+}
+
+impl ViewBuilder<Env, IncompatSlotData> for ObjectId {
+    type Object = IncompatSlot;
+
+    fn enumerate(env: &Env) -> BTreeSet<IncompatSlotData> {
+        let mut output = BTreeSet::new();
+        for (incompat_id, incompat) in &env.data.get_inner_data().params.incompats.incompat_map {
+            let week_pattern = extract_week_pattern(&env.data, incompat.week_pattern_id);
+            for (week, status) in week_pattern.into_iter().enumerate() {
+                if !status {
+                    continue;
+                }
+                for slot_num in 0..incompat.slots.len() {
+                    output.insert(IncompatSlotData {
+                        incompat: *incompat_id,
+                        week: WeekId(week),
+                        slot_num,
+                    });
+                }
+            }
+        }
+        output
+    }
+
+    fn build(env: &Env, id: &IncompatSlotData) -> Option<Self::Object> {
+        let incompat_data = env
+            .data
+            .get_inner_data()
+            .params
+            .incompats
+            .incompat_map
+            .get(&id.incompat)
+            .expect("Incompat ID should be valid");
+        let slot_data = incompat_data
+            .slots
+            .get(id.slot_num)
+            .expect("Incompat slot number should be  valid");
+
+        Some(IncompatSlot {
+            incompat_week: IncompatWeekData {
+                incompat: id.incompat,
+                week: id.week,
+            },
+            time_slots: IncompatSlot::generate_time_slots_in_slot(env, &slot_data, id.week),
+        })
+    }
+}
+
+impl IncompatSlot {
+    fn generate_time_slots_in_slot(
+        env: &Env,
+        slot_with_duration: &SlotWithDuration,
+        week: WeekId,
+    ) -> Vec<TimeSlotData> {
+        let duration = tools::compute_time_resolution(&env.data.get_inner_data().params);
+
+        const MINUTES_PER_HOUR: u32 = 60;
+        use chrono::Timelike;
+        let start_minute = slot_with_duration.start().start_time.hour() * MINUTES_PER_HOUR
+            + slot_with_duration.start().start_time.minute();
+
+        (0..slot_with_duration.duration().get().get())
+            .step_by(duration as usize)
+            .map(|inner_minute| {
+                let minute = start_minute + inner_minute;
+                let hour = minute / MINUTES_PER_HOUR;
+                let min = minute % MINUTES_PER_HOUR;
+                let start_time = WholeMinuteTime::new(
+                    chrono::NaiveTime::from_hms_opt(hour, min, 0).expect("Time should be valid"),
+                )
+                .expect("Time should be with a whole minute");
+                let actual_slot = collomatique_time::SlotWithDuration::new(
+                    collomatique_time::SlotStart {
+                        weekday: slot_with_duration.start().weekday.clone().into(),
+                        start_time,
+                    },
+                    NonZeroMinutes::new(duration).expect("duration should be non-zero"),
+                )
+                .expect("Slot should be valid and not cross the midnight boundary");
+
+                TimeSlotData {
+                    slot: actual_slot,
+                    week,
+                }
+            })
+            .collect()
     }
 }
