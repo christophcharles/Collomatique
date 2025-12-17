@@ -4,6 +4,7 @@ use crate::eval::{
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
 use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
+use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -194,6 +195,14 @@ impl<
         new_var
     }
 
+    fn generate_helper_continuous_var(&mut self) -> ProblemVar<T, V> {
+        let new_var = ProblemVar::Helper(self.current_helper_id);
+        self.vars_desc
+            .insert(new_var.clone(), collomatique_ilp::Variable::continuous());
+        self.current_helper_id += 1;
+        new_var
+    }
+
     fn get_variable_type(&self, v: &ProblemVar<T, V>) -> Variable {
         match v {
             ProblemVar::Helper(_)
@@ -213,6 +222,82 @@ impl<
                 },
             },
         }
+    }
+
+    fn objectify_single_constraint(
+        &mut self,
+        constraint: &Constraint<ProblemVar<T, V>>,
+        origin: ConstraintDesc<T>,
+        var: ProblemVar<T, V>,
+    ) -> (
+        Objective<ProblemVar<T, V>>,
+        Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
+    ) {
+        match constraint.get_symbol() {
+            EqSymbol::LessThan => {
+                let var = LinExpr::var(var);
+                let lin_expr = constraint.get_lhs().clone();
+                let c1 = lin_expr.leq(&var);
+                let c2 = var.geq(&LinExpr::constant(0.));
+                let constraints = vec![(c1, origin.clone()), (c2, origin.clone())];
+                let objective = Objective::new(var, ObjectiveSense::Minimize);
+                (objective, constraints)
+            }
+            EqSymbol::Equals => {
+                let var = LinExpr::var(var);
+                let lin_expr = constraint.get_lhs().clone();
+                let c1 = lin_expr.leq(&var);
+                let c2 = lin_expr.geq(&(-&var));
+                let constraints = vec![(c1, origin.clone()), (c2, origin.clone())];
+                let objective = Objective::new(var, ObjectiveSense::Minimize);
+                (objective, constraints)
+            }
+        }
+    }
+
+    /// Takes a list of constraints and generate a linear expression
+    /// to optimize as an objective. Returns the objective and the
+    /// necessary constraints to enforce define the helper variables.
+    fn objectify_constraints<'b>(
+        &mut self,
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, V>>>,
+        origin: ConstraintDesc<T>,
+    ) -> (
+        Objective<ProblemVar<T, V>>,
+        Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
+    )
+    where
+        T: 'b,
+        V: 'b,
+    {
+        // If there is no constraints, we can have a trivial linear expression
+        if constraints.len() == 0 {
+            let objective = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
+            return (objective, vec![]);
+        }
+        // With a single constraint, we can just defer to objectify_single_constraint
+        if constraints.len() == 1 {
+            let var = self.generate_helper_continuous_var();
+            return self.objectify_single_constraint(constraints.next().unwrap(), origin, var);
+        }
+
+        let c_count = constraints.len() as f64;
+
+        let global_var = self.generate_helper_continuous_var();
+        let global_var = LinExpr::var(global_var);
+        let mut obj = Objective::new(c_count * global_var.clone(), ObjectiveSense::Minimize);
+        let mut output = vec![];
+        for constraint in constraints {
+            let var = self.generate_helper_continuous_var();
+            let lin_expr = LinExpr::var(var.clone());
+            output.push((lin_expr.leq(&global_var), origin.clone()));
+            let (c_obj, c_constraints) =
+                self.objectify_single_constraint(constraint, origin.clone(), var);
+            obj = obj + c_obj;
+            output.extend(c_constraints);
+        }
+        obj = (0.5 / c_count) * obj; // the global weight should be one
+        (obj, output)
     }
 
     fn reify_single_constraint(
