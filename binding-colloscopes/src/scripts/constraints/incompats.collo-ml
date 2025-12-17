@@ -1,0 +1,43 @@
+let student_list_for_incompat_week(incompat_week: IncompatWeek) -> [Student] =
+    sum period_data in incompat_week.incompat.subject.periods_data where period_data.period == incompat_week.week.period {
+        period_data.students
+    };
+
+let enforce_saturated_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+    forall student in student_list_for_incompat_week(incompat_week) {
+        forall slot in incompat_week.slots {
+            forall time_slot in slot.time_slots {
+                forall interrogation in time_slot.interrogations {
+                    $StudentAtInterrogation(student, interrogation) === 0
+                }
+            }
+        }
+    };
+
+let student_not_at_incompat_slot(student: Student, slot: IncompatSlot) -> Constraint =
+    forall time_slot in slot.time_slots {
+        forall interrogation in time_slot.interrogations {
+            $StudentAtInterrogation(student, interrogation) === 0
+        }
+    };
+
+reify student_not_at_incompat_slot as $StudentNotAtIncompatSlot;
+
+let enforce_non_saturated_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+    forall student in student_list_for_incompat_week(incompat_week) {
+        sum slot in incompat_week.slots {
+            $StudentNotAtIncompatSlot(student, slot)
+        } >== incompat_week.incompat.minimum_free_slots
+    };
+
+let enforce_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+    if |incompat_week.slots| == incompat_week.incompat.minimum_free_slots {
+        enforce_saturated_incompat_week(incompat_week)
+    } else {
+        enforce_non_saturated_incompat_week(incompat_week)
+    };
+
+pub let constraint() -> Constraint =
+    forall incompat_week in @[IncompatWeek] {
+        enforce_incompat_week(incompat_week)
+    };
