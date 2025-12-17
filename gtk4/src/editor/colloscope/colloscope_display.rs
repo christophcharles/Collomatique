@@ -166,8 +166,9 @@ impl Component for Display {
                 self.colloscope = colloscope;
 
                 self.update_display_issue();
-                self.rebuild_columns();
+                self.clear_columns();
                 self.update_view_wrapper(sender);
+                self.build_columns();
             }
             DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
                 sender
@@ -204,8 +205,11 @@ impl Display {
         };
     }
 
-    fn rebuild_columns(&mut self) {
+    fn clear_columns(&mut self) {
         self.column_view.clear_columns();
+    }
+
+    fn build_columns(&mut self) {
         self.column_view.append_column(SubjectColumn {});
         self.column_view.append_column(TeacherColumn {});
         self.column_view.append_column(DateTimeColumn {});
