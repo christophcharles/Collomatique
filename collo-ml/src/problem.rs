@@ -54,6 +54,10 @@ pub enum ConstraintDesc<T: EvalObject> {
         script_ref: ScriptRef,
         origin: Origin<T>,
     },
+    Objectify {
+        script_ref: ScriptRef,
+        origin: Origin<T>,
+    },
 }
 
 pub struct ProblemBuilder<
@@ -598,14 +602,21 @@ impl<
         ))
     }
 
-    fn eval_lin_expr_in_history<'b>(
-        &self,
+    fn eval_obj_in_history<'b>(
+        &mut self,
         script_ref: &ScriptRef,
         eval_history: &mut EvalHistory<'b, T>,
         fn_name: &str,
         args: &Vec<ExprValue<T>>,
-    ) -> Result<(LinExpr<ProblemVar<T, V>>, Origin<T>), ProblemError<T>> {
-        let (lin_expr_expr, origin) =
+        obj_sense: &ObjectiveSense,
+    ) -> Result<
+        (
+            Objective<ProblemVar<T, V>>,
+            Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
+        ),
+        ProblemError<T>,
+    > {
+        let (fn_result, origin) =
             eval_history
                 .eval_fn(fn_name, args.clone())
                 .map_err(|e| match e {
@@ -625,18 +636,56 @@ impl<
                     _ => panic!("Unexpected error: {:?}", e),
                 })?;
 
-        let lin_expr = match lin_expr_expr {
-            ExprValue::LinExpr(lin_expr) => lin_expr,
+        let mut values_list = vec![];
+        match fn_result {
+            ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
+            ExprValue::Constraint(constraint) => {
+                values_list.push(ExprValue::Constraint(constraint))
+            }
+            ExprValue::List(list) => values_list.extend(list),
             _ => {
                 return Err(ProblemError::UnexpectedReturnValue {
                     func: fn_name.to_string(),
-                    returned: lin_expr_expr,
+                    returned: fn_result,
                     expected: SimpleType::LinExpr.into(),
                 })
             }
         };
 
-        Ok((self.clean_lin_expr(script_ref, &lin_expr), origin))
+        let mut obj = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
+        let mut constraints = vec![];
+
+        for value in values_list {
+            match value {
+                ExprValue::LinExpr(lin_expr) => {
+                    let cleaned_lin_expr = self.clean_lin_expr(script_ref, &lin_expr);
+                    obj = obj + Objective::new(cleaned_lin_expr, obj_sense.clone());
+                }
+                ExprValue::Constraint(c) => {
+                    let cleaned_constraints: Vec<_> = c
+                        .into_iter()
+                        .map(|c_with_o| self.clean_constraint(script_ref, &c_with_o.constraint))
+                        .collect();
+                    let new_origin = ConstraintDesc::Objectify {
+                        script_ref: script_ref.clone(),
+                        origin: origin.clone(),
+                    };
+                    let (new_obj, new_constraints) =
+                        self.objectify_constraints(cleaned_constraints.iter(), new_origin);
+                    obj = obj + new_obj;
+                    constraints.extend(new_constraints);
+                }
+                _ => {
+                    return Err(ProblemError::UnexpectedReturnValue {
+                        func: fn_name.to_string(),
+                        returned: value,
+                        expected: SimpleType::LinExpr.into(),
+                    })
+                }
+            }
+        }
+
+        Ok((obj, constraints))
     }
 
     fn look_for_uncalled_public_reified_var<'b>(
@@ -685,6 +734,10 @@ impl<
         let mut pending_reification = HashMap::<ScriptRef, Vec<PendingReification<T>>>::new();
         let mut warnings = HashMap::new();
 
+        let list_of_lin_expr_and_constraints = ExprType::simple(SimpleType::List(
+            ExprType::sum([SimpleType::LinExpr, SimpleType::Constraint]).unwrap(),
+        ));
+
         while let Some(script) = current_script_opt {
             let ast = script.get_ast();
             let ast_funcs = ast.get_functions();
@@ -732,7 +785,10 @@ impl<
                 let (_params, out_typ) = ast_funcs
                     .get(&fn_name)
                     .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-                if !out_typ.is_lin_expr() {
+                if !out_typ.is_lin_expr()
+                    && !out_typ.is_constraint()
+                    && !out_typ.is_subtype_of(&list_of_lin_expr_and_constraints)
+                {
                     return Err(ProblemError::WrongReturnType {
                         func: fn_name.clone(),
                         returned: out_typ.clone(),
@@ -740,15 +796,23 @@ impl<
                     });
                 }
 
-                let (lin_expr, _origin) = self.eval_lin_expr_in_history(
+                let (new_obj, new_constraints) = self.eval_obj_in_history(
                     script.get_ref(),
                     &mut eval_history,
                     &fn_name,
                     &args,
+                    &obj_sense,
                 )?;
-                uncalled_vars
-                    .extend(self.look_for_uncalled_public_reified_var_in_lin_expr(&lin_expr));
-                self.objective = &self.objective + Objective::new(coef * lin_expr, obj_sense);
+                uncalled_vars.extend(
+                    self.look_for_uncalled_public_reified_var_in_lin_expr(new_obj.get_function()),
+                );
+                uncalled_vars.extend(
+                    self.look_for_uncalled_public_reified_var(
+                        new_constraints.iter().map(|(c, _o)| c),
+                    ),
+                );
+                self.constraints.extend(new_constraints);
+                self.objective = &self.objective + coef * new_obj;
             }
 
             // Then we evaluate the missing public reified vars from this scripts
@@ -936,7 +1000,7 @@ impl<
             stored_scripts: vec![],
             constraints: vec![],
             called_public_reified_variables: BTreeSet::new(),
-            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Maximize),
+            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
             current_helper_id: 0,
             vars_desc,
             original_var_list,
@@ -1111,6 +1175,10 @@ impl<
                     script_ref: _,
                     origin: _,
                 } => None,
+                ConstraintDesc::Objectify {
+                    script_ref: _,
+                    origin: _,
+                } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
                 ConstraintDesc::Reified {
                     script_ref: _,
                     var_name: _,
