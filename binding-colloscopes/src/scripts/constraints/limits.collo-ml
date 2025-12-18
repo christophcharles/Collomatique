@@ -13,8 +13,8 @@ let max_per_day_for(student: Student) -> Constraint =
         count_interrogations_in_day(student, day) <== student.max_interrogations_per_day
     };
 
-let max_per_day() -> Constraint =
-    forall student in @[Student] where student.hard_max_interrogations_per_day {
+let max_per_day(hard: Bool) -> Constraint =
+    forall student in @[Student] where student.hard_max_interrogations_per_day == hard {
         max_per_day_for(student)
     };
 
@@ -28,8 +28,8 @@ let max_per_week_for(student: Student) -> Constraint =
         count_interrogations_in_week(student, week) <== student.max_interrogations_per_week
     };
 
-let max_per_week() -> Constraint =
-    forall student in @[Student] where student.hard_max_interrogations_per_week {
+let max_per_week(hard: Bool) -> Constraint =
+    forall student in @[Student] where student.hard_max_interrogations_per_week == hard {
         max_per_week_for(student)
     };
 
@@ -38,9 +38,11 @@ let min_per_week_for(student: Student) -> Constraint =
         count_interrogations_in_week(student, week) >== student.min_interrogations_per_week
     };
 
-let min_per_week() -> Constraint =
-    forall student in @[Student] where student.hard_min_interrogations_per_week {
+let min_per_week(hard: Bool) -> Constraint =
+    forall student in @[Student] where student.hard_min_interrogations_per_week == hard {
         min_per_week_for(student)
     };
 
-pub let constraint() -> Constraint = max_per_day() and max_per_week() and min_per_week();
+pub let constraint() -> Constraint = max_per_day(true) and max_per_week(true) and min_per_week(true);
+
+pub let objective() -> [Constraint] = [max_per_day(false), max_per_week(false), min_per_week(false)];
