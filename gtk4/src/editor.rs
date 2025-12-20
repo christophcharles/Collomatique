@@ -13,6 +13,7 @@ use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
+use crate::editor::colloscope::ColloscopeOutput;
 use crate::tools;
 
 mod error_dialog;
@@ -54,7 +55,8 @@ pub enum EditorInput {
     CancelOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
-    NewStateFromScript(AppState<Data, Desc>),
+    NewStateFromSecondInstance(AppState<Data, Desc>),
+    SolveColloscopeClicked,
 }
 
 #[derive(Debug)]
@@ -182,7 +184,7 @@ pub struct EditorPanel {
     settings: Controller<settings::Settings>,
     colloscope: Controller<colloscope::Colloscope>,
     check_script_dialog: Controller<check_script::Dialog>,
-    run_script_dialog: Controller<run_second_instance::Dialog>,
+    run_second_instance_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
@@ -684,11 +686,15 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
-        let colloscope = colloscope::Colloscope::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
-            });
+        let colloscope =
+            colloscope::Colloscope::builder()
+                .launch(())
+                .forward(sender.input_sender(), |op| match op {
+                    ColloscopeOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+                    }
+                    ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
+                });
 
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
@@ -699,12 +705,12 @@ impl Component for EditorPanel {
                 }
             });
 
-        let run_script_dialog = run_second_instance::Dialog::builder()
+        let run_second_instance_dialog = run_second_instance::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 run_second_instance::DialogOutput::NewData(new_data) => {
-                    EditorInput::NewStateFromScript(new_data)
+                    EditorInput::NewStateFromSecondInstance(new_data)
                 }
             });
 
@@ -747,7 +753,7 @@ impl Component for EditorPanel {
             settings,
             colloscope,
             check_script_dialog,
-            run_script_dialog,
+            run_second_instance_dialog,
             warning_op_dialog,
         };
         let widgets = view_output!();
@@ -908,7 +914,7 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::RunScript(path, script) => {
-                self.run_script_dialog
+                self.run_second_instance_dialog
                     .sender()
                     .send(run_second_instance::DialogInput::Run(
                         run_second_instance::RunType::Script(path, script),
@@ -916,13 +922,22 @@ impl Component for EditorPanel {
                     ))
                     .unwrap();
             }
-            EditorInput::NewStateFromScript(new_data) => {
+            EditorInput::NewStateFromSecondInstance(new_data) => {
                 self.data = new_data;
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::SolveColloscopeClicked => {
+                self.run_second_instance_dialog
+                    .sender()
+                    .send(run_second_instance::DialogInput::Run(
+                        run_second_instance::RunType::SolveColloscope,
+                        self.data.clone(),
+                    ))
+                    .unwrap();
             }
         }
     }

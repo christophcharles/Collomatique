@@ -1,4 +1,4 @@
-use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
 use relm4::{
@@ -33,6 +33,14 @@ pub enum ColloscopeInput {
         usize,
     ),
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+
+    SolveColloscopeClicked,
+}
+
+#[derive(Debug)]
+pub enum ColloscopeOutput {
+    UpdateOp(ColloscopeUpdateOp),
+    SolveColloscopeClicked,
 }
 
 pub struct Colloscope {
@@ -60,7 +68,7 @@ pub struct Colloscope {
 #[relm4::component(pub)]
 impl Component for Colloscope {
     type Input = ColloscopeInput;
-    type Output = ColloscopeUpdateOp;
+    type Output = ColloscopeOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -90,12 +98,12 @@ impl Component for Colloscope {
                     gtk::Button {
                         add_css_class: "frame",
                         add_css_class: "accent",
-                        set_sensitive: false,
                         set_margin_all: 5,
                         adw::ButtonContent {
                             set_icon_name: "run-build-configure",
                             set_label: "Générer le colloscope automatiquement",
                         },
+                        connect_clicked => ColloscopeInput::SolveColloscopeClicked,
                     },
                 },
                 #[local_ref]
@@ -264,9 +272,11 @@ impl Component for Colloscope {
                     .take()
                     .expect("A group list id should have been stored for edition");
                 sender
-                    .output(ColloscopeUpdateOp::UpdateColloscopeGroupList(
-                        group_list_id,
-                        collo_group_list,
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                            group_list_id,
+                            collo_group_list,
+                        ),
                     ))
                     .unwrap();
             }
@@ -323,12 +333,19 @@ impl Component for Colloscope {
                     .take()
                     .expect("Interrogation information should have been stored for edition");
                 sender
-                    .output(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                        period_id,
-                        slot_id,
-                        week_in_period,
-                        interrogation,
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                            period_id,
+                            slot_id,
+                            week_in_period,
+                            interrogation,
+                        ),
                     ))
+                    .unwrap();
+            }
+            ColloscopeInput::SolveColloscopeClicked => {
+                sender
+                    .output(ColloscopeOutput::SolveColloscopeClicked)
                     .unwrap();
             }
         }
