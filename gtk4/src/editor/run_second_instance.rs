@@ -22,7 +22,7 @@ mod warning_running;
 
 pub struct Dialog {
     hidden: bool,
-    path: PathBuf,
+    run_type: RunType,
     is_running: bool,
     end_with_error: bool,
     error_dialog: Controller<error_dialog::Dialog>,
@@ -39,6 +39,42 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum RunType {
     Script(PathBuf, String),
+}
+
+impl RunType {
+    fn get_path(&self) -> Option<std::path::PathBuf> {
+        match self {
+            RunType::Script(path, _script) => Some(path.clone()),
+        }
+    }
+
+    fn get_init_msg(&self) -> collomatique_rpc::InitMsg {
+        match self {
+            RunType::Script(_path, script) => {
+                collomatique_rpc::InitMsg::RunPythonScript(script.clone())
+            }
+        }
+    }
+
+    fn get_under_text(&self) -> String {
+        match self {
+            RunType::Script(path, _script) => path.to_string_lossy().to_string(),
+        }
+    }
+
+    fn get_op_name(&self) -> String {
+        match self {
+            RunType::Script(path, _script) => {
+                format!("Exécution de {}", path.to_string_lossy())
+            }
+        }
+    }
+
+    fn get_title(&self) -> String {
+        match self {
+            RunType::Script(_, _) => "Exécution du script Python".to_string(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -80,7 +116,8 @@ impl Component for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Exécution du script Python"),
+            #[watch]
+            set_title: Some(&model.run_type.get_title()),
             add_css_class: "devel",
 
             adw::ToolbarView {
@@ -198,7 +235,7 @@ impl Component for Dialog {
                         set_margin_all: 5,
                         add_css_class: "dimmed",
                         #[watch]
-                        set_label: &model.path.to_string_lossy(),
+                        set_label: &model.run_type.get_under_text(),
                     },
                 }
             }
@@ -270,7 +307,7 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
-            path: PathBuf::new(),
+            run_type: RunType::Script(PathBuf::new(), String::new()),
             error_dialog,
             warning_running,
             ok_dialog,
@@ -295,9 +332,8 @@ impl Component for Dialog {
         self.adjust_scrolling = false;
         match msg {
             DialogInput::Run(run_type, app_state) => {
-                let RunType::Script(path, script) = run_type;
                 self.hidden = false;
-                self.path = path;
+                self.run_type = run_type;
                 self.app_session = Some(AppSession::new(app_state));
                 self.commands.guard().clear();
                 self.is_running = true;
@@ -305,7 +341,7 @@ impl Component for Dialog {
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        collomatique_rpc::InitMsg::RunPythonScript(script),
+                        self.run_type.get_init_msg(),
                     ))
                     .unwrap();
             }
@@ -396,10 +432,9 @@ impl Component for Dialog {
                     None => collomatique_ops::OpCategory::None,
                 };
                 sender
-                    .output(DialogOutput::NewData(app_session.commit((
-                        last_op_cat,
-                        format!("Exécution de {}", self.path.to_string_lossy()),
-                    ))))
+                    .output(DialogOutput::NewData(
+                        app_session.commit((last_op_cat, self.run_type.get_op_name())),
+                    ))
                     .unwrap();
             }
             DialogInput::ProcessFinished => {
@@ -458,7 +493,7 @@ impl Dialog {
     ) {
         match gui_cmd {
             collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
-                let path = self.path.clone();
+                let path = self.run_type.get_path();
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -469,7 +504,7 @@ impl Dialog {
                     let file_name = crate::tools::open_save::generic_open_dialog(
                         &params.title,
                         &ext_vec[..],
-                        Some(&path),
+                        path.as_ref().map(|x| x.as_path()),
                     )
                     .await;
 
