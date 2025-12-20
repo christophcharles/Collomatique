@@ -473,8 +473,12 @@ name = "collomatique-rpc-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "collomatique-binding-colloscopes",
+ "collomatique-ilp",
+ "collomatique-ops",
  "collomatique-python",
  "collomatique-rpc",
+ "collomatique-state-colloscopes",
 ]
 
 [[package]]
