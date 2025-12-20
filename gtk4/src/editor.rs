@@ -23,7 +23,7 @@ mod colloscope;
 mod general_planning;
 mod group_lists;
 mod incompats;
-mod run_script;
+mod run_second_instance;
 mod settings;
 mod slots;
 mod students;
@@ -182,7 +182,7 @@ pub struct EditorPanel {
     settings: Controller<settings::Settings>,
     colloscope: Controller<colloscope::Colloscope>,
     check_script_dialog: Controller<check_script::Dialog>,
-    run_script_dialog: Controller<run_script::Dialog>,
+    run_script_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
@@ -699,11 +699,11 @@ impl Component for EditorPanel {
                 }
             });
 
-        let run_script_dialog = run_script::Dialog::builder()
+        let run_script_dialog = run_second_instance::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                run_script::DialogOutput::NewData(new_data) => {
+                run_second_instance::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromScript(new_data)
                 }
             });
@@ -910,9 +910,8 @@ impl Component for EditorPanel {
             EditorInput::RunScript(path, script) => {
                 self.run_script_dialog
                     .sender()
-                    .send(run_script::DialogInput::Run(
-                        path,
-                        script,
+                    .send(run_second_instance::DialogInput::Run(
+                        run_second_instance::RunType::Script(path, script),
                         self.data.clone(),
                     ))
                     .unwrap();

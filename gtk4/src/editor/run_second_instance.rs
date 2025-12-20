@@ -37,8 +37,13 @@ pub struct Dialog {
 }
 
 #[derive(Debug)]
+pub enum RunType {
+    Script(PathBuf, String),
+}
+
+#[derive(Debug)]
 pub enum DialogInput {
-    Run(PathBuf, String, AppState<Data, Desc>),
+    Run(RunType, AppState<Data, Desc>),
     CancelRequest,
     Accept,
 
@@ -263,7 +268,8 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.adjust_scrolling = false;
         match msg {
-            DialogInput::Run(path, script, app_state) => {
+            DialogInput::Run(run_type, app_state) => {
+                let RunType::Script(path, script) = run_type;
                 self.hidden = false;
                 self.path = path;
                 self.app_session = Some(AppSession::new(app_state));
