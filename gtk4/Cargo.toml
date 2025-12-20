@@ -10,11 +10,9 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 collomatique-ilp = { path = "../ilp" }
-collomatique-solver = { path = "../solver" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
-collomatique-solver-glue = { path = "../solver-glue" }
 collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }

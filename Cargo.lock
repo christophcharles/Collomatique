@@ -404,8 +404,6 @@ dependencies = [
  "collomatique-ops",
  "collomatique-rpc",
  "collomatique-rpc-engine",
- "collomatique-solver",
- "collomatique-solver-glue",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -477,49 +475,6 @@ dependencies = [
  "anyhow",
  "collomatique-python",
  "collomatique-rpc",
-]
-
-[[package]]
-name = "collomatique-solver"
-version = "0.1.0"
-dependencies = [
- "collomatique-ilp",
- "ordered-float",
- "thiserror",
-]
-
-[[package]]
-name = "collomatique-solver-colloscopes"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "collomatique-ilp",
- "collomatique-solver",
- "collomatique-time",
- "ordered-float",
- "thiserror",
-]
-
-[[package]]
-name = "collomatique-solver-glue"
-version = "0.1.0"
-dependencies = [
- "collomatique-ilp",
- "collomatique-solver",
- "collomatique-solver-colloscopes",
- "collomatique-state-colloscopes",
- "thiserror",
-]
-
-[[package]]
-name = "collomatique-solver-groups"
-version = "0.1.0"
-dependencies = [
- "collomatique-ilp",
- "collomatique-solver",
- "collomatique-time",
- "ordered-float",
- "thiserror",
 ]
 
 [[package]]
