@@ -59,6 +59,7 @@ impl Component for RpcLogger {
         #[root]
         gtk::ScrolledWindow {
             set_hexpand: true,
+            set_vexpand: true,
             set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
             set_margin_all: 5,
             #[name(text_view)]

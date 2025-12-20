@@ -1,7 +1,7 @@
 use collomatique_rpc::gui_answer::OpenFileDialogAnswer;
 use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
-use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
@@ -128,27 +128,40 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Start,
                         set_label: "Opérations effectuées :",
                     },
-                    #[name(scrolled_window)]
-                    gtk::ScrolledWindow {
+                    gtk::Paned {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                         set_margin_all: 5,
-                        #[local_ref]
-                        cmds_listbox -> gtk::ListBox {
-                            set_hexpand: true,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                        }
-                    },
-                    gtk::Expander {
-                        set_margin_all: 5,
-                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Vertical,
                         #[wrap(Some)]
-                        set_label_widget = &gtk::Label {
-                            set_label: "Informations de débogage",
+                        set_start_child = &gtk::Box {
+                            set_hexpand: true,
+                            set_orientation: gtk::Orientation::Vertical,
+                            #[name(scrolled_window)]
+                            gtk::ScrolledWindow {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                                set_margin_all: 5,
+                                #[local_ref]
+                                cmds_listbox -> gtk::ListBox {
+                                    set_hexpand: true,
+                                    add_css_class: "boxed-list",
+                                    set_selection_mode: gtk::SelectionMode::None,
+                                }
+                            },
                         },
-                        set_child: Some(model.rpc_logger.widget()),
+                        #[wrap(Some)]
+                        set_end_child = &gtk::Box {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_orientation: gtk::Orientation::Vertical,
+                            gtk::Label {
+                                set_halign: gtk::Align::Start,
+                                set_label: "Informations de débogage :",
+                            },
+                            append = model.rpc_logger.widget(),
+                        },
                     },
                     gtk::Label {
                         set_margin_all: 5,
