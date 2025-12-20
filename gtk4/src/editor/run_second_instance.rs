@@ -138,7 +138,7 @@ impl Component for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: !model.is_running,
+                        set_sensitive: !model.is_running && !model.commands.is_empty(),
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
