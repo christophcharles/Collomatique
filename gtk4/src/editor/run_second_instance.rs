@@ -39,12 +39,14 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum RunType {
     Script(PathBuf, String),
+    SolveColloscope,
 }
 
 impl RunType {
     fn get_path(&self) -> Option<std::path::PathBuf> {
         match self {
             RunType::Script(path, _script) => Some(path.clone()),
+            RunType::SolveColloscope => None,
         }
     }
 
@@ -53,12 +55,14 @@ impl RunType {
             RunType::Script(_path, script) => {
                 collomatique_rpc::InitMsg::RunPythonScript(script.clone())
             }
+            RunType::SolveColloscope => collomatique_rpc::InitMsg::SolveColloscope,
         }
     }
 
     fn get_under_text(&self) -> String {
         match self {
             RunType::Script(path, _script) => path.to_string_lossy().to_string(),
+            RunType::SolveColloscope => "Résolution du colloscope".into(),
         }
     }
 
@@ -67,12 +71,14 @@ impl RunType {
             RunType::Script(path, _script) => {
                 format!("Exécution de {}", path.to_string_lossy())
             }
+            RunType::SolveColloscope => "Résolution du colloscope".into(),
         }
     }
 
     fn get_title(&self) -> String {
         match self {
             RunType::Script(_, _) => "Exécution du script Python".to_string(),
+            RunType::SolveColloscope => "Résolution du colloscope".into(),
         }
     }
 }
