@@ -96,16 +96,27 @@ impl ResultMsg {
     }
 }
 
+const RPC_MSG_MARKER: &'static str = "%%COLLOMATIQUE-RPC-MSG%%";
+
 impl CompleteCmdMsg {
+    pub fn check_if_msg(data: &str) -> bool {
+        data.starts_with(RPC_MSG_MARKER)
+    }
+
     pub fn from_text_msg(data: &str) -> Result<Self, String> {
-        match serde_json::from_str::<Self>(data) {
+        let Some(deprefixed) = data.strip_prefix(RPC_MSG_MARKER) else {
+            return Err(trim_newline(data.to_string()));
+        };
+
+        match serde_json::from_str::<Self>(deprefixed) {
             Ok(cmd) => Ok(cmd),
             Err(_) => Err(trim_newline(data.to_string())),
         }
     }
 
     pub fn into_text_msg(&self) -> String {
-        serde_json::to_string(self).expect("Serializing to JSON should not fail")
+        RPC_MSG_MARKER.to_string()
+            + &serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
 

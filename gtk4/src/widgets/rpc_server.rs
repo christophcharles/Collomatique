@@ -99,7 +99,7 @@ impl Component for RpcLogger {
         match message {
             RpcLoggerInput::RunRcpEngine(init_msg) => {
                 if self.is_running() {
-                    panic!("A Python engine is already running!");
+                    panic!("An RPC engine is already running!");
                 }
                 self.buffer_op = Some(BufferOp::Clear);
 
@@ -251,6 +251,14 @@ impl Component for RpcLogger {
                 }
             }
             LoggerCommandOutput::NewStdoutData(data, stdout_buf) => {
+                if !CompleteCmdMsg::check_if_msg(&data) {
+                    self.buffer_op = Some(BufferOp::Insert(data));
+                    if self.child_process.is_some() {
+                        self.wait_stdout_data(sender, stdout_buf);
+                    }
+                    return;
+                }
+
                 let complete_cmd = CompleteCmdMsg::from_text_msg(&data);
                 let cmd = match complete_cmd {
                     Ok(c) => match c {
