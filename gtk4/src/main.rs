@@ -5,7 +5,6 @@
 
 use clap::Parser;
 use collomatique_gtk4::AppModel;
-use collomatique_state::traits::Manager;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
@@ -24,81 +23,9 @@ struct Args {
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
 
-    /// TEMPORARY PARAMETER: do not open the gtk4 gui but launch the resolution of the colloscope
-    #[arg(long, default_value_t = false)]
-    solve: bool,
-
     /// Everything after gets passed through to GTK.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     gtk_options: Vec<String>,
-}
-
-fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
-    use anyhow::anyhow;
-
-    let Some(path) = file else {
-        return Err(anyhow!("You must specify a file to open and solve"));
-    };
-
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    let result = rt.block_on(collomatique_storage::load_data_from_file(&path));
-
-    let (data, caveats) = match result {
-        Ok(r) => r,
-        Err(e) => {
-            return Err(anyhow!("Failed to load file: {:?}", e));
-        }
-    };
-
-    for caveat in caveats {
-        println!("Caveat: {:?}", caveat);
-    }
-
-    println!("Building ILP problem...");
-
-    use collomatique_binding_colloscopes::scripts::build_default_problem;
-    let env = collomatique_binding_colloscopes::views::Env::from(data);
-    let problem = build_default_problem(&env);
-
-    println!("Solving ILP problem...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let sol_opt = problem.solve(&solver);
-    let Some(sol) = sol_opt else {
-        println!("No solution found");
-        return Ok(());
-    };
-    println!("Solution found!");
-    let config_data = sol.get_data();
-    let new_colloscope =
-        collomatique_binding_colloscopes::convert::build_colloscope(&env, &config_data)
-            .expect("Config data should be compatible with colloscope parameters");
-
-    println!("Saving colloscope...");
-    let update_ops = env
-        .data
-        .get_inner_data()
-        .colloscope
-        .update_ops(new_colloscope)
-        .expect("New and old colloscopes should be compatible");
-
-    use collomatique_state::AppState;
-    let mut state = AppState::new(env.data);
-    for op in update_ops {
-        state
-            .apply(collomatique_state_colloscopes::Op::Colloscope(op), ())
-            .expect("Op should be valid");
-    }
-    rt.block_on(async {
-        collomatique_storage::save_data_to_file(state.get_data(), &path)
-            .await
-            .expect("Failed to save file")
-    });
-    println!("Done.");
-
-    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -106,10 +33,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     if args.rpc_engine {
         return collomatique_rpc_engine::run_rpc_engine();
-    }
-
-    if args.solve {
-        return try_solve(args.file);
     }
 
     let payload = collomatique_gtk4::AppInit {
