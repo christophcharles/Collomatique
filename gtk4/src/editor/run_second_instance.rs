@@ -112,21 +112,47 @@ impl Component for Dialog {
                         #[watch]
                         set_visible: model.is_running,
                     },
-                    gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
-                        set_size_request: (50, 50),
-                        set_icon_size: gtk::IconSize::Large,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error,
+                        set_visible: !model.is_running && !model.end_with_error && !model.commands.is_empty(),
+                        gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                            set_size_request: (50, 50),
+                            set_icon_size: gtk::IconSize::Large,
+                        },
+                        gtk::Label {
+                            set_label: "Exécution terminée",
+                        },
                     },
-                    gtk::Image::from_icon_name("emblem-error-symbolic") {
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
-                        set_size_request: (50, 50),
-                        set_icon_size: gtk::IconSize::Large,
+                        #[watch]
+                        set_visible: !model.is_running && !model.end_with_error && model.commands.is_empty(),
+                        gtk::Image::from_icon_name("emblem-warning-symbolic") {
+                            set_size_request: (50, 50),
+                            set_icon_size: gtk::IconSize::Large,
+                        },
+                        gtk::Label {
+                            set_label: "Aucune modification effectuée",
+                        },
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: !model.is_running && model.end_with_error,
+                        gtk::Image::from_icon_name("emblem-error-symbolic") {
+                            set_size_request: (50, 50),
+                            set_icon_size: gtk::IconSize::Large,
+                        },
+                        gtk::Label {
+                            set_label: "Erreur pendant l'exécution",
+                        },
                     },
                     gtk::Label {
                         set_margin_all: 5,
