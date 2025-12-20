@@ -28,6 +28,9 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             collomatique_python::initialize();
             collomatique_python::run_python_script(script)?;
         }
+        InitMsg::SolveColloscope(_data) => {
+            eprintln!("/!\\ Solver with RPC not implemented yet!");
+        }
     }
 
     eprintln!("Exiting...");

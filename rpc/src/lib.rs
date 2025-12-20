@@ -16,6 +16,7 @@ pub use gui_answer::GuiAnswer;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
+    SolveColloscope(InternalDataStream),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
