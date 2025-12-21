@@ -24,3 +24,5 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "proces
 chrono.workspace = true
 anyhow.workspace = true
 non-empty-string.workspace = true
+portable-pty = "0.9"
+libc = "*"

@@ -1,22 +1,23 @@
 use anyhow::anyhow;
-use collomatique_rpc::{send_rpc, wait_for_msg, CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
 use collomatique_state_colloscopes::ColloscopeOp;
-use std::io::Write;
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
-    let data = wait_for_msg();
-    InitMsg::from_text_msg(&data)
+    let encoded_msg = EncodedMsg::receive()?;
+    Ok(encoded_msg.try_into()?)
 }
 
 pub fn send_exit() {
-    print!("{}\r\n", CompleteCmdMsg::GracefulExit.into_text_msg());
-    std::io::stdout().flush().expect("no error on flush");
+    let msg = CompleteCmdMsg::GracefulExit;
+    let encoded_msg = EncodedMsg::from(msg);
+    encoded_msg.send();
 }
 
 fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
 
-    let data_msg = send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
+    let data_msg =
+        EncodedMsg::send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
     let inner_data = match data_msg {
         ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
@@ -67,7 +68,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
                 )
             }
         };
-        send_rpc(CmdMsg::Update(collomatique_ops::UpdateOp::Colloscope(
+        EncodedMsg::send_rpc(CmdMsg::Update(collomatique_ops::UpdateOp::Colloscope(
             dressed_op,
         )))
         .map_err(|e| anyhow!("Error on UpdateOp: {}", e))?;

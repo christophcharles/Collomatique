@@ -67,7 +67,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 pub fn log(msg: String) {
     use std::io::Write;
-    eprint!("{}\r\n", msg);
+    eprintln!("{}", msg);
     std::io::stderr().flush().expect("no error on flush");
 }
 
@@ -82,7 +82,12 @@ pub struct Session {}
 
 impl Session {
     fn send_msg(&self, msg: collomatique_rpc::CmdMsg) -> collomatique_rpc::ResultMsg {
-        collomatique_rpc::send_rpc(msg).expect("Valid result message")
+        let encoded_msg = collomatique_rpc::EncodedMsg::from(msg);
+        encoded_msg
+            .send_and_get_response()
+            .expect("Valid result message")
+            .try_into()
+            .expect("Valid result message")
     }
 }
 

@@ -61,81 +61,236 @@ pub enum CompleteCmdMsg {
     GracefulExit,
 }
 
-fn trim_newline(mut s: String) -> String {
-    if s.ends_with('\n') {
-        s.pop();
-        if s.ends_with('\r') {
-            s.pop();
-        }
-    }
-    s
-}
-
 impl InitMsg {
-    pub fn from_text_msg(data: &str) -> Result<Self, String> {
-        match serde_json::from_str::<Self>(data) {
+    fn from_text_msg(data: &str) -> Result<Self, String> {
+        match serde_json::from_str::<Self>(&data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(trim_newline(data.to_string())),
+            Err(_) => Err(data.to_string()),
         }
     }
 
-    pub fn into_text_msg(&self) -> String {
-        serde_json::to_string(self).expect("Serializing to JSON should not fail")
+    fn into_text_msg(&self) -> String {
+        serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
     }
 }
 
 impl ResultMsg {
-    pub fn from_text_msg(data: &str) -> Result<Self, String> {
+    fn from_text_msg(data: &str) -> Result<Self, String> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(trim_newline(data.to_string())),
+            Err(_) => Err(data.to_string()),
         }
     }
 
-    pub fn into_text_msg(&self) -> String {
+    fn into_text_msg(&self) -> String {
+        serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
+    }
+}
+
+impl CompleteCmdMsg {
+    fn from_text_msg(data: &str) -> Result<Self, String> {
+        match serde_json::from_str::<Self>(data) {
+            Ok(cmd) => Ok(cmd),
+            Err(_) => Err(data.to_string()),
+        }
+    }
+
+    fn into_text_msg(&self) -> String {
         serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
 
-const RPC_MSG_MARKER: &'static str = "%%COLLOMATIQUE-RPC-MSG%%";
+#[derive(Clone, Debug)]
+pub struct EncodedMsg {
+    msg: String,
+}
 
-impl CompleteCmdMsg {
+const RPC_MSG_MARKER: &'static str = "%%COLLOMATIQUE-RPC-MSG%%";
+const RPC_CONTINUE_MARKER: &'static str = "%%COLLOMATIQUE-RPC-CON%%";
+const RPC_END_MARKER: &'static str = "%%COLLOMATIQUE-RPC-END%%";
+const NEW_LINE: &'static str = "\n";
+const MAX_LINE_LEN: usize = 80;
+
+impl EncodedMsg {
     pub fn check_if_msg(data: &str) -> bool {
         data.starts_with(RPC_MSG_MARKER)
+            || data.starts_with(RPC_CONTINUE_MARKER)
+            || data.starts_with(RPC_END_MARKER)
     }
 
-    pub fn from_text_msg(data: &str) -> Result<Self, String> {
-        let Some(deprefixed) = data.strip_prefix(RPC_MSG_MARKER) else {
-            return Err(trim_newline(data.to_string()));
-        };
+    pub fn check_if_end(data: &str) -> bool {
+        data.starts_with(RPC_END_MARKER)
+    }
 
-        match serde_json::from_str::<Self>(deprefixed) {
-            Ok(cmd) => Ok(cmd),
-            Err(_) => Err(trim_newline(data.to_string())),
+    pub fn receive() -> Result<Self, String> {
+        Self::from_raw_string(Self::wait_for_raw_msg())
+    }
+
+    pub fn encode(self) -> String {
+        Self::bundle_msg(self.msg)
+    }
+
+    pub fn from_raw_string(raw: String) -> Result<Self, String> {
+        let msg = Self::strip_msg(raw)?;
+        Ok(Self { msg })
+    }
+
+    pub fn send_and_get_response(self) -> Result<Self, String> {
+        self.send();
+        Self::receive()
+    }
+
+    pub fn send(self) {
+        let bundled = Self::bundle_msg(self.msg);
+        Self::send_raw_msg(&bundled);
+    }
+
+    pub fn send_rpc(cmd: CmdMsg) -> Result<ResultMsg, String> {
+        let msg: Self = CompleteCmdMsg::CmdMsg(cmd).into();
+        let answer = msg.send_and_get_response()?;
+        answer.try_into()
+    }
+}
+
+impl From<InitMsg> for EncodedMsg {
+    fn from(value: InitMsg) -> Self {
+        EncodedMsg {
+            msg: value.into_text_msg(),
         }
     }
+}
 
-    pub fn into_text_msg(&self) -> String {
-        RPC_MSG_MARKER.to_string()
-            + &serde_json::to_string(self).expect("Serializing to JSON should not fail")
+impl TryFrom<EncodedMsg> for InitMsg {
+    type Error = String;
+    fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
+        InitMsg::from_text_msg(&value.msg)
     }
 }
 
-pub fn wait_for_msg() -> String {
-    let mut buffer = String::new();
-    let stdin = std::io::stdin();
-    stdin.read_line(&mut buffer).expect("no error on reading");
-    buffer
+impl From<CmdMsg> for EncodedMsg {
+    fn from(value: CmdMsg) -> Self {
+        Self::from(CompleteCmdMsg::CmdMsg(value))
+    }
 }
 
-pub fn send_raw_msg(msg: &str) -> Result<ResultMsg, String> {
-    print!("{}\r\n", msg);
-    std::io::stdout().flush().expect("no error on flush");
-    let data = wait_for_msg();
-    ResultMsg::from_text_msg(&data)
+impl From<CompleteCmdMsg> for EncodedMsg {
+    fn from(value: CompleteCmdMsg) -> Self {
+        EncodedMsg {
+            msg: value.into_text_msg(),
+        }
+    }
 }
 
-pub fn send_rpc(cmd: CmdMsg) -> Result<ResultMsg, String> {
-    let msg = CompleteCmdMsg::CmdMsg(cmd).into_text_msg();
-    send_raw_msg(&msg)
+impl TryFrom<EncodedMsg> for CompleteCmdMsg {
+    type Error = String;
+    fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
+        CompleteCmdMsg::from_text_msg(&value.msg)
+    }
+}
+
+impl From<ResultMsg> for EncodedMsg {
+    fn from(value: ResultMsg) -> Self {
+        EncodedMsg {
+            msg: value.into_text_msg(),
+        }
+    }
+}
+
+impl TryFrom<EncodedMsg> for ResultMsg {
+    type Error = String;
+    fn try_from(value: EncodedMsg) -> Result<Self, String> {
+        ResultMsg::from_text_msg(&value.msg)
+    }
+}
+
+impl EncodedMsg {
+    fn bundle_msg(data: String) -> String {
+        let mut output = String::new();
+        for line in data.lines() {
+            output += RPC_MSG_MARKER;
+
+            let mut remaining_line_opt = Some(line);
+            while let Some(mut remaining_line) = remaining_line_opt.take() {
+                if remaining_line.len() > MAX_LINE_LEN {
+                    let target_len = remaining_line.floor_char_boundary(MAX_LINE_LEN);
+                    let (start, end) = remaining_line.split_at(target_len);
+                    remaining_line = start;
+                    remaining_line_opt = Some(end);
+                }
+                output += remaining_line;
+                if remaining_line_opt.is_some() {
+                    output += NEW_LINE;
+                    output += RPC_CONTINUE_MARKER;
+                }
+            }
+
+            output += NEW_LINE;
+        }
+        output += RPC_END_MARKER;
+        output += NEW_LINE;
+        output
+    }
+
+    fn strip_msg(data: String) -> Result<String, String> {
+        let naked_data = data
+            .replace(RPC_MSG_MARKER, "")
+            .replace(RPC_CONTINUE_MARKER, "")
+            .replace(RPC_END_MARKER, "");
+        let mut stripped = String::new();
+        let mut reached_last = false;
+        let mut first_run = true;
+        for line in data.lines() {
+            if reached_last {
+                return Err(naked_data);
+            }
+            if line.starts_with(RPC_END_MARKER) {
+                if line != RPC_END_MARKER {
+                    return Err(naked_data);
+                }
+                reached_last = true;
+                continue;
+            }
+            if line.starts_with(RPC_MSG_MARKER) {
+                if !first_run {
+                    stripped += NEW_LINE;
+                }
+                stripped += match line.strip_prefix(RPC_MSG_MARKER) {
+                    Some(d) => d,
+                    None => return Err(naked_data),
+                };
+            } else if line.starts_with(RPC_CONTINUE_MARKER) {
+                if first_run {
+                    return Err(naked_data);
+                }
+                stripped += match line.strip_prefix(RPC_CONTINUE_MARKER) {
+                    Some(d) => d,
+                    None => return Err(naked_data),
+                };
+            } else {
+                return Err(naked_data);
+            }
+            first_run = false;
+        }
+        Ok(stripped)
+    }
+
+    fn wait_for_raw_msg() -> String {
+        let mut output = String::new();
+        let mut buffer = String::new();
+        let stdin = std::io::stdin();
+        loop {
+            buffer.clear();
+            stdin.read_line(&mut buffer).expect("no error on reading");
+            output += &buffer;
+            if buffer.starts_with(RPC_END_MARKER) {
+                break;
+            }
+        }
+        output
+    }
+
+    fn send_raw_msg(msg: &str) {
+        print!("{}", msg);
+        std::io::stdout().flush().expect("no error on flush");
+    }
 }
