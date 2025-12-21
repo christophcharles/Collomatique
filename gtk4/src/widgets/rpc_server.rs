@@ -369,10 +369,8 @@ impl RpcLogger {
         if let Some(BufferOp::Insert(content)) = self.buffer_op.take() {
             let mut end_iter = widgets.text_buffer.end_iter();
             widgets.text_buffer.insert(&mut end_iter, &content);
-            let mut end_iter = widgets.text_buffer.end_iter();
-            widgets
-                .text_view
-                .scroll_to_iter(&mut end_iter, 0., false, 0., 0.);
+            let cursor_mark = widgets.text_buffer.get_insert();
+            widgets.text_view.scroll_mark_onscreen(&cursor_mark);
         }
     }
 }
