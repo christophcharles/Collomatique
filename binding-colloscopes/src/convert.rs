@@ -203,10 +203,12 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                 student,
                 group_list,
             } => {
-                let collo_group_list = colloscope.group_lists.get_mut(&group_list)?;
-                collo_group_list
-                    .groups_for_students
-                    .insert(student, value as u32);
+                if value >= -0.1 {
+                    let collo_group_list = colloscope.group_lists.get_mut(&group_list)?;
+                    collo_group_list
+                        .groups_for_students
+                        .insert(student, value as u32);
+                }
             }
             Var::GroupInInterrogation {
                 interrogation,

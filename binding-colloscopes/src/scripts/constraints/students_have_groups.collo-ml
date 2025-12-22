@@ -1,0 +1,12 @@
+let enforce_student_has_group(student: Student, group_list: GroupList) -> Constraint =
+    $StudentGroup(student, group_list) >== 0;
+
+let enforce_all_studens_have_group(group: Group) -> Constraint =
+    forall student in group.group_list.students {
+        enforce_student_has_group(student, group.group_list)
+    };
+
+pub let constraint() -> Constraint =
+    forall group in @[Group] {
+        enforce_all_studens_have_group(group)
+    };
