@@ -1,6 +1,9 @@
 use collo_ml::eval::Origin;
 use collomatique_binding_colloscopes::views::ObjectId;
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
+use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::FactorySender;
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
@@ -8,6 +11,7 @@ pub struct Dialog {
     hidden: bool,
     move_front: bool,
     warnings: Option<Vec<Origin<ObjectId>>>,
+    messages: FactoryVecDeque<Entry>,
 }
 
 #[derive(Debug)]
@@ -81,29 +85,15 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                             },
                         },
-                        gtk::ListBox {
+                        #[local_ref]
+                        messages_listbox -> gtk::ListBox {
                             set_hexpand: true,
                             set_vexpand: true,
                             add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
+                            set_selection_mode: gtk::SelectionMode::Single,
                             #[watch]
                             set_visible: model.warnings.as_ref().map(|x| !x.is_empty()).unwrap_or(false),
-                            gtk::ListBoxRow {
-                                gtk::Box {
-                                    set_margin_all: 5,
-                                    set_orientation: gtk::Orientation::Horizontal,
-                                    add_css_class: "warning",
-                                    gtk::Image {
-                                        set_margin_end: 5,
-                                        set_icon_name: Some("emblem-warning"),
-                                    },
-                                    gtk::Label {
-                                        set_halign: gtk::Align::Start,
-                                        set_label: "Contrainte n°3",
-                                    },
-                                },
-                            },
-                        },
+                        }
                     },
                 },
             }
@@ -115,11 +105,18 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let messages = FactoryVecDeque::builder()
+            .launch(gtk::ListBox::default())
+            .detach();
+
         let model = Dialog {
             hidden: true,
             move_front: false,
             warnings: None,
+            messages,
         };
+
+        let messages_listbox = model.messages.widget();
 
         let widgets = view_output!();
 
@@ -138,6 +135,7 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Update(warnings) => {
                 self.warnings = warnings;
+                self.update_messages();
             }
         }
     }
@@ -145,6 +143,94 @@ impl SimpleComponent for Dialog {
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         if self.move_front {
             widgets.root_window.present();
+        }
+    }
+}
+
+impl Dialog {
+    fn update_messages(&mut self) {
+        let mut messages = vec![];
+        if let Some(warnings) = &self.warnings {
+            messages.extend(warnings.iter().map(|x| EntryData::Warning(x.to_string())));
+        }
+        super::super::tools::factories::update_vec_deque(
+            &mut self.messages,
+            messages.into_iter(),
+            |x| EntryInput::Update(x),
+        );
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum EntryData {
+    Warning(String),
+}
+
+#[derive(Debug)]
+struct Entry {
+    data: EntryData,
+}
+
+#[derive(Debug)]
+enum EntryInput {
+    Update(EntryData),
+}
+
+impl Entry {
+    fn generate_icon_name(&self) -> String {
+        match &self.data {
+            EntryData::Warning(_) => "emblem-warning".into(),
+        }
+    }
+
+    fn generate_label(&self) -> String {
+        match &self.data {
+            EntryData::Warning(s) => s.clone(),
+        }
+    }
+}
+
+#[relm4::factory]
+impl FactoryComponent for Entry {
+    type Init = EntryData;
+    type Input = EntryInput;
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        #[root]
+        root_widget = gtk::Box {
+            set_margin_all: 5,
+            set_orientation: gtk::Orientation::Horizontal,
+            #[watch]
+            add_css_class: match &self.data {
+                EntryData::Warning(_) => "warning",
+            },
+            gtk::Image {
+                set_margin_end: 5,
+                #[watch]
+                set_icon_name: Some(&self.generate_icon_name()),
+            },
+            gtk::Label {
+                set_halign: gtk::Align::Start,
+                #[watch]
+                set_label: &self.generate_label(),
+            },
+        },
+    }
+
+    fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        let model = Self { data };
+
+        model
+    }
+
+    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+        match msg {
+            EntryInput::Update(data) => {
+                self.data = data;
+            }
         }
     }
 }
