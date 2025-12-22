@@ -1,3 +1,4 @@
+use collo_ml::problem::ConstraintDesc;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
@@ -34,6 +35,7 @@ pub enum ColloscopeInput {
 
 #[derive(Debug)]
 pub enum ColloscopeCommandOutput {
+    IlpProblemComputed(IlpProblem),
     IlpReprComputed(IlpRepr),
 }
 
@@ -43,13 +45,20 @@ pub enum ColloscopeOutput {
     SolveColloscopeClicked,
 }
 
-#[derive(Debug)]
-pub struct IlpRepr {
+#[derive(Debug, Clone)]
+pub struct IlpProblem {
     params: collomatique_state_colloscopes::colloscope_params::Parameters,
-    ilp_problem: collo_ml::problem::Problem<
+    problem: collo_ml::problem::Problem<
         collomatique_binding_colloscopes::views::ObjectId,
         collomatique_binding_colloscopes::vars::Var,
     >,
+}
+
+#[derive(Debug, Clone)]
+pub struct IlpRepr {
+    ilp_problem: IlpProblem,
+    colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
+    warnings: Vec<String>,
 }
 
 pub struct Colloscope {
@@ -69,6 +78,22 @@ pub struct Colloscope {
     )>,
 
     ilp_repr: Option<IlpRepr>,
+}
+
+impl Colloscope {
+    fn has_warnings(&self) -> bool {
+        match &self.ilp_repr {
+            None => false,
+            Some(ilp_repr) => !ilp_repr.warnings.is_empty(),
+        }
+    }
+
+    fn generate_warning_text(&self) -> String {
+        match &self.ilp_repr {
+            None => String::new(),
+            Some(ilp_repr) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -109,6 +134,31 @@ impl Component for Colloscope {
                         gtk::Label {
                             set_label: "<i><small>Construction des contraintes...</small></i>",
                             set_use_markup: true,
+                        },
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_start: 10,
+                        #[watch]
+                        set_visible: model.ilp_repr.is_some() && !model.has_warnings(),
+                        gtk::Image {
+                            set_icon_name: Some("emblem-success"),
+                        },
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_start: 10,
+                        set_spacing: 5,
+                        #[watch]
+                        set_visible: model.has_warnings(),
+                        gtk::Image {
+                            set_icon_name: Some("emblem-warning"),
+                        },
+                        gtk::Label {
+                            #[watch]
+                            set_label: &model.generate_warning_text(),
+                            set_use_markup: true,
+                            add_css_class: "warning",
                         },
                     },
                     gtk::Box {
@@ -247,13 +297,22 @@ impl Component for Colloscope {
                 self.params = params;
                 self.colloscope = colloscope;
 
-                let should_rebuild_ilp_repr = match &self.ilp_repr {
-                    Some(ilp_repr) => ilp_repr.params != self.params,
-                    None => true,
-                };
-                if should_rebuild_ilp_repr {
-                    self.ilp_repr = None;
-                    self.compute_ilp_repr(sender.clone());
+                match &self.ilp_repr {
+                    Some(ilp_repr) => {
+                        if ilp_repr.ilp_problem.params != self.params {
+                            self.ilp_repr = None;
+                            self.compute_ilp_repr(sender.clone());
+                        } else if ilp_repr.colloscope != self.colloscope {
+                            let ilp_problem = ilp_repr.ilp_problem.clone();
+                            self.ilp_repr = None;
+                            self.recompute_warnings(sender.clone(), ilp_problem);
+                        } else {
+                            // Everything is up to date
+                        }
+                    }
+                    None => {
+                        self.compute_ilp_repr(sender.clone());
+                    }
                 }
 
                 self.update_group_list_entries();
@@ -370,12 +429,18 @@ impl Component for Colloscope {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
+            ColloscopeCommandOutput::IlpProblemComputed(ilp_problem) => {
+                if ilp_problem.params != self.params {
+                    return; // Ignore old computation that are no longer relevant
+                }
+                self.recompute_warnings(sender, ilp_problem);
+            }
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
-                if ilp_repr.params != self.params {
+                if ilp_repr.ilp_problem.params != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
                 self.ilp_repr = Some(ilp_repr);
@@ -385,16 +450,49 @@ impl Component for Colloscope {
 }
 
 impl Colloscope {
+    fn recompute_warnings(&self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
+        let env = collomatique_binding_colloscopes::views::Env::from(self.params.clone());
+        let colloscope = self.colloscope.clone();
+
+        sender.spawn_oneshot_command(move || {
+            let config_data =
+                collomatique_binding_colloscopes::convert::build_complete_config(&env, &colloscope);
+            let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+            let sol = ilp_problem
+                .problem
+                .solution_from_data(&config_data, &solver)
+                .expect("There should be a complete ilp config for the colloscope");
+            let to_blame_list = sol.blame();
+            ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
+                ilp_problem,
+                colloscope,
+                warnings: to_blame_list
+                    .into_iter()
+                    .filter_map(|(_constraint, desc)| match desc {
+                        ConstraintDesc::InScript {
+                            script_ref: _,
+                            origin,
+                        } => {
+                            if origin.pretty_docstring.is_empty() {
+                                Some(origin.fn_name.node)
+                            } else {
+                                Some(origin.pretty_docstring.join("\n"))
+                            }
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+            })
+        });
+    }
+
     fn compute_ilp_repr(&self, sender: ComponentSender<Self>) {
         let params = self.params.clone();
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::build_default_problem;
             let env = collomatique_binding_colloscopes::views::Env::from(params.clone());
-            let ilp_problem = build_default_problem(&env);
-            ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
-                params,
-                ilp_problem,
-            })
+            let problem = build_default_problem(&env);
+            ColloscopeCommandOutput::IlpProblemComputed(IlpProblem { params, problem })
         });
     }
 
