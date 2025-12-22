@@ -15,10 +15,31 @@ pub struct ScriptVar<T: EvalObject> {
     pub params: Vec<ExprValue<T>>,
 }
 
+impl<T: EvalObject> std::fmt::Display for ScriptVar<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args: Vec<_> = self.params.iter().map(|x| x.to_string()).collect();
+        match self.from_list {
+            Some(i) => {
+                write!(f, "${}({})[{}]", self.name, args.join(", "), i)
+            }
+            None => {
+                write!(f, "${}({})", self.name, args.join(", "))
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct ExternVar<T: EvalObject> {
     pub name: String,
     pub params: Vec<ExprValue<T>>,
+}
+
+impl<T: EvalObject> std::fmt::Display for ExternVar<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args: Vec<_> = self.params.iter().map(|x| x.to_string()).collect();
+        write!(f, "${}({})", self.name, args.join(", "))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -27,11 +48,32 @@ pub enum IlpVar<T: EvalObject> {
     Script(ScriptVar<T>),
 }
 
+impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IlpVar::Base(b) => write!(f, "{}", b),
+            IlpVar::Script(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Origin<T: EvalObject> {
     pub fn_name: Spanned<String>,
     pub args: Vec<ExprValue<T>>,
     pub pretty_docstring: Vec<String>,
+}
+
+impl<T: EvalObject> std::fmt::Display for Origin<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.pretty_docstring.is_empty() {
+            let args_str: Vec<_> = self.args.iter().map(|x| x.to_string()).collect();
+
+            write!(f, "{}({})", self.fn_name.node, args_str.join(", "))
+        } else {
+            write!(f, "{}", self.pretty_docstring.join("\n"))
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -64,6 +106,26 @@ pub enum ExprValue<T: EvalObject> {
     Constraint(Vec<ConstraintWithOrigin<T>>),
     Object(T),
     List(Vec<ExprValue<T>>),
+}
+
+impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprValue::None => write!(f, "none"),
+            ExprValue::Int(v) => write!(f, "{}", v),
+            ExprValue::Bool(v) => write!(f, "{}", v),
+            ExprValue::LinExpr(lin_expr) => write!(f, "{}", lin_expr),
+            ExprValue::Constraint(c_with_o) => {
+                let strs: Vec<_> = c_with_o.iter().map(|x| x.constraint.to_string()).collect();
+                write!(f, "{}", strs.join(", "))
+            }
+            ExprValue::Object(obj) => write!(f, "{:?}", obj),
+            ExprValue::List(list) => {
+                let strs: Vec<_> = list.iter().map(|x| x.to_string()).collect();
+                write!(f, "[{}]", strs.join(", "))
+            }
+        }
+    }
 }
 
 impl<T: EvalObject> From<i32> for ExprValue<T> {
