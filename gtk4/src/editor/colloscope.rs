@@ -370,16 +370,15 @@ impl Component for Colloscope {
     fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
-                if ilp_repr.params == self.params {
-                    self.ilp_repr = Some(ilp_repr);
-                } else if self.ilp_repr.is_none() {
-                    self.compute_ilp_repr(sender.clone());
+                if ilp_repr.params != self.params {
+                    return; // Ignore old computation that are no longer relevant
                 }
+                self.ilp_repr = Some(ilp_repr);
             }
         }
     }
