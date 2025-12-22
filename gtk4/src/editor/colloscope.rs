@@ -1,4 +1,6 @@
+use collo_ml::eval::Origin;
 use collo_ml::problem::ConstraintDesc;
+use collomatique_binding_colloscopes::views::ObjectId;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
@@ -58,7 +60,7 @@ pub struct IlpProblem {
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<String>,
+    warnings: Vec<Origin<ObjectId>>,
 }
 
 pub struct Colloscope {
@@ -468,18 +470,19 @@ impl Colloscope {
                 colloscope,
                 warnings: to_blame_list
                     .into_iter()
-                    .filter_map(|(_constraint, desc)| match desc {
-                        ConstraintDesc::InScript {
+                    .map(|(_constraint, desc)| {
+                        let ConstraintDesc::InScript {
                             script_ref: _,
                             origin,
-                        } => {
-                            if origin.pretty_docstring.is_empty() {
-                                Some(origin.fn_name.node)
-                            } else {
-                                Some(origin.pretty_docstring.join("\n"))
-                            }
-                        }
-                        _ => None,
+                        } = desc
+                        else {
+                            panic!(
+                                "Reification constraints should all be satisfied! {:?}",
+                                desc
+                            )
+                        };
+
+                        origin
                     })
                     .collect(),
             })
