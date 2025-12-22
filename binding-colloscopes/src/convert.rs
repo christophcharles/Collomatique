@@ -4,17 +4,15 @@ use collomatique_state_colloscopes::colloscopes::Colloscope;
 
 use super::vars::Var;
 
-pub fn build_config(env: &Env) -> ConfigData<Var> {
+pub fn build_config(env: &Env, colloscope: Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
 
-    for (group_list_id, group_list) in &env.data.get_inner_data().colloscope.group_lists {
+    for (group_list_id, group_list) in &colloscope.group_lists {
         let data_group_list = if env.ignore_prefill_for_group_lists.contains(group_list_id) {
             None
         } else {
             Some(
-                env.data
-                    .get_inner_data()
-                    .params
+                env.params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -38,11 +36,8 @@ pub fn build_config(env: &Env) -> ConfigData<Var> {
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.data.get_inner_data().params.periods.ordered_period_list {
-        let period = env
-            .data
-            .get_inner_data()
-            .colloscope
+    for (period_id, period_desc) in &env.params.periods.ordered_period_list {
+        let period = colloscope
             .period_map
             .get(period_id)
             .expect("Period ID should be valid");
@@ -79,10 +74,9 @@ pub fn build_config(env: &Env) -> ConfigData<Var> {
 }
 
 pub fn build_empty_colloscope_with_prefilled_groups(env: &Env) -> Colloscope {
-    let mut colloscope = Colloscope::new_empty_from_params(&env.data.get_inner_data().params);
+    let mut colloscope = Colloscope::new_empty_from_params(&env.params);
 
-    for (group_list_id, group_list) in &env.data.get_inner_data().params.group_lists.group_list_map
-    {
+    for (group_list_id, group_list) in &env.params.group_lists.group_list_map {
         if env.ignore_prefill_for_group_lists.contains(group_list_id) {
             continue;
         }
@@ -123,10 +117,8 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                 if value < 0.5 {
                     continue;
                 }
-                let (period_id, num_in_period) = tools::week_to_period_id(
-                    &env.data.get_inner_data().params,
-                    interrogation.week,
-                )?;
+                let (period_id, num_in_period) =
+                    tools::week_to_period_id(&env.params, interrogation.week)?;
                 let collo_period = colloscope.period_map.get_mut(&period_id)?;
                 let collo_slot = collo_period.slot_map.get_mut(&interrogation.slot)?;
                 let collo_interrogation_opt = collo_slot.interrogations.get_mut(num_in_period)?;

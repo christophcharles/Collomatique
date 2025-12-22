@@ -7,21 +7,21 @@ use super::objects::{
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
 use collomatique_state_colloscopes::{
-    Data, GroupListId, IncompatId, PeriodId, StudentId, SubjectId,
+    colloscope_params::Parameters, GroupListId, IncompatId, PeriodId, StudentId, SubjectId,
 };
 use collomatique_time::{NonZeroMinutes, SlotWithDuration, WholeMinuteTime};
 use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub struct Env {
-    pub data: Data,
+    pub params: Parameters,
     pub ignore_prefill_for_group_lists: BTreeSet<GroupListId>,
 }
 
-impl From<Data> for Env {
-    fn from(value: Data) -> Self {
+impl From<Parameters> for Env {
+    fn from(value: Parameters) -> Self {
         Env {
-            data: value,
+            params: value,
             ignore_prefill_for_group_lists: BTreeSet::new(),
         }
     }
@@ -185,23 +185,20 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
 
     fn enumerate(env: &Env) -> BTreeSet<InterrogationData> {
         let mut output = BTreeSet::new();
-        for (subject_id, subject_slots) in &env.data.get_inner_data().params.slots.subject_map {
+        for (subject_id, subject_slots) in &env.params.slots.subject_map {
             let subject_desc = env
-                .data
-                .get_inner_data()
                 .params
                 .subjects
                 .find_subject(*subject_id)
                 .expect("Subject ID should be valid");
             for (slot_id, slot_desc) in &subject_slots.ordered_slots {
-                let week_pattern = tools::extract_week_pattern(&env.data, slot_desc.week_pattern);
+                let week_pattern = tools::extract_week_pattern(&env.params, slot_desc.week_pattern);
                 for (week, status) in week_pattern.into_iter().enumerate() {
                     if !status {
                         continue;
                     }
-                    let (period, _) =
-                        tools::week_to_period_id(&env.data.get_inner_data().params, week)
-                            .expect("Week should correspond to some period");
+                    let (period, _) = tools::week_to_period_id(&env.params, week)
+                        .expect("Week should correspond to some period");
                     if subject_desc.excluded_periods.contains(&period) {
                         continue;
                     }
@@ -216,16 +213,9 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
     }
 
     fn build(env: &Env, id: &InterrogationData) -> Option<Self::Object> {
-        let (subject_id, _pos) = env
-            .data
-            .get_inner_data()
-            .params
-            .slots
-            .find_slot_subject_and_position(id.slot)?;
-        let (period_id, _) = week_to_period_id(&env.data.get_inner_data().params, id.week)?;
+        let (subject_id, _pos) = env.params.slots.find_slot_subject_and_position(id.slot)?;
+        let (period_id, _) = week_to_period_id(&env.params, id.week)?;
         let period_associations = env
-            .data
-            .get_inner_data()
             .params
             .group_lists
             .subjects_associations
@@ -233,8 +223,6 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
         let group_list_id = period_associations.get(&subject_id)?;
 
         let students = match env
-            .data
-            .get_inner_data()
             .params
             .assignments
             .period_map
@@ -248,8 +236,6 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
         };
 
         let slot = env
-            .data
-            .get_inner_data()
             .params
             .slots
             .find_slot(id.slot)
@@ -272,9 +258,7 @@ impl ViewBuilder<Env, WeekId> for ObjectId {
         let mut output = BTreeSet::new();
 
         let mut current_first_week = 0usize;
-        for (_period_id, period_desc) in
-            &env.data.get_inner_data().params.periods.ordered_period_list
-        {
+        for (_period_id, period_desc) in &env.params.periods.ordered_period_list {
             for (num, week_desc) in period_desc.iter().enumerate() {
                 if !week_desc.interrogations {
                     continue;
@@ -288,7 +272,7 @@ impl ViewBuilder<Env, WeekId> for ObjectId {
     }
 
     fn build(env: &Env, id: &WeekId) -> Option<Self::Object> {
-        let (period, _) = tools::week_to_period_id(&env.data.get_inner_data().params, id.0)?;
+        let (period, _) = tools::week_to_period_id(&env.params, id.0)?;
 
         Some(Week {
             num: id.0 as i32,
@@ -304,9 +288,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
     type Object = GroupList;
 
     fn enumerate(env: &Env) -> BTreeSet<GroupListId> {
-        env.data
-            .get_inner_data()
-            .params
+        env.params
             .group_lists
             .group_list_map
             .keys()
@@ -315,17 +297,9 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
     }
 
     fn build(env: &Env, id: &GroupListId) -> Option<Self::Object> {
-        let group_list_data = env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .group_list_map
-            .get(id)?;
+        let group_list_data = env.params.group_lists.group_list_map.get(id)?;
 
         let complete_students: Vec<_> = env
-            .data
-            .get_inner_data()
             .params
             .students
             .student_map
@@ -357,13 +331,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
 
 impl GroupList {
     fn enumerate_groups(env: &Env, group_list_id: &GroupListId) -> Option<Vec<GroupId>> {
-        let group_list_data = env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .group_list_map
-            .get(group_list_id)?;
+        let group_list_data = env.params.group_lists.group_list_map.get(group_list_id)?;
 
         Some(
             (0..(*group_list_data.params.group_count.end() as i32))
@@ -381,9 +349,7 @@ impl ViewBuilder<Env, GroupId> for ObjectId {
     type Object = Group;
 
     fn enumerate(env: &Env) -> BTreeSet<GroupId> {
-        env.data
-            .get_inner_data()
-            .params
+        env.params
             .group_lists
             .group_list_map
             .keys()
@@ -399,13 +365,7 @@ impl ViewBuilder<Env, GroupId> for ObjectId {
             if env.ignore_prefill_for_group_lists.contains(&id.group_list) {
                 (vec![], false)
             } else {
-                let group_list_data = env
-                    .data
-                    .get_inner_data()
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(&id.group_list)?;
+                let group_list_data = env.params.group_lists.group_list_map.get(&id.group_list)?;
                 match group_list_data.prefilled_groups.groups.get(id.num as usize) {
                     Some(prefilled_group) => (
                         prefilled_group.students.iter().copied().collect(),
@@ -432,9 +392,7 @@ impl ViewBuilder<Env, SubjectId> for ObjectId {
     type Object = Subject;
 
     fn enumerate(env: &Env) -> BTreeSet<SubjectId> {
-        env.data
-            .get_inner_data()
-            .params
+        env.params
             .subjects
             .ordered_subject_list
             .iter()
@@ -443,16 +401,9 @@ impl ViewBuilder<Env, SubjectId> for ObjectId {
     }
 
     fn build(env: &Env, id: &SubjectId) -> Option<Self::Object> {
-        let subject_data = env
-            .data
-            .get_inner_data()
-            .params
-            .subjects
-            .find_subject(*id)?;
+        let subject_data = env.params.subjects.find_subject(*id)?;
 
         let periods_data = env
-            .data
-            .get_inner_data()
             .params
             .periods
             .ordered_period_list
@@ -497,33 +448,18 @@ impl ViewBuilder<Env, StudentId> for ObjectId {
     type Object = Student;
 
     fn enumerate(env: &Env) -> BTreeSet<StudentId> {
-        env.data
-            .get_inner_data()
-            .params
-            .students
-            .student_map
-            .keys()
-            .copied()
-            .collect()
+        env.params.students.student_map.keys().copied().collect()
     }
 
     fn build(env: &Env, id: &StudentId) -> Option<Self::Object> {
-        let student_data = env
-            .data
-            .get_inner_data()
-            .params
-            .students
-            .student_map
-            .get(id)?;
+        let student_data = env.params.students.student_map.get(id)?;
 
         let limits = env
-            .data
-            .get_inner_data()
             .params
             .settings
             .students
             .get(id)
-            .unwrap_or(&env.data.get_inner_data().params.settings.global);
+            .unwrap_or(&env.params.settings.global);
 
         let (hard_max_interrogations_per_day, max_interrogations_per_day) =
             match &limits.max_interrogations_per_day {
@@ -551,8 +487,6 @@ impl ViewBuilder<Env, StudentId> for ObjectId {
             hard_min_interrogations_per_week,
             min_interrogations_per_week,
             periods: env
-                .data
-                .get_inner_data()
                 .params
                 .periods
                 .ordered_period_list
@@ -572,9 +506,7 @@ impl ViewBuilder<Env, PeriodId> for ObjectId {
     type Object = Period;
 
     fn enumerate(env: &Env) -> BTreeSet<PeriodId> {
-        env.data
-            .get_inner_data()
-            .params
+        env.params
             .periods
             .ordered_period_list
             .iter()
@@ -584,12 +516,10 @@ impl ViewBuilder<Env, PeriodId> for ObjectId {
 
     fn build(env: &Env, id: &PeriodId) -> Option<Self::Object> {
         let (pos, first_week) = env
-            .data
-            .get_inner_data()
             .params
             .periods
             .find_period_position_and_first_week(*id)?;
-        let period_data = &env.data.get_inner_data().params.periods.ordered_period_list[pos].1;
+        let period_data = &env.params.periods.ordered_period_list[pos].1;
 
         Some(Period {
             weeks: period_data
@@ -632,9 +562,7 @@ impl ViewBuilder<Env, DayData> for ObjectId {
         let mut output = BTreeSet::new();
 
         let mut current_first_week = 0usize;
-        for (_period_id, period_desc) in
-            &env.data.get_inner_data().params.periods.ordered_period_list
-        {
+        for (_period_id, period_desc) in &env.params.periods.ordered_period_list {
             for (num, week_desc) in period_desc.iter().enumerate() {
                 if !week_desc.interrogations {
                     continue;
@@ -672,7 +600,7 @@ impl TimeSlot {
         env: &Env,
         day: collomatique_time::Weekday,
     ) -> Vec<collomatique_time::SlotWithDuration> {
-        let duration = tools::compute_time_resolution(&env.data.get_inner_data().params);
+        let duration = tools::compute_time_resolution(&env.params);
 
         const MINUTES_PER_HOUR: u32 = 60;
         const HOUR_PER_DAY: u32 = 24;
@@ -706,7 +634,7 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
     fn enumerate(env: &Env) -> BTreeSet<TimeSlotData> {
         let mut output = BTreeSet::new();
         for day in collomatique_time::Weekday::iter() {
-            for (week, status) in tools::extract_week_pattern(&env.data, None)
+            for (week, status) in tools::extract_week_pattern(&env.params, None)
                 .into_iter()
                 .enumerate()
             {
@@ -730,17 +658,14 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
         use chrono::Timelike;
         let mut interrogations = vec![];
 
-        for (subject_id, subject_slots) in &env.data.get_inner_data().params.slots.subject_map {
+        for (subject_id, subject_slots) in &env.params.slots.subject_map {
             let subject_desc = env
-                .data
-                .get_inner_data()
                 .params
                 .subjects
                 .find_subject(*subject_id)
                 .expect("Subject ID should be valid");
-            let (period, _) =
-                tools::week_to_period_id(&env.data.get_inner_data().params, id.week.0)
-                    .expect("Week should correspond to some period");
+            let (period, _) = tools::week_to_period_id(&env.params, id.week.0)
+                .expect("Week should correspond to some period");
             if subject_desc.excluded_periods.contains(&period) {
                 continue;
             }
@@ -751,7 +676,7 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
                 .expect("Subject with slots should have parameters");
             let duration = subject_params.duration.clone();
             for (slot_id, slot_desc) in &subject_slots.ordered_slots {
-                let week_pattern = tools::extract_week_pattern(&env.data, slot_desc.week_pattern);
+                let week_pattern = tools::extract_week_pattern(&env.params, slot_desc.week_pattern);
                 let status = week_pattern
                     .get(id.week.0)
                     .expect("Week number should be valid");
@@ -792,16 +717,8 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
     fn enumerate(env: &Env) -> BTreeSet<SubjectPeriodData> {
         let mut output = BTreeSet::new();
 
-        for (subject_id, subject_data) in &env
-            .data
-            .get_inner_data()
-            .params
-            .subjects
-            .ordered_subject_list
-        {
-            for (period_id, _period_desc) in
-                &env.data.get_inner_data().params.periods.ordered_period_list
-            {
+        for (subject_id, subject_data) in &env.params.subjects.ordered_subject_list {
+            for (period_id, _period_desc) in &env.params.periods.ordered_period_list {
                 if subject_data.excluded_periods.contains(period_id) {
                     continue;
                 }
@@ -817,8 +734,6 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
 
     fn build(env: &Env, id: &SubjectPeriodData) -> Option<Self::Object> {
         let group_list_id = env
-            .data
-            .get_inner_data()
             .params
             .group_lists
             .subjects_associations
@@ -826,8 +741,6 @@ impl ViewBuilder<Env, SubjectPeriodData> for ObjectId {
             .expect("Period ID should be valid")
             .get(&id.subject);
         let subject_assignments = env
-            .data
-            .get_inner_data()
             .params
             .assignments
             .period_map
@@ -852,27 +765,18 @@ impl ViewBuilder<Env, IncompatId> for ObjectId {
     type Object = Incompat;
 
     fn enumerate(env: &Env) -> BTreeSet<IncompatId> {
-        env.data
-            .get_inner_data()
-            .params
-            .incompats
-            .incompat_map
-            .keys()
-            .cloned()
-            .collect()
+        env.params.incompats.incompat_map.keys().cloned().collect()
     }
 
     fn build(env: &Env, id: &IncompatId) -> Option<Self::Object> {
         let incompat_data = env
-            .data
-            .get_inner_data()
             .params
             .incompats
             .incompat_map
             .get(id)
             .expect("Incompat ID should be valid");
 
-        let week_pattern = extract_week_pattern(&env.data, incompat_data.week_pattern_id);
+        let week_pattern = extract_week_pattern(&env.params, incompat_data.week_pattern_id);
 
         Some(Incompat {
             subject: incompat_data.subject_id,
@@ -899,8 +803,8 @@ impl ViewBuilder<Env, IncompatWeekData> for ObjectId {
 
     fn enumerate(env: &Env) -> BTreeSet<IncompatWeekData> {
         let mut output = BTreeSet::new();
-        for (incompat_id, incompat) in &env.data.get_inner_data().params.incompats.incompat_map {
-            let week_pattern = extract_week_pattern(&env.data, incompat.week_pattern_id);
+        for (incompat_id, incompat) in &env.params.incompats.incompat_map {
+            let week_pattern = extract_week_pattern(&env.params, incompat.week_pattern_id);
             for (week, status) in week_pattern.into_iter().enumerate() {
                 if !status {
                     continue;
@@ -916,8 +820,6 @@ impl ViewBuilder<Env, IncompatWeekData> for ObjectId {
 
     fn build(env: &Env, id: &IncompatWeekData) -> Option<Self::Object> {
         let incompat_data = env
-            .data
-            .get_inner_data()
             .params
             .incompats
             .incompat_map
@@ -946,8 +848,8 @@ impl ViewBuilder<Env, IncompatSlotData> for ObjectId {
 
     fn enumerate(env: &Env) -> BTreeSet<IncompatSlotData> {
         let mut output = BTreeSet::new();
-        for (incompat_id, incompat) in &env.data.get_inner_data().params.incompats.incompat_map {
-            let week_pattern = extract_week_pattern(&env.data, incompat.week_pattern_id);
+        for (incompat_id, incompat) in &env.params.incompats.incompat_map {
+            let week_pattern = extract_week_pattern(&env.params, incompat.week_pattern_id);
             for (week, status) in week_pattern.into_iter().enumerate() {
                 if !status {
                     continue;
@@ -966,8 +868,6 @@ impl ViewBuilder<Env, IncompatSlotData> for ObjectId {
 
     fn build(env: &Env, id: &IncompatSlotData) -> Option<Self::Object> {
         let incompat_data = env
-            .data
-            .get_inner_data()
             .params
             .incompats
             .incompat_map
@@ -994,7 +894,7 @@ impl IncompatSlot {
         slot_with_duration: &SlotWithDuration,
         week: WeekId,
     ) -> Vec<TimeSlotData> {
-        let duration = tools::compute_time_resolution(&env.data.get_inner_data().params);
+        let duration = tools::compute_time_resolution(&env.params);
 
         const MINUTES_PER_HOUR: u32 = 60;
         use chrono::Timelike;

@@ -8,7 +8,7 @@ use super::*;
 fn all_scripts_should_compile() {
     let data = collomatique_state_colloscopes::Data::new();
     let env = views::Env {
-        data,
+        params: data.get_inner_data().params.clone(),
         ignore_prefill_for_group_lists: BTreeSet::new(),
     };
     let mut builder = ProblemBuilder::<ObjectId, Var>::new(&env)
@@ -52,7 +52,7 @@ fn all_scripts_should_compile() {
 fn all_scripts_should_compile_without_warnings() {
     let data = collomatique_state_colloscopes::Data::new();
     let env = views::Env {
-        data,
+        params: data.get_inner_data().params.clone(),
         ignore_prefill_for_group_lists: BTreeSet::new(),
     };
     let mut builder = ProblemBuilder::<ObjectId, Var>::new(&env)

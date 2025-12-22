@@ -1,6 +1,4 @@
-use collomatique_state_colloscopes::{
-    colloscope_params::Parameters, Data, PeriodId, WeekPatternId,
-};
+use collomatique_state_colloscopes::{colloscope_params::Parameters, PeriodId, WeekPatternId};
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;
@@ -14,24 +12,25 @@ pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, 
     None
 }
 
-pub fn extract_week_pattern(env: &Data, week_pattern_id: Option<WeekPatternId>) -> Vec<bool> {
+pub fn extract_week_pattern(
+    params: &Parameters,
+    week_pattern_id: Option<WeekPatternId>,
+) -> Vec<bool> {
     let mut output = vec![];
 
     let week_pattern = match week_pattern_id {
-        Some(id) => env
-            .get_inner_data()
-            .params
+        Some(id) => params
             .week_patterns
             .week_pattern_map
             .get(&id)
             .expect("WeekPatternId should be valid")
             .weeks
             .clone(),
-        None => vec![true; env.get_inner_data().params.periods.count_weeks()],
+        None => vec![true; params.periods.count_weeks()],
     };
 
     let mut current_first_week = 0usize;
-    for (_period_id, period_desc) in &env.get_inner_data().params.periods.ordered_period_list {
+    for (_period_id, period_desc) in &params.periods.ordered_period_list {
         for (num, week_desc) in period_desc.iter().enumerate() {
             if !week_desc.interrogations {
                 output.push(false);

@@ -22,12 +22,10 @@ fn try_solve() -> Result<(), anyhow::Error> {
         ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
     };
-    let data = collomatique_state_colloscopes::Data::from_inner_data(inner_data)?;
-
     eprintln!("Building ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::build_default_problem;
-    let env = collomatique_binding_colloscopes::views::Env::from(data);
+    let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
     let problem = build_default_problem(&env);
 
     println!("Solving ILP problem...");
@@ -44,9 +42,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
             .expect("Config data should be compatible with colloscope parameters");
 
     println!("Sending update ops...");
-    let update_ops = env
-        .data
-        .get_inner_data()
+    let update_ops = inner_data
         .colloscope
         .update_ops(new_colloscope)
         .expect("New and old colloscopes should be compatible");

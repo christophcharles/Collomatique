@@ -22,14 +22,7 @@ pub enum Var {
 
 impl Var {
     fn compute_max_group_num(env: &Env, group_list: &GroupListId) -> f64 {
-        let group_list_data = match env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .group_list_map
-            .get(group_list)
-        {
+        let group_list_data = match env.params.group_lists.group_list_map.get(group_list) {
             Some(data) => data,
             None => return 0.,
         };
@@ -39,8 +32,6 @@ impl Var {
     fn compute_group_range(env: &Env, interrogation: &InterrogationData) -> std::ops::Range<i32> {
         let default_range = 0..0;
         let subject_id = match env
-            .data
-            .get_inner_data()
             .params
             .slots
             .find_slot_subject_and_position(interrogation.slot)
@@ -48,18 +39,11 @@ impl Var {
             Some((subject_id, _pos)) => subject_id,
             None => return default_range,
         };
-        let period_id =
-            match week_to_period_id(&env.data.get_inner_data().params, interrogation.week) {
-                Some((id, _)) => id,
-                None => return default_range,
-            };
-        let period_associations = match env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .subjects_associations
-            .get(&period_id)
+        let period_id = match week_to_period_id(&env.params, interrogation.week) {
+            Some((id, _)) => id,
+            None => return default_range,
+        };
+        let period_associations = match env.params.group_lists.subjects_associations.get(&period_id)
         {
             Some(period_associations) => period_associations,
             None => return default_range,
@@ -68,14 +52,7 @@ impl Var {
             Some(id) => id,
             None => return default_range,
         };
-        let group_list = match env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .group_list_map
-            .get(group_list_id)
-        {
+        let group_list = match env.params.group_lists.group_list_map.get(group_list_id) {
             Some(group_list) => group_list,
             None => return default_range,
         };
@@ -83,14 +60,7 @@ impl Var {
     }
 
     fn fix_student_group(env: &Env, student: &StudentId, group_list: &GroupListId) -> Option<f64> {
-        let group_list_data = match env
-            .data
-            .get_inner_data()
-            .params
-            .group_lists
-            .group_list_map
-            .get(group_list)
-        {
+        let group_list_data = match env.params.group_lists.group_list_map.get(group_list) {
             Some(data) => data,
             None => return Some(-1.),
         };

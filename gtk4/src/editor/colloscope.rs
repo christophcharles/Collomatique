@@ -15,12 +15,7 @@ mod interrogation_dialog;
 #[derive(Debug)]
 pub enum ColloscopeInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::subjects::Subjects,
-        collomatique_state_colloscopes::slots::Slots,
-        collomatique_state_colloscopes::teachers::Teachers,
-        collomatique_state_colloscopes::students::Students,
-        collomatique_state_colloscopes::group_lists::GroupLists,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
     ),
 
@@ -38,18 +33,27 @@ pub enum ColloscopeInput {
 }
 
 #[derive(Debug)]
+pub enum ColloscopeCommandOutput {
+    IlpReprComputed(IlpRepr),
+}
+
+#[derive(Debug)]
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
     SolveColloscopeClicked,
 }
 
+#[derive(Debug)]
+pub struct IlpRepr {
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
+    ilp_problem: collo_ml::problem::Problem<
+        collomatique_binding_colloscopes::views::ObjectId,
+        collomatique_binding_colloscopes::vars::Var,
+    >,
+}
+
 pub struct Colloscope {
-    periods: collomatique_state_colloscopes::periods::Periods,
-    subjects: collomatique_state_colloscopes::subjects::Subjects,
-    slots: collomatique_state_colloscopes::slots::Slots,
-    teachers: collomatique_state_colloscopes::teachers::Teachers,
-    students: collomatique_state_colloscopes::students::Students,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
@@ -63,6 +67,8 @@ pub struct Colloscope {
         collomatique_state_colloscopes::PeriodId,
         usize,
     )>,
+
+    ilp_repr: Option<IlpRepr>,
 }
 
 #[relm4::component(pub)]
@@ -70,7 +76,7 @@ impl Component for Colloscope {
     type Input = ColloscopeInput;
     type Output = ColloscopeOutput;
     type Init = ();
-    type CommandOutput = ();
+    type CommandOutput = ColloscopeCommandOutput;
 
     view! {
         #[root]
@@ -90,6 +96,20 @@ impl Component for Colloscope {
                         set_halign: gtk::Align::Start,
                         set_label: "Colloscope",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                    },
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_start: 10,
+                        set_spacing: 5,
+                        #[watch]
+                        set_visible: model.ilp_repr.is_none(),
+                        adw::Spinner {
+                            set_halign: gtk::Align::Start,
+                        },
+                        gtk::Label {
+                            set_label: "<i><small>Construction des contraintes...</small></i>",
+                            set_use_markup: true,
+                        },
                     },
                     gtk::Box {
                         set_hexpand: true,
@@ -203,12 +223,7 @@ impl Component for Colloscope {
             });
 
         let model = Colloscope {
-            periods: collomatique_state_colloscopes::periods::Periods::default(),
-            subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
-            slots: collomatique_state_colloscopes::slots::Slots::default(),
-            teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
-            students: collomatique_state_colloscopes::students::Students::default(),
-            group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
+            params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
             group_list_entries,
             group_list_dialog,
@@ -216,6 +231,7 @@ impl Component for Colloscope {
             colloscope_display,
             interrogation_dialog,
             edited_interrogation: None,
+            ilp_repr: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -227,21 +243,12 @@ impl Component for Colloscope {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ColloscopeInput::Update(
-                periods,
-                subjects,
-                slots,
-                teachers,
-                students,
-                group_lists,
-                colloscope,
-            ) => {
-                self.periods = periods;
-                self.subjects = subjects;
-                self.slots = slots;
-                self.teachers = teachers;
-                self.students = students;
-                self.group_lists = group_lists;
+            ColloscopeInput::Update(params, colloscope) => {
+                if self.params != params {
+                    self.ilp_repr = None;
+                    Self::compute_ilp_repr(sender.clone(), self.params.clone());
+                }
+                self.params = params;
                 self.colloscope = colloscope;
 
                 self.update_group_list_entries();
@@ -252,8 +259,9 @@ impl Component for Colloscope {
                 self.group_list_dialog
                     .sender()
                     .send(group_list_dialog::DialogInput::Show(
-                        self.students.clone(),
-                        self.group_lists
+                        self.params.students.clone(),
+                        self.params
+                            .group_lists
                             .group_list_map
                             .get(&group_list_id)
                             .cloned()
@@ -284,10 +292,12 @@ impl Component for Colloscope {
                 self.edited_interrogation = Some((slot_id, period_id, week_in_period));
 
                 let (subject_id, _pos) = self
+                    .params
                     .slots
                     .find_slot_subject_and_position(slot_id)
                     .expect("Slot ID should be valid");
                 let period_associations = self
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(&period_id)
@@ -296,6 +306,7 @@ impl Component for Colloscope {
                     .get(&subject_id)
                     .expect("A group list is needed to be able to edit a slot");
                 let group_list = self
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -350,11 +361,44 @@ impl Component for Colloscope {
             }
         }
     }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
+                if ilp_repr.params == self.params {
+                    self.ilp_repr = Some(ilp_repr);
+                } else if self.ilp_repr.is_none() {
+                    Self::compute_ilp_repr(sender.clone(), self.params.clone());
+                }
+            }
+        }
+    }
 }
 
 impl Colloscope {
+    fn compute_ilp_repr(
+        sender: ComponentSender<Self>,
+        params: collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) {
+        sender.spawn_oneshot_command(move || {
+            use collomatique_binding_colloscopes::scripts::build_default_problem;
+            let env = collomatique_binding_colloscopes::views::Env::from(params.clone());
+            let ilp_problem = build_default_problem(&env);
+            ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
+                params,
+                ilp_problem,
+            })
+        });
+    }
+
     fn update_group_list_entries(&mut self) {
         let mut group_lists_vec: Vec<_> = self
+            .params
             .group_lists
             .group_list_map
             .iter()
@@ -367,7 +411,7 @@ impl Colloscope {
                     .get(id)
                     .expect("Group list ID should be valid")
                     .clone(),
-                total_student_count: self.students.student_map.len(),
+                total_student_count: self.params.students.student_map.len(),
             })
             .collect();
 
@@ -384,12 +428,12 @@ impl Colloscope {
         self.colloscope_display
             .sender()
             .send(colloscope_display::DisplayInput::Update(
-                self.periods.clone(),
-                self.subjects.clone(),
-                self.slots.clone(),
-                self.teachers.clone(),
-                self.students.clone(),
-                self.group_lists.clone(),
+                self.params.periods.clone(),
+                self.params.subjects.clone(),
+                self.params.slots.clone(),
+                self.params.teachers.clone(),
+                self.params.students.clone(),
+                self.params.group_lists.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();

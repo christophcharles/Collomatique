@@ -402,32 +402,7 @@ impl EditorPanel {
         self.colloscope
             .sender()
             .send(colloscope::ColloscopeInput::Update(
-                self.data.get_data().get_inner_data().params.periods.clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .clone(),
-                self.data.get_data().get_inner_data().params.slots.clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .teachers
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .students
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .group_lists
-                    .clone(),
+                self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
             ))
             .unwrap();
