@@ -526,7 +526,9 @@ impl Colloscope {
         self.ilp_repr = ilp_repr;
         self.blame_dialog
             .sender()
-            .send(blame_dialog::DialogInput::Update)
+            .send(blame_dialog::DialogInput::Update(
+                self.ilp_repr.as_ref().map(|x| x.warnings.clone()),
+            ))
             .unwrap();
     }
 
