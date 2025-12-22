@@ -10,6 +10,7 @@ use relm4::{
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+mod blame_dialog;
 mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
@@ -33,6 +34,8 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+
+    ShowBlamedConstraints,
 }
 
 #[derive(Debug)]
@@ -71,6 +74,7 @@ pub struct Colloscope {
     group_list_dialog: Controller<group_list_dialog::Dialog>,
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
+    blame_dialog: Controller<blame_dialog::Dialog>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -124,43 +128,49 @@ impl Component for Colloscope {
                         set_label: "Colloscope",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_margin_start: 10,
-                        set_spacing: 5,
-                        #[watch]
-                        set_visible: model.ilp_repr.is_none(),
-                        adw::Spinner {
-                            set_halign: gtk::Align::Start,
-                        },
-                        gtk::Label {
-                            set_label: "<i><small>Construction des contraintes...</small></i>",
-                            set_use_markup: true,
-                        },
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_margin_start: 10,
-                        #[watch]
-                        set_visible: model.ilp_repr.is_some() && !model.has_warnings(),
-                        gtk::Image {
-                            set_icon_name: Some("emblem-success"),
-                        },
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_margin_start: 10,
-                        set_spacing: 5,
-                        #[watch]
-                        set_visible: model.has_warnings(),
-                        gtk::Image {
-                            set_icon_name: Some("emblem-warning"),
-                        },
-                        gtk::Label {
-                            #[watch]
-                            set_label: &model.generate_warning_text(),
-                            set_use_markup: true,
-                            add_css_class: "warning",
+                    gtk::Button {
+                        set_margin_start: 5,
+                        add_css_class: "flat",
+                        set_tooltip: "Afficher les erreurs du colloscope",
+                        connect_clicked => ColloscopeInput::ShowBlamedConstraints,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                #[watch]
+                                set_visible: model.ilp_repr.is_none(),
+                                adw::Spinner {
+                                    set_halign: gtk::Align::Start,
+                                },
+                                gtk::Label {
+                                    set_label: "<i><small>Construction des contraintes...</small></i>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                #[watch]
+                                set_visible: model.ilp_repr.is_some() && !model.has_warnings(),
+                                gtk::Image {
+                                    set_icon_name: Some("emblem-success"),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                #[watch]
+                                set_visible: model.has_warnings(),
+                                gtk::Image {
+                                    set_icon_name: Some("emblem-warning"),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &model.generate_warning_text(),
+                                    set_use_markup: true,
+                                    add_css_class: "warning",
+                                },
+                            },
                         },
                     },
                     gtk::Box {
@@ -274,6 +284,11 @@ impl Component for Colloscope {
                 }
             });
 
+        let blame_dialog = blame_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let model = Colloscope {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -284,6 +299,7 @@ impl Component for Colloscope {
             interrogation_dialog,
             edited_interrogation: None,
             ilp_repr: None,
+            blame_dialog,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -302,11 +318,9 @@ impl Component for Colloscope {
                 match &self.ilp_repr {
                     Some(ilp_repr) => {
                         if ilp_repr.ilp_problem.params != self.params {
-                            self.ilp_repr = None;
                             self.compute_ilp_repr(sender.clone());
                         } else if ilp_repr.colloscope != self.colloscope {
                             let ilp_problem = ilp_repr.ilp_problem.clone();
-                            self.ilp_repr = None;
                             self.recompute_warnings(sender.clone(), ilp_problem);
                         } else {
                             // Everything is up to date
@@ -425,6 +439,12 @@ impl Component for Colloscope {
                     .output(ColloscopeOutput::SolveColloscopeClicked)
                     .unwrap();
             }
+            ColloscopeInput::ShowBlamedConstraints => {
+                self.blame_dialog
+                    .sender()
+                    .send(blame_dialog::DialogInput::Show)
+                    .unwrap();
+            }
         }
     }
 
@@ -445,14 +465,16 @@ impl Component for Colloscope {
                 if ilp_repr.ilp_problem.params != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
-                self.ilp_repr = Some(ilp_repr);
+                self.update_ilp_repr(Some(ilp_repr));
             }
         }
     }
 }
 
 impl Colloscope {
-    fn recompute_warnings(&self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
+    fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
+        self.update_ilp_repr(None);
+
         let env = collomatique_binding_colloscopes::views::Env::from(self.params.clone());
         let colloscope = self.colloscope.clone();
 
@@ -489,7 +511,8 @@ impl Colloscope {
         });
     }
 
-    fn compute_ilp_repr(&self, sender: ComponentSender<Self>) {
+    fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
+        self.update_ilp_repr(None);
         let params = self.params.clone();
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::build_default_problem;
@@ -497,6 +520,14 @@ impl Colloscope {
             let problem = build_default_problem(&env);
             ColloscopeCommandOutput::IlpProblemComputed(IlpProblem { params, problem })
         });
+    }
+
+    fn update_ilp_repr(&mut self, ilp_repr: Option<IlpRepr>) {
+        self.ilp_repr = ilp_repr;
+        self.blame_dialog
+            .sender()
+            .send(blame_dialog::DialogInput::Update)
+            .unwrap();
     }
 
     fn update_group_list_entries(&mut self) {
