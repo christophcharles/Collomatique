@@ -244,12 +244,17 @@ impl Component for Colloscope {
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             ColloscopeInput::Update(params, colloscope) => {
-                if self.params != params || self.ilp_repr.is_none() {
-                    self.ilp_repr = None;
-                    Self::compute_ilp_repr(sender.clone(), self.params.clone());
-                }
                 self.params = params;
                 self.colloscope = colloscope;
+
+                let should_rebuild_ilp_repr = match &self.ilp_repr {
+                    Some(ilp_repr) => ilp_repr.params != self.params,
+                    None => true,
+                };
+                if should_rebuild_ilp_repr {
+                    self.ilp_repr = None;
+                    self.compute_ilp_repr(sender.clone());
+                }
 
                 self.update_group_list_entries();
                 self.update_colloscope_display();
@@ -373,7 +378,7 @@ impl Component for Colloscope {
                 if ilp_repr.params == self.params {
                     self.ilp_repr = Some(ilp_repr);
                 } else if self.ilp_repr.is_none() {
-                    Self::compute_ilp_repr(sender.clone(), self.params.clone());
+                    self.compute_ilp_repr(sender.clone());
                 }
             }
         }
@@ -381,10 +386,8 @@ impl Component for Colloscope {
 }
 
 impl Colloscope {
-    fn compute_ilp_repr(
-        sender: ComponentSender<Self>,
-        params: collomatique_state_colloscopes::colloscope_params::Parameters,
-    ) {
+    fn compute_ilp_repr(&self, sender: ComponentSender<Self>) {
+        let params = self.params.clone();
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::build_default_problem;
             let env = collomatique_binding_colloscopes::views::Env::from(params.clone());
