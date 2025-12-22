@@ -244,7 +244,7 @@ impl Component for Colloscope {
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             ColloscopeInput::Update(params, colloscope) => {
-                if self.params != params {
+                if self.params != params || self.ilp_repr.is_none() {
                     self.ilp_repr = None;
                     Self::compute_ilp_repr(sender.clone(), self.params.clone());
                 }
