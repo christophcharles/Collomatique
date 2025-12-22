@@ -12,10 +12,28 @@ use collomatique_state_colloscopes::{
 use collomatique_time::{NonZeroMinutes, SlotWithDuration, WholeMinuteTime};
 use std::collections::BTreeSet;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Env {
-    pub params: Parameters,
-    pub ignore_prefill_for_group_lists: BTreeSet<GroupListId>,
+    pub(crate) params: Parameters,
+    pub(crate) ignore_prefill_for_group_lists: BTreeSet<GroupListId>,
+}
+
+impl Env {
+    pub fn with_ignore_all_prefill(params: Parameters) -> Self {
+        Env {
+            ignore_prefill_for_group_lists: params
+                .group_lists
+                .group_list_map
+                .keys()
+                .cloned()
+                .collect(),
+            params,
+        }
+    }
+
+    pub fn get_params(&self) -> &Parameters {
+        &self.params
+    }
 }
 
 impl From<Parameters> for Env {

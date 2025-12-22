@@ -52,7 +52,7 @@ pub enum ColloscopeOutput {
 
 #[derive(Debug, Clone)]
 pub struct IlpProblem {
-    params: collomatique_state_colloscopes::colloscope_params::Parameters,
+    env: collomatique_binding_colloscopes::views::Env,
     problem: collo_ml::problem::Problem<
         collomatique_binding_colloscopes::views::ObjectId,
         collomatique_binding_colloscopes::vars::Var,
@@ -317,7 +317,7 @@ impl Component for Colloscope {
 
                 match &self.ilp_repr {
                     Some(ilp_repr) => {
-                        if ilp_repr.ilp_problem.params != self.params {
+                        if *ilp_repr.ilp_problem.env.get_params() != self.params {
                             self.compute_ilp_repr(sender.clone());
                         } else if ilp_repr.colloscope != self.colloscope {
                             let ilp_problem = ilp_repr.ilp_problem.clone();
@@ -456,13 +456,13 @@ impl Component for Colloscope {
     ) {
         match message {
             ColloscopeCommandOutput::IlpProblemComputed(ilp_problem) => {
-                if ilp_problem.params != self.params {
+                if *ilp_problem.env.get_params() != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
                 self.recompute_warnings(sender, ilp_problem);
             }
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
-                if ilp_repr.ilp_problem.params != self.params {
+                if *ilp_repr.ilp_problem.env.get_params() != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
                 self.update_ilp_repr(Some(ilp_repr));
@@ -475,12 +475,13 @@ impl Colloscope {
     fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
         self.update_ilp_repr(None);
 
-        let env = collomatique_binding_colloscopes::views::Env::from(self.params.clone());
         let colloscope = self.colloscope.clone();
 
         sender.spawn_oneshot_command(move || {
-            let config_data =
-                collomatique_binding_colloscopes::convert::build_complete_config(&env, &colloscope);
+            let config_data = collomatique_binding_colloscopes::convert::build_complete_config(
+                &ilp_problem.env,
+                &colloscope,
+            );
             let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
@@ -516,9 +517,9 @@ impl Colloscope {
         let params = self.params.clone();
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::build_default_problem;
-            let env = collomatique_binding_colloscopes::views::Env::from(params.clone());
+            let env = collomatique_binding_colloscopes::views::Env::from(params);
             let problem = build_default_problem(&env);
-            ColloscopeCommandOutput::IlpProblemComputed(IlpProblem { params, problem })
+            ColloscopeCommandOutput::IlpProblemComputed(IlpProblem { env, problem })
         });
     }
 
