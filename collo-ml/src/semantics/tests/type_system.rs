@@ -186,12 +186,12 @@ fn unknown_field_access() {
 #[test]
 fn nested_field_access() {
     let mut types = HashMap::new();
-    types.insert("String".to_string(), HashMap::new());
+    types.insert("String2".to_string(), HashMap::new());
 
     let mut address_fields = HashMap::new();
     address_fields.insert(
         "city".to_string(),
-        ExprType::simple(SimpleType::Object("String".to_string()))
+        ExprType::simple(SimpleType::Object("String2".to_string()))
             .try_into()
             .unwrap(),
     );
@@ -206,7 +206,7 @@ fn nested_field_access() {
     );
     types.insert("Student".to_string(), student_fields);
 
-    let input = "pub let f(s: Student) -> String = s.address.city;";
+    let input = "pub let f(s: Student) -> String2 = s.address.city;";
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(

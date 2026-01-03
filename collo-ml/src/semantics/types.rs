@@ -16,6 +16,7 @@ pub enum SimpleType {
     None,
     LinExpr,
     Constraint,
+    String,
     EmptyList,
     List(ExprType),
     Object(String),
@@ -176,7 +177,8 @@ impl SimpleType {
             | (SimpleType::Bool, SimpleType::Bool)
             | (SimpleType::None, SimpleType::None)
             | (SimpleType::LinExpr, SimpleType::LinExpr)
-            | (SimpleType::Constraint, SimpleType::Constraint) => true,
+            | (SimpleType::Constraint, SimpleType::Constraint)
+            | (SimpleType::String, SimpleType::String) => true,
 
             // Same object type overlaps
             (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
@@ -193,7 +195,9 @@ impl SimpleType {
             | (SimpleType::Constraint, _)
             | (_, SimpleType::Constraint)
             | (SimpleType::Object(_), _)
-            | (_, SimpleType::Object(_)) => false,
+            | (_, SimpleType::Object(_))
+            | (SimpleType::String, _)
+            | (_, SimpleType::String) => false,
 
             // Lists all overlap: the empty list is an example of all types
             (SimpleType::EmptyList, SimpleType::EmptyList)
@@ -220,6 +224,7 @@ impl std::fmt::Display for SimpleType {
             SimpleType::Int => write!(f, "Int"),
             SimpleType::LinExpr => write!(f, "LinExpr"),
             SimpleType::Constraint => write!(f, "Constraint"),
+            SimpleType::String => write!(f, "String"),
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
             SimpleType::Object(typ) => write!(f, "{}", typ),
@@ -238,6 +243,7 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
             SimpleTypeName::Int => Ok(SimpleType::Int),
             SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
             SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
+            SimpleTypeName::String => Ok(SimpleType::String),
             SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),

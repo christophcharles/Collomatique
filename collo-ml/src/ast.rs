@@ -93,6 +93,7 @@ pub enum SimpleTypeName {
     None,
     Int,
     Bool,
+    String,
     Object(String), // Student, Week, etc
     EmptyList,
     List(Spanned<TypeName>), // [Student], [[Int]], etc.
@@ -571,6 +572,7 @@ impl SimpleTypeName {
                     "Bool" => Ok(SimpleTypeName::Bool),
                     "LinExpr" => Ok(SimpleTypeName::LinExpr),
                     "Constraint" => Ok(SimpleTypeName::Constraint),
+                    "String" => Ok(SimpleTypeName::String),
                     _ => Ok(SimpleTypeName::Object(type_name.to_string())),
                 }
             }

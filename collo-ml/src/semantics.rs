@@ -126,6 +126,7 @@ impl GlobalEnv {
             SimpleType::Int => true,
             SimpleType::LinExpr => true,
             SimpleType::Constraint => true,
+            SimpleType::String => true,
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
