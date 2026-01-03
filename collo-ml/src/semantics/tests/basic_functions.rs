@@ -24,6 +24,30 @@ fn function_with_no_parameters() {
 }
 
 #[test]
+fn function_with_string_return_type() {
+    let input = r#"pub let constant() -> String = "Hello world!";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function with string output should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn function_passing_string() {
+    let input = "pub let pass(str: String) -> String = str;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function passing string should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn function_with_constraint_return_type() {
     let input = "pub let constraint() -> Constraint = 5 <== 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());

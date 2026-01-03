@@ -41,6 +41,7 @@ impl SimpleType {
                 | SimpleType::LinExpr
                 | SimpleType::Constraint
                 | SimpleType::None
+                | SimpleType::String
         )
     }
 

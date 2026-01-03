@@ -9,6 +9,7 @@ fn simple_type_is_primitive_type() {
     assert!(SimpleType::None.is_primitive_type());
     assert!(SimpleType::LinExpr.is_primitive_type());
     assert!(SimpleType::Constraint.is_primitive_type());
+    assert!(SimpleType::String.is_primitive_type());
 
     assert!(!SimpleType::EmptyList.is_primitive_type());
     assert!(!SimpleType::List(ExprType::simple(SimpleType::Int)).is_primitive_type());
