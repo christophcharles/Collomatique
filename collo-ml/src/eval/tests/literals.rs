@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn simple_string() {
+    let input = r#"pub let f() -> String = "Hello world!";"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String("Hello world!".into()));
+}
+
+#[test]
+fn string_with_quotes() {
+    let input = r#"pub let f() -> String = ~"Hello "quotes""~;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String(r#"Hello "quotes""#.into()));
+}
+
+#[test]
+fn pass_string() {
+    let input = "pub let f(str: String) -> String = str;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::String("Hello world!".into())])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String("Hello world!".into()));
+}
+
+#[test]
 fn simple_number() {
     let input = "pub let f() -> Int = 42;";
 
