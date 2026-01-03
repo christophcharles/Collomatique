@@ -941,6 +941,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         ExprValue::LinExpr(lin_expr_value + new_lin_expr)
                     }
                     (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => ExprValue::LinExpr(v1 + v2),
+                    (ExprValue::String(s1), ExprValue::String(s2)) => ExprValue::String(s1 + &s2),
                     (ExprValue::List(mut list1), ExprValue::List(list2)) => {
                         list1.reserve(list2.len());
                         list1.extend(list2);
@@ -1175,6 +1176,9 @@ impl<T: EvalObject> LocalEnv<T> {
                             }
                             (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => {
                                 ExprValue::LinExpr(v1 + v2)
+                            }
+                            (ExprValue::String(s1), ExprValue::String(s2)) => {
+                                ExprValue::String(s1 + &s2)
                             }
                             (ExprValue::List(mut list), ExprValue::List(new_list)) => {
                                 list.reserve(new_list.len());

@@ -680,6 +680,7 @@ impl LocalEnv {
             // Int + LinExpr -> LinExpr (auto convert Int to LinExpr)
             // LinExpr + LinExpr -> LinExpr
             // [Type] + [Type] -> [Type]
+            // String + String -> String
             Expr::Add(left, right) => {
                 let left_type = self.check_expr(
                     global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
@@ -698,7 +699,7 @@ impl LocalEnv {
                     (None, None) => None,
                     (Some(t), None) |
                     (None, Some(t)) => {
-                        if t.is_int() || t.is_lin_expr() || t.is_list() {
+                        if t.is_int() || t.is_lin_expr() || t.is_list() || t.is_string() {
                             Some(t.clone())
                         } else if t.can_convert_to(&SimpleType::LinExpr.into_concrete().unwrap()) {
                             Some(SimpleType::LinExpr.into())
@@ -713,7 +714,7 @@ impl LocalEnv {
                                 expected: SimpleType::Int.into(),
                                 found: t.clone(),
                                 context:
-                                    "addition/concatenation requires Int or LinExpr or List"
+                                    "addition/concatenation requires Int, LinExpr, String or List"
                                         .to_string(),
                             });
                             None
@@ -728,6 +729,7 @@ impl LocalEnv {
                                 (SimpleType::LinExpr, SimpleType::Int) |
                                 (SimpleType::Int, SimpleType::LinExpr) |
                                 (SimpleType::LinExpr, SimpleType::LinExpr) => Ok(SimpleType::LinExpr),
+                                (SimpleType::String, SimpleType::String) => Ok(SimpleType::String),
                                 (SimpleType::EmptyList, SimpleType::EmptyList) => Ok(SimpleType::EmptyList),
                                 (SimpleType::List(inner), SimpleType::EmptyList) |
                                 (SimpleType::EmptyList, SimpleType::List(inner)) => Ok(
@@ -737,8 +739,8 @@ impl LocalEnv {
                                     Ok(SimpleType::List(inner1.unify_with(inner2)))
                                 }
                                 (a,b) => {
-                                    let is_a_valid = a.is_arithmetic() || a.is_list();
-                                    let is_b_valid = b.is_arithmetic() || b.is_list();
+                                    let is_a_valid = a.is_arithmetic() || a.is_list() || a.is_string();
+                                    let is_b_valid = b.is_arithmetic() || b.is_list() || b.is_string();
                                     let span = if is_a_valid {
                                         right.span.clone()
                                     } else {
@@ -761,7 +763,7 @@ impl LocalEnv {
                                         expected: expected.into(),
                                         found: found.into(),
                                         context: format!(
-                                            "addition/concatenation requires Int, LinExpr or List, got {} and {}",
+                                            "addition/concatenation requires Int, LinExpr, String or List, got {} and {}",
                                             a, b
                                         ),
                                     })
@@ -1550,13 +1552,15 @@ impl LocalEnv {
                 self.pop_scope(warnings);
 
                 match body_type {
-                    Some(typ) if typ.is_arithmetic() || typ.is_list() => Some(typ),
+                    Some(typ) if typ.is_arithmetic() || typ.is_list() || typ.is_string() => {
+                        Some(typ)
+                    }
                     Some(typ) => {
                         errors.push(SemError::TypeMismatch {
                             span: body.span.clone(),
                             expected: SimpleType::Int.into(),
                             found: typ,
-                            context: "sum body must be Int or LinExpr or list".to_string(),
+                            context: "sum body must be Int, LinExpr, String or List".to_string(),
                         });
                         None
                     }

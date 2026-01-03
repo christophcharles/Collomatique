@@ -69,6 +69,10 @@ impl SimpleType {
         matches!(self, SimpleType::Bool)
     }
 
+    pub fn is_string(&self) -> bool {
+        matches!(self, SimpleType::String)
+    }
+
     pub fn is_constraint(&self) -> bool {
         matches!(self, SimpleType::Constraint)
     }
@@ -514,6 +518,10 @@ impl ExprType {
 
     pub fn is_bool(&self) -> bool {
         self.as_simple().map(|x| x.is_bool()).unwrap_or(false)
+    }
+
+    pub fn is_string(&self) -> bool {
+        self.as_simple().map(|x| x.is_string()).unwrap_or(false)
     }
 
     pub fn is_constraint(&self) -> bool {
