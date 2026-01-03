@@ -260,6 +260,62 @@ fn let_statement_with_literal_expressions() {
 }
 
 #[test]
+fn let_statement_with_string_literal_expressions() {
+    let cases = vec![
+        r#"let f() -> String = "hello";"#,
+        r#"let g() -> String = "";"#, // empty string
+        r#"let h() -> String = "Hello, World!";"#,
+        r#"let i() -> String = "with spaces and 123";"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_with_quotes() {
+    let cases = vec![
+        r#"let f() -> String = ~"He said "hello""~;"#,
+        r#"let g() -> String = ~"Contains " character"~;"#,
+        r#"let h() -> String = ~~"Has "~ sequence"~~;"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_with_newlines() {
+    let cases = vec![
+        "let f() -> String = \"line1\nline2\";",
+        "let g() -> String = \"multiple\nlines\nhere\";",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should parse string with newlines: {:?}",
+            result
+        );
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_unicode() {
+    let cases = vec![
+        r#"let f() -> String = "Hello 世界";"#,
+        r#"let g() -> String = "café";"#,
+        r#"let h() -> String = "😀🎉";"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
 fn let_statement_with_path_expressions() {
     let cases = vec![
         "let f(s: Student) -> Int = s.age;",
