@@ -18,6 +18,7 @@ fn let_statement_with_option_primitive_types() {
         "let h() -> ?LinExpr = 5;",
         "let i() -> ?Constraint = $V() === 0;",
         "let j() -> ?None = none;",
+        "let k() -> ?String = get_name();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -78,6 +79,8 @@ fn let_statement_with_simple_sum_types() {
         "let g() -> Student | Teacher = get_person();",
         "let h() -> LinExpr | Int = compute();",
         "let i(x: Int | Bool) -> Int = 0;",
+        "let j() -> String | Int = get_value();",
+        "let k() -> String | Bool = format_or_check();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -91,6 +94,8 @@ fn let_statement_with_multiple_variant_sum_types() {
         "let f() -> Int | Bool | LinExpr = 5;",
         "let g() -> Student | Teacher | Admin | Guest = get_person();",
         "let h(x: Int | Bool | Student | Week) -> Int = 0;",
+        "let i() -> String | Int | Bool = get_mixed();",
+        "let j() -> String | Int | Bool | None = flexible_return();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -342,6 +347,70 @@ fn let_statement_realistic_sum_type_examples() {
         assert!(
             result.is_ok(),
             "Should parse realistic example '{}': {:?}",
+            case,
+            result
+        );
+    }
+}
+
+// =============================================================================
+// STRING TYPE IN SUM AND OPTION TYPES
+// =============================================================================
+
+#[test]
+fn let_statement_with_string_option_types() {
+    let cases = vec![
+        "let f() -> ?String = get_name();",
+        "let g() -> ?String = none;",
+        "let h(name: ?String) -> Int = 0;",
+        "let i() -> ?[String] = get_names();",
+        "let j() -> [?String] = [get_name(), none];",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_sum_types() {
+    let cases = vec![
+        "let f() -> String | Int = get_value();",
+        "let g() -> String | Bool | Int = mixed();",
+        "let h() -> String | None = maybe_name();",
+        "let i(x: String | Student) -> Bool = true;",
+        "let j() -> [String] | [Int] = get_list();",
+        "let k() -> [String | Int] = [get_name(), 42];",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_complex_types() {
+    let cases = vec![
+        // String with option sugar
+        "let f() -> String | None = maybe_name();",
+        // Equivalent to ?String
+        "let g() -> ?String = maybe_name();",
+        // String in complex sum
+        "let h() -> String | Int | Bool | None = flexible();",
+        // Lists of strings in sums
+        "let i() -> [String] | [Int] = get_mixed_list();",
+        // Optional list of strings
+        "let j() -> ?[String] = maybe_names();",
+        // List of optional strings
+        "let k() -> [?String] = sparse_names();",
+        // String in nested structures
+        "let l() -> [[String] | [Int]] = nested_lists();",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should parse complex String type '{}': {:?}",
             case,
             result
         );

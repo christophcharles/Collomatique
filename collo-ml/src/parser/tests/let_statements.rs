@@ -21,6 +21,7 @@ fn let_statement_minimal_structure() {
         "let g() -> Bool = true;",
         "let h() -> LinExpr = 5;",
         "let i() -> Constraint = $V() === 0;",
+        "let j() -> String = get_str();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -159,6 +160,7 @@ fn let_statement_with_primitive_return_types() {
         "let g() -> Bool = true;",
         "let h() -> LinExpr = 5;",
         "let i() -> Constraint = $V() === 0;",
+        "let j() -> String = get_name();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -188,6 +190,50 @@ fn let_statement_with_list_return_types() {
         "let h() -> [LinExpr] = [];",
         "let i() -> [[Int]] = [[1, 2], [3, 4]];",
         "let j() -> [[[Bool]]] = [];",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// =============================================================================
+// STRING TYPE TESTS
+// =============================================================================
+
+#[test]
+fn let_statement_with_string_return_type() {
+    let cases = vec![
+        "let f() -> String = get_name();",
+        "let g() -> String = format_output();",
+        "let h(s: Student) -> String = s.name;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_parameter() {
+    let cases = vec![
+        "let f(name: String) -> Int = 0;",
+        "let g(s: String, n: Int) -> Bool = true;",
+        "let h(prefix: String, suffix: String) -> String = prefix + suffix;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_list_types() {
+    let cases = vec![
+        "let f() -> [String] = [];",
+        "let g() -> [String] = get_names();",
+        "let h(names: [String]) -> Int = |names|;",
+        "let i() -> [[String]] = [];",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
