@@ -89,6 +89,29 @@ fn parse_let_with_multiple_params() {
 }
 
 #[test]
+fn parse_let_with_string_param() {
+    let input = r#"let f(name: String) -> Int = 0;"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { params, .. } => {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].name.node, "name");
+            assert_eq!(params[0].typ.node.types.len(), 1);
+            assert_eq!(
+                params[0].typ.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::String,
+                }
+            );
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
 fn parse_let_with_no_params() {
     let input = "let f() -> LinExpr = 42;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();

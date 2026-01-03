@@ -89,6 +89,27 @@ fn parse_constraint_type() {
 }
 
 #[test]
+fn parse_string_type() {
+    let input = r#"let f() -> String = "hello";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(
+                output_type.node.types[0].node,
+                MaybeTypeName {
+                    maybe_count: 0,
+                    inner: SimpleTypeName::String,
+                }
+            );
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
 fn parse_custom_object_type() {
     let input = "let f() -> Student = x;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
@@ -315,6 +336,34 @@ fn parse_list_of_constraint() {
                         MaybeTypeName {
                             maybe_count: 0,
                             inner: SimpleTypeName::Constraint,
+                        }
+                    );
+                }
+                _ => panic!("Expected List type"),
+            }
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_list_of_string() {
+    let input = r#"let f() -> [String] = ["a", "b"];"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(
+                        inner_typename.node.types[0].node,
+                        MaybeTypeName {
+                            maybe_count: 0,
+                            inner: SimpleTypeName::String,
                         }
                     );
                 }

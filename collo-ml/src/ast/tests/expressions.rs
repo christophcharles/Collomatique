@@ -74,6 +74,96 @@ fn parse_boolean_false() {
     }
 }
 
+#[test]
+fn parse_string_literal_basic() {
+    let input = r#"let f() -> String = "hello";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, "hello"),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_literal_empty() {
+    let input = r#"let f() -> String = "";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, ""),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_literal_with_spaces() {
+    let input = r#"let f() -> String = "hello world";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, "hello world"),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_literal_with_tildes() {
+    let input = r#"let f() -> String = ~"He said "hello""~;"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, r#"He said "hello""#),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_literal_with_newline() {
+    let input = "let f() -> String = \"line1\nline2\";";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, "line1\nline2"),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_literal_with_unicode() {
+    let input = r#"let f() -> String = "Hello 世界";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::StringLiteral(s) => assert_eq!(s, "Hello 世界"),
+            _ => panic!("Expected StringLiteral, got {:?}", body.node),
+        },
+        _ => panic!("Expected Let statement"),
+    }
+}
+
 // ============= Path Expressions =============
 
 #[test]
