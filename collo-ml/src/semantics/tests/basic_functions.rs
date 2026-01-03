@@ -47,6 +47,149 @@ fn function_passing_string() {
     );
 }
 
+// ========== String Concatenation Tests ==========
+
+#[test]
+fn string_concatenation_with_plus() {
+    let input = r#"pub let concat() -> String = "hello" + "world";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String concatenation with + should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_concatenation_multiple() {
+    let input = r#"pub let concat() -> String = "a" + "b" + "c";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Multiple string concatenation should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_concatenation_with_variables() {
+    let input = r#"pub let concat(a: String, b: String) -> String = a + b;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String concatenation with parameters should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_concatenation_with_parentheses() {
+    let input = r#"pub let concat() -> String = ("hello" + " ") + "world";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String concatenation with parentheses should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_concatenation_mixed_with_int_should_fail() {
+    let input = r#"pub let concat() -> String = "hello" + 42;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Should error when concatenating string with int"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn string_concatenation_mixed_with_bool_should_fail() {
+    let input = r#"pub let concat() -> String = "value: " + true;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Should error when concatenating string with bool"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn int_plus_string_should_fail() {
+    let input = r#"pub let concat() -> String = 42 + "hello";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Should error when adding int to string");
+}
+
+#[test]
+fn string_concatenation_in_expression() {
+    let input = r#"
+        pub let greet(name: String) -> String = 
+            "Hello, " + name + "!";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String concatenation in complex expression should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_concatenation_with_empty_string() {
+    let input = r#"pub let concat() -> String = "" + "hello" + "";"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String concatenation with empty strings should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn sum_strings_in_list() {
+    let input = r#"
+        pub let concat_list() -> String = 
+            sum s in ["a", "b", "c"] { s };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Sum over list of strings should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn sum_strings_with_expression() {
+    let input = r#"
+        pub let build_string() -> String = 
+            sum s in ["hello", "world"] { s + " " };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Sum with string concatenation should be valid: {:?}",
+        errors
+    );
+}
+
 #[test]
 fn function_with_constraint_return_type() {
     let input = "pub let constraint() -> Constraint = 5 <== 10;";
