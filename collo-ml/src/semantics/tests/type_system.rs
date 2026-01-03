@@ -276,6 +276,129 @@ fn chained_type_conversions() {
     );
 }
 
+// ========== Conversion to String Tests ==========
+
+#[test]
+fn int_to_string_conversion() {
+    let input = r#"pub let f() -> String = 42 into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Int to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn bool_to_string_conversion() {
+    let input = r#"pub let f() -> String = true into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Bool to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_to_string_conversion() {
+    let input = r#"pub let f() -> String = "hello" into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn linexpr_to_string_conversion() {
+    let input = r#"pub let f(x: LinExpr) -> String = x into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "LinExpr to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn none_to_string_conversion() {
+    let input = r#"pub let f() -> String = none into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "None to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn int_list_to_string_conversion() {
+    let input = r#"pub let f() -> String = [1, 2, 3] into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn string_list_to_string_conversion() {
+    let input = r#"pub let f() -> String = ["a", "b", "c"] into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String list to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn object_to_string_conversion() {
+    let types = simple_object("Student");
+    let input = r#"pub let f(s: Student) -> String = s into String;"#;
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Object to String conversion should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn conversion_to_string_in_concatenation() {
+    let input = r#"pub let f() -> String = "Value: " + (42 into String);"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "String conversion in concatenation should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn chained_conversion_to_string() {
+    let input = r#"pub let f() -> String = ((5 into Int) into LinExpr) into String;"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Chained conversion ending in String should be valid: {:?}",
+        errors
+    );
+}
+
 // ========== List of Object Types ==========
 
 #[test]
