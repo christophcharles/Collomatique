@@ -75,10 +75,7 @@ fn add_linexpr_with_int_coercion() {
             // Should be: 1 * $V() + 5
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                })) + 5.
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![]))) + 5.
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -102,10 +99,7 @@ fn add_int_to_linexpr_coercion() {
             // Should be: 1 * $V() + 10
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                })) + 10.
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![]))) + 10.
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -129,13 +123,8 @@ fn add_two_linexprs() {
             // Should be: $V1() + $V2()
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V1".into(),
-                    params: vec![]
-                })) + LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V2".into(),
-                    params: vec![]
-                }))
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
+                    + LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -230,10 +219,7 @@ fn sub_linexpr_with_int() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                })) - 3
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![]))) - 3
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -256,13 +242,8 @@ fn sub_two_linexprs() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V1".into(),
-                    params: vec![]
-                })) - LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V2".into(),
-                    params: vec![]
-                }))
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
+                    - LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -329,10 +310,7 @@ fn mul_int_with_linexpr() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                5 * LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                }))
+                5 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -355,10 +333,7 @@ fn mul_linexpr_with_int() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                3 * LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                }))
+                3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -381,10 +356,7 @@ fn mul_with_param() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                10 * LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                }))
+                10 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),

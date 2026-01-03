@@ -439,16 +439,16 @@ fn fold_linexpr_simple() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(0) + $V(1) + $V(2)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(0)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(2)],
-            }));
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(0)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(2)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -471,10 +471,8 @@ fn fold_linexpr_with_coefficients() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 1*$V() + 2*$V() = 3*$V()
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![],
-            }));
+            let expected =
+                3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),

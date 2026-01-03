@@ -544,10 +544,10 @@ fn test_named_optional_week_fix() {
 fn test_try_from_optional_student_none() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
-    let extern_var = ExternVar {
-        name: "OptionalStudent".to_string(),
-        params: vec![ExprValue::<ObjectId>::None],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalStudent".to_string(),
+        vec![ExprValue::<ObjectId>::None],
+    );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -558,10 +558,10 @@ fn test_try_from_optional_student_none() {
 fn test_try_from_optional_student_some() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
-    let extern_var = ExternVar {
-        name: "OptionalStudent".to_string(),
-        params: vec![ExprValue::Object(ObjectId::Student(StudentId(1)))],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalStudent".to_string(),
+        vec![ExprValue::Object(ObjectId::Student(StudentId(1)))],
+    );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -572,10 +572,10 @@ fn test_try_from_optional_student_some() {
 fn test_try_from_optional_week_none() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
-    let extern_var = ExternVar {
-        name: "OptionalWeek".to_string(),
-        params: vec![ExprValue::<ObjectId>::None],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalWeek".to_string(),
+        vec![ExprValue::<ObjectId>::None],
+    );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -586,10 +586,10 @@ fn test_try_from_optional_week_none() {
 fn test_try_from_optional_week_some() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
-    let extern_var = ExternVar {
-        name: "OptionalWeek".to_string(),
-        params: vec![ExprValue::<ObjectId>::Int(2)],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalWeek".to_string(),
+        vec![ExprValue::<ObjectId>::Int(2)],
+    );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -601,28 +601,28 @@ fn test_try_from_optional_bool() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
     // None
-    let extern_var = ExternVar {
-        name: "OptionalFlag".to_string(),
-        params: vec![ExprValue::<ObjectId>::None],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalFlag".to_string(),
+        vec![ExprValue::<ObjectId>::None],
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(var.unwrap(), OptionVar::OptionalFlag(None));
 
     // Some(true)
-    let extern_var = ExternVar {
-        name: "OptionalFlag".to_string(),
-        params: vec![ExprValue::<ObjectId>::Bool(true)],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalFlag".to_string(),
+        vec![ExprValue::<ObjectId>::Bool(true)],
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(var.unwrap(), OptionVar::OptionalFlag(Some(true)));
 
     // Some(false)
-    let extern_var = ExternVar {
-        name: "OptionalFlag".to_string(),
-        params: vec![ExprValue::<ObjectId>::Bool(false)],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalFlag".to_string(),
+        vec![ExprValue::<ObjectId>::Bool(false)],
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(var.unwrap(), OptionVar::OptionalFlag(Some(false)));
@@ -633,13 +633,13 @@ fn test_try_from_student_with_mentor() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
     // Mentor is None
-    let extern_var = ExternVar {
-        name: "StuMentor".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "StuMentor".to_string(),
+        vec![
             ExprValue::Object(ObjectId::Student(StudentId(0))),
             ExprValue::None,
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -651,13 +651,13 @@ fn test_try_from_student_with_mentor() {
     );
 
     // Mentor is Some
-    let extern_var = ExternVar {
-        name: "StuMentor".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "StuMentor".to_string(),
+        vec![
             ExprValue::Object(ObjectId::Student(StudentId(0))),
             ExprValue::Object(ObjectId::Student(StudentId(2))),
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -674,22 +674,22 @@ fn test_try_from_both_optional() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
     // Both None
-    let extern_var = ExternVar {
-        name: "BothOptional".to_string(),
-        params: vec![ExprValue::<ObjectId>::None, ExprValue::None],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "BothOptional".to_string(),
+        vec![ExprValue::<ObjectId>::None, ExprValue::None],
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(var.unwrap(), OptionVar::BothOptional(None, None));
 
     // First Some, second None
-    let extern_var = ExternVar {
-        name: "BothOptional".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "BothOptional".to_string(),
+        vec![
             ExprValue::Object(ObjectId::Student(StudentId(1))),
             ExprValue::None,
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -698,13 +698,13 @@ fn test_try_from_both_optional() {
     );
 
     // First None, second Some
-    let extern_var = ExternVar {
-        name: "BothOptional".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "BothOptional".to_string(),
+        vec![
             ExprValue::None,
             ExprValue::Object(ObjectId::Subject(SubjectId(2))),
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -713,13 +713,13 @@ fn test_try_from_both_optional() {
     );
 
     // Both Some
-    let extern_var = ExternVar {
-        name: "BothOptional".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "BothOptional".to_string(),
+        vec![
             ExprValue::Object(ObjectId::Student(StudentId(0))),
             ExprValue::Object(ObjectId::Subject(SubjectId(1))),
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -733,14 +733,14 @@ fn test_try_from_multiple_optionals() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
     // All None
-    let extern_var = ExternVar {
-        name: "MultipleOptionals".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "MultipleOptionals".to_string(),
+        vec![
             ExprValue::<ObjectId>::None,
             ExprValue::None,
             ExprValue::None,
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -753,14 +753,14 @@ fn test_try_from_multiple_optionals() {
     );
 
     // All Some
-    let extern_var = ExternVar {
-        name: "MultipleOptionals".to_string(),
-        params: vec![
+    let extern_var = ExternVar::new_no_env(
+        "MultipleOptionals".to_string(),
+        vec![
             ExprValue::Object(ObjectId::Student(StudentId(1))),
             ExprValue::Object(ObjectId::Subject(SubjectId(2))),
             ExprValue::Int(1),
         ],
-    };
+    );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
     assert_eq!(
@@ -779,10 +779,10 @@ fn test_try_from_optional_wrong_type() {
     use collo_ml::traits::VarConversionError;
 
     // Passing Int when expecting Option<StudentId>
-    let extern_var = ExternVar {
-        name: "OptionalStudent".to_string(),
-        params: vec![ExprValue::<ObjectId>::Int(42)],
-    };
+    let extern_var = ExternVar::new_no_env(
+        "OptionalStudent".to_string(),
+        vec![ExprValue::<ObjectId>::Int(42)],
+    );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_err());

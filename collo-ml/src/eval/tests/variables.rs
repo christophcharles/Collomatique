@@ -16,10 +16,10 @@ fn base_var_simple() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![]
+        ))))
     );
 }
 
@@ -37,10 +37,10 @@ fn base_var_with_int_param() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![ExprValue::Int(42)]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![ExprValue::Int(42)]
+        ))))
     );
 }
 
@@ -58,10 +58,10 @@ fn base_var_with_bool_param() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![ExprValue::Bool(true)]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![ExprValue::Bool(true)]
+        ))))
     );
 }
 
@@ -86,10 +86,10 @@ fn base_var_with_multiple_params() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]
+        ))))
     );
 }
 
@@ -107,10 +107,10 @@ fn base_var_with_function_param() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![ExprValue::Int(42)]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![ExprValue::Int(42)]
+        ))))
     );
 }
 
@@ -128,10 +128,10 @@ fn base_var_with_expression_param() {
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-            name: "V".into(),
-            params: vec![ExprValue::Int(15)]
-        })))
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            "V".into(),
+            vec![ExprValue::Int(15)]
+        ))))
     );
 }
 
@@ -152,11 +152,8 @@ fn base_var_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![]
-                }))
-                .eq(&LinExpr::constant(1.))
+                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
+                    .eq(&LinExpr::constant(1.))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -177,10 +174,9 @@ fn base_var_in_arithmetic() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![],
-            })) + LinExpr::constant(5.);
+            let expected =
+                3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
+                    + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -201,13 +197,8 @@ fn multiple_base_vars() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V1".into(),
-                params: vec![],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V2".into(),
-                params: vec![],
-            }));
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
+                + LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -236,11 +227,11 @@ fn script_var_simple_reify() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(5)]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(5)],
+                )))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -268,11 +259,11 @@ fn script_var_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(10)]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(10)],
+                )))
                 .eq(&LinExpr::constant(0.))
             );
         }
@@ -304,19 +295,19 @@ fn script_var_with_sum() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(3)],
-            }));
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(3)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -372,11 +363,11 @@ fn script_var_multiple_params() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(3), ExprValue::Int(7)]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(3), ExprValue::Int(7)],
+                )))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -403,11 +394,11 @@ fn script_var_no_params() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![],
+                )))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -432,11 +423,11 @@ fn script_var_with_arithmetic() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(10)],
-            })) + LinExpr::constant(5.);
+            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(10)],
+            ))) + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -466,15 +457,15 @@ fn multiple_script_vars() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar1".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(5)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar2".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(5)],
-            }));
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar1".into(),
+                None,
+                vec![ExprValue::Int(5)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar2".into(),
+                None,
+                vec![ExprValue::Int(5)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -499,14 +490,14 @@ fn script_var_and_base_var_mixed() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(10)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "BaseV".into(),
-                params: vec![ExprValue::Int(10)],
-            }));
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(10)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "BaseV".into(),
+                vec![ExprValue::Int(10)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -547,11 +538,11 @@ fn var_list_simple_reify() {
                     ExprValue::LinExpr(le) => {
                         assert_eq!(
                             le,
-                            &LinExpr::var(IlpVar::Script(ScriptVar {
-                                name: "MyVars".into(),
-                                from_list: Some(idx),
-                                params: vec![list.clone()],
-                            }))
+                            &LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                                "MyVars".into(),
+                                Some(idx),
+                                vec![list.clone()],
+                            )))
                         );
                     }
                     _ => panic!("Expected LinExpr in list"),
@@ -584,15 +575,15 @@ fn var_list_in_sum() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVars".into(),
-                    from_list: Some(0),
-                    params: vec![list.clone()]
-                })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVars".into(),
-                    from_list: Some(1),
-                    params: vec![list.clone()]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(0),
+                    vec![list.clone()]
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(1),
+                    vec![list.clone()]
+                )))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -627,19 +618,19 @@ fn var_list_in_constraint() {
             let constraint = constraints.iter().next().unwrap().constraint.clone();
             assert_eq!(
                 constraint,
-                (LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVars".into(),
-                    from_list: Some(0),
-                    params: vec![list.clone()]
-                })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVars".into(),
-                    from_list: Some(1),
-                    params: vec![list.clone()]
-                })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVars".into(),
-                    from_list: Some(2),
-                    params: vec![list.clone()]
-                })))
+                (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(0),
+                    vec![list.clone()]
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(1),
+                    vec![list.clone()]
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(2),
+                    vec![list.clone()]
+                ))))
                 .leq(&LinExpr::constant(10.))
             );
         }
@@ -670,19 +661,19 @@ fn var_list_with_forall() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(0),
-                params: vec![list.clone()],
-            }))
+            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(0),
+                vec![list.clone()],
+            )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));
 
-            let constraint = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(1),
-                params: vec![list.clone()],
-            }))
+            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(1),
+                vec![list.clone()],
+            )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));
         }
@@ -738,17 +729,19 @@ fn var_list_with_multiple_params() {
     match result {
         ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
-            let lin_expr1 = ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(0),
-                params: vec![list.clone(), ExprValue::Int(10)],
-            })));
+            let lin_expr1 =
+                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(0),
+                    vec![list.clone(), ExprValue::Int(10)],
+                ))));
             assert!(linexprs.contains(&lin_expr1));
-            let lin_expr2 = ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(1),
-                params: vec![list.clone(), ExprValue::Int(10)],
-            })));
+            let lin_expr2 =
+                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVars".into(),
+                    Some(1),
+                    vec![list.clone(), ExprValue::Int(10)],
+                ))));
             assert!(linexprs.contains(&lin_expr2));
         }
         _ => panic!("Expected List of LinExpr"),
@@ -885,11 +878,11 @@ fn var_in_if_expression() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(5)]
-                }))
+                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(5)]
+                )))
             );
         }
         _ => panic!("Expected LinExpr"),

@@ -8,37 +8,102 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+use derivative::Derivative;
+
+#[derive(Debug, Clone, Derivative)]
+#[derivative(PartialOrd, Ord, PartialEq, Eq)]
 pub struct ScriptVar<T: EvalObject> {
     pub name: String,
     pub from_list: Option<usize>,
     pub params: Vec<ExprValue<T>>,
+    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
+    params_str: String,
+}
+
+impl<T: EvalObject> ScriptVar<T> {
+    pub fn new(
+        env: &T::Env,
+        cache: &mut T::Cache,
+        name: String,
+        from_list: Option<usize>,
+        params: Vec<ExprValue<T>>,
+    ) -> Self {
+        let args: Vec<_> = params
+            .iter()
+            .map(|x| x.convert_to_string(env, cache))
+            .collect();
+        ScriptVar {
+            name,
+            from_list,
+            params,
+            params_str: args.join(", "),
+        }
+    }
+
+    pub fn new_no_env(name: String, from_list: Option<usize>, params: Vec<ExprValue<T>>) -> Self {
+        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
+        ScriptVar {
+            name,
+            from_list,
+            params,
+            params_str: args.join(", "),
+        }
+    }
 }
 
 impl<T: EvalObject> std::fmt::Display for ScriptVar<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let args: Vec<_> = self.params.iter().map(|x| x.to_string()).collect();
         match self.from_list {
             Some(i) => {
-                write!(f, "${}({})[{}]", self.name, args.join(", "), i)
+                write!(f, "${}({})[{}]", self.name, self.params_str, i)
             }
             None => {
-                write!(f, "${}({})", self.name, args.join(", "))
+                write!(f, "${}({})", self.name, self.params_str)
             }
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, Clone, Derivative)]
+#[derivative(PartialOrd, Ord, PartialEq, Eq)]
 pub struct ExternVar<T: EvalObject> {
     pub name: String,
     pub params: Vec<ExprValue<T>>,
+    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
+    params_str: String,
+}
+
+impl<T: EvalObject> ExternVar<T> {
+    pub fn new(
+        env: &T::Env,
+        cache: &mut T::Cache,
+        name: String,
+        params: Vec<ExprValue<T>>,
+    ) -> Self {
+        let args: Vec<_> = params
+            .iter()
+            .map(|x| x.convert_to_string(env, cache))
+            .collect();
+        ExternVar {
+            name,
+            params,
+            params_str: args.join(", "),
+        }
+    }
+
+    pub fn new_no_env(name: String, params: Vec<ExprValue<T>>) -> Self {
+        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
+        ExternVar {
+            name,
+            params,
+            params_str: args.join(", "),
+        }
+    }
 }
 
 impl<T: EvalObject> std::fmt::Display for ExternVar<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let args: Vec<_> = self.params.iter().map(|x| x.to_string()).collect();
-        write!(f, "${}({})", self.name, args.join(", "))
+        write!(f, "${}({})", self.name, self.params_str)
     }
 }
 
@@ -313,7 +378,7 @@ impl<T: EvalObject> ExprValue<T> {
         })
     }
 
-    fn convert_to_string(self, env: &T::Env, cache: &mut T::Cache) -> String {
+    fn convert_to_string(&self, env: &T::Env, cache: &mut T::Cache) -> String {
         match self {
             Self::Object(obj) => match obj.pretty_print(env, cache) {
                 Some(v) => v,
@@ -321,7 +386,7 @@ impl<T: EvalObject> ExprValue<T> {
             },
             Self::List(list) => {
                 let inners: Vec<_> = list
-                    .into_iter()
+                    .iter()
                     .map(|x| x.convert_to_string(env, cache))
                     .collect();
                 format!("[{}]", inners.join(", "))
@@ -742,10 +807,12 @@ impl<T: EvalObject> LocalEnv<T> {
                     .get_predefined_vars()
                     .get(&name.node)
                 {
-                    ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar {
-                        name: name.node.clone(),
-                        params: args,
-                    })))
+                    ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+                        eval_history.env,
+                        &mut eval_history.cache,
+                        name.node.clone(),
+                        args,
+                    ))))
                 } else if let Some(var_desc) =
                     eval_history.ast.global_env.get_vars().get(&name.node)
                 {
@@ -758,11 +825,13 @@ impl<T: EvalObject> LocalEnv<T> {
                         args.clone(),
                         true,
                     )?;
-                    ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                        name: name.node.clone(),
-                        from_list: None,
-                        params: args,
-                    })))
+                    ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
+                        eval_history.env,
+                        &mut eval_history.cache,
+                        name.node.clone(),
+                        None,
+                        args,
+                    ))))
                     .into()
                 } else {
                     panic!("Valid var expected")
@@ -1410,11 +1479,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     (0..constraint_count)
                         .into_iter()
                         .map(|i| {
-                            ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                                name: name.node.clone(),
-                                from_list: Some(i),
-                                params: evaluated_args.clone(),
-                            })))
+                            ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
+                                eval_history.env,
+                                &mut eval_history.cache,
+                                name.node.clone(),
+                                Some(i),
+                                evaluated_args.clone(),
+                            ))))
                         })
                         .collect(),
                 )

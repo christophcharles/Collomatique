@@ -14,3 +14,4 @@ collo-ml-derive = { path = "../collo-ml-derive" }
 sha2 = "0.10"
 base64 = "0.22"
 lazy_static = "*"
+derivative = "*"

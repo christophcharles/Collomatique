@@ -31,18 +31,18 @@ fn forall_with_reified_var_and_filter() {
             let constraints = strip_origins(&constraints);
 
             // Expected: $MyVar(1) === 1 and $MyVar(2) === 1
-            let expected1 = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1)],
-            }))
+            let expected1 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1)],
+            )))
             .eq(&LinExpr::constant(1.));
 
-            let expected2 = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2)],
-            }))
+            let expected2 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2)],
+            )))
             .eq(&LinExpr::constant(1.));
 
             assert!(constraints.contains(&expected1));
@@ -74,43 +74,43 @@ fn sum_with_var_list_and_comprehension() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Concat gives [1, 2, 2, 3], so 4 variables summed
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(0),
-                params: vec![ExprValue::List(Vec::from([
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(0),
+                vec![ExprValue::List(Vec::from([
                     ExprValue::Int(1),
                     ExprValue::Int(2),
                     ExprValue::Int(2),
                     ExprValue::Int(3),
                 ]))],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(1),
-                params: vec![ExprValue::List(Vec::from([
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(1),
+                vec![ExprValue::List(Vec::from([
                     ExprValue::Int(1),
                     ExprValue::Int(2),
                     ExprValue::Int(2),
                     ExprValue::Int(3),
                 ]))],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(2),
-                params: vec![ExprValue::List(Vec::from([
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(2),
+                vec![ExprValue::List(Vec::from([
                     ExprValue::Int(1),
                     ExprValue::Int(2),
                     ExprValue::Int(2),
                     ExprValue::Int(3),
                 ]))],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVars".into(),
-                from_list: Some(3),
-                params: vec![ExprValue::List(Vec::from([
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVars".into(),
+                Some(3),
+                vec![ExprValue::List(Vec::from([
                     ExprValue::Int(1),
                     ExprValue::Int(2),
                     ExprValue::Int(2),
                     ExprValue::Int(3),
                 ]))],
-            }));
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -213,21 +213,21 @@ fn nested_list_comp_with_reified_vars() {
             assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
 
             let expected_vars = Vec::from([
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(1), ExprValue::Int(2)],
-                }))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(1), ExprValue::Int(3)],
-                }))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar {
-                    name: "MyVar".into(),
-                    from_list: None,
-                    params: vec![ExprValue::Int(2), ExprValue::Int(3)],
-                }))),
+                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(1), ExprValue::Int(2)],
+                )))),
+                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(1), ExprValue::Int(3)],
+                )))),
+                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "MyVar".into(),
+                    None,
+                    vec![ExprValue::Int(2), ExprValue::Int(3)],
+                )))),
             ]);
             assert_eq!(list, expected_vars);
         }
@@ -363,11 +363,11 @@ fn nested_if_with_variables() {
 
     match result_scaled {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(5)],
-            }));
+            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(5)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -408,31 +408,31 @@ fn function_returning_constraint_system() {
             let constraints = strip_origins(&constraints);
 
             // Check sum constraint: V(1) + V(2) + V(3) === 2
-            let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(2)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(3)],
-            })))
+            let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(2)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(3)],
+            ))))
             .eq(&LinExpr::constant(2.));
             assert!(constraints.contains(&sum_constraint));
 
             // Check bound constraints for each variable
             for x in [1, 2, 3] {
-                let ge_constraint = LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(x)],
-                }))
+                let ge_constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                    "V".into(),
+                    vec![ExprValue::Int(x)],
+                )))
                 .geq(&LinExpr::constant(0.));
 
-                let le_constraint = LinExpr::var(IlpVar::Base(ExternVar {
-                    name: "V".into(),
-                    params: vec![ExprValue::Int(x)],
-                }))
+                let le_constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                    "V".into(),
+                    vec![ExprValue::Int(x)],
+                )))
                 .leq(&LinExpr::constant(1.));
 
                 assert!(constraints.contains(&ge_constraint));
@@ -475,15 +475,15 @@ fn function_composition_with_reified_vars() {
             let constraints = strip_origins(&constraints);
 
             // Expected: MyVar(1,5) + MyVar(2,5) <= 10
-            let expected = (LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(5)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(5)],
-            })))
+            let expected = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(5)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(5)],
+            ))))
             .leq(&LinExpr::constant(10.));
 
             assert!(constraints.contains(&expected));
@@ -534,46 +534,46 @@ fn assignment_constraint_pattern() {
             let constraints = strip_origins(&constraints);
 
             // Student 1 exactly one: Assigned(1,1) + Assigned(1,2) === 1
-            let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(1), ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(1), ExprValue::Int(2)],
-            })))
+            let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(1), ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(1), ExprValue::Int(2)],
+            ))))
             .eq(&LinExpr::constant(1.));
             assert!(constraints.contains(&student1_constraint));
 
             // Student 2 exactly one: Assigned(2,1) + Assigned(2,2) === 1
-            let student2_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(2), ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(2), ExprValue::Int(2)],
-            })))
+            let student2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(2), ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(2), ExprValue::Int(2)],
+            ))))
             .eq(&LinExpr::constant(1.));
             assert!(constraints.contains(&student2_constraint));
 
             // Slot 1 capacity: Assigned(1,1) + Assigned(2,1) <= 1
-            let slot1_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(1), ExprValue::Int(1)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(2), ExprValue::Int(1)],
-            })))
+            let slot1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(1), ExprValue::Int(1)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(2), ExprValue::Int(1)],
+            ))))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&slot1_constraint));
 
             // Slot 2 capacity: Assigned(1,2) + Assigned(2,2) <= 1
-            let slot2_constraint = (LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(1), ExprValue::Int(2)],
-            })) + LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(2), ExprValue::Int(2)],
-            })))
+            let slot2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(1), ExprValue::Int(2)],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(2), ExprValue::Int(2)],
+            ))))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&slot2_constraint));
         }
@@ -623,15 +623,15 @@ fn conditional_constraint_with_reification() {
             let constraints = strip_origins(&constraints);
 
             // Expected: Assigned(1,5) <= IsAvailable(1,5)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar {
-                name: "Assigned".into(),
-                params: vec![ExprValue::Int(1), ExprValue::Int(5)],
-            }))
-            .leq(&LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "IsAvailable".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(5)],
-            })));
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "Assigned".into(),
+                vec![ExprValue::Int(1), ExprValue::Int(5)],
+            )))
+            .leq(&LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "IsAvailable".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(5)],
+            ))));
 
             assert!(constraints.contains(&expected));
         }
@@ -917,13 +917,13 @@ fn mixed_coercion_in_complex_expression() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // 2*$V(1) + 4*$V(2)
-            let expected = 2 * LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(1)],
-            })) + 4 * LinExpr::var(IlpVar::Base(ExternVar {
-                name: "V".into(),
-                params: vec![ExprValue::Int(2)],
-            }));
+            let expected = 2 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(1)],
+            ))) + 4 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                "V".into(),
+                vec![ExprValue::Int(2)],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -1018,32 +1018,32 @@ fn all_features_combined() {
             let constraints = strip_origins(&constraints);
 
             // Verify some constraints exist
-            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
-            }))
+            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(3)],
+            )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_1_3));
 
             // Verify sum constraint exists
-            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(4)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(3)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(4)],
-            })))
+            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(3)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(4)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(3)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(4)],
+            ))))
             .leq(&LinExpr::constant(5.));
             assert!(constraints.contains(&sum_constraint));
         }
@@ -1129,40 +1129,40 @@ fn all_features_combined_with_let() {
             let constraints = strip_origins(&constraints);
 
             // Verify some constraints exist
-            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
-            }))
+            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(3)],
+            )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_1_3));
 
-            let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(4)],
-            }))
+            let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(4)],
+            )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_2_4));
 
             // Verify sum constraint exists
-            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(3)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(1), ExprValue::Int(4)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(3)],
-            })) + LinExpr::var(IlpVar::Script(ScriptVar {
-                name: "MyVar".into(),
-                from_list: None,
-                params: vec![ExprValue::Int(2), ExprValue::Int(4)],
-            })))
+            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(3)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(1), ExprValue::Int(4)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(3)],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "MyVar".into(),
+                None,
+                vec![ExprValue::Int(2), ExprValue::Int(4)],
+            ))))
             .leq(&LinExpr::constant(5.));
             assert!(constraints.contains(&sum_constraint));
         }

@@ -501,6 +501,7 @@ impl<
                 name,
                 from_list,
                 params,
+                ..
             }) => ProblemVar::ReifiedPrivate(ReifiedPrivateVar {
                 script_ref: script_ref.clone(),
                 name: name.clone(),
