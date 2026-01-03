@@ -120,16 +120,16 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
                 let strs: Vec<_> = c_with_o.iter().map(|x| x.constraint.to_string()).collect();
                 write!(f, "{}", strs.join(", "))
             }
-            ExprValue::String(str_litteral) => {
+            ExprValue::String(str_literal) => {
                 let mut closing_delim = String::from("\"");
-                while str_litteral.contains(&closing_delim) {
+                while str_literal.contains(&closing_delim) {
                     closing_delim.push('~');
                 }
                 write!(
                     f,
                     "{}{}{}",
                     closing_delim.chars().rev().collect::<String>(),
-                    str_litteral,
+                    str_literal,
                     closing_delim
                 )
             }
