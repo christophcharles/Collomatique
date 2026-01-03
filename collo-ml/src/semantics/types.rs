@@ -170,6 +170,8 @@ impl SimpleType {
                     .expect("target type should be concrete");
                 inner1.can_convert_to(&inner2_concrete)
             }
+            // Anything can convert to String
+            (_, SimpleType::String) => true,
             // Anything else: no conversion
             _ => false,
         }

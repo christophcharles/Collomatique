@@ -254,6 +254,7 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Bool(_), SimpleType::Bool) => true,
             (Self::LinExpr(_), SimpleType::LinExpr) => true,
             (Self::Constraint(_), SimpleType::Constraint) => true,
+            (Self::String(_), SimpleType::String) => true,
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
             // For empty list, we can convert to any list type
             (Self::List(list), SimpleType::EmptyList) if list.is_empty() => true,
@@ -270,12 +271,19 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Special cases: we can convert from Int to LinExpr
             (Self::Int(_), SimpleType::LinExpr) => true,
+            // Anything converts to String
+            (_, SimpleType::String) => true,
             // Everything else forbidden
             _ => false,
         }
     }
 
-    pub fn convert_to(self, env: &T::Env, target: &ConcreteType) -> Option<ExprValue<T>> {
+    pub fn convert_to(
+        self,
+        env: &T::Env,
+        cache: &mut T::Cache,
+        target: &ConcreteType,
+    ) -> Option<ExprValue<T>> {
         if !self.can_convert_to(env, target) {
             return None;
         }
@@ -292,14 +300,33 @@ impl<T: EvalObject> ExprValue<T> {
                     .expect("Type should be concrete");
                 Self::List(
                     list.into_iter()
-                        .map(|x| x.convert_to(env, &concrete_inner))
+                        .map(|x| x.convert_to(env, cache, &concrete_inner))
                         .collect::<Option<_>>()?,
                 )
             }
             (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(val as f64)),
+            // Conversion to string
+            (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
         })
+    }
+
+    fn convert_to_string(self, env: &T::Env, cache: &mut T::Cache) -> String {
+        match self {
+            Self::Object(obj) => match obj.pretty_print(env, cache) {
+                Some(v) => v,
+                None => format!("{:?}", obj),
+            },
+            Self::List(list) => {
+                let inners: Vec<_> = list
+                    .into_iter()
+                    .map(|x| x.convert_to_string(env, cache))
+                    .collect();
+                format!("[{}]", inners.join(","))
+            }
+            v => format!("{}", v),
+        }
     }
 }
 
@@ -644,7 +671,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Should be concrete at this point");
 
                 let converted_value = value
-                    .convert_to(eval_history.env, &concrete_target)
+                    .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
                     .expect("Resulting expression should be convertible to target type");
 
                 converted_value
@@ -805,13 +832,21 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -832,13 +867,21 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -859,13 +902,21 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
                 };
                 let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(&eval_history.env, &concrete_lin_expr)
+                    .convert_to(
+                        &eval_history.env,
+                        &mut eval_history.cache,
+                        &concrete_lin_expr,
+                    )
                     .unwrap()
                 else {
                     panic!("Should be a LinExpr result")
@@ -1072,7 +1123,11 @@ impl<T: EvalObject> LocalEnv<T> {
 
                             value
                                 .clone()
-                                .convert_to(eval_history.env, &concrete_target)
+                                .convert_to(
+                                    eval_history.env,
+                                    &mut eval_history.cache,
+                                    &concrete_target,
+                                )
                                 .expect("Resulting expression should be convertible to target type")
                         }
                         None => value.clone(),
