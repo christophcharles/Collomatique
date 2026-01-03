@@ -1135,7 +1135,8 @@ impl<T: EvalObject> LocalEnv<T> {
                     a if a.is_lin_expr() => ExprValue::LinExpr(LinExpr::constant(0.)),
                     a if a.is_int() => ExprValue::Int(0),
                     a if a.is_list() => ExprValue::List(Vec::with_capacity(list.len())), // Heuristic for length
-                    _ => panic!("Expected Int, LinExpr or List output"),
+                    a if a.is_string() => ExprValue::String(String::new()),
+                    _ => panic!("Expected Int, LinExpr, String or List output"),
                 };
 
                 for elem in list {
