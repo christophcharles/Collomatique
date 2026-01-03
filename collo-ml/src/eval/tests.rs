@@ -20,4 +20,5 @@ mod match_branches;
 mod objects;
 mod origins;
 mod quantifiers;
+mod strings;
 mod variables;
