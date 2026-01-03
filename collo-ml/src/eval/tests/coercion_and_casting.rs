@@ -254,7 +254,7 @@ fn conversion_in_sum_body() {
     }
 }
 
-// ========== Explicit Type Casting with 'into' ==========
+// ========== Type Conversion with 'into' ==========
 
 #[test]
 fn explicit_cast_int_to_linexpr() {
@@ -785,4 +785,251 @@ fn cast_in_nested_list() {
         }
         _ => panic!("Expected List of List of Int"),
     }
+}
+
+// ========== Conversion to String with 'into' ==========
+
+#[test]
+fn convert_int_to_string() {
+    let input = r#"pub let f() -> String = 42 into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("42".to_string()));
+}
+
+#[test]
+fn convert_bool_true_to_string() {
+    let input = r#"pub let f() -> String = true into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("true".to_string()));
+}
+
+#[test]
+fn convert_bool_false_to_string() {
+    let input = r#"pub let f() -> String = false into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("false".to_string()));
+}
+
+#[test]
+fn convert_string_to_string() {
+    let input = r#"pub let f() -> String = "hello" into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("hello".to_string()));
+}
+
+#[test]
+fn convert_none_to_string() {
+    let input = r#"pub let f() -> String = none into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("none".to_string()));
+}
+
+#[test]
+fn convert_int_list_to_string() {
+    let input = r#"pub let f() -> String = [1, 2, 3] into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("[1, 2, 3]".to_string()));
+}
+
+#[test]
+fn convert_bool_list_to_string() {
+    let input = r#"pub let f() -> String = [true, false] into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("[true, false]".to_string()));
+}
+
+#[test]
+fn convert_string_list_to_string() {
+    let input = r#"pub let f() -> String = ["a", "b", "c"] into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String(r#"["a", "b", "c"]"#.to_string()));
+}
+
+#[test]
+fn convert_empty_list_to_string() {
+    let input = r#"pub let f() -> String = [<Int>] into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("[]".to_string()));
+}
+
+#[test]
+fn convert_nested_list_to_string() {
+    let input = r#"pub let f() -> String = [[1, 2], [3, 4]] into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("[[1, 2], [3, 4]]".to_string()));
+}
+
+#[test]
+fn convert_linexpr_to_string() {
+    let input = r#"pub let f() -> String = $V() into String;"#;
+
+    let vars = HashMap::from([("V".to_string(), vec![])]);
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("1*$V()".to_string()));
+}
+
+#[test]
+fn convert_to_string_in_concatenation() {
+    let input = r#"pub let f() -> String = "Value: " + (42 into String);"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("Value: 42".to_string()));
+}
+
+#[test]
+fn convert_to_string_with_param() {
+    let input = r#"pub let f(x: Int) -> String = x into String;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(100)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("100".to_string()));
+}
+
+#[test]
+fn convert_to_string_in_expression() {
+    let input = r#"pub let f(x: Int) -> String = "Result: " + ((x + 5) into String);"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(10)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("Result: 15".to_string()));
+}
+
+#[test]
+fn convert_to_string_in_if_expression() {
+    let input =
+        r#"pub let f(x: Bool) -> String = if x { true into String } else { false into String };"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result_true = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .expect("Should evaluate");
+    assert_eq!(result_true, ExprValue::String("true".to_string()));
+
+    let result_false = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .expect("Should evaluate");
+    assert_eq!(result_false, ExprValue::String("false".to_string()));
+}
+
+#[test]
+fn convert_multiple_types_to_string() {
+    let input = r#"pub let f() -> String = (42 into String) + " " + (true into String);"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("42 true".to_string()));
 }

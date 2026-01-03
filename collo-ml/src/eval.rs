@@ -306,6 +306,7 @@ impl<T: EvalObject> ExprValue<T> {
             }
             (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(val as f64)),
             // Conversion to string
+            (Self::String(v), SimpleType::String) => Self::String(v),
             (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
@@ -323,7 +324,7 @@ impl<T: EvalObject> ExprValue<T> {
                     .into_iter()
                     .map(|x| x.convert_to_string(env, cache))
                     .collect();
-                format!("[{}]", inners.join(","))
+                format!("[{}]", inners.join(", "))
             }
             v => format!("{}", v),
         }
