@@ -2,11 +2,27 @@
 WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 COMMENT = _{ (!"##" ~ "#") ~ (!EOL ~ ANY)* }
 file = { SOI ~ statement* ~ EOI }
+
+// Raw strings with delimiter syntax
+// "..." for basic strings
+// ~"..."~ if you need " inside
+// ~~"..."~~ if you need "~ inside, etc.
 string_literal = @{
-    (
-        "\\\\" | "\\\"" | ( !("\"" | "\\") ~ ANY )
-    )*
+    raw_string_5 |
+    raw_string_4 |
+    raw_string_3 |
+    raw_string_2 |
+    raw_string_1 |
+    raw_string_0
 }
+
+raw_string_0 = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+raw_string_1 = @{ "~\"" ~ (!"\"~" ~ ANY)* ~ "\"~" }
+raw_string_2 = @{ "~~\"" ~ (!"\"~~" ~ ANY)* ~ "\"~~" }
+raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
+raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
+raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
+
 statement = { let_statement | reify_statement }
 
 docstring = ${
@@ -113,6 +129,7 @@ primary_expr = {
     var_call |
     var_list_call |
     fn_call |
+    string_literal |
     boolean |
     none |
     number |

@@ -567,6 +567,7 @@ impl LocalEnv {
             Expr::None => Some(SimpleType::None.into()),
             Expr::Number(_) => Some(SimpleType::Int.into()),
             Expr::Boolean(_) => Some(SimpleType::Bool.into()),
+            Expr::StringLiteral(_) => Some(SimpleType::String.into()),
 
             Expr::Ident(ident) => self
                 .check_ident(

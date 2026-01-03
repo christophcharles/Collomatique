@@ -104,6 +104,7 @@ pub enum ExprValue<T: EvalObject> {
     Bool(bool),
     LinExpr(LinExpr<IlpVar<T>>),
     Constraint(Vec<ConstraintWithOrigin<T>>),
+    String(String),
     Object(T),
     List(Vec<ExprValue<T>>),
 }
@@ -118,6 +119,19 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
             ExprValue::Constraint(c_with_o) => {
                 let strs: Vec<_> = c_with_o.iter().map(|x| x.constraint.to_string()).collect();
                 write!(f, "{}", strs.join(", "))
+            }
+            ExprValue::String(str_litteral) => {
+                let mut closing_delim = String::from("\"");
+                while str_litteral.contains(&closing_delim) {
+                    closing_delim.push('~');
+                }
+                write!(
+                    f,
+                    "{}{}{}",
+                    closing_delim.chars().rev().collect::<String>(),
+                    str_litteral,
+                    closing_delim
+                )
             }
             ExprValue::Object(obj) => write!(f, "{:?}", obj),
             ExprValue::List(list) => {
@@ -210,6 +224,7 @@ impl<T: EvalObject> ExprValue<T> {
             Self::Bool(_) => target.get_variants().contains(&SimpleType::Bool),
             Self::LinExpr(_) => target.get_variants().contains(&SimpleType::LinExpr),
             Self::Constraint(_) => target.get_variants().contains(&SimpleType::Constraint),
+            Self::String(_) => target.get_variants().contains(&SimpleType::String),
             Self::Object(obj) => target
                 .get_variants()
                 .contains(&SimpleType::Object(obj.typ_name(env))),
@@ -577,6 +592,7 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::None => ExprValue::None,
             Expr::Boolean(val) => ExprValue::Bool(*val),
             Expr::Number(val) => ExprValue::Int(*val),
+            Expr::StringLiteral(val) => ExprValue::String(val.clone()),
             Expr::Ident(ident) => self
                 .lookup_ident(&ident.node)
                 .expect("Identifiers should be defined in a checked AST"),
@@ -1579,6 +1595,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             ExprValue::Bool(_) => true,
             ExprValue::LinExpr(_) => true,
             ExprValue::Constraint(_) => true,
+            ExprValue::String(_) => true,
             ExprValue::Object(obj) => self
                 .ast
                 .global_env
