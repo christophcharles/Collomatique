@@ -11,6 +11,7 @@ mod tests;
 /// or objects or even lists
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleType {
+    Never,
     Int,
     Bool,
     None,
@@ -138,6 +139,8 @@ impl SimpleType {
         match (self, other) {
             // Most types are either equal or distinct
             (a, b) if a == b => true,
+            // Never is a subtype of everything
+            (SimpleType::Never, _) => true,
             // Empty lists are subtypes of all lists
             (SimpleType::EmptyList, SimpleType::List(_)) => true,
             // For lists we have to recursively check
@@ -190,6 +193,9 @@ impl SimpleType {
             // Same object type overlaps
             (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
 
+            // Never overlaps with everything: it is a subtype of everything
+            (SimpleType::Never, _) | (_, SimpleType::Never) => true,
+
             // Different primitive types don't overlap
             (SimpleType::Int, _)
             | (_, SimpleType::Int)
@@ -226,6 +232,7 @@ impl SimpleType {
 impl std::fmt::Display for SimpleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SimpleType::Never => write!(f, "Never"),
             SimpleType::None => write!(f, "None"),
             SimpleType::Bool => write!(f, "Bool"),
             SimpleType::Int => write!(f, "Int"),
@@ -245,6 +252,7 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
     fn try_from(value: crate::ast::SimpleTypeName) -> Result<Self, Self::Error> {
         use crate::ast::SimpleTypeName;
         match value {
+            SimpleTypeName::Never => Ok(SimpleType::Never),
             SimpleTypeName::None => Ok(SimpleType::None),
             SimpleTypeName::Bool => Ok(SimpleType::Bool),
             SimpleTypeName::Int => Ok(SimpleType::Int),

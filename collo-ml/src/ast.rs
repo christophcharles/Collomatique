@@ -88,6 +88,7 @@ pub struct MaybeTypeName {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimpleTypeName {
+    Never,
     LinExpr,
     Constraint,
     None,
@@ -574,6 +575,7 @@ impl SimpleTypeName {
                     "LinExpr" => Ok(SimpleTypeName::LinExpr),
                     "Constraint" => Ok(SimpleTypeName::Constraint),
                     "String" => Ok(SimpleTypeName::String),
+                    "Never" => Ok(SimpleTypeName::Never),
                     _ => Ok(SimpleTypeName::Object(type_name.to_string())),
                 }
             }

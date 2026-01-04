@@ -38,6 +38,7 @@ reserved_keyword = {
     "LinExpr" |
     "forall" |  // before "for"
     "String" |
+    "Never" |
     "false" |
     "reify" |
     "where" |
@@ -76,7 +77,7 @@ params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ type_name }
 
 // ========== Type Names ==========
-primitive_type = { ident | "None" | "Int" | "Bool" | "LinExpr" | "Constraint" | "String" }
+primitive_type = { ident | "None" | "Int" | "Bool" | "LinExpr" | "Constraint" | "String" | "Never" }
 type_name = { maybe_type ~ ( "|" ~ maybe_type )* }
 maybe_type = { maybe_op* ~ list_type }
 maybe_op = @{ "?" }

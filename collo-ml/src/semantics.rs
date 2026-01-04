@@ -121,6 +121,7 @@ impl GlobalEnv {
 
     pub fn validate_simple_type(&self, typ: &SimpleType) -> bool {
         match typ {
+            SimpleType::Never => true,
             SimpleType::None => true,
             SimpleType::Bool => true,
             SimpleType::Int => true,

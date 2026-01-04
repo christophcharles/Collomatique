@@ -467,3 +467,77 @@ fn global_collection_unknown_type() {
         .iter()
         .any(|e| matches!(e, SemError::UnknownType { .. })));
 }
+
+// ========== Never Type ==========
+
+#[test]
+fn never_is_valid_input() {
+    let input = "pub let f(x: Never) -> Int = 42;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_is_valid_output() {
+    let input = "pub let f(x: Never) -> Never = x;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be valid even in output: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_converts_to_int() {
+    let input = "pub let f(x: Never) -> Int = x as Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be a subtype of Int: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_converts_to_bool() {
+    let input = "pub let f(x: Never) -> Bool = x as Bool;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be a subtype of Bool: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_converts_to_list() {
+    let input = "pub let f(x: Never) -> [Int] = x as [Int];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be a subtype of [Int]: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_converts_implicitely() {
+    let input = "pub let f(x: Never) -> Int = x;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should automatically coerce to larger Int type: {:?}",
+        errors
+    );
+}
