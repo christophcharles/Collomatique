@@ -541,3 +541,32 @@ fn never_converts_implicitely() {
         errors
     );
 }
+
+#[test]
+fn never_cannot_be_added() {
+    let input = r#"let g(x: Never) -> Never = x;
+pub let f(x: Never) -> Int = 42 + g(x);"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Never type should not allow addition: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn never_can_appear_in_branch() {
+    let input = r#"let f(x: Int, y: Never) -> Int = if x > 0 {
+    x
+} else {
+    y
+};"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Never type should be unified with Int: {:?}",
+        errors
+    );
+}
