@@ -840,3 +840,180 @@ fn parentheses_override_precedence() {
 
     assert!(errors.is_empty(), "Parentheses should work: {:?}", errors);
 }
+
+// ========== List Indexing: [i]? and [i]! ==========
+
+#[test]
+fn list_index_fallible_basic() {
+    let input = "pub let f(xs: [Int]) -> ?Int = xs[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing with [i]? should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_panic_basic() {
+    let input = "pub let f(xs: [Int]) -> Int = xs[0]!;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing with [i]! should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_fallible_returns_optional() {
+    // [i]? should return optional type, not the element type
+    let input = "pub let f(xs: [Int]) -> Int = xs[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "[i]? should return optional type, not Int"
+    );
+}
+
+#[test]
+fn list_index_panic_returns_non_optional_type() {
+    // [i]! returns Int directly, which is a subtype of ?Int, so this should work
+    let input = "pub let f(xs: [Int]) -> ?Int = xs[0]!;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "[i]! returning Int should be assignable to ?Int: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_panic_not_optional() {
+    // [i]! returns Int, not ?Int - so it can be used directly without unwrapping
+    let input = "pub let f(xs: [Int]) -> Int = xs[0]! + 1;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "[i]! should return non-optional type: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_on_non_list_fails() {
+    let input = "pub let f(x: Int) -> ?Int = x[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "List indexing on non-list should fail");
+}
+
+#[test]
+fn list_index_non_int_index_fails() {
+    let input = "pub let f(xs: [Int]) -> ?Int = xs[true]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "List indexing with non-Int index should fail"
+    );
+}
+
+#[test]
+fn list_index_union_of_lists() {
+    // ([Int] | [Bool])[i]! should return Int | Bool
+    let input = "pub let f(xs: [Int] | [Bool]) -> Int | Bool = xs[0]!;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing on union of lists should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_union_of_lists_fallible() {
+    // ([Int] | [Bool])[i]? should return Int | Bool | None
+    let input = "pub let f(xs: [Int] | [Bool]) -> Int | Bool | None = xs[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Fallible list indexing on union of lists should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_chained() {
+    let input = "pub let f(matrix: [[Int]]) -> Int = matrix[0]![1]!;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Chained list indexing should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_with_field_access() {
+    let types = HashMap::from([(
+        "Student".to_string(),
+        HashMap::from([(
+            "scores".to_string(),
+            ExprType::simple(SimpleType::List(SimpleType::Int.into())),
+        )]),
+    )]);
+    let input = "pub let f(s: Student) -> ?Int = s.scores[0]?;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing after field access should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_with_expression() {
+    let input = "pub let f(xs: [Int], i: Int) -> ?Int = xs[i + 1]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing with expression index should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_nested_list_element_type() {
+    // [[Int]][i]? should return ?[Int]
+    let input = "pub let f(xs: [[Int]]) -> ?[Int] = xs[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing on nested list should return correct type: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn list_index_on_literal() {
+    let input = "pub let f() -> ?Int = [1, 2, 3][0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List indexing on literal should work: {:?}",
+        errors
+    );
+}

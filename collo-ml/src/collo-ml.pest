@@ -123,8 +123,11 @@ cast_expr = { explicit_type ~ (cast_op ~ type_name)? }
 cast_op = { "cast?" | "cast!" }
 explicit_type = { path ~ ( "as" ~ type_name)? }
 
-path = { primary_expr ~ ("." ~ path_segment)* }
+path = { primary_expr ~ ("." ~ path_segment | index_segment)* }
 path_segment = { tuple_index | ident }
+index_segment = { "[" ~ expr ~ index_suffix }
+index_suffix = ${ "]" ~ index_op }
+index_op = { "?" | "!" }
 tuple_index = @{ ASCII_DIGIT+ }
 
 // Primary expressions

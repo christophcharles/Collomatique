@@ -627,3 +627,224 @@ fn collection_operations_with_if() {
         ExprValue::List(Vec::from([ExprValue::Int(4)]))
     );
 }
+
+// ========== List Indexing: [i]? and [i]! ==========
+
+#[test]
+fn list_index_fallible_valid() {
+    let input = "pub let f() -> ?Int = [1, 2, 3][1]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(2));
+}
+
+#[test]
+fn list_index_fallible_first_element() {
+    let input = "pub let f() -> ?Int = [10, 20, 30][0]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(10));
+}
+
+#[test]
+fn list_index_fallible_out_of_bounds() {
+    let input = "pub let f() -> ?Int = [1, 2, 3][10]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::None);
+}
+
+#[test]
+fn list_index_fallible_negative() {
+    let input = "pub let f() -> ?Int = [1, 2, 3][-1]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::None);
+}
+
+#[test]
+fn list_index_fallible_empty_list() {
+    let input = "pub let f(xs: [Int]) -> ?Int = xs[0]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::List(vec![])])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::None);
+}
+
+#[test]
+fn list_index_panic_valid() {
+    let input = "pub let f() -> Int = [1, 2, 3][1]!;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(2));
+}
+
+#[test]
+fn list_index_panic_out_of_bounds() {
+    let input = "pub let f() -> Int = [1, 2, 3][10]!;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast.quick_eval_fn("f", vec![]);
+    assert!(result.is_err(), "Should panic on out of bounds index");
+}
+
+#[test]
+fn list_index_panic_negative() {
+    let input = "pub let f() -> Int = [1, 2, 3][-1]!;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast.quick_eval_fn("f", vec![]);
+    assert!(result.is_err(), "Should panic on negative index");
+}
+
+#[test]
+fn list_index_with_expression() {
+    let input = "pub let f(i: Int) -> ?Int = [10, 20, 30, 40][i + 1]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(1)])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(30));
+}
+
+#[test]
+fn list_index_chained() {
+    let input = "pub let f() -> Int = [[1, 2], [3, 4]][0]![1]!;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(2));
+}
+
+#[test]
+fn list_index_chained_fallible_then_panic() {
+    // Use fallible on outer, panic on inner
+    let input = "pub let f() -> ?Int = [[1, 2], [3, 4]][0]![1]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(2));
+}
+
+#[test]
+fn list_index_with_param() {
+    let input = "pub let f(xs: [Int], i: Int) -> ?Int = xs[i]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let list = ExprValue::List(vec![
+        ExprValue::Int(100),
+        ExprValue::Int(200),
+        ExprValue::Int(300),
+    ]);
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![list.clone(), ExprValue::Int(2)])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Int(300));
+
+    let result_out = checked_ast
+        .quick_eval_fn("f", vec![list, ExprValue::Int(5)])
+        .expect("Should evaluate");
+    assert_eq!(result_out, ExprValue::None);
+}
+
+#[test]
+fn list_index_with_comprehension() {
+    let input = "pub let f() -> ?Int = [x * 2 for x in [1..5]][2]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    // [1..5] = [1, 2, 3, 4], x*2 = [2, 4, 6, 8], [2] = 6
+    assert_eq!(result, ExprValue::Int(6));
+}
+
+#[test]
+fn list_index_bool_list() {
+    let input = "pub let f() -> ?Bool = [true, false, true][1]?;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::Bool(false));
+}
+
+#[test]
+fn list_index_string_list() {
+    let input = r#"pub let f() -> ?String = ["a", "b", "c"][0]?;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![])
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String("a".to_string()));
+}

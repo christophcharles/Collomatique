@@ -400,6 +400,10 @@ pub enum SemError {
     },
     #[error("Null coalescing operator '??' at {span:?} requires a maybe type (containing None), but found {found}")]
     NullCoalesceOnNonMaybe { span: Span, found: ExprType },
+    #[error("List index at {span:?} requires Int type, but found {found}")]
+    ListIndexNotInt { span: Span, found: ExprType },
+    #[error("Cannot index into non-list type {typ} at {span:?}")]
+    IndexOnNonList { typ: ExprType, span: Span },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -2722,6 +2726,55 @@ impl LocalEnv {
                     }
                     current_type =
                         ExprType::sum(variants).expect("There should be at least one variant");
+                }
+
+                PathSegment::ListIndexFallible(index_expr)
+                | PathSegment::ListIndexPanic(index_expr) => {
+                    // 1. Check index expression is Int
+                    let index_type = self.check_expr(
+                        global_env,
+                        &index_expr.node,
+                        &index_expr.span,
+                        type_info,
+                        expr_types,
+                        errors,
+                        warnings,
+                    )?;
+
+                    if !index_type.is_int() {
+                        errors.push(SemError::ListIndexNotInt {
+                            span: index_expr.span.clone(),
+                            found: index_type,
+                        });
+                        return None;
+                    }
+
+                    // 2. Check current_type is a list (or union of lists)
+                    let mut element_types = BTreeSet::new();
+                    for variant in current_type.get_variants() {
+                        match variant {
+                            SimpleType::List(elem_type) => {
+                                element_types.extend(elem_type.clone().into_variants());
+                            }
+                            _ => {
+                                errors.push(SemError::IndexOnNonList {
+                                    typ: current_type.clone(),
+                                    span: segment.span.clone(),
+                                });
+                                return None;
+                            }
+                        }
+                    }
+
+                    // 3. Compute result type
+                    let element_type = ExprType::sum(element_types)
+                        .expect("There should be at least one element type");
+
+                    current_type = match &segment.node {
+                        PathSegment::ListIndexFallible(_) => element_type.make_optional(),
+                        PathSegment::ListIndexPanic(_) => element_type,
+                        _ => unreachable!(),
+                    };
                 }
             }
         }

@@ -105,6 +105,8 @@ pub enum SimpleTypeName {
 pub enum PathSegment {
     Field(String),
     TupleIndex(usize),
+    ListIndexFallible(Box<Spanned<Expr>>), // [expr]?
+    ListIndexPanic(Box<Spanned<Expr>>),    // [expr]!
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1065,27 +1067,56 @@ impl Expr {
 
         let mut segments = Vec::new();
         for segment in inner {
-            if segment.as_rule() == Rule::path_segment {
-                let inner_segment = segment.into_inner().next().unwrap();
-                let segment_span = Span::from_pest(&inner_segment);
-                match inner_segment.as_rule() {
-                    Rule::ident => {
-                        segments.push(Spanned::new(
-                            PathSegment::Field(inner_segment.as_str().to_string()),
-                            segment_span,
-                        ));
+            match segment.as_rule() {
+                Rule::path_segment => {
+                    let inner_segment = segment.into_inner().next().unwrap();
+                    let segment_span = Span::from_pest(&inner_segment);
+                    match inner_segment.as_rule() {
+                        Rule::ident => {
+                            segments.push(Spanned::new(
+                                PathSegment::Field(inner_segment.as_str().to_string()),
+                                segment_span,
+                            ));
+                        }
+                        Rule::tuple_index => {
+                            let index: usize = inner_segment.as_str().parse().map_err(|e| {
+                                AstError::ParseIntError {
+                                    span: segment_span.clone(),
+                                    error: e,
+                                }
+                            })?;
+                            segments
+                                .push(Spanned::new(PathSegment::TupleIndex(index), segment_span));
+                        }
+                        _ => {}
                     }
-                    Rule::tuple_index => {
-                        let index: usize = inner_segment.as_str().parse().map_err(|e| {
-                            AstError::ParseIntError {
-                                span: segment_span.clone(),
-                                error: e,
-                            }
-                        })?;
-                        segments.push(Spanned::new(PathSegment::TupleIndex(index), segment_span));
-                    }
-                    _ => {}
                 }
+                Rule::index_segment => {
+                    // index_segment = { "[" ~ expr ~ index_suffix }
+                    // index_suffix = ${ "]" ~ index_op }
+                    let segment_span = Span::from_pest(&segment);
+                    let mut index_inner = segment.into_inner();
+
+                    // First is the index expression
+                    let index_expr_pair = index_inner.next().unwrap();
+                    let index_expr_span = Span::from_pest(&index_expr_pair);
+                    let index_expr = Self::from_pest(index_expr_pair)?;
+                    let boxed_index = Box::new(Spanned::new(index_expr, index_expr_span));
+
+                    // Second is index_suffix which contains "]" and index_op
+                    let suffix_pair = index_inner.next().unwrap();
+                    let suffix_str = suffix_pair.as_str();
+
+                    // suffix_str is "]?" or "]!"
+                    let path_segment = if suffix_str.ends_with('?') {
+                        PathSegment::ListIndexFallible(boxed_index)
+                    } else {
+                        PathSegment::ListIndexPanic(boxed_index)
+                    };
+
+                    segments.push(Spanned::new(path_segment, segment_span));
+                }
+                _ => {}
             }
         }
 

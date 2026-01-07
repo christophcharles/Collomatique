@@ -796,6 +796,45 @@ impl<T: EvalObject> LocalEnv<T> {
                                 .nth(*index)
                                 .expect("Index should be valid after type checking");
                         }
+                        PathSegment::ListIndexFallible(index_expr) => {
+                            let index = self.eval_expr(eval_history, index_expr)?;
+                            let ExprValue::Int(i) = index else {
+                                panic!("Index should be Int after type checking");
+                            };
+
+                            let ExprValue::List(elements) = current_value else {
+                                panic!("Should be list after type checking");
+                            };
+
+                            // Bounds check - return None if out of bounds
+                            if i < 0 || (i as usize) >= elements.len() {
+                                current_value = ExprValue::None;
+                            } else {
+                                current_value = elements.into_iter().nth(i as usize).unwrap();
+                            }
+                        }
+                        PathSegment::ListIndexPanic(index_expr) => {
+                            let index = self.eval_expr(eval_history, index_expr)?;
+                            let ExprValue::Int(i) = index else {
+                                panic!("Index should be Int after type checking");
+                            };
+
+                            let ExprValue::List(elements) = current_value else {
+                                panic!("Should be list after type checking");
+                            };
+
+                            // Bounds check - panic if out of bounds
+                            if i < 0 || (i as usize) >= elements.len() {
+                                return Err(EvalError::Panic(Box::new(ExprValue::String(
+                                    format!(
+                                    "list index out of bounds: index {} but list has {} elements",
+                                    i,
+                                    elements.len()
+                                ),
+                                ))));
+                            }
+                            current_value = elements.into_iter().nth(i as usize).unwrap();
+                        }
                     }
                 }
 
