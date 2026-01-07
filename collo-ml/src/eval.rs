@@ -172,6 +172,7 @@ pub enum ExprValue<T: EvalObject> {
     String(String),
     Object(T),
     List(Vec<ExprValue<T>>),
+    Tuple(Vec<ExprValue<T>>),
 }
 
 impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
@@ -202,6 +203,10 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
             ExprValue::List(list) => {
                 let strs: Vec<_> = list.iter().map(|x| x.to_string()).collect();
                 write!(f, "[{}]", strs.join(", "))
+            }
+            ExprValue::Tuple(elements) => {
+                let strs: Vec<_> = elements.iter().map(|x| x.to_string()).collect();
+                write!(f, "({})", strs.join(", "))
             }
         }
     }
@@ -262,6 +267,9 @@ impl<T: EvalObject> ExprValue<T> {
             ExprValue::List(list) => {
                 ExprValue::List(list.iter().map(|x| x.with_origin(origin)).collect())
             }
+            ExprValue::Tuple(elements) => {
+                ExprValue::Tuple(elements.iter().map(|x| x.with_origin(origin)).collect())
+            }
             _ => self.clone(),
         }
     }
@@ -279,6 +287,10 @@ impl<T: EvalObject> ExprValue<T> {
 
     pub fn is_arithmetic(&self) -> bool {
         matches!(self, Self::Int(_) | Self::LinExpr(_))
+    }
+
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Self::Tuple(_))
     }
 
     pub fn fits_in_typ(&self, env: &T::Env, target: &ExprType) -> bool {
@@ -303,6 +315,25 @@ impl<T: EvalObject> ExprValue<T> {
                     };
 
                     if list.iter().all(|x| x.fits_in_typ(env, &inner_typ)) {
+                        return true;
+                    }
+                }
+                false
+            }
+            // Tuples must match element-wise
+            Self::Tuple(elements) => {
+                for variant in target.get_variants() {
+                    let SimpleType::Tuple(target_elems) = variant else {
+                        continue;
+                    };
+                    if elements.len() != target_elems.len() {
+                        continue;
+                    }
+                    if elements
+                        .iter()
+                        .zip(target_elems.iter())
+                        .all(|(e, t)| e.fits_in_typ(env, t))
+                    {
                         return true;
                     }
                 }
@@ -338,6 +369,21 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Int(_), SimpleType::LinExpr) => true,
             // Anything converts to String
             (_, SimpleType::String) => true,
+            // Tuples: element-wise conversion
+            (Self::Tuple(elements), SimpleType::Tuple(target_elems)) => {
+                if elements.len() != target_elems.len() {
+                    return false;
+                }
+                elements.iter().zip(target_elems.iter()).all(|(e, t)| {
+                    let t_concrete = t
+                        .as_simple()
+                        .expect("Type should be concrete")
+                        .clone()
+                        .into_concrete()
+                        .expect("Type should be concrete");
+                    e.can_convert_to(env, &t_concrete)
+                })
+            }
             // Everything else forbidden
             _ => false,
         }
@@ -373,6 +419,23 @@ impl<T: EvalObject> ExprValue<T> {
             // Conversion to string
             (Self::String(v), SimpleType::String) => Self::String(v),
             (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
+            // Tuple conversion: element-wise
+            (Self::Tuple(elements), SimpleType::Tuple(target_elems)) => {
+                let converted: Option<Vec<_>> = elements
+                    .into_iter()
+                    .zip(target_elems.iter())
+                    .map(|(e, t)| {
+                        let t_concrete = t
+                            .as_simple()
+                            .expect("Type should be concrete")
+                            .clone()
+                            .into_concrete()
+                            .expect("Type should be concrete");
+                        e.convert_to(env, cache, &t_concrete)
+                    })
+                    .collect();
+                Self::Tuple(converted?)
+            }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
         })
@@ -390,6 +453,13 @@ impl<T: EvalObject> ExprValue<T> {
                     .map(|x| x.convert_to_string(env, cache))
                     .collect();
                 format!("[{}]", inners.join(", "))
+            }
+            Self::Tuple(elements) => {
+                let inners: Vec<_> = elements
+                    .iter()
+                    .map(|x| x.convert_to_string(env, cache))
+                    .collect();
+                format!("({})", inners.join(", "))
             }
             v => format!("{}", v),
         }
@@ -692,22 +762,41 @@ impl<T: EvalObject> LocalEnv<T> {
                 .lookup_ident(&ident.node)
                 .expect("Identifiers should be defined in a checked AST"),
             Expr::Path { object, segments } => {
+                use crate::ast::PathSegment;
                 assert!(!segments.is_empty());
 
                 let mut current_value = self.eval_expr(eval_history, &object)?;
 
-                for field in segments {
-                    let obj = match current_value {
-                        ExprValue::Object(obj) => obj,
-                        _ => panic!("Object expected"),
-                    };
-                    current_value = obj
-                        .field_access(&eval_history.env, &mut eval_history.cache, &field.node)
-                        .ok_or(EvalError::MissingObjectField {
-                            object: format!("{:?}", obj),
-                            typ: obj.typ_name(&eval_history.env),
-                            field: field.node.clone(),
-                        })?;
+                for segment in segments {
+                    match &segment.node {
+                        PathSegment::Field(field_name) => {
+                            let obj = match current_value {
+                                ExprValue::Object(obj) => obj,
+                                _ => panic!("Object expected for field access"),
+                            };
+                            current_value = obj
+                                .field_access(
+                                    &eval_history.env,
+                                    &mut eval_history.cache,
+                                    field_name,
+                                )
+                                .ok_or(EvalError::MissingObjectField {
+                                    object: format!("{:?}", obj),
+                                    typ: obj.typ_name(&eval_history.env),
+                                    field: field_name.clone(),
+                                })?;
+                        }
+                        PathSegment::TupleIndex(index) => {
+                            let tuple = match current_value {
+                                ExprValue::Tuple(elements) => elements,
+                                _ => panic!("Tuple expected for index access"),
+                            };
+                            current_value = tuple
+                                .into_iter()
+                                .nth(*index)
+                                .expect("Index should be valid after type checking");
+                        }
+                    }
                 }
 
                 current_value
@@ -1522,6 +1611,14 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 body_value?
             }
+            Expr::TupleLiteral { elements } => {
+                let element_values: Vec<_> = elements
+                    .iter()
+                    .map(|x| self.eval_expr(eval_history, &x))
+                    .collect::<Result<_, _>>()?;
+
+                ExprValue::Tuple(element_values)
+            }
         })
     }
 
@@ -1622,6 +1719,13 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 let pretty_values: Vec<_> =
                     list.iter().map(|x| self.prettify_expr_value(x)).collect();
                 format!("[{}]", pretty_values.join(","))
+            }
+            ExprValue::Tuple(elements) => {
+                let pretty_values: Vec<_> = elements
+                    .iter()
+                    .map(|x| self.prettify_expr_value(x))
+                    .collect();
+                format!("({})", pretty_values.join(","))
             }
             ExprValue::Bool(v) => format!("{}", v),
             ExprValue::Int(v) => format!("{}", v),
@@ -1746,6 +1850,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 }
                 true
             }
+            ExprValue::Tuple(elements) => elements.iter().all(|e| self.validate_value(e)),
         }
     }
 

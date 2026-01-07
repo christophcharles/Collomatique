@@ -21,6 +21,7 @@ pub enum SimpleType {
     EmptyList,
     List(ExprType),
     Object(String),
+    Tuple(Vec<ExprType>), // (Int, Bool), (Int, Bool, String), etc.
 }
 
 /// Represents a sum type (or a simple type if there is only one type in it)
@@ -121,9 +122,21 @@ impl SimpleType {
         matches!(self, SimpleType::Int | SimpleType::LinExpr)
     }
 
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, SimpleType::Tuple(_))
+    }
+
+    pub fn get_tuple_elements(&self) -> Option<&Vec<ExprType>> {
+        match self {
+            SimpleType::Tuple(elements) => Some(elements),
+            _ => None,
+        }
+    }
+
     pub fn is_concrete(&self) -> bool {
         match self {
             SimpleType::List(inner) => inner.is_concrete(),
+            SimpleType::Tuple(elements) => elements.iter().all(|e| e.is_concrete()),
             _ => true,
         }
     }
@@ -147,6 +160,14 @@ impl SimpleType {
             (SimpleType::List(inner1), SimpleType::List(inner2)) => {
                 // otherwise we defer to the sum types
                 inner1.is_subtype_of(inner2)
+            }
+            // Tuples are covariant: (A, B) <: (A', B') if A <: A' and B <: B'
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1
+                        .iter()
+                        .zip(elems2.iter())
+                        .all(|(e1, e2)| e1.is_subtype_of(e2))
             }
             // For all other combination, it's not
             _ => false,
@@ -173,6 +194,20 @@ impl SimpleType {
                     .expect("target type should be concrete");
                 inner1.can_convert_to(&inner2_concrete)
             }
+            // Tuples: element-wise conversion
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1.iter().zip(elems2.iter()).all(|(e1, e2)| {
+                        let e2_simple = e2
+                            .as_simple()
+                            .expect("target type should be concrete and so simple");
+                        let e2_concrete = e2_simple
+                            .clone()
+                            .into_concrete()
+                            .expect("target type should be concrete");
+                        e1.can_convert_to(&e2_concrete)
+                    })
+            }
             // Anything can convert to String
             (_, SimpleType::String) => true,
             // Anything else: no conversion
@@ -195,6 +230,18 @@ impl SimpleType {
 
             // Never overlaps with everything: it is a subtype of everything
             (SimpleType::Never, _) | (_, SimpleType::Never) => true,
+
+            // Tuples overlap if same arity and all elements overlap
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1
+                        .iter()
+                        .zip(elems2.iter())
+                        .all(|(e1, e2)| e1.overlaps_with(e2))
+            }
+
+            // Tuples don't overlap with non-tuples
+            (SimpleType::Tuple(_), _) | (_, SimpleType::Tuple(_)) => false,
 
             // Different primitive types don't overlap
             (SimpleType::Int, _)
@@ -223,8 +270,14 @@ impl SimpleType {
 
 impl SimpleType {
     fn assert_invariant(&self) {
-        if let SimpleType::List(inner) = self {
-            inner.assert_invariant();
+        match self {
+            SimpleType::List(inner) => inner.assert_invariant(),
+            SimpleType::Tuple(elements) => {
+                for elem in elements {
+                    elem.assert_invariant();
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -242,6 +295,10 @@ impl std::fmt::Display for SimpleType {
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
             SimpleType::Object(typ) => write!(f, "{}", typ),
+            SimpleType::Tuple(elements) => {
+                let types: Vec<_> = elements.iter().map(|t| t.to_string()).collect();
+                write!(f, "({})", types.join(", "))
+            }
         }
     }
 }
@@ -262,6 +319,13 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
             SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),
+            SimpleTypeName::Tuple(elements) => {
+                let converted: Vec<ExprType> = elements
+                    .into_iter()
+                    .map(|e| ExprType::try_from(e))
+                    .collect::<Result<_, _>>()?;
+                Ok(SimpleType::Tuple(converted))
+            }
         }
     }
 }

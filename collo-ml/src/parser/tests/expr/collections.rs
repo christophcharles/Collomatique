@@ -580,8 +580,8 @@ fn collection_rejects_lists_range_with_incomplete_syntax() {
 #[test]
 fn collection_rejects_lists_range_with_bad_syntax() {
     let cases = vec![
-        "[0...1]",    // Extra points
-        "[0.1]",      // Missing point
+        "[0...1]", // Extra points
+        // "[0.1]" is now valid syntax - parses as 0.1 (tuple access), checked at semantic level
         "[0..1, 42]", // Mixing with literals
         "0..1",       // Missing brackets
         "[0..1",      // Missing bracket

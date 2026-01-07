@@ -97,7 +97,14 @@ pub enum SimpleTypeName {
     String,
     Object(String), // Student, Week, etc
     EmptyList,
-    List(Spanned<TypeName>), // [Student], [[Int]], etc.
+    List(Spanned<TypeName>),       // [Student], [[Int]], etc.
+    Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathSegment {
+    Field(String),
+    TupleIndex(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,7 +183,10 @@ pub enum Expr {
     Ident(Spanned<String>),
     Path {
         object: Box<Spanned<Expr>>, // first segment might be an expression - for "get_group().student.age" this is "get_group()"
-        segments: Vec<Spanned<String>>, // and this is ["student", "age"]
+        segments: Vec<Spanned<PathSegment>>, // and this is [Field("student"), Field("age")] or [TupleIndex(0)]
+    },
+    TupleLiteral {
+        elements: Vec<Spanned<Expr>>, // (expr, expr, ...) - at least 2 elements
     },
 
     // Arithmetic
@@ -557,14 +567,28 @@ impl SimpleTypeName {
                             inner_span,
                         )))
                     }
+                    Rule::tuple_type => Self::from_tuple_type(inner_pair),
                     _ => Err(AstError::UnexpectedRule {
-                        expected: "primitive_type or type_name",
+                        expected: "primitive_type, type_name, or tuple_type",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     }),
                 }
             }
         }
+    }
+
+    fn from_tuple_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ")" }
+        let elements: Result<Vec<_>, _> = pair
+            .into_inner()
+            .map(|type_pair| {
+                let type_span = Span::from_pest(&type_pair);
+                Ok(Spanned::new(TypeName::from_pest(type_pair)?, type_span))
+            })
+            .collect();
+
+        Ok(SimpleTypeName::Tuple(elements?))
     }
 
     fn from_primitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -967,9 +991,27 @@ impl Expr {
 
         let mut segments = Vec::new();
         for segment in inner {
-            if segment.as_rule() == Rule::ident {
-                let segment_span = Span::from_pest(&segment);
-                segments.push(Spanned::new(segment.as_str().to_string(), segment_span));
+            if segment.as_rule() == Rule::path_segment {
+                let inner_segment = segment.into_inner().next().unwrap();
+                let segment_span = Span::from_pest(&inner_segment);
+                match inner_segment.as_rule() {
+                    Rule::ident => {
+                        segments.push(Spanned::new(
+                            PathSegment::Field(inner_segment.as_str().to_string()),
+                            segment_span,
+                        ));
+                    }
+                    Rule::tuple_index => {
+                        let index: usize = inner_segment.as_str().parse().map_err(|e| {
+                            AstError::ParseIntError {
+                                span: segment_span.clone(),
+                                error: e,
+                            }
+                        })?;
+                        segments.push(Spanned::new(PathSegment::TupleIndex(index), segment_span));
+                    }
+                    _ => {}
+                }
             }
         }
 
@@ -1019,6 +1061,7 @@ impl Expr {
             Rule::none => Self::from_none(inner),
             Rule::neg => Self::from_neg(inner),
             Rule::panic => Self::from_panic(inner),
+            Rule::tuple_literal => Self::from_tuple_literal(inner),
             Rule::number => {
                 let num_str = inner.as_str();
                 let value = num_str
@@ -1326,6 +1369,22 @@ impl Expr {
         let inner = Box::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
 
         Ok(Expr::Panic(inner))
+    }
+
+    fn from_tuple_literal(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ")" }
+        let elements: Result<Vec<_>, _> = pair
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::expr)
+            .map(|expr_pair| {
+                let expr_span = Span::from_pest(&expr_pair);
+                Ok(Spanned::new(Expr::from_pest(expr_pair)?, expr_span))
+            })
+            .collect();
+
+        Ok(Expr::TupleLiteral {
+            elements: elements?,
+        })
     }
 
     fn from_empty_typed_list(pair: Pair<Rule>) -> Result<Self, AstError> {

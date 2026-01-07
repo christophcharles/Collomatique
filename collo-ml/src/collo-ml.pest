@@ -83,8 +83,13 @@ maybe_type = { maybe_op* ~ list_type }
 maybe_op = @{ "?" }
 list_type = {
     "[" ~ type_name? ~ "]" |
+    tuple_type |
     primitive_type
 }
+
+// Tuple type: (Type1, Type2) or (Type1, Type2, Type3, ...)
+// Minimum 2 elements to distinguish from grouping
+tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ")" }
 
 // ========== Unified Expressions ==========
 expr = { or_expr }
@@ -111,7 +116,9 @@ mul_div_mod_expr = { type_conversion ~ ((mul_op | div_op | mod_op) ~ type_conver
 type_conversion = { explicit_type ~ ( "into" ~ type_name)? }
 explicit_type = { path ~ ( "as" ~ type_name)? }
 
-path = { primary_expr ~ ("." ~ ident)* }
+path = { primary_expr ~ ("." ~ path_segment)* }
+path_segment = { tuple_index | ident }
+tuple_index = @{ ASCII_DIGIT+ }
 
 // Primary expressions
 primary_expr = {
@@ -136,9 +143,14 @@ primary_expr = {
     number |
     neg |
     panic |
+    tuple_literal |    // Must come before "(" ~ expr ~ ")" to parse correctly
     ident |
     "(" ~ expr ~ ")"
 }
+
+// Tuple literal: (expr, expr) or (expr, expr, expr, ...)
+// Minimum 2 elements to distinguish from grouping
+tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ")" }
 
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
@@ -189,3 +201,5 @@ type_name_complete = { SOI ~ type_name ~ EOI }
 let_statement_complete = { SOI ~ let_statement ~ EOI }
 reify_statement_complete = { SOI ~ reify_statement ~ EOI }
 ident_complete = { SOI ~ ident ~ EOI }
+tuple_type_complete = { SOI ~ tuple_type ~ EOI }
+tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }

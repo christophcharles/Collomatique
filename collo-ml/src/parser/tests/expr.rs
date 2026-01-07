@@ -34,4 +34,5 @@ mod logical;
 mod match_expr;
 mod panic;
 mod semantic_invalid;
+mod tuples;
 mod type_annotations;

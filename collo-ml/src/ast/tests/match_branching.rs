@@ -280,7 +280,7 @@ fn parse_match_with_path_in_body() {
                 match &branches[0].body.node {
                     Expr::Path { segments, .. } => {
                         assert_eq!(segments.len(), 1);
-                        assert_eq!(segments[0].node, "age");
+                        assert_eq!(segments[0].node, PathSegment::Field("age".to_string()));
                     }
                     _ => panic!("Expected Path in body"),
                 }

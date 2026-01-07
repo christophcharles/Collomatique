@@ -131,6 +131,7 @@ impl GlobalEnv {
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
+            SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
         }
     }
 
@@ -354,6 +355,18 @@ pub enum SemError {
     FieldAccessOnNonObject {
         typ: ExprType,
         field: String,
+        span: Span,
+    },
+    #[error("Tuple index {index} out of bounds for tuple of size {size} at {span:?}")]
+    TupleIndexOutOfBounds {
+        index: usize,
+        size: usize,
+        span: Span,
+    },
+    #[error("Cannot access tuple index {index} on non-tuple type {typ} at {span:?}")]
+    TupleIndexOnNonTuple {
+        typ: ExprType,
+        index: usize,
         span: Span,
     },
     #[error("Type at {span:?}: found {found} which is not a concrete type ({context})")]
@@ -2213,6 +2226,26 @@ impl LocalEnv {
                 }
             }
 
+            Expr::TupleLiteral { elements } => {
+                // Tuples must have at least 2 elements (enforced by grammar)
+                let element_types: Vec<_> = elements
+                    .iter()
+                    .filter_map(|elem| {
+                        self.check_expr(
+                            global_env, &elem.node, &elem.span, type_info, expr_types, errors,
+                            warnings,
+                        )
+                    })
+                    .collect();
+
+                // If any element failed to type-check, we can't form a valid tuple type
+                if element_types.len() != elements.len() {
+                    return None;
+                }
+
+                Some(SimpleType::Tuple(element_types).into())
+            }
+
             Expr::ListRange { start, end } => {
                 let start_type = self.check_expr(
                     global_env,
@@ -2479,12 +2512,13 @@ impl LocalEnv {
         &mut self,
         global_env: &mut GlobalEnv,
         object: &Spanned<Expr>,
-        segments: &Vec<Spanned<String>>,
+        segments: &Vec<Spanned<crate::ast::PathSegment>>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
+        use crate::ast::PathSegment;
         assert!(!segments.is_empty(), "Path must have at least one segment");
 
         // First segment can be an expression
@@ -2498,40 +2532,74 @@ impl LocalEnv {
             warnings,
         )?;
 
-        // Follow the path through fields
+        // Follow the path through fields or tuple indices
         for segment in segments {
-            let mut variants = BTreeSet::new();
-            for variant in current_type.get_variants() {
-                match variant {
-                    a if a.is_object() => {
-                        let type_name = a.get_inner_object_type().unwrap();
-                        // Look up the field in this object type
-                        match global_env.lookup_field(type_name, &segment.node) {
-                            Some(field_type) => {
-                                variants.extend(field_type.into_variants());
+            match &segment.node {
+                PathSegment::Field(field_name) => {
+                    let mut variants = BTreeSet::new();
+                    for variant in current_type.get_variants() {
+                        match variant {
+                            a if a.is_object() => {
+                                let type_name = a.get_inner_object_type().unwrap();
+                                // Look up the field in this object type
+                                match global_env.lookup_field(type_name, field_name) {
+                                    Some(field_type) => {
+                                        variants.extend(field_type.into_variants());
+                                    }
+                                    None => {
+                                        errors.push(SemError::UnknownField {
+                                            object_type: type_name.clone(),
+                                            field: field_name.clone(),
+                                            span: segment.span.clone(),
+                                        });
+                                        return None;
+                                    }
+                                }
                             }
-                            None => {
-                                errors.push(SemError::UnknownField {
-                                    object_type: type_name.clone(),
-                                    field: segment.node.clone(),
+                            _ => {
+                                // Can't access fields on non-object types
+                                errors.push(SemError::FieldAccessOnNonObject {
+                                    typ: current_type.clone().into(),
+                                    field: field_name.clone(),
                                     span: segment.span.clone(),
                                 });
                                 return None;
                             }
                         }
                     }
-                    _ => {
-                        // Can't access fields on non-object types
-                        errors.push(SemError::FieldAccessOnNonObject {
-                            typ: current_type.clone().into(),
-                            field: segment.node.clone(),
-                            span: segment.span.clone(),
-                        });
-                        return None;
+                    current_type =
+                        ExprType::sum(variants).expect("There should be at least one variant");
+                }
+
+                PathSegment::TupleIndex(index) => {
+                    let mut variants = BTreeSet::new();
+                    for variant in current_type.get_variants() {
+                        match variant {
+                            SimpleType::Tuple(elements) => {
+                                if *index >= elements.len() {
+                                    errors.push(SemError::TupleIndexOutOfBounds {
+                                        index: *index,
+                                        size: elements.len(),
+                                        span: segment.span.clone(),
+                                    });
+                                    return None;
+                                }
+                                variants.extend(elements[*index].clone().into_variants());
+                            }
+                            _ => {
+                                errors.push(SemError::TupleIndexOnNonTuple {
+                                    typ: current_type.clone(),
+                                    index: *index,
+                                    span: segment.span.clone(),
+                                });
+                                return None;
+                            }
+                        }
                     }
+                    current_type =
+                        ExprType::sum(variants).expect("There should be at least one variant");
                 }
             }
-            current_type = ExprType::sum(variants).expect("There should be at least one variant");
         }
 
         Some(current_type)

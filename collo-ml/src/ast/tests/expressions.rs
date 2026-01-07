@@ -199,7 +199,7 @@ fn parse_path_with_field_access() {
                     _ => panic!("Expected Ident"),
                 }
                 assert_eq!(segments.len(), 1);
-                assert_eq!(segments[0].node, "age");
+                assert_eq!(segments[0].node, PathSegment::Field("age".to_string()));
             }
             _ => panic!("Expected Path"),
         },
@@ -223,9 +223,9 @@ fn parse_deep_path() {
                     _ => panic!("Expected Ident"),
                 }
                 assert_eq!(segments.len(), 3);
-                assert_eq!(segments[0].node, "b");
-                assert_eq!(segments[1].node, "c");
-                assert_eq!(segments[2].node, "d");
+                assert_eq!(segments[0].node, PathSegment::Field("b".to_string()));
+                assert_eq!(segments[1].node, PathSegment::Field("c".to_string()));
+                assert_eq!(segments[2].node, PathSegment::Field("d".to_string()));
             }
             _ => panic!("Expected Path"),
         },
@@ -987,7 +987,7 @@ fn parse_let_in_with_path_value() {
                     Expr::Path { object, segments } => {
                         matches!(object.node, Expr::Ident(_));
                         assert_eq!(segments.len(), 1);
-                        assert_eq!(segments[0].node, "age");
+                        assert_eq!(segments[0].node, PathSegment::Field("age".to_string()));
                     }
                     _ => panic!("Expected Path"),
                 }

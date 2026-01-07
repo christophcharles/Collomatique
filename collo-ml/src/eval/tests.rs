@@ -22,4 +22,5 @@ mod origins;
 mod panic;
 mod quantifiers;
 mod strings;
+mod tuples;
 mod variables;
