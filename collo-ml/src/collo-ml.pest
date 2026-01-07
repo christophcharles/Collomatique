@@ -135,6 +135,7 @@ primary_expr = {
     none |
     number |
     neg |
+    panic |
     ident |
     "(" ~ expr ~ ")"
 }
@@ -158,6 +159,7 @@ fn_call = { ident ~ "(" ~ args? ~ ")" }
 args = { arg ~ ("," ~ arg)* }
 arg = { expr }
 neg = { "-" ~ expr }
+panic = { "panic!" ~ expr }
 
 // Operators
 add_op = { "+" }

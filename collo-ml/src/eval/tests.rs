@@ -19,6 +19,7 @@ mod literals;
 mod match_branches;
 mod objects;
 mod origins;
+mod panic;
 mod quantifiers;
 mod strings;
 mod variables;

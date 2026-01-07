@@ -32,5 +32,6 @@ mod let_expr;
 mod literals;
 mod logical;
 mod match_expr;
+mod panic;
 mod semantic_invalid;
 mod type_annotations;

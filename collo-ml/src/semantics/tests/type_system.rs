@@ -570,3 +570,87 @@ fn never_can_appear_in_branch() {
         errors
     );
 }
+
+// ========== Panic Expression ==========
+
+#[test]
+fn panic_returns_never_type() {
+    let input = "pub let f() -> Never = panic! 42;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "panic! should return Never type: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn panic_accepts_any_inner_type() {
+    let inputs = vec![
+        "pub let f() -> Never = panic! 42;",
+        "pub let f() -> Never = panic! true;",
+        r#"pub let f() -> Never = panic! "error";"#,
+        "pub let f() -> Never = panic! [1, 2, 3];",
+        "pub let f() -> Never = panic! none;",
+    ];
+    for input in inputs {
+        let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+        assert!(
+            errors.is_empty(),
+            "panic! should accept any inner type: {:?} for '{}'",
+            errors,
+            input
+        );
+    }
+}
+
+#[test]
+fn panic_coerces_to_any_return_type() {
+    let inputs = vec![
+        "pub let f() -> Int = panic! 42;",
+        "pub let f() -> Bool = panic! 42;",
+        "pub let f() -> [Int] = panic! 42;",
+        "pub let f() -> String = panic! 42;",
+    ];
+    for input in inputs {
+        let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+        assert!(
+            errors.is_empty(),
+            "panic! should coerce to any return type: {:?} for '{}'",
+            errors,
+            input
+        );
+    }
+}
+
+#[test]
+fn panic_in_if_branch() {
+    let input = r#"pub let f(x: Int) -> Int = if x > 0 {
+    x
+} else {
+    panic! 0
+};"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "panic! in else branch should unify with Int: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn panic_in_match_branch() {
+    let input = r#"pub let f(x: Int | Bool) -> Int = match x {
+    x as Int { x }
+    x as Bool { panic! 0 }
+};"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "panic! in match branch should unify with Int: {:?}",
+        errors
+    );
+}

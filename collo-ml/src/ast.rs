@@ -205,6 +205,9 @@ pub enum Expr {
     Or(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Not(Box<Spanned<Expr>>),
 
+    // Control flow
+    Panic(Box<Spanned<Expr>>),
+
     // Collection specific
     In {
         item: Box<Spanned<Expr>>,
@@ -1015,6 +1018,7 @@ impl Expr {
             Rule::boolean => Self::from_boolean(inner),
             Rule::none => Self::from_none(inner),
             Rule::neg => Self::from_neg(inner),
+            Rule::panic => Self::from_panic(inner),
             Rule::number => {
                 let num_str = inner.as_str();
                 let value = num_str
@@ -1309,6 +1313,19 @@ impl Expr {
         let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
 
         Ok(Expr::Neg(term))
+    }
+
+    fn from_panic(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let inner_pair = pair
+            .into_inner()
+            .next()
+            .ok_or(AstError::MissingBody(span))?;
+
+        let inner_span = Span::from_pest(&inner_pair);
+        let inner = Box::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
+
+        Ok(Expr::Panic(inner))
     }
 
     fn from_empty_typed_list(pair: Pair<Rule>) -> Result<Self, AstError> {

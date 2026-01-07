@@ -1280,6 +1280,24 @@ impl LocalEnv {
                 }
             }
 
+            // ========== Panic ==========
+            // panic! expr -> Never (always diverges)
+            Expr::Panic(inner_expr) => {
+                // Type-check the inner expression (any type is allowed)
+                let _ = self.check_expr(
+                    global_env,
+                    &inner_expr.node,
+                    &inner_expr.span,
+                    type_info,
+                    expr_types,
+                    errors,
+                    warnings,
+                );
+
+                // Panic always returns Never type
+                Some(SimpleType::Never.into())
+            }
+
             // ========== Membership Test ==========
             // x in collection -> Bool
             Expr::In { item, collection } => {

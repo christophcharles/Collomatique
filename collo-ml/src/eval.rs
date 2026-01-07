@@ -489,6 +489,8 @@ pub enum EvalError<T: EvalObject> {
     },
     #[error("Param {param} is an inconsistent ExprValue")]
     InvalidExprValue { param: usize },
+    #[error("Panic: {0:?}")]
+    Panic(Box<ExprValue<T>>),
 }
 
 impl CheckedAST<NoObject> {
@@ -1105,6 +1107,10 @@ impl<T: EvalObject> LocalEnv<T> {
                     ExprValue::LinExpr(v) => ExprValue::LinExpr(-v),
                     value => panic!("Unexpected type for (-) operand: {:?}", value),
                 }
+            }
+            Expr::Panic(inner_expr) => {
+                let value = self.eval_expr(eval_history, &*inner_expr)?;
+                return Err(EvalError::Panic(Box::new(value)));
             }
             Expr::Mul(left, right) => {
                 let value1 = self.eval_expr(eval_history, &*left)?;
