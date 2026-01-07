@@ -10,7 +10,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
-    warnings: Option<Vec<Origin<ObjectId>>>,
+    warnings: Option<Result<Vec<Origin<ObjectId>>, String>>,
     messages: FactoryVecDeque<Entry>,
 }
 
@@ -18,7 +18,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show,
     Close,
-    Update(Option<Vec<Origin<ObjectId>>>),
+    Update(Option<Result<Vec<Origin<ObjectId>>, String>>),
 }
 
 #[relm4::component(pub)]
@@ -72,13 +72,39 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                             },
                             #[watch]
-                            set_visible: model.warnings.as_ref().map(|x| x.is_empty()).unwrap_or(false),
+                            set_visible: matches!(&model.warnings, Some(Ok(w)) if w.is_empty()),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
                                 set_icon_name: Some("emblem-success"),
                             },
                             gtk::Label {
                                 set_label: "Toutes les contraintes sont satisfaites",
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                        },
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 10,
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            #[watch]
+                            set_visible: matches!(&model.warnings, Some(Err(_))),
+                            gtk::Image {
+                                set_icon_size: gtk::IconSize::Large,
+                                set_icon_name: Some("emblem-error"),
+                            },
+                            gtk::Label {
+                                #[watch]
+                                set_label: &model.warnings.as_ref()
+                                    .and_then(|r| r.as_ref().err())
+                                    .map(|e| format!("Erreur dans un script: {}", e))
+                                    .unwrap_or_default(),
                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                             },
                             gtk::Box {
@@ -92,7 +118,7 @@ impl SimpleComponent for Dialog {
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::Single,
                             #[watch]
-                            set_visible: model.warnings.as_ref().map(|x| !x.is_empty()).unwrap_or(false),
+                            set_visible: matches!(&model.warnings, Some(Ok(w)) if !w.is_empty()),
                         }
                     },
                 },
@@ -150,9 +176,10 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn update_messages(&mut self) {
         let mut messages = vec![];
-        if let Some(warnings) = &self.warnings {
+        if let Some(Ok(warnings)) = &self.warnings {
             messages.extend(warnings.iter().map(|x| EntryData::Warning(x.to_string())));
         }
+        // On Err, messages stays empty (error shown via label)
         super::super::tools::factories::update_vec_deque(
             &mut self.messages,
             messages.into_iter(),

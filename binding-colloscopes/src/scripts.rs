@@ -2,7 +2,7 @@ use super::{
     vars::Var,
     views::{Env, ObjectId},
 };
-use collo_ml::problem::{Problem, ProblemBuilder, Script};
+use collo_ml::problem::{Problem, ProblemBuilder, ProblemError, Script};
 use collomatique_ilp::ObjectiveSense;
 
 mod constraints;
@@ -11,7 +11,7 @@ mod reifications;
 #[cfg(test)]
 mod tests;
 
-pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
+pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String> {
     let mut builder = ProblemBuilder::<ObjectId, Var>::new(env)
         .expect("ObjectId, Var and Data should be compatible");
     for (name, script) in reifications::DEFAULT_REIFICATION_LIST {
@@ -34,10 +34,13 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
             .collect();
         builder
             .add_reified_variables_with_compiled_script(stored_script, to_reify)
-            .expect(&format!(
-                "Should be compatible with builder: {}\n\n{}",
-                name, script
-            ));
+            .map_err(|e| match e {
+                ProblemError::Panic(value) => format!("{}", value),
+                _ => panic!(
+                    "Should be compatible with builder: {}\n\n{}\n\nError: {}",
+                    name, script, e
+                ),
+            })?;
     }
     for (name, script) in constraints::DEFAULT_CONSTRAINT_LIST {
         let stored_script = builder
@@ -68,7 +71,10 @@ pub fn build_default_problem(env: &Env) -> Problem<ObjectId, Var> {
                 funcs,
                 objectives,
             )
-            .expect(&format!("Should compile: {}\n\n{}", name, script));
+            .map_err(|e| match e {
+                ProblemError::Panic(value) => format!("{}", value),
+                _ => panic!("Should compile: {}\n\n{}\n\nError: {}", name, script, e),
+            })?;
     }
-    builder.build()
+    Ok(builder.build())
 }

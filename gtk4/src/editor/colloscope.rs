@@ -40,7 +40,7 @@ pub enum ColloscopeInput {
 
 #[derive(Debug)]
 pub enum ColloscopeCommandOutput {
-    IlpProblemComputed(IlpProblem),
+    IlpProblemComputed(Result<IlpProblem, String>),
     IlpReprComputed(IlpRepr),
 }
 
@@ -83,21 +83,29 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_repr: Option<IlpRepr>,
+    ilp_repr: Option<Result<IlpRepr, String>>,
 }
 
 impl Colloscope {
     fn has_warnings(&self) -> bool {
         match &self.ilp_repr {
-            None => false,
-            Some(ilp_repr) => !ilp_repr.warnings.is_empty(),
+            Some(Ok(ilp_repr)) => !ilp_repr.warnings.is_empty(),
+            _ => false,
         }
+    }
+
+    fn has_error(&self) -> bool {
+        matches!(&self.ilp_repr, Some(Err(_)))
+    }
+
+    fn has_success(&self) -> bool {
+        matches!(&self.ilp_repr, Some(Ok(ilp_repr)) if ilp_repr.warnings.is_empty())
     }
 
     fn generate_warning_text(&self) -> String {
         match &self.ilp_repr {
-            None => String::new(),
-            Some(ilp_repr) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
+            Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
+            _ => String::new(),
         }
     }
 }
@@ -151,9 +159,17 @@ impl Component for Colloscope {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 #[watch]
-                                set_visible: model.ilp_repr.is_some() && !model.has_warnings(),
+                                set_visible: model.has_success(),
                                 gtk::Image {
                                     set_icon_name: Some("emblem-success"),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                #[watch]
+                                set_visible: model.has_error(),
+                                gtk::Image {
+                                    set_icon_name: Some("emblem-error"),
                                 },
                             },
                             gtk::Box {
@@ -316,7 +332,7 @@ impl Component for Colloscope {
                 self.colloscope = colloscope;
 
                 match &self.ilp_repr {
-                    Some(ilp_repr) => {
+                    Some(Ok(ilp_repr)) => {
                         if *ilp_repr.ilp_problem.env.get_params() != self.params {
                             self.compute_ilp_repr(sender.clone());
                         } else if ilp_repr.colloscope != self.colloscope {
@@ -326,7 +342,7 @@ impl Component for Colloscope {
                             // Everything is up to date
                         }
                     }
-                    None => {
+                    Some(Err(_)) | None => {
                         self.compute_ilp_repr(sender.clone());
                     }
                 }
@@ -455,17 +471,24 @@ impl Component for Colloscope {
         _root: &Self::Root,
     ) {
         match message {
-            ColloscopeCommandOutput::IlpProblemComputed(ilp_problem) => {
-                if *ilp_problem.env.get_params() != self.params {
-                    return; // Ignore old computation that are no longer relevant
+            ColloscopeCommandOutput::IlpProblemComputed(result) => {
+                match result {
+                    Ok(ilp_problem) => {
+                        if *ilp_problem.env.get_params() != self.params {
+                            return; // Ignore old computation that are no longer relevant
+                        }
+                        self.recompute_warnings(sender, ilp_problem);
+                    }
+                    Err(msg) => {
+                        self.update_ilp_repr(Some(Err(msg)));
+                    }
                 }
-                self.recompute_warnings(sender, ilp_problem);
             }
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
                 if *ilp_repr.ilp_problem.env.get_params() != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
-                self.update_ilp_repr(Some(ilp_repr));
+                self.update_ilp_repr(Some(Ok(ilp_repr)));
             }
         }
     }
@@ -518,17 +541,25 @@ impl Colloscope {
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::build_default_problem;
             let env = collomatique_binding_colloscopes::views::Env::from(params);
-            let problem = build_default_problem(&env);
-            ColloscopeCommandOutput::IlpProblemComputed(IlpProblem { env, problem })
+            match build_default_problem(&env) {
+                Ok(problem) => {
+                    ColloscopeCommandOutput::IlpProblemComputed(Ok(IlpProblem { env, problem }))
+                }
+                Err(msg) => ColloscopeCommandOutput::IlpProblemComputed(Err(msg)),
+            }
         });
     }
 
-    fn update_ilp_repr(&mut self, ilp_repr: Option<IlpRepr>) {
+    fn update_ilp_repr(&mut self, ilp_repr: Option<Result<IlpRepr, String>>) {
         self.ilp_repr = ilp_repr;
         self.blame_dialog
             .sender()
             .send(blame_dialog::DialogInput::Update(
-                self.ilp_repr.as_ref().map(|x| x.warnings.clone()),
+                self.ilp_repr.as_ref().map(|r| {
+                    r.as_ref()
+                        .map(|x| x.warnings.clone())
+                        .map_err(|e| e.clone())
+                }),
             ))
             .unwrap();
     }

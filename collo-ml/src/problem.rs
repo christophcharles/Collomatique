@@ -152,6 +152,8 @@ pub enum ProblemError<T: EvalObject> {
         returned: ExprValue<T>,
         expected: ExprType,
     },
+    #[error("Panic: {0}")]
+    Panic(Box<ExprValue<T>>),
 }
 
 impl<
@@ -563,6 +565,7 @@ impl<
                         ProblemError::InvalidExprValue(format!("{:?}", args[param]))
                     }
                     EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
+                    EvalError::Panic(value) => ProblemError::Panic(value),
                     _ => panic!("Unexpected error: {:?}", e),
                 })?;
 
@@ -634,6 +637,7 @@ impl<
                         ProblemError::InvalidExprValue(format!("{:?}", args[param]))
                     }
                     EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
+                    EvalError::Panic(value) => ProblemError::Panic(value),
                     _ => panic!("Unexpected error: {:?}", e),
                 })?;
 

@@ -26,7 +26,13 @@ fn try_solve() -> Result<(), anyhow::Error> {
 
     use collomatique_binding_colloscopes::scripts::build_default_problem;
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
-    let problem = build_default_problem(&env);
+    let problem = match build_default_problem(&env) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("Script panic: {}", msg);
+            return Ok(());
+        }
+    };
 
     println!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
