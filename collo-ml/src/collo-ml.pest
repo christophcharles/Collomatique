@@ -94,7 +94,10 @@ list_type = {
 tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ")" }
 
 // ========== Unified Expressions ==========
-expr = { or_expr }
+expr = { null_coalesce_expr }
+
+// Null coalescing (lowest precedence binary operator)
+null_coalesce_expr = { or_expr ~ (null_coalesce_op ~ or_expr)* }
 
 // Logical ops
 or_expr = { and_expr ~ (or_op ~ and_expr)* }
@@ -185,6 +188,7 @@ div_op = { "//" }
 mod_op = { "%" }
 comp_op = { "===" | "<==" | ">==" | "==" | "!=" | "<=" | ">=" | "<" | ">" }
 in_op = @{ "in" ~ !ident_char }
+null_coalesce_op = { "??" }
 or_op = @{ "||" | "or" ~ !ident_char }
 and_op = @{ "&&" | "and" ~ !ident_char }
 not_op = @{ "!" | "not" ~ !ident_char }

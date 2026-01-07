@@ -398,6 +398,8 @@ pub enum SemError {
         span: Span,
         remaining_types: ExprType,
     },
+    #[error("Null coalescing operator '??' at {span:?} requires a maybe type (containing None), but found {found}")]
+    NullCoalesceOnNonMaybe { span: Span, found: ExprType },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -1371,6 +1373,47 @@ impl LocalEnv {
                         None
                     }
                     None => None,
+                }
+            }
+
+            // ========== Null Coalescing ==========
+            // x ?? default -> (typeof x - None) | typeof default
+            Expr::NullCoalesce(lhs, rhs) => {
+                let lhs_type = self.check_expr(
+                    global_env, &lhs.node, &lhs.span, type_info, expr_types, errors, warnings,
+                );
+                let rhs_type = self.check_expr(
+                    global_env, &rhs.node, &rhs.span, type_info, expr_types, errors, warnings,
+                );
+
+                match (lhs_type, rhs_type) {
+                    (Some(l), Some(r)) => {
+                        // LHS must contain None
+                        if !l.contains(&SimpleType::None) {
+                            errors.push(SemError::NullCoalesceOnNonMaybe {
+                                span: lhs.span.clone(),
+                                found: l.clone(),
+                            });
+                            return None;
+                        }
+                        // Result type is (LHS - None) | RHS
+                        match l.substract(&SimpleType::None.into()) {
+                            Some(lhs_without_none) => Some(lhs_without_none.unify_with(&r)),
+                            // LHS was just None, result is RHS type
+                            None => Some(r),
+                        }
+                    }
+                    (Some(l), None) => {
+                        // Still check that LHS contains None
+                        if !l.contains(&SimpleType::None) {
+                            errors.push(SemError::NullCoalesceOnNonMaybe {
+                                span: lhs.span.clone(),
+                                found: l.clone(),
+                            });
+                        }
+                        None
+                    }
+                    _ => None,
                 }
             }
 

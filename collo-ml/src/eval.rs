@@ -1007,6 +1007,14 @@ impl<T: EvalObject> LocalEnv<T> {
                     value => panic!("Unexpected type for NOT operand: {:?}", value),
                 }
             }
+            Expr::NullCoalesce(lhs, rhs) => {
+                let lhs_value = self.eval_expr(eval_history, &*lhs)?;
+                if lhs_value == ExprValue::None {
+                    self.eval_expr(eval_history, &*rhs)?
+                } else {
+                    lhs_value
+                }
+            }
             Expr::ConstraintEq(expr1, expr2) => {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;

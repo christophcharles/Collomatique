@@ -249,6 +249,113 @@ fn cast_panic_to_optional_type() {
     );
 }
 
+// ========== Null Coalescing Operator ==========
+
+#[test]
+fn null_coalesce_basic() {
+    let input = "pub let f(x: ?Int) -> Int = x ?? 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? with maybe type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_union_type() {
+    let input = "pub let f(x: Int | Bool | None) -> Int | Bool = x ?? 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? with union containing None should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_on_non_maybe_fails() {
+    let input = "pub let f(x: Int) -> Int = x ?? 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "?? on non-maybe type should fail");
+}
+
+#[test]
+fn null_coalesce_result_type_removes_none() {
+    // Result should be Int, not ?Int
+    let input = "pub let f(x: ?Int) -> ?Int = x ?? 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Int fits in ?Int, so this should work
+    assert!(
+        errors.is_empty(),
+        "?? result should fit in optional: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_result_type_unifies() {
+    // x: ?Int, default: Bool -> result is Int | Bool
+    let input = "pub let f(x: ?Int) -> Int | Bool = x ?? true;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? should unify lhs-None with rhs: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_with_none_default() {
+    // x ?? none is a no-op, result is still ?Int
+    let input = "pub let f(x: ?Int) -> ?Int = x ?? none;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? with none default should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_chained() {
+    let input = "pub let f(x: ?Int, y: ?Int) -> Int = x ?? y ?? 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "chained ?? should work: {:?}", errors);
+}
+
+#[test]
+fn null_coalesce_with_expression() {
+    let input = "pub let f(x: ?Int) -> Int = (x ?? 0) + 10;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? in expression context should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn null_coalesce_precedence_with_or() {
+    // ?? has lower precedence than or, so this parses as (x or y) ?? z
+    let input = "pub let f(x: Bool, y: Bool, z: Bool) -> Bool = (x or y) as ?Bool ?? z;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "?? precedence with or should work: {:?}",
+        errors
+    );
+}
+
 // ========== Arithmetic Operators ==========
 
 #[test]

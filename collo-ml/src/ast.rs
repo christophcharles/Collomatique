@@ -215,6 +215,9 @@ pub enum Expr {
     Or(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Not(Box<Spanned<Expr>>),
 
+    // Null coalescing
+    NullCoalesce(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+
     // Control flow
     Panic(Box<Spanned<Expr>>),
 
@@ -636,12 +639,33 @@ impl Expr {
             });
         }
 
-        // expr -> and_expr
-        let and_expr = pair
+        // expr -> null_coalesce_expr
+        let null_coalesce_expr = pair
             .into_inner()
             .next()
             .ok_or(AstError::MissingBody(span))?;
-        Self::from_or_expr(and_expr)
+        Self::from_null_coalesce_expr(null_coalesce_expr)
+    }
+
+    fn from_null_coalesce_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        let first = inner.next().unwrap();
+        let mut result = Self::from_or_expr(first)?;
+
+        while let Some(_op) = inner.next() {
+            let right_pair = inner.next().unwrap();
+            let right = Self::from_or_expr(right_pair)?;
+
+            let result_span = span.clone();
+            result = Expr::NullCoalesce(
+                Box::new(Spanned::new(result, result_span.clone())),
+                Box::new(Spanned::new(right, result_span)),
+            );
+        }
+
+        Ok(result)
     }
 
     fn from_or_expr(pair: Pair<Rule>) -> Result<Self, AstError> {

@@ -418,6 +418,215 @@ fn cast_panic_to_optional_type() {
     }
 }
 
+// ========== Null Coalescing Operator ==========
+
+#[test]
+fn null_coalesce_returns_value_when_not_none() {
+    let input = "pub let f(x: ?Int) -> Int = x ?? 0;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(42));
+}
+
+#[test]
+fn null_coalesce_returns_default_when_none() {
+    let input = "pub let f(x: ?Int) -> Int = x ?? 0;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(0));
+}
+
+#[test]
+fn null_coalesce_with_different_types() {
+    let input = "pub let f(x: ?Int) -> Int | Bool = x ?? true;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // With Int value
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    // With None
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Bool(true));
+}
+
+#[test]
+fn null_coalesce_with_none_default() {
+    let input = "pub let f(x: ?Int) -> ?Int = x ?? none;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // With Int value
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    // With None (no-op)
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+}
+
+#[test]
+fn null_coalesce_chained() {
+    let input = "pub let f(x: ?Int, y: ?Int) -> Int = x ?? y ?? 0;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // First has value
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(1), ExprValue::Int(2)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(1));
+
+    // First is none, second has value
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None, ExprValue::Int(2)])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Int(2));
+
+    // Both are none
+    let result3 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None, ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result3, ExprValue::Int(0));
+}
+
+#[test]
+fn null_coalesce_with_expression_default() {
+    let input = "pub let f(x: ?Int, y: Int) -> Int = x ?? (y + 10);";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None, ExprValue::Int(5)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(15));
+}
+
+#[test]
+fn null_coalesce_in_larger_expression() {
+    let input = "pub let f(x: ?Int) -> Int = (x ?? 0) + 100;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(105));
+
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Int(100));
+}
+
+#[test]
+fn null_coalesce_with_string() {
+    let input = r#"pub let f(x: ?String) -> String = x ?? "default";"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::String("hello".to_string())])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::String("hello".to_string()));
+
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::String("default".to_string()));
+}
+
+#[test]
+fn null_coalesce_with_list() {
+    let input = "pub let f(x: ?[Int]) -> [Int] = x ?? [1, 2, 3];";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+
+    assert_eq!(
+        result,
+        ExprValue::List(vec![
+            ExprValue::Int(1),
+            ExprValue::Int(2),
+            ExprValue::Int(3)
+        ])
+    );
+}
+
+#[test]
+fn null_coalesce_with_tuple() {
+    let input = "pub let f(x: ?(Int, Bool)) -> (Int, Bool) = x ?? (0, false);";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // With value
+    let result1 = checked_ast
+        .quick_eval_fn(
+            "f",
+            vec![ExprValue::Tuple(vec![
+                ExprValue::Int(42),
+                ExprValue::Bool(true),
+            ])],
+        )
+        .expect("Should evaluate");
+    assert_eq!(
+        result1,
+        ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)])
+    );
+
+    // With none
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(
+        result2,
+        ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Bool(false)])
+    );
+}
+
 // ========== Implicit Type Coercion: Int → LinExpr ==========
 
 #[test]
