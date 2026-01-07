@@ -489,7 +489,7 @@ pub enum EvalError<T: EvalObject> {
     },
     #[error("Param {param} is an inconsistent ExprValue")]
     InvalidExprValue { param: usize },
-    #[error("Panic: {0:?}")]
+    #[error("Panic: {0}")]
     Panic(Box<ExprValue<T>>),
 }
 
