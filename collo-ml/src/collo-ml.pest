@@ -44,6 +44,8 @@ reserved_keyword = {
     "where" |
     "rfold" |
     "match" |
+    "panic" |
+    "cast" |
     "fold" |
     "with" |
     "else" |
