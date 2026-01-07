@@ -688,6 +688,87 @@ impl LocalEnv {
                 Some(target_type) // Propagate target in all cases
             }
 
+            // ========== Cast constructs ==========
+            // cast? narrows a type, returns None if the value doesn't fit
+            Expr::CastFallible { expr, typ } => {
+                // Check the inner expression
+                let expr_type = self.check_expr(
+                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                );
+
+                // Convert the declared type
+                let target_type = match ExprType::try_from(typ.clone()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        errors.push(e);
+                        return expr_type; // Fallback to inferred type
+                    }
+                };
+
+                // Validate that the target type is actually valid
+                if !global_env.validate_type(&target_type) {
+                    errors.push(SemError::UnknownType {
+                        typ: target_type.to_string(),
+                        span: typ.span.clone(),
+                    });
+                    return expr_type; // Fallback to inferred type
+                }
+
+                if let Some(inferred) = expr_type {
+                    // For cast?, target must be subtype of expr type (narrowing)
+                    if !target_type.is_subtype_of(&inferred) {
+                        errors.push(SemError::TypeMismatch {
+                            span: expr.span.clone(),
+                            expected: target_type.clone(),
+                            found: inferred,
+                            context: "cast? can only narrow types (target must be subtype of expression type)".into(),
+                        });
+                    }
+                }
+                // Return type is always ?TargetType
+                Some(target_type.make_optional())
+            }
+
+            // cast! narrows a type, panics if the value doesn't fit
+            Expr::CastPanic { expr, typ } => {
+                // Check the inner expression
+                let expr_type = self.check_expr(
+                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                );
+
+                // Convert the declared type
+                let target_type = match ExprType::try_from(typ.clone()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        errors.push(e);
+                        return expr_type; // Fallback to inferred type
+                    }
+                };
+
+                // Validate that the target type is actually valid
+                if !global_env.validate_type(&target_type) {
+                    errors.push(SemError::UnknownType {
+                        typ: target_type.to_string(),
+                        span: typ.span.clone(),
+                    });
+                    return expr_type; // Fallback to inferred type
+                }
+
+                if let Some(inferred) = expr_type {
+                    // For cast!, target must be subtype of expr type (narrowing)
+                    if !target_type.is_subtype_of(&inferred) {
+                        errors.push(SemError::TypeMismatch {
+                            span: expr.span.clone(),
+                            expected: target_type.clone(),
+                            found: inferred,
+                            context: "cast! can only narrow types (target must be subtype of expression type)".into(),
+                        });
+                    }
+                }
+                // Return type is the target type (panics on failure)
+                Some(target_type)
+            }
+
             // ========== Arithmetic Operations ==========
             // Int + Int -> Int
             // LinExpr + Int -> LinExpr (auto convert Int to LinExpr)

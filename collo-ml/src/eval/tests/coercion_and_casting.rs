@@ -1,5 +1,366 @@
 use super::*;
 
+// ========== Narrowing Cast: cast? (fallible) ==========
+
+#[test]
+fn cast_fallible_success_int_to_int() {
+    let input = "pub let f(x: Int | Bool) -> ?Int = x cast? Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(42));
+}
+
+#[test]
+fn cast_fallible_failure_bool_to_int() {
+    let input = "pub let f(x: Int | Bool) -> ?Int = x cast? Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[test]
+fn cast_fallible_none_value_fails() {
+    // When we try to cast None to Int, it fails and returns None
+    let input = "pub let f(x: ?Int) -> ?Int = x cast? Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[test]
+fn cast_fallible_from_union_with_none() {
+    let input = "pub let f(x: Int | Bool | None) -> ?Bool = x cast? Bool;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Test with Bool value - should succeed
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Bool(false));
+
+    // Test with Int value - should return none
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+
+    // Test with None value - should return none
+    let result3 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result3, ExprValue::None);
+}
+
+#[test]
+fn cast_fallible_list_type() {
+    let input = "pub let f(x: [Int] | [Bool]) -> ?[Int] = x cast? [Int];";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Test with [Int] list - should succeed
+    let result1 = checked_ast
+        .quick_eval_fn(
+            "f",
+            vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
+        )
+        .expect("Should evaluate");
+    assert_eq!(
+        result1,
+        ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])
+    );
+
+    // Test with [Bool] list - should return none
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::List(vec![ExprValue::Bool(true)])])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+}
+
+#[test]
+fn cast_fallible_in_if_expression() {
+    let input = r#"
+    pub let f(x: Int | Bool) -> String =
+        if (x cast? Int) != none { "is int" } else { "is bool" };
+    "#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::String("is int".to_string()));
+
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::String("is bool".to_string()));
+}
+
+// ========== Narrowing Cast: cast! (panicking) ==========
+
+#[test]
+fn cast_panic_success_int_to_int() {
+    let input = "pub let f(x: Int | Bool) -> Int = x cast! Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Int(42));
+}
+
+#[test]
+fn cast_panic_failure_bool_to_int() {
+    let input = "pub let f(x: Int | Bool) -> Int = x cast! Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::Bool(true)]);
+
+    match result {
+        Err(EvalError::Panic(_)) => {
+            // Expected panic
+        }
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
+#[test]
+fn cast_panic_success_bool_to_bool() {
+    let input = "pub let f(x: Int | Bool) -> Bool = x cast! Bool;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::Bool(false));
+}
+
+#[test]
+fn cast_panic_failure_int_to_bool() {
+    let input = "pub let f(x: Int | Bool) -> Bool = x cast! Bool;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::Int(100)]);
+
+    match result {
+        Err(EvalError::Panic(_)) => {
+            // Expected panic
+        }
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
+#[test]
+fn cast_panic_with_none() {
+    let input = "pub let f(x: ?Int) -> Int = x cast! Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Test with Int value - should succeed
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(5));
+
+    // Test with None value - should panic
+    let result2 = checked_ast.quick_eval_fn("f", vec![ExprValue::None]);
+    match result2 {
+        Err(EvalError::Panic(_)) => {
+            // Expected panic
+        }
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
+#[test]
+fn cast_panic_in_else_branch_triggers() {
+    let input = r#"pub let f(x: Int | Bool) -> Int =
+        if x cast? Int != none { x cast! Int } else { x cast! Int };"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Bool value triggers else branch, which panics
+    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::Bool(true)]);
+
+    match result {
+        Err(EvalError::Panic(_)) => {
+            // Expected panic
+        }
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
+#[test]
+fn cast_panic_in_else_branch_not_triggered() {
+    let input = r#"pub let f(x: Int | Bool) -> Int =
+        if x cast? Int != none { x cast! Int } else { 0 };"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Int value takes the then branch, no panic
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate without panic");
+
+    assert_eq!(result, ExprValue::Int(42));
+}
+
+#[test]
+fn cast_panic_list_type_success() {
+    let input = "pub let f(x: [Int] | [Bool]) -> [Bool] = x cast! [Bool];";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::List(vec![ExprValue::Bool(true)])])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::List(vec![ExprValue::Bool(true)]));
+}
+
+#[test]
+fn cast_panic_list_type_failure() {
+    let input = "pub let f(x: [Int] | [Bool]) -> [Bool] = x cast! [Bool];";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::List(vec![ExprValue::Int(1)])]);
+
+    match result {
+        Err(EvalError::Panic(_)) => {
+            // Expected panic
+        }
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
+// ========== Combined cast? and cast! ==========
+
+#[test]
+fn cast_fallible_then_panic() {
+    // Use cast? to check, then cast! to narrow (safe pattern)
+    let input = r#"
+    pub let f(x: Int | Bool | String) -> Int =
+        if x cast? Int != none {
+            x cast! Int
+        } else {
+            0
+        };
+    "#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Int(0));
+
+    let result3 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::String("hello".to_string())])
+        .expect("Should evaluate");
+    assert_eq!(result3, ExprValue::Int(0));
+}
+
+#[test]
+fn cast_with_tuple() {
+    let input = "pub let f(x: (Int, Bool) | (Bool, Int)) -> ?(Int, Bool) = x cast? (Int, Bool);";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Test with (Int, Bool) - should succeed
+    let result1 = checked_ast
+        .quick_eval_fn(
+            "f",
+            vec![ExprValue::Tuple(vec![
+                ExprValue::Int(1),
+                ExprValue::Bool(true),
+            ])],
+        )
+        .expect("Should evaluate");
+    assert_eq!(
+        result1,
+        ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)])
+    );
+
+    // Test with (Bool, Int) - should return none
+    let result2 = checked_ast
+        .quick_eval_fn(
+            "f",
+            vec![ExprValue::Tuple(vec![
+                ExprValue::Bool(true),
+                ExprValue::Int(1),
+            ])],
+        )
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+}
+
 // ========== Implicit Type Coercion: Int → LinExpr ==========
 
 #[test]

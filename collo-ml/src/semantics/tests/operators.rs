@@ -1,5 +1,229 @@
 use super::*;
 
+// ========== Narrowing Cast Operators: cast? and cast! ==========
+
+#[test]
+fn cast_fallible_valid_narrowing() {
+    let input = "pub let f(x: Int | Bool) -> ?Int = x cast? Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? with valid subtype should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_fallible_returns_optional_type() {
+    let input = "pub let f(x: Int | Bool) -> Int = x cast? Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Return type should be ?Int, not Int
+    assert!(!errors.is_empty(), "cast? should return optional type");
+}
+
+#[test]
+fn cast_fallible_invalid_not_subtype() {
+    // Trying to cast Int to String should fail because String is not a subtype of Int
+    let input = "pub let f(x: Int) -> ?String = x cast? String;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "cast? should not allow casting to non-subtype"
+    );
+}
+
+#[test]
+fn cast_fallible_same_type() {
+    let input = "pub let f(x: Int) -> ?Int = x cast? Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? with same type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_fallible_with_none() {
+    let input = "pub let f(x: ?Int) -> ?Int = x cast? Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? from optional type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_fallible_from_optional() {
+    // Casting an optional type to get the underlying value
+    let input = "pub let f(x: ?Int) -> ?Int = x cast? Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? from optional should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_fallible_unrelated_types() {
+    // String is not a subtype of Int | Bool
+    let input = "pub let f(x: Int | Bool) -> ?String = x cast? String;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "cast? to unrelated type should fail");
+}
+
+#[test]
+fn cast_panic_valid_narrowing() {
+    let input = "pub let f(x: Int | Bool) -> Int = x cast! Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! with valid subtype should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_returns_exact_type() {
+    // cast! returns the target type directly (not optional)
+    let input = "pub let f(x: Int | Bool) -> ?Int = x cast! Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    // This should work since Int is subtype of ?Int
+    assert!(
+        errors.is_empty(),
+        "cast! result should fit in optional: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_invalid_not_subtype() {
+    // Trying to cast Int to String should fail because String is not a subtype of Int
+    let input = "pub let f(x: Int) -> String = x cast! String;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "cast! should not allow casting to non-subtype"
+    );
+}
+
+#[test]
+fn cast_panic_same_type() {
+    let input = "pub let f(x: Int) -> Int = x cast! Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! with same type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_with_none() {
+    let input = "pub let f(x: ?Int) -> Int = x cast! Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! from optional type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_unrelated_types() {
+    let input = "pub let f(x: Int | Bool) -> String = x cast! String;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "cast! to unrelated type should fail");
+}
+
+#[test]
+fn cast_fallible_list_type() {
+    let input = "pub let f(x: [Int] | [Bool]) -> ?[Int] = x cast? [Int];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? with list type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_list_type() {
+    let input = "pub let f(x: [Int] | [Bool]) -> [Bool] = x cast! [Bool];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! with list type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_fallible_tuple_type() {
+    let input = "pub let f(x: (Int, Bool) | (Bool, Int)) -> ?(Int, Bool) = x cast? (Int, Bool);";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? with tuple type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_tuple_type() {
+    let input = "pub let f(x: (Int, Bool) | (Bool, Int)) -> (Bool, Int) = x cast! (Bool, Int);";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! with tuple type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_in_expression_context() {
+    let input = "pub let f(x: Int | Bool) -> Int = (x cast! Int) + 10;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! in expression should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_chained_with_as() {
+    // Cast to narrow, then widen with as
+    let input = "pub let f(x: Int | Bool | String) -> ?Int = (x cast? Int) as ?Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? followed by as should work: {:?}",
+        errors
+    );
+}
+
 // ========== Arithmetic Operators ==========
 
 #[test]

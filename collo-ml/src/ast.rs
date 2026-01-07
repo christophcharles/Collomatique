@@ -249,6 +249,16 @@ pub enum Expr {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
     },
+
+    // Narrowing casts
+    CastFallible {
+        expr: Box<Spanned<Expr>>,
+        typ: Spanned<TypeName>,
+    },
+    CastPanic {
+        expr: Box<Spanned<Expr>>,
+        typ: Spanned<TypeName>,
+    },
 }
 
 // ============= Error Type =============
@@ -918,14 +928,13 @@ impl Expr {
 
         let mut inner = pair.into_inner();
 
-        // First is always path
+        // First is always cast_expr
         let expr_pair = inner.next().unwrap();
         let expr_span = Span::from_pest(&expr_pair);
-        let expr = Self::from_explicit_type(expr_pair)?;
+        let expr = Self::from_cast_expr(expr_pair)?;
 
-        // Check if there's a type annotation
+        // Check if there's a type annotation (into Type)
         if let Some(type_pair) = inner.next() {
-            // This is the type_name after "as"
             let type_span = Span::from_pest(&type_pair);
             let typ = TypeName::from_pest(type_pair)?;
 
@@ -935,6 +944,47 @@ impl Expr {
             })
         } else {
             // No type annotation, just return the expression
+            Ok(expr)
+        }
+    }
+
+    fn from_cast_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::cast_expr {
+            return Err(AstError::UnexpectedRule {
+                expected: "cast_expr",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
+        let mut inner = pair.into_inner();
+
+        // First is always explicit_type
+        let expr_pair = inner.next().unwrap();
+        let expr_span = Span::from_pest(&expr_pair);
+        let expr = Self::from_explicit_type(expr_pair)?;
+
+        // Check if there's a cast operator
+        if let Some(cast_op_pair) = inner.next() {
+            let cast_op = cast_op_pair.as_str();
+            let type_pair = inner.next().unwrap();
+            let type_span = Span::from_pest(&type_pair);
+            let typ = TypeName::from_pest(type_pair)?;
+
+            match cast_op {
+                "cast?" => Ok(Expr::CastFallible {
+                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    typ: Spanned::new(typ, type_span),
+                }),
+                "cast!" => Ok(Expr::CastPanic {
+                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    typ: Spanned::new(typ, type_span),
+                }),
+                _ => panic!("Unknown cast operator: {}", cast_op),
+            }
+        } else {
+            // No cast, just return the expression
             Ok(expr)
         }
     }

@@ -620,6 +620,14 @@ impl ExprType {
         self.variants
     }
 
+    /// Returns an optional version of this type (adds None to the variants)
+    pub fn make_optional(self) -> ExprType {
+        let mut variants = self.variants;
+        variants.insert(SimpleType::None);
+        Self::clean_subtypes(&mut variants);
+        ExprType { variants }.assert_before_return()
+    }
+
     pub fn is_subtype_of(&self, other: &Self) -> bool {
         for variant in &self.variants {
             if other.variants.iter().all(|x| !variant.is_subtype_of(x)) {

@@ -833,6 +833,33 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 converted_value
             }
+            Expr::CastFallible { expr, typ } => {
+                let value = self.eval_expr(eval_history, &expr)?;
+                let target_type =
+                    ExprType::try_from(typ.clone()).expect("At this point types should be valid");
+
+                // Check if value fits in target type
+                if value.fits_in_typ(eval_history.env, &target_type) {
+                    value
+                } else {
+                    ExprValue::None
+                }
+            }
+            Expr::CastPanic { expr, typ } => {
+                let value = self.eval_expr(eval_history, &expr)?;
+                let target_type =
+                    ExprType::try_from(typ.clone()).expect("At this point types should be valid");
+
+                // Check if value fits in target type
+                if value.fits_in_typ(eval_history.env, &target_type) {
+                    value
+                } else {
+                    return Err(EvalError::Panic(Box::new(ExprValue::String(format!(
+                        "cast! failed: value {} does not fit in type {}",
+                        value, target_type
+                    )))));
+                }
+            }
             Expr::ListLiteral { elements } => {
                 let element_values: Vec<_> = elements
                     .iter()
