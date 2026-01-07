@@ -361,6 +361,63 @@ fn cast_with_tuple() {
     assert_eq!(result2, ExprValue::None);
 }
 
+#[test]
+fn cast_fallible_to_optional_type() {
+    // Target type ?Int already contains None
+    let input = "pub let f(x: Int | Bool | None) -> ?Int = x cast? ?Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Int fits in ?Int
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    // None fits in ?Int
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+
+    // Bool does not fit in ?Int, returns none
+    let result3 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .expect("Should evaluate");
+    assert_eq!(result3, ExprValue::None);
+}
+
+#[test]
+fn cast_panic_to_optional_type() {
+    let input = "pub let f(x: Int | Bool | None) -> ?Int = x cast! ?Int;";
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    // Int fits in ?Int
+    let result1 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::Int(42)])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    // None fits in ?Int
+    let result2 = checked_ast
+        .quick_eval_fn("f", vec![ExprValue::None])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::None);
+
+    // Bool does not fit in ?Int, panics
+    let result3 = checked_ast.quick_eval_fn("f", vec![ExprValue::Bool(true)]);
+    match result3 {
+        Err(EvalError::Panic(_)) => {}
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
+
 // ========== Implicit Type Coercion: Int → LinExpr ==========
 
 #[test]

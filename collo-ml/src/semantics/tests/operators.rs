@@ -224,6 +224,31 @@ fn cast_chained_with_as() {
     );
 }
 
+#[test]
+fn cast_fallible_to_optional_type() {
+    // Target type ?Int already contains None, result is still ?Int
+    let input = "pub let f(x: Int | Bool | None) -> ?Int = x cast? ?Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast? to optional type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn cast_panic_to_optional_type() {
+    let input = "pub let f(x: Int | Bool | None) -> ?Int = x cast! ?Int;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "cast! to optional type should work: {:?}",
+        errors
+    );
+}
+
 // ========== Arithmetic Operators ==========
 
 #[test]
