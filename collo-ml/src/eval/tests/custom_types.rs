@@ -457,3 +457,116 @@ fn custom_type_in_list_comprehension() {
         ])
     );
 }
+
+// =============================================================================
+// CUSTOM TYPES WRAPPING UNION TYPES
+// =============================================================================
+
+#[test]
+fn custom_type_wrapping_union_tuple_index() {
+    // Custom type wraps union of tuples, tuple index access should work
+    let input = r#"
+        type MyType = (Int, Bool) | (String, Bool);
+        pub let get_second(x: MyType) -> Bool = x.1;
+    "#;
+    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+
+    // Test with first variant (Int, Bool)
+    let value1 = ExprValue::Custom {
+        type_name: "MyType".to_string(),
+        content: Box::new(ExprValue::Tuple(vec![
+            ExprValue::Int(42),
+            ExprValue::Bool(true),
+        ])),
+    };
+    let result1 = checked_ast
+        .quick_eval_fn("get_second", vec![value1])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Bool(true));
+
+    // Test with second variant (String, Bool)
+    let value2 = ExprValue::Custom {
+        type_name: "MyType".to_string(),
+        content: Box::new(ExprValue::Tuple(vec![
+            ExprValue::String("hello".to_string()),
+            ExprValue::Bool(false),
+        ])),
+    };
+    let result2 = checked_ast
+        .quick_eval_fn("get_second", vec![value2])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Bool(false));
+}
+
+#[test]
+fn custom_type_wrapping_union_tuple_index_returns_union() {
+    // Custom type wraps union of tuples with different first element types
+    let input = r#"
+        type MyType = (Int, Bool) | (String, Bool);
+        pub let get_first(x: MyType) -> Int | String = x.0;
+    "#;
+    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+
+    // Test with first variant (Int, Bool)
+    let value1 = ExprValue::Custom {
+        type_name: "MyType".to_string(),
+        content: Box::new(ExprValue::Tuple(vec![
+            ExprValue::Int(42),
+            ExprValue::Bool(true),
+        ])),
+    };
+    let result1 = checked_ast
+        .quick_eval_fn("get_first", vec![value1])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(42));
+
+    // Test with second variant (String, Bool)
+    let value2 = ExprValue::Custom {
+        type_name: "MyType".to_string(),
+        content: Box::new(ExprValue::Tuple(vec![
+            ExprValue::String("hello".to_string()),
+            ExprValue::Bool(false),
+        ])),
+    };
+    let result2 = checked_ast
+        .quick_eval_fn("get_first", vec![value2])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::String("hello".to_string()));
+}
+
+#[test]
+fn custom_type_wrapping_nested_custom_type_union() {
+    // type A wraps tuple, type B is union containing A
+    let input = r#"
+        type A = (Int, Int);
+        type B = A | (String, Int);
+        pub let get_second(x: B) -> Int = x.1;
+    "#;
+    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+
+    // Test with A variant (wrapped in B)
+    let value1 = ExprValue::Custom {
+        type_name: "B".to_string(),
+        content: Box::new(ExprValue::Custom {
+            type_name: "A".to_string(),
+            content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)])),
+        }),
+    };
+    let result1 = checked_ast
+        .quick_eval_fn("get_second", vec![value1])
+        .expect("Should evaluate");
+    assert_eq!(result1, ExprValue::Int(2));
+
+    // Test with (String, Int) variant
+    let value2 = ExprValue::Custom {
+        type_name: "B".to_string(),
+        content: Box::new(ExprValue::Tuple(vec![
+            ExprValue::String("test".to_string()),
+            ExprValue::Int(99),
+        ])),
+    };
+    let result2 = checked_ast
+        .quick_eval_fn("get_second", vec![value2])
+        .expect("Should evaluate");
+    assert_eq!(result2, ExprValue::Int(99));
+}

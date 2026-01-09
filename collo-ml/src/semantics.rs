@@ -645,26 +645,34 @@ impl LocalEnv {
         false
     }
 
-    /// Resolve a SimpleType that might be a Custom type to its underlying type for field/index access
-    /// Returns the underlying type for Custom types (recursively), or the original type otherwise
-    fn resolve_custom_type_for_access(
+    /// Resolve all variants of an ExprType, unwrapping any Custom types to their leaf types.
+    /// For Custom types, recursively resolves through the underlying ExprType (which may be a union).
+    /// Returns all the leaf SimpleTypes after resolving custom types.
+    fn resolve_type_for_access(&self, global_env: &GlobalEnv, typ: &ExprType) -> Vec<SimpleType> {
+        let mut result = Vec::new();
+        for variant in typ.get_variants() {
+            result.extend(self.resolve_simple_type_for_access(global_env, variant));
+        }
+        result
+    }
+
+    /// Resolve a single SimpleType, unwrapping Custom types recursively.
+    fn resolve_simple_type_for_access(
         &self,
         global_env: &GlobalEnv,
         typ: &SimpleType,
-    ) -> Option<SimpleType> {
+    ) -> Vec<SimpleType> {
         match typ {
             SimpleType::Custom(name) => {
                 if let Some(underlying) = global_env.get_custom_type_underlying(name) {
-                    // Custom type underlying should be concrete for field access
-                    if underlying.is_concrete() {
-                        let underlying_simple = underlying.clone().to_simple()?;
-                        // Recursively resolve in case of nested custom types
-                        return self.resolve_custom_type_for_access(global_env, &underlying_simple);
-                    }
+                    // Recursively resolve the underlying ExprType
+                    self.resolve_type_for_access(global_env, underlying)
+                } else {
+                    // Unknown custom type - return empty (error will be caught elsewhere)
+                    vec![]
                 }
-                None
             }
-            other => Some(other.clone()),
+            other => vec![other.clone()],
         }
     }
 
@@ -2760,14 +2768,22 @@ impl LocalEnv {
         for segment in segments {
             match &segment.node {
                 PathSegment::Field(field_name) => {
-                    let mut variants = BTreeSet::new();
-                    for variant in current_type.get_variants() {
-                        // Resolve custom types to their underlying type for field access
-                        let resolved_variant =
-                            self.resolve_custom_type_for_access(global_env, variant);
+                    // Resolve all custom types to their underlying leaf types
+                    let resolved_variants = self.resolve_type_for_access(global_env, &current_type);
 
+                    if resolved_variants.is_empty() {
+                        errors.push(SemError::FieldAccessOnNonObject {
+                            typ: current_type.clone().into(),
+                            field: field_name.clone(),
+                            span: segment.span.clone(),
+                        });
+                        return None;
+                    }
+
+                    let mut variants = BTreeSet::new();
+                    for resolved_variant in resolved_variants {
                         match resolved_variant {
-                            Some(SimpleType::Object(type_name)) => {
+                            SimpleType::Object(type_name) => {
                                 // Look up the field in this object type
                                 match global_env.lookup_field(&type_name, field_name) {
                                     Some(field_type) => {
@@ -2799,14 +2815,22 @@ impl LocalEnv {
                 }
 
                 PathSegment::TupleIndex(index) => {
-                    let mut variants = BTreeSet::new();
-                    for variant in current_type.get_variants() {
-                        // Resolve custom types to their underlying type for tuple access
-                        let resolved_variant =
-                            self.resolve_custom_type_for_access(global_env, variant);
+                    // Resolve all custom types to their underlying leaf types
+                    let resolved_variants = self.resolve_type_for_access(global_env, &current_type);
 
+                    if resolved_variants.is_empty() {
+                        errors.push(SemError::TupleIndexOnNonTuple {
+                            typ: current_type.clone(),
+                            index: *index,
+                            span: segment.span.clone(),
+                        });
+                        return None;
+                    }
+
+                    let mut variants = BTreeSet::new();
+                    for resolved_variant in resolved_variants {
                         match resolved_variant {
-                            Some(SimpleType::Tuple(elements)) => {
+                            SimpleType::Tuple(elements) => {
                                 if *index >= elements.len() {
                                     errors.push(SemError::TupleIndexOutOfBounds {
                                         index: *index,

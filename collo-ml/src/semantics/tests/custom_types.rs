@@ -372,3 +372,92 @@ fn error_forward_reference_to_custom_type() {
         "Should error on forward reference to custom type"
     );
 }
+
+// =============================================================================
+// CUSTOM TYPES WRAPPING UNION TYPES
+// =============================================================================
+
+#[test]
+fn custom_type_wrapping_union_tuple_index_same_type() {
+    // Custom type wraps union of tuples, field access should work
+    let input = r#"
+        type MyType = (Int, Bool) | (String, Bool);
+        let f(x: MyType) -> Bool = x.1;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Errors: {:?}", errors);
+}
+
+#[test]
+fn custom_type_wrapping_union_tuple_index_different_types() {
+    // Custom type wraps union of tuples with different first element types
+    let input = r#"
+        type MyType = (Int, Bool) | (String, Bool);
+        let f(x: MyType) -> Int | String = x.0;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Errors: {:?}", errors);
+}
+
+#[test]
+fn custom_type_wrapping_nested_custom_type_union() {
+    // type A wraps tuple, type B is union containing A
+    let input = r#"
+        type A = (Int, Int);
+        type B = A | (String, Int);
+        let f(x: B) -> Int = x.1;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Errors: {:?}", errors);
+}
+
+#[test]
+fn custom_type_wrapping_union_with_triple_tuple() {
+    // Union of tuples with different lengths - both have index 0 and 1
+    let input = r#"
+        type MyType = (Int, Bool) | (String, Bool, Int);
+        let f(x: MyType) -> Bool = x.1;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Errors: {:?}", errors);
+}
+
+#[test]
+fn error_custom_type_wrapping_union_invalid_index() {
+    // Union where one variant doesn't have the index
+    let input = r#"
+        type MyType = (Int, Bool) | String;
+        let f(x: MyType) -> Bool = x.1;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Should error: String has no tuple index"
+    );
+}
+
+#[test]
+fn error_custom_type_wrapping_union_index_out_of_bounds() {
+    // Union where one variant doesn't have sufficient elements (only index 0 and 1)
+    let input = r#"
+        type MyType = (Int, Bool, String) | (Int, Bool);
+        let f(x: MyType) -> String = x.2;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Should error: second variant has no index 2"
+    );
+}
+
+#[test]
+fn custom_type_wrapping_custom_type_tuple_index() {
+    // Custom type wrapping another custom type that wraps a tuple
+    let input = r#"
+        type UnionType = (Int, Bool);
+        type MyType = UnionType;
+        let f(x: MyType) -> Int = x.0;
+    "#;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Errors: {:?}", errors);
+}
