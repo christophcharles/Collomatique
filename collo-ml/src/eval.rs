@@ -2086,13 +2086,6 @@ impl<T: EvalObject> LocalEnv<T> {
     }
 }
 
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref RE: regex::Regex =
-        regex::Regex::new(r"@\{([a-zA-Z_][a-zA-Z0-9_]*)\}").expect("Should be a valid regex");
-}
-
 #[derive(Debug)]
 pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST<T>,
@@ -2117,66 +2110,31 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         })
     }
 
-    fn prettify_expr_value(&mut self, value: &ExprValue<T>) -> String {
-        match value {
-            ExprValue::Object(obj) => match obj.pretty_print(self.env, &mut self.cache) {
-                Some(s) => s,
-                None => format!("{:?}", obj),
-            },
-            ExprValue::List(list) => {
-                let pretty_values: Vec<_> =
-                    list.iter().map(|x| self.prettify_expr_value(x)).collect();
-                format!("[{}]", pretty_values.join(","))
-            }
-            ExprValue::Tuple(elements) => {
-                let pretty_values: Vec<_> = elements
-                    .iter()
-                    .map(|x| self.prettify_expr_value(x))
-                    .collect();
-                format!("({})", pretty_values.join(","))
-            }
-            ExprValue::Custom {
-                type_name,
-                variant,
-                content,
-            } => match variant {
-                None => format!("{}({})", type_name, self.prettify_expr_value(content)),
-                Some(v) => format!(
-                    "{}::{}({})",
-                    type_name,
-                    v,
-                    self.prettify_expr_value(content)
-                ),
-            },
-            ExprValue::Bool(v) => format!("{}", v),
-            ExprValue::Int(v) => format!("{}", v),
-            _ => format!("{:?}", value),
-        }
-    }
-
     fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        args: &Vec<ExprValue<T>>,
-    ) -> Vec<String> {
-        let mut substitution_values = HashMap::new();
-        for (arg_name, arg_value) in fn_desc.arg_names.iter().zip(args.iter()) {
-            let pretty_value = self.prettify_expr_value(arg_value);
-            substitution_values.insert(arg_name.clone(), pretty_value);
-        }
-
+        local_env: &mut LocalEnv<T>,
+    ) -> Result<Vec<String>, EvalError<T>> {
         fn_desc
             .docstring
             .iter()
-            .map(|d| {
-                RE.replace_all(d.trim_start(), |caps: &regex::Captures| {
-                    let name = &caps[1];
-                    substitution_values
-                        .get(name)
-                        .cloned()
-                        .unwrap_or(caps[0].to_string())
-                })
-                .to_string()
+            .map(|line| {
+                let mut result = String::new();
+                for part in line {
+                    result.push_str(&part.prefix);
+                    if let Some(expr) = &part.expr {
+                        match local_env.eval_expr(self, expr)? {
+                            ExprValue::String(s) => result.push_str(&s),
+                            // Expression is wrapped in String(...) at parse time,
+                            // so this should never happen - logic bug if it does
+                            other => panic!(
+                                "Docstring expression should evaluate to String, got {:?}",
+                                other
+                            ),
+                        }
+                    }
+                }
+                Ok(result.trim_start().to_string())
             })
             .collect()
     }
@@ -2231,13 +2189,15 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
         local_env.push_scope();
         let naked_result = local_env.eval_expr(self, &fn_desc.body);
+        // Evaluate docstring expressions BEFORE popping scope (parameters still available)
+        let pretty_docstring = self.prettify_docstring(fn_desc, &mut local_env)?;
         local_env.pop_scope();
         let naked_result = naked_result?;
 
         let origin = Origin {
             fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
             args: args.clone(),
-            pretty_docstring: self.prettify_docstring(fn_desc, &args),
+            pretty_docstring,
         };
 
         let result = naked_result.with_origin(&origin);

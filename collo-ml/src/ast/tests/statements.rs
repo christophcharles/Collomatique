@@ -2,6 +2,19 @@ use super::*;
 use crate::parser::ColloMLParser;
 use pest::Parser;
 
+/// Helper to convert DocstringLine to a plain string (for testing simple docstrings without expressions)
+fn docstring_line_to_string(line: &DocstringLine) -> String {
+    line.iter()
+        .map(|part| {
+            let mut s = part.prefix.clone();
+            if part.expr.is_some() {
+                s.push_str("<expr>");
+            }
+            s
+        })
+        .collect()
+}
+
 // ============= Basic Let Statements =============
 
 #[test]
@@ -148,7 +161,7 @@ fn parse_let_with_docstring() {
     match &file.statements[0].node {
         Statement::Let { docstring, .. } => {
             assert_eq!(docstring.len(), 1);
-            assert_eq!(docstring[0], " This is a doc");
+            assert_eq!(docstring_line_to_string(&docstring[0]), " This is a doc");
         }
         _ => panic!("Expected Let statement"),
     }
@@ -163,8 +176,8 @@ fn parse_let_with_multiple_docstrings() {
     match &file.statements[0].node {
         Statement::Let { docstring, .. } => {
             assert_eq!(docstring.len(), 2);
-            assert_eq!(docstring[0], " This is a doc");
-            assert_eq!(docstring[1], " Second line");
+            assert_eq!(docstring_line_to_string(&docstring[0]), " This is a doc");
+            assert_eq!(docstring_line_to_string(&docstring[1]), " Second line");
         }
         _ => panic!("Expected Let statement"),
     }
@@ -182,7 +195,7 @@ fn parse_pub_let_with_docstring() {
         } => {
             assert!(*public);
             assert_eq!(docstring.len(), 1);
-            assert_eq!(docstring[0], " Documentation");
+            assert_eq!(docstring_line_to_string(&docstring[0]), " Documentation");
         }
         _ => panic!("Expected Let statement"),
     }
@@ -245,7 +258,10 @@ fn parse_reify_with_docstring() {
     match &file.statements[0].node {
         Statement::Reify { docstring, .. } => {
             assert_eq!(docstring.len(), 1);
-            assert_eq!(docstring[0], " Reify this constraint");
+            assert_eq!(
+                docstring_line_to_string(&docstring[0]),
+                " Reify this constraint"
+            );
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -260,8 +276,8 @@ fn parse_reify_with_multiple_docstrings() {
     match &file.statements[0].node {
         Statement::Reify { docstring, .. } => {
             assert_eq!(docstring.len(), 2);
-            assert_eq!(docstring[0], " First line");
-            assert_eq!(docstring[1], " Second line");
+            assert_eq!(docstring_line_to_string(&docstring[0]), " First line");
+            assert_eq!(docstring_line_to_string(&docstring[1]), " Second line");
         }
         _ => panic!("Expected Reify statement"),
     }

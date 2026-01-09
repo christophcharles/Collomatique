@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Param, Span, Spanned};
+use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub mod string_case;
@@ -33,7 +33,7 @@ pub struct FunctionDesc {
     pub used: bool,
     pub arg_names: Vec<String>,
     pub body: Spanned<crate::ast::Expr>,
-    pub docstring: Vec<String>,
+    pub docstring: Vec<DocstringLine>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,7 +245,7 @@ impl GlobalEnv {
         public: bool,
         arg_names: Vec<String>,
         body: Spanned<crate::ast::Expr>,
-        docstring: Vec<String>,
+        docstring: Vec<DocstringLine>,
         type_info: &mut TypeInfo,
     ) {
         assert!(!self.functions.contains_key(name));
@@ -3657,7 +3657,7 @@ impl GlobalEnv {
         params: &Vec<Param>,
         output_type: &Spanned<crate::ast::TypeName>,
         body: &Spanned<Expr>,
-        docstring: &Vec<String>,
+        docstring: &Vec<DocstringLine>,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
@@ -3768,6 +3768,29 @@ impl GlobalEnv {
         }
     }
 
+    /// Check docstring expressions for semantic validity
+    fn check_docstring_expressions(
+        &mut self,
+        docstring: &Vec<DocstringLine>,
+        local_env: &mut LocalEnv,
+        type_info: &mut TypeInfo,
+        expr_types: &mut HashMap<Span, ExprType>,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) {
+        for line in docstring {
+            for part in line {
+                if let Some(expr) = &part.expr {
+                    // Check the expression - it's already wrapped in String(...)
+                    // so it should type-check if the inner expression can convert to String
+                    local_env.check_expr(
+                        self, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    );
+                }
+            }
+        }
+    }
+
     /// Pass 2: Validate function body (now all function signatures are known)
     fn expand_with_let_statement_pass2(
         &mut self,
@@ -3792,8 +3815,20 @@ impl GlobalEnv {
             local_env.register_identifier_no_check(param_name, param_typ.clone());
         }
 
-        // Validate body
+        // Validate body and docstring expressions (parameters available in same scope)
         local_env.push_scope();
+
+        // Check docstring expressions first
+        self.check_docstring_expressions(
+            &fn_desc.docstring,
+            &mut local_env,
+            type_info,
+            expr_types,
+            errors,
+            warnings,
+        );
+
+        // Then validate body
         let body_type_opt = local_env.check_expr(
             self, &body.node, &body.span, type_info, expr_types, errors, warnings,
         );

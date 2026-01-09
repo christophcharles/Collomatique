@@ -1,5 +1,6 @@
-use crate::parser::Rule;
+use crate::parser::{ColloMLParser, Rule};
 use pest::iterators::Pair;
+use pest::Parser;
 
 // ============= Span and Spanned =============
 
@@ -38,6 +39,178 @@ impl<T> Spanned<T> {
     }
 }
 
+// ============= Docstrings =============
+
+/// A part of a docstring line, either plain text or an expression to evaluate
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocstringPart {
+    /// Text before the expression (or the entire text if no expression)
+    pub prefix: String,
+    /// Optional expression to evaluate, wrapped in String(...)
+    pub expr: Option<Spanned<Expr>>,
+}
+
+/// A complete docstring line with all its parts
+pub type DocstringLine = Vec<DocstringPart>;
+
+/// Parse a docstring line and extract expressions delimited by backticks.
+/// Supports multiple backticks for escaping: `` `x` ``, ``` ``x with `backticks` `` ```, etc.
+/// Each expression is automatically wrapped in String(...) for evaluation.
+pub fn parse_docstring_line(
+    content: &str,
+    base_span_start: usize,
+) -> Result<DocstringLine, AstError> {
+    let mut parts = Vec::new();
+    let mut current_pos = 0;
+    let bytes = content.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // Look for backticks
+        if bytes[i] == b'`' {
+            // Count opening backticks
+            let backtick_start = i;
+            let mut backtick_count = 0;
+            while i < bytes.len() && bytes[i] == b'`' {
+                backtick_count += 1;
+                i += 1;
+            }
+
+            // Find matching closing backticks (same count)
+            let expr_start = i;
+            let mut found_closing = false;
+            let mut expr_end = i;
+
+            while i < bytes.len() {
+                if bytes[i] == b'`' {
+                    // Count consecutive backticks
+                    let closing_start = i;
+                    let mut closing_count = 0;
+                    while i < bytes.len() && bytes[i] == b'`' {
+                        closing_count += 1;
+                        i += 1;
+                    }
+
+                    if closing_count == backtick_count {
+                        // Found matching closing backticks
+                        expr_end = closing_start;
+                        found_closing = true;
+                        break;
+                    }
+                    // Not matching count, continue searching
+                } else {
+                    i += 1;
+                }
+            }
+
+            if !found_closing {
+                return Err(AstError::UnmatchedBackticks {
+                    span: Span {
+                        start: base_span_start + backtick_start,
+                        end: base_span_start + content.len(),
+                    },
+                });
+            }
+
+            let expr_text = &content[expr_start..expr_end];
+            let expr_span_start = base_span_start + expr_start;
+
+            // Parse expression using pest
+            let parsed = ColloMLParser::parse(Rule::expr_complete, expr_text).map_err(|e| {
+                AstError::DocstringExpressionParse {
+                    text: expr_text.to_string(),
+                    error: format!("{}", e),
+                    span: Span {
+                        start: expr_span_start,
+                        end: expr_span_start + expr_text.len(),
+                    },
+                }
+            })?;
+
+            let expr_pair = parsed
+                .into_iter()
+                .next()
+                .unwrap()
+                .into_inner()
+                .next()
+                .ok_or_else(|| AstError::DocstringExpressionParse {
+                    text: expr_text.to_string(),
+                    error: "Empty expression".to_string(),
+                    span: Span {
+                        start: expr_span_start,
+                        end: expr_span_start + expr_text.len(),
+                    },
+                })?;
+
+            let inner_expr = Expr::from_pest(expr_pair)?;
+
+            // Wrap in String(...) type cast
+            let string_type = TypeName {
+                types: vec![Spanned::new(
+                    MaybeTypeName {
+                        maybe_count: 0,
+                        inner: SimpleTypeName::String,
+                    },
+                    Span {
+                        start: expr_span_start,
+                        end: expr_span_start,
+                    },
+                )],
+            };
+
+            let wrapped_expr = Expr::ComplexTypeCast {
+                typ: Spanned::new(
+                    string_type,
+                    Span {
+                        start: expr_span_start,
+                        end: expr_span_start,
+                    },
+                ),
+                args: vec![Spanned::new(
+                    inner_expr,
+                    Span {
+                        start: expr_span_start,
+                        end: expr_span_start + expr_text.len(),
+                    },
+                )],
+            };
+
+            // Add prefix text part (if any)
+            let prefix = content[current_pos..backtick_start].to_string();
+            if !prefix.is_empty() {
+                parts.push(DocstringPart { prefix, expr: None });
+            }
+
+            // Add expression part
+            parts.push(DocstringPart {
+                prefix: String::new(),
+                expr: Some(Spanned::new(
+                    wrapped_expr,
+                    Span {
+                        start: expr_span_start,
+                        end: expr_span_start + expr_text.len(),
+                    },
+                )),
+            });
+
+            current_pos = i;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Add remaining text
+    if current_pos < content.len() {
+        parts.push(DocstringPart {
+            prefix: content[current_pos..].to_string(),
+            expr: None,
+        });
+    }
+
+    // Handle empty docstring - return empty vec (no parts)
+    Ok(parts)
+}
+
 // ============= Top Level =============
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,7 +227,7 @@ impl File {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Let {
-        docstring: Vec<String>,
+        docstring: Vec<DocstringLine>,
         public: bool,
         name: Spanned<String>,
         params: Vec<Param>,
@@ -62,7 +235,7 @@ pub enum Statement {
         body: Spanned<Expr>,            // Body
     },
     Reify {
-        docstring: Vec<String>,
+        docstring: Vec<DocstringLine>,
         constraint_name: Spanned<String>,
         var_list: bool,
         name: Spanned<String>,
@@ -349,6 +522,14 @@ pub enum AstError {
         span: Span,
         error: std::num::ParseIntError,
     },
+    #[error("Unclosed backticks in docstring expression at {span:?}")]
+    UnmatchedBackticks { span: Span },
+    #[error("Failed to parse docstring expression `{text}` at {span:?}: {error}")]
+    DocstringExpressionParse {
+        text: String,
+        error: String,
+        span: Span,
+    },
 }
 
 impl File {
@@ -415,12 +596,14 @@ impl Statement {
             match inner_pair.as_rule() {
                 Rule::docstring => {
                     // docstring contains docstring_content
+                    let docstring_span = Span::from_pest(&inner_pair);
                     let content = inner_pair
                         .into_inner()
                         .next()
                         .map(|p| p.as_str().to_string())
                         .unwrap_or_default();
-                    docstring.push(content);
+                    let parsed_line = parse_docstring_line(&content, docstring_span.start)?;
+                    docstring.push(parsed_line);
                 }
                 Rule::pub_modifier => {
                     public = true;
@@ -471,12 +654,14 @@ impl Statement {
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
                 Rule::docstring => {
+                    let docstring_span = Span::from_pest(&inner_pair);
                     let content = inner_pair
                         .into_inner()
                         .next()
                         .map(|p| p.as_str().to_string())
                         .unwrap_or_default();
-                    docstring.push(content);
+                    let parsed_line = parse_docstring_line(&content, docstring_span.start)?;
+                    docstring.push(parsed_line);
                 }
                 Rule::ident => {
                     if constraint_name.is_none() {

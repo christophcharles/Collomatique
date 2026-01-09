@@ -383,7 +383,7 @@ fn deeply_nested_function_origin() {
 #[test]
 fn docstring_substitution_with_args() {
     let input = r#"
-    /// @{x} must be smaller than 1.
+    /// `x` must be smaller than 1.
     let h(x: Int) -> Constraint = x <== 1;
     pub let f() -> Constraint = h(1) and h(2);
     "#;
@@ -431,8 +431,8 @@ fn docstring_substitution_with_args() {
 #[test]
 fn multiline_docstring_multiple_params() {
     let input = r#"
-    /// Constraint on @{x} and @{y}:
-    /// - @{x} must be less than @{y}
+    /// Constraint on `x` and `y`:
+    /// - `x` must be less than `y`
     /// - Their sum must be positive
     let range_check(x: Int, y: Int) -> Constraint =
         (x <== y) and ((x + y) >== 0);
@@ -472,7 +472,7 @@ fn multiline_docstring_multiple_params() {
 #[test]
 fn repeated_parameter_substitution() {
     let input = r#"
-    /// The value @{val} is compared to itself: @{val} === @{val}
+    /// The value `val` is compared to itself: `val` === `val`
     let self_compare(val: Int) -> Constraint = val === val;
     pub let test() -> Constraint = self_compare(42);
     "#;
@@ -495,6 +495,68 @@ fn repeated_parameter_substitution() {
                 origin.pretty_docstring[0],
                 "The value 42 is compared to itself: 42 === 42"
             );
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
+
+/// Test that arbitrary expressions work in docstrings (not just parameter names)
+#[test]
+fn docstring_expression_evaluation() {
+    let input = r#"
+    /// Index `i + 1` of `total` items.
+    let describe_index(i: Int, total: Int) -> Constraint = i <== total;
+    pub let test() -> Constraint = describe_index(5, 10);
+    "#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("test", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            let constraint = constraints.iter().next().unwrap();
+            assert!(constraint.origin.is_some());
+            let origin = constraint.origin.as_ref().unwrap();
+
+            assert_eq!(origin.fn_name.node, "describe_index");
+            assert_eq!(origin.pretty_docstring.len(), 1);
+            // i=5, so i+1=6; total=10
+            assert_eq!(origin.pretty_docstring[0], "Index 6 of 10 items.");
+        }
+        _ => panic!("Expected Constraint"),
+    }
+}
+
+/// Test double backticks for expressions containing single backticks
+#[test]
+fn docstring_double_backticks() {
+    let input = r#"
+    /// Value is ``x``.
+    let show(x: Int) -> Constraint = x >== 0;
+    pub let test() -> Constraint = show(42);
+    "#;
+
+    let vars = HashMap::new();
+
+    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+
+    let result = checked_ast
+        .quick_eval_fn("test", vec![])
+        .expect("Should evaluate");
+
+    match result {
+        ExprValue::Constraint(constraints) => {
+            let constraint = constraints.iter().next().unwrap();
+            assert!(constraint.origin.is_some());
+            let origin = constraint.origin.as_ref().unwrap();
+
+            assert_eq!(origin.pretty_docstring.len(), 1);
+            assert_eq!(origin.pretty_docstring[0], "Value is 42.");
         }
         _ => panic!("Expected Constraint"),
     }
