@@ -22,6 +22,7 @@ fn custom_type_wrap_and_unwrap() {
         wrapped,
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(42))
         }
     );
@@ -65,6 +66,7 @@ fn custom_type_with_tuple() {
         result,
         ExprValue::Custom {
             type_name: "Point".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]))
         }
     );
@@ -86,6 +88,7 @@ fn custom_type_with_list() {
         result,
         ExprValue::Custom {
             type_name: "IntList".to_string(),
+            variant: None,
             content: Box::new(ExprValue::List(vec![
                 ExprValue::Int(1),
                 ExprValue::Int(2),
@@ -110,6 +113,7 @@ fn custom_type_tuple_field_access() {
 
     let point = ExprValue::Custom {
         type_name: "Point".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::Int(10),
             ExprValue::Int(20),
@@ -138,10 +142,12 @@ fn custom_type_nested_tuple_field_access() {
 
     let named_point = ExprValue::Custom {
         type_name: "NamedPoint".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::String("origin".to_string()),
             ExprValue::Custom {
                 type_name: "Point".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Int(0)])),
             },
         ])),
@@ -174,14 +180,17 @@ fn custom_type_in_list() {
         ExprValue::List(vec![
             ExprValue::Custom {
                 type_name: "MyInt".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Int(1))
             },
             ExprValue::Custom {
                 type_name: "MyInt".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Int(2))
             },
             ExprValue::Custom {
                 type_name: "MyInt".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Int(3))
             }
         ])
@@ -199,14 +208,17 @@ fn sum_over_custom_type_list() {
     let list = ExprValue::List(vec![
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1)),
         },
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(2)),
         },
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(3)),
         },
     ]);
@@ -237,6 +249,7 @@ fn custom_type_in_if_expression() {
         result_true,
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1))
         }
     );
@@ -248,6 +261,7 @@ fn custom_type_in_if_expression() {
         result_false,
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(0))
         }
     );
@@ -282,6 +296,7 @@ fn custom_type_to_string() {
 
     let value = ExprValue::Custom {
         type_name: "MyInt".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Int(42)),
     };
 
@@ -302,6 +317,7 @@ fn custom_type_tuple_to_string() {
 
     let value = ExprValue::Custom {
         type_name: "Point".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)])),
     };
 
@@ -338,6 +354,7 @@ fn multiple_custom_types() {
         a,
         ExprValue::Custom {
             type_name: "TypeA".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1))
         }
     );
@@ -345,6 +362,7 @@ fn multiple_custom_types() {
         b,
         ExprValue::Custom {
             type_name: "TypeB".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1))
         }
     );
@@ -368,13 +386,16 @@ fn custom_type_referencing_another() {
         result,
         ExprValue::Custom {
             type_name: "Outer".to_string(),
+            variant: None,
             content: Box::new(ExprValue::List(vec![
                 ExprValue::Custom {
                     type_name: "Inner".to_string(),
+                    variant: None,
                     content: Box::new(ExprValue::Int(1))
                 },
                 ExprValue::Custom {
                     type_name: "Inner".to_string(),
+                    variant: None,
                     content: Box::new(ExprValue::Int(2))
                 }
             ]))
@@ -397,14 +418,17 @@ fn custom_type_in_fold() {
     let list = ExprValue::List(vec![
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1)),
         },
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(2)),
         },
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(3)),
         },
     ]);
@@ -431,10 +455,12 @@ fn custom_type_in_list_comprehension() {
     let list = ExprValue::List(vec![
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(1)),
         },
         ExprValue::Custom {
             type_name: "MyInt".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Int(2)),
         },
     ]);
@@ -448,10 +474,12 @@ fn custom_type_in_list_comprehension() {
         ExprValue::List(vec![
             ExprValue::Custom {
                 type_name: "MyInt".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Int(2))
             },
             ExprValue::Custom {
                 type_name: "MyInt".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Int(4))
             }
         ])
@@ -474,6 +502,7 @@ fn custom_type_wrapping_union_tuple_index() {
     // Test with first variant (Int, Bool)
     let value1 = ExprValue::Custom {
         type_name: "MyType".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::Int(42),
             ExprValue::Bool(true),
@@ -487,6 +516,7 @@ fn custom_type_wrapping_union_tuple_index() {
     // Test with second variant (String, Bool)
     let value2 = ExprValue::Custom {
         type_name: "MyType".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::String("hello".to_string()),
             ExprValue::Bool(false),
@@ -510,6 +540,7 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
     // Test with first variant (Int, Bool)
     let value1 = ExprValue::Custom {
         type_name: "MyType".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::Int(42),
             ExprValue::Bool(true),
@@ -523,6 +554,7 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
     // Test with second variant (String, Bool)
     let value2 = ExprValue::Custom {
         type_name: "MyType".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::String("hello".to_string()),
             ExprValue::Bool(false),
@@ -547,8 +579,10 @@ fn custom_type_wrapping_nested_custom_type_union() {
     // Test with A variant (wrapped in B)
     let value1 = ExprValue::Custom {
         type_name: "B".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Custom {
             type_name: "A".to_string(),
+            variant: None,
             content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)])),
         }),
     };
@@ -560,6 +594,7 @@ fn custom_type_wrapping_nested_custom_type_union() {
     // Test with (String, Int) variant
     let value2 = ExprValue::Custom {
         type_name: "B".to_string(),
+        variant: None,
         content: Box::new(ExprValue::Tuple(vec![
             ExprValue::String("test".to_string()),
             ExprValue::Int(99),

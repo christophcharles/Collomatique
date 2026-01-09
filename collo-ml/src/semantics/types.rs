@@ -24,7 +24,10 @@ pub enum SimpleType {
     EmptyList,
     List(ExprType),
     Object(String),
-    Custom(String),                     // User-defined type wrapping another type
+    /// Custom type with optional variant: Custom(root, variant)
+    /// - Custom("MyType", None) for simple custom types
+    /// - Custom("Result", Some("Ok")) for enum variants like Result::Ok
+    Custom(String, Option<String>),
     Tuple(Vec<ExprType>),               // (Int, Bool), (Int, Bool, String), etc.
     Struct(BTreeMap<String, ExprType>), // {field1: Type1, field2: Type2}
 }
@@ -110,7 +113,7 @@ impl SimpleType {
     }
 
     pub fn is_custom(&self) -> bool {
-        matches!(self, SimpleType::Custom(_))
+        matches!(self, SimpleType::Custom(_, _))
     }
 
     pub fn get_inner_object_type(&self) -> Option<&String> {
@@ -127,16 +130,32 @@ impl SimpleType {
         }
     }
 
-    pub fn get_inner_custom_type(&self) -> Option<&String> {
+    pub fn get_inner_custom_type(&self) -> Option<(&String, &Option<String>)> {
         match self {
-            SimpleType::Custom(typ) => Some(typ),
+            SimpleType::Custom(root, variant) => Some((root, variant)),
             _ => None,
         }
     }
 
-    pub fn to_inner_custom_type(self) -> Option<String> {
+    pub fn to_inner_custom_type(self) -> Option<(String, Option<String>)> {
         match self {
-            SimpleType::Custom(typ) => Some(typ),
+            SimpleType::Custom(root, variant) => Some((root, variant)),
+            _ => None,
+        }
+    }
+
+    /// Get the root name of a custom type (for both simple custom types and enum variants)
+    pub fn get_custom_root(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(root, _) => Some(root),
+            _ => None,
+        }
+    }
+
+    /// Get the variant name if this is an enum variant type
+    pub fn get_custom_variant(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(_, Some(variant)) => Some(variant),
             _ => None,
         }
     }
@@ -215,6 +234,9 @@ impl SimpleType {
                             .unwrap_or(false)
                     })
             }
+            // Enum variant is a subtype of its root enum type
+            // Custom(root, Some(variant)) <: Custom(root, None)
+            (SimpleType::Custom(root1, Some(_)), SimpleType::Custom(root2, None)) => root1 == root2,
             // For all other combination, it's not
             _ => false,
         }
@@ -294,8 +316,24 @@ impl SimpleType {
             // Same object type overlaps
             (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
 
-            // Same custom type overlaps
-            (SimpleType::Custom(s_name), SimpleType::Custom(o_name)) => s_name == o_name,
+            // Custom types overlap if:
+            // - Same root and same variant (exact match)
+            // - One is a variant and the other is the root enum (variant overlaps with root)
+            // - Different variants of the same enum don't overlap (they're disjoint)
+            (SimpleType::Custom(root1, variant1), SimpleType::Custom(root2, variant2)) => {
+                if root1 != root2 {
+                    false // Different roots never overlap
+                } else {
+                    match (variant1, variant2) {
+                        // Same exact type
+                        (None, None) | (Some(_), Some(_)) if variant1 == variant2 => true,
+                        // Variant overlaps with root enum
+                        (Some(_), None) | (None, Some(_)) => true,
+                        // Different variants don't overlap
+                        _ => false,
+                    }
+                }
+            }
 
             // Never overlaps with everything: it is a subtype of everything
             (SimpleType::Never, _) | (_, SimpleType::Never) => true,
@@ -340,8 +378,8 @@ impl SimpleType {
             | (_, SimpleType::Constraint)
             | (SimpleType::Object(_), _)
             | (_, SimpleType::Object(_))
-            | (SimpleType::Custom(_), _)
-            | (_, SimpleType::Custom(_))
+            | (SimpleType::Custom(_, _), _)
+            | (_, SimpleType::Custom(_, _))
             | (SimpleType::String, _)
             | (_, SimpleType::String) => false,
 
@@ -386,7 +424,8 @@ impl std::fmt::Display for SimpleType {
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
             SimpleType::Object(typ) => write!(f, "{}", typ),
-            SimpleType::Custom(typ) => write!(f, "{}", typ),
+            SimpleType::Custom(root, None) => write!(f, "{}", root),
+            SimpleType::Custom(root, Some(variant)) => write!(f, "{}::{}", root, variant),
             SimpleType::Tuple(elements) => {
                 let types: Vec<_> = elements.iter().map(|t| t.to_string()).collect();
                 write!(f, "({})", types.join(", "))
@@ -416,6 +455,7 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
             SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
             SimpleTypeName::String => Ok(SimpleType::String),
             SimpleTypeName::Other(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::Qualified(root, variant) => Ok(SimpleType::Custom(root, Some(variant))),
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),
             SimpleTypeName::Tuple(elements) => {
@@ -510,6 +550,11 @@ impl From<SimpleType> for ExprType {
 impl SimpleType {
     /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
     /// to either Object or Custom based on the provided sets.
+    ///
+    /// For custom_types, the set contains:
+    /// - Simple type names like "MyInt" for `type MyInt = Int;`
+    /// - Qualified names like "Result::Ok" for enum variants
+    /// - Root enum names like "Result" for `enum Result = Ok(Int) | Error(String);`
     pub fn from_ast(
         value: crate::ast::SimpleTypeName,
         object_types: &HashSet<String>,
@@ -528,9 +573,17 @@ impl SimpleType {
                 if object_types.contains(&name) {
                     Ok(SimpleType::Object(name))
                 } else if custom_types.contains(&name) {
-                    Ok(SimpleType::Custom(name))
+                    Ok(SimpleType::Custom(name, None))
                 } else {
                     Err(TypeResolutionError::UnknownType(name))
+                }
+            }
+            SimpleTypeName::Qualified(root, variant) => {
+                let qualified_name = format!("{}::{}", root, variant);
+                if custom_types.contains(&qualified_name) {
+                    Ok(SimpleType::Custom(root, Some(variant)))
+                } else {
+                    Err(TypeResolutionError::UnknownType(qualified_name))
                 }
             }
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
@@ -731,6 +784,18 @@ impl ExprType {
         }
         Self::clean_subtypes(&mut variants);
         Some(Self { variants }.assert_before_return())
+    }
+
+    /// Create an ExprType from a collection of SimpleType variants
+    /// Unlike `sum`, this doesn't return None for empty input - it requires at least one variant
+    pub fn from_variants(types: impl IntoIterator<Item = SimpleType>) -> Self {
+        let mut variants: BTreeSet<_> = types.into_iter().collect();
+        assert!(
+            !variants.is_empty(),
+            "from_variants requires at least one variant"
+        );
+        Self::clean_subtypes(&mut variants);
+        Self { variants }.assert_before_return()
     }
 
     pub fn is_simple(&self) -> bool {

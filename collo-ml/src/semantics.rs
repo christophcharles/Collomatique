@@ -132,7 +132,13 @@ impl GlobalEnv {
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
-            SimpleType::Custom(typ_name) => self.custom_types.contains_key(typ_name),
+            SimpleType::Custom(root, variant) => {
+                let key = match variant {
+                    None => root.clone(),
+                    Some(v) => format!("{}::{}", root, v),
+                };
+                self.custom_types.contains_key(&key)
+            }
             SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
             SimpleType::Struct(fields) => fields.values().all(|t| self.validate_type(t)),
         }
@@ -161,6 +167,48 @@ impl GlobalEnv {
     /// Get all custom types
     pub fn get_custom_types(&self) -> &HashMap<String, ExprType> {
         &self.custom_types
+    }
+
+    /// Get all variant names for an enum (e.g., for "Result", returns ["Ok", "Error"])
+    pub fn get_enum_variants(&self, enum_name: &str) -> Vec<String> {
+        let prefix = format!("{}::", enum_name);
+        self.custom_types
+            .keys()
+            .filter_map(|k| k.strip_prefix(&prefix).map(|v| v.to_string()))
+            .collect()
+    }
+
+    /// Expand a type by replacing root enum types with their variant types.
+    /// For example, Custom("Result", None) becomes Custom("Result", Some("Ok")) | Custom("Result", Some("Error"))
+    pub fn expand_enum_variants(&self, typ: &ExprType) -> ExprType {
+        let expanded: Vec<SimpleType> = typ
+            .get_variants()
+            .iter()
+            .flat_map(|v| {
+                if let SimpleType::Custom(root, None) = v {
+                    let variants = self.get_enum_variants(root);
+                    if variants.is_empty() {
+                        // Not an enum or no variants found, keep as-is
+                        vec![v.clone()]
+                    } else {
+                        // Expand to all variants
+                        variants
+                            .into_iter()
+                            .map(|var| SimpleType::Custom(root.clone(), Some(var)))
+                            .collect()
+                    }
+                } else {
+                    vec![v.clone()]
+                }
+            })
+            .collect();
+        ExprType::sum(expanded.into_iter()).unwrap_or_else(|| typ.clone())
+    }
+
+    /// Subtract types with enum-awareness: expands root enum types before subtracting
+    pub fn substract_enum_aware(&self, from: &ExprType, to_remove: &ExprType) -> Option<ExprType> {
+        let expanded_from = self.expand_enum_variants(from);
+        expanded_from.substract(to_remove)
     }
 
     pub fn get_functions(&self) -> &HashMap<String, FunctionDesc> {
@@ -633,8 +681,12 @@ impl LocalEnv {
         let to_simple = to.inner();
 
         // Check if target is a custom type and source can convert to underlying
-        if let SimpleType::Custom(custom_name) = to_simple {
-            if let Some(underlying) = global_env.get_custom_type_underlying(custom_name) {
+        if let SimpleType::Custom(root, variant) = to_simple {
+            let key = match variant {
+                None => root.clone(),
+                Some(v) => format!("{}::{}", root, v),
+            };
+            if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
                 // Can convert if source can convert to the underlying type
                 if underlying.is_concrete() {
                     let underlying_concrete = underlying
@@ -653,8 +705,12 @@ impl LocalEnv {
         // Check if source is a custom type and underlying can convert to target
         if from.is_concrete() {
             if let Some(from_simple) = from.clone().to_simple() {
-                if let SimpleType::Custom(custom_name) = from_simple {
-                    if let Some(underlying) = global_env.get_custom_type_underlying(&custom_name) {
+                if let SimpleType::Custom(root, variant) = from_simple {
+                    let key = match variant {
+                        None => root.clone(),
+                        Some(v) => format!("{}::{}", root, v),
+                    };
+                    if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
                         // Can convert if the underlying type can convert to target
                         if underlying.can_convert_to(to) {
                             return true;
@@ -696,19 +752,23 @@ impl LocalEnv {
         visited: &mut HashSet<String>,
     ) -> Vec<SimpleType> {
         match typ {
-            SimpleType::Custom(name) => {
-                if visited.contains(name) {
+            SimpleType::Custom(root, variant) => {
+                let key = match variant {
+                    None => root.clone(),
+                    Some(v) => format!("{}::{}", root, v),
+                };
+                if visited.contains(&key) {
                     // If has_unguarded_reference is correct, we should NEVER hit this.
                     // Panic to catch bugs in validation.
                     panic!(
                         "Cycle detected in type resolution for '{}'. \
                          This indicates a bug in has_unguarded_reference validation.",
-                        name
+                        key
                     );
                 }
-                visited.insert(name.clone());
+                visited.insert(key.clone());
 
-                if let Some(underlying) = global_env.get_custom_type_underlying(name) {
+                if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
                     // Recursively resolve the underlying ExprType
                     self.resolve_type_for_access_impl(global_env, underlying, visited)
                 } else {
@@ -1036,7 +1096,7 @@ impl LocalEnv {
                                 }
 
                                 // Return the custom type
-                                Some(SimpleType::Custom(type_name.node.clone()).into())
+                                Some(SimpleType::Custom(type_name.node.clone(), None).into())
                             }
                         }
                     }
@@ -2330,7 +2390,9 @@ impl LocalEnv {
                         // Update remaining type
                         if branch.filter.is_none() {
                             if let Some(typ) = current_type {
-                                current_type = typ.substract(&actual_branch_typ);
+                                // Use enum-aware subtraction to properly handle enum variants
+                                current_type =
+                                    global_env.substract_enum_aware(&typ, &actual_branch_typ);
                             }
                         }
                     }
@@ -2522,7 +2584,7 @@ impl LocalEnv {
                     }
 
                     // Return type is the custom type
-                    Some(SimpleType::Custom(name.node.clone()).into())
+                    Some(SimpleType::Custom(name.node.clone(), None).into())
                 } else {
                     // This is a function call
                     match global_env.lookup_fn(&name.node) {
@@ -2573,6 +2635,233 @@ impl LocalEnv {
                             Some(fn_type.output)
                         }
                     }
+                }
+            }
+
+            // ========== Qualified Type Cast (Enum Variants) ==========
+            // Result::Ok(x), Option::None(), Option::None
+            Expr::QualifiedTypeCast {
+                root,
+                variant,
+                args,
+            } => {
+                let qualified_name = format!("{}::{}", root.node, variant.node);
+
+                // Check if this qualified type exists
+                if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
+                    let underlying_type = target_type.clone();
+                    let underlying_simple = underlying_type.to_simple();
+
+                    // Check if it's a unit type (underlying is None)
+                    let is_unit = underlying_simple
+                        .as_ref()
+                        .map(|s| s.is_none())
+                        .unwrap_or(false);
+                    // Check if it's a tuple type
+                    let is_tuple = matches!(underlying_simple, Some(SimpleType::Tuple(_)));
+
+                    // For unit variants, args should be empty (or just `none`)
+                    if is_unit {
+                        if args.len() > 1 {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: qualified_name.clone(),
+                                span: root.span.clone(),
+                                expected: 0,
+                                found: args.len(),
+                            });
+                        }
+                        // Check single arg if present (should be none)
+                        if let Some(arg) = args.first() {
+                            let arg_type = self.check_expr(
+                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                warnings,
+                            );
+                            if let Some(inferred) = arg_type {
+                                if !inferred.is_none() {
+                                    let none_concrete = SimpleType::None.into_concrete().unwrap();
+                                    if !inferred.can_convert_to(&none_concrete) {
+                                        errors.push(SemError::ImpossibleConversion {
+                                            span: arg.span.clone(),
+                                            found: inferred,
+                                            target: none_concrete,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    } else if is_tuple {
+                        // Tuple variant - check arg count matches tuple size
+                        if let Some(SimpleType::Tuple(tuple_types)) = underlying_simple.as_ref() {
+                            if args.len() != tuple_types.len() {
+                                errors.push(SemError::ArgumentCountMismatch {
+                                    identifier: qualified_name.clone(),
+                                    span: root.span.clone(),
+                                    expected: tuple_types.len(),
+                                    found: args.len(),
+                                });
+                            }
+                            // Check each arg's type
+                            for arg in args {
+                                self.check_expr(
+                                    global_env, &arg.node, &arg.span, type_info, expr_types,
+                                    errors, warnings,
+                                );
+                            }
+                        }
+                    } else {
+                        // Single value variant - expect exactly 1 argument
+                        if args.len() != 1 {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: qualified_name.clone(),
+                                span: root.span.clone(),
+                                expected: 1,
+                                found: args.len(),
+                            });
+                        }
+
+                        // Check single arg conversion
+                        if let (Some(arg), Some(underlying)) =
+                            (args.first(), underlying_simple.as_ref())
+                        {
+                            let arg_type = self.check_expr(
+                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                warnings,
+                            );
+
+                            if let Some(inferred) = arg_type {
+                                if let Some(concrete_target) = underlying.clone().into_concrete() {
+                                    if !inferred.can_convert_to(&concrete_target) {
+                                        errors.push(SemError::ImpossibleConversion {
+                                            span: arg.span.clone(),
+                                            found: inferred,
+                                            target: concrete_target,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Return type is the qualified custom type (enum variant)
+                    Some(SimpleType::Custom(root.node.clone(), Some(variant.node.clone())).into())
+                } else {
+                    errors.push(SemError::UnknownType {
+                        typ: qualified_name,
+                        span: root.span.clone(),
+                    });
+                    None
+                }
+            }
+
+            // ========== Qualified Struct Cast (Enum Struct Variants) ==========
+            // MyEnum::StructCase { x: 1, y: 2 }
+            Expr::QualifiedStructCast {
+                root,
+                variant,
+                fields,
+            } => {
+                let qualified_name = format!("{}::{}", root.node, variant.node);
+
+                // Check if this qualified type exists
+                if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
+                    let underlying_type = target_type.clone();
+
+                    // The underlying type should be a struct
+                    let expected_struct = match underlying_type.clone().to_simple() {
+                        Some(SimpleType::Struct(fields)) => Some(fields),
+                        _ => None,
+                    };
+
+                    match expected_struct {
+                        None => {
+                            errors.push(SemError::NonConcreteType {
+                                span: root.span.clone(),
+                                found: underlying_type,
+                                context:
+                                    "Struct-style type cast requires a type that wraps a struct"
+                                        .to_string(),
+                            });
+                            None
+                        }
+                        Some(expected_fields) => {
+                            // Check fields match
+                            let mut found_fields: std::collections::HashMap<String, Span> =
+                                std::collections::HashMap::new();
+                            for (field_name, field_expr) in fields {
+                                if let Some(prev_span) = found_fields.get(&field_name.node) {
+                                    errors.push(SemError::ParameterAlreadyDefined {
+                                        identifier: field_name.node.clone(),
+                                        span: field_name.span.clone(),
+                                        here: prev_span.clone(),
+                                    });
+                                    continue;
+                                }
+                                found_fields
+                                    .insert(field_name.node.clone(), field_name.span.clone());
+
+                                // Check if field exists
+                                let expected_type = expected_fields.get(&field_name.node);
+
+                                match expected_type {
+                                    None => {
+                                        errors.push(SemError::UnknownField {
+                                            object_type: qualified_name.clone(),
+                                            field: field_name.node.clone(),
+                                            span: field_name.span.clone(),
+                                        });
+                                    }
+                                    Some(exp_typ) => {
+                                        let inferred = self.check_expr(
+                                            global_env,
+                                            &field_expr.node,
+                                            &field_expr.span,
+                                            type_info,
+                                            expr_types,
+                                            errors,
+                                            warnings,
+                                        );
+
+                                        if let Some(inf) = inferred {
+                                            if !inf.is_subtype_of(exp_typ) {
+                                                errors.push(SemError::TypeMismatch {
+                                                    span: field_expr.span.clone(),
+                                                    expected: exp_typ.clone(),
+                                                    found: inf,
+                                                    context: format!(
+                                                        "Field '{}' has wrong type",
+                                                        field_name.node
+                                                    ),
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Check for missing fields
+                            for exp_name in expected_fields.keys() {
+                                if !found_fields.contains_key(exp_name) {
+                                    errors.push(SemError::UnknownField {
+                                        object_type: qualified_name.clone(),
+                                        field: exp_name.clone(),
+                                        span: root.span.clone(),
+                                    });
+                                }
+                            }
+
+                            // Return the qualified custom type (enum variant)
+                            Some(
+                                SimpleType::Custom(root.node.clone(), Some(variant.node.clone()))
+                                    .into(),
+                            )
+                        }
+                    }
+                } else {
+                    errors.push(SemError::UnknownType {
+                        typ: qualified_name,
+                        span: root.span.clone(),
+                    });
+                    None
                 }
             }
 
@@ -3226,8 +3515,14 @@ impl GlobalEnv {
         // This allows forward references between types
         // ====================================================================
         for statement in &file.statements {
-            if let crate::ast::Statement::TypeDecl { name, .. } = &statement.node {
-                temp_env.expand_with_type_decl_pass1(name, &mut errors);
+            match &statement.node {
+                crate::ast::Statement::TypeDecl { name, .. } => {
+                    temp_env.expand_with_type_decl_pass1(name, &mut errors);
+                }
+                crate::ast::Statement::EnumDecl { name, variants } => {
+                    temp_env.expand_with_enum_decl_pass1(name, variants, &mut errors);
+                }
+                _ => {}
             }
         }
 
@@ -3236,8 +3531,14 @@ impl GlobalEnv {
         // Now all type names are known, we can resolve underlying types
         // ====================================================================
         for statement in &file.statements {
-            if let crate::ast::Statement::TypeDecl { name, underlying } = &statement.node {
-                temp_env.expand_with_type_decl_pass2(name, underlying, &mut errors);
+            match &statement.node {
+                crate::ast::Statement::TypeDecl { name, underlying } => {
+                    temp_env.expand_with_type_decl_pass2(name, underlying, &mut errors);
+                }
+                crate::ast::Statement::EnumDecl { name, variants } => {
+                    temp_env.expand_with_enum_decl_pass2(name, variants, &mut errors);
+                }
+                _ => {}
             }
         }
 
@@ -3685,6 +3986,189 @@ impl GlobalEnv {
         self.custom_types.insert(name.node.clone(), underlying_type);
     }
 
+    /// Pass 1 for enum declarations: Register the enum name and all variant names with placeholders
+    fn expand_with_enum_decl_pass1(
+        &mut self,
+        name: &Spanned<String>,
+        variants: &[Spanned<crate::ast::EnumVariant>],
+        errors: &mut Vec<SemError>,
+    ) {
+        // Check if enum name shadows a primitive type
+        if Self::is_primitive_type_name(&name.node) {
+            errors.push(SemError::TypeShadowsPrimitive {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Check for shadowing existing object or custom types
+        if self.defined_types.contains_key(&name.node) {
+            errors.push(SemError::TypeShadowsObject {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        if self.custom_types.contains_key(&name.node) {
+            errors.push(SemError::TypeShadowsCustomType {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Register the root enum type with a placeholder
+        self.custom_types
+            .insert(name.node.clone(), ExprType::simple(SimpleType::Never));
+
+        // Register all variant types with placeholders
+        for variant in variants {
+            let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
+
+            // Note: Primitive type names ARE allowed as variant names since the qualified name
+            // (e.g., "MyType::Int", "Option::None") is distinct from the primitive type.
+            // Only the root enum name must not shadow primitives.
+
+            if self.custom_types.contains_key(&qualified_name) {
+                errors.push(SemError::TypeShadowsCustomType {
+                    type_name: qualified_name.clone(),
+                    span: variant.node.name.span.clone(),
+                });
+                continue;
+            }
+
+            self.custom_types
+                .insert(qualified_name, ExprType::simple(SimpleType::Never));
+        }
+    }
+
+    /// Pass 2 for enum declarations: Resolve underlying types for all variants
+    /// and build the root enum type as a union of all variants
+    fn expand_with_enum_decl_pass2(
+        &mut self,
+        name: &Spanned<String>,
+        variants: &[Spanned<crate::ast::EnumVariant>],
+        errors: &mut Vec<SemError>,
+    ) {
+        use crate::ast::EnumVariantType;
+
+        // Skip if pass 1 failed
+        if !self.custom_types.contains_key(&name.node) {
+            return;
+        }
+
+        // Build the context for type resolution
+        let object_types: std::collections::HashSet<String> =
+            self.defined_types.keys().cloned().collect();
+        let custom_type_names: std::collections::HashSet<String> =
+            self.custom_types.keys().cloned().collect();
+
+        // Process each variant and collect their SimpleTypes for the root enum
+        let mut variant_simple_types = Vec::new();
+
+        for variant in variants {
+            let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
+
+            // Skip if this variant wasn't registered in pass 1
+            if !self.custom_types.contains_key(&qualified_name) {
+                continue;
+            }
+
+            // Determine the underlying type for this variant
+            let underlying_type = match &variant.node.underlying {
+                None => {
+                    // Unit variant - underlying type is None
+                    ExprType::simple(SimpleType::None)
+                }
+                Some(variant_type) => match &variant_type.node {
+                    EnumVariantType::Tuple(types) if types.is_empty() => {
+                        // Empty parens () - also a unit variant
+                        ExprType::simple(SimpleType::None)
+                    }
+                    EnumVariantType::Tuple(types) if types.len() == 1 => {
+                        // Single type like Ok(Int) - underlying is just that type
+                        match ExprType::from_ast(
+                            types[0].clone(),
+                            &object_types,
+                            &custom_type_names,
+                        ) {
+                            Ok(typ) => typ,
+                            Err(e) => {
+                                errors.push(e);
+                                continue;
+                            }
+                        }
+                    }
+                    EnumVariantType::Tuple(types) => {
+                        // Multiple types like TupleCase(Int, Bool) - underlying is a tuple
+                        let tuple_types: Result<Vec<ExprType>, _> = types
+                            .iter()
+                            .map(|t| {
+                                ExprType::from_ast(t.clone(), &object_types, &custom_type_names)
+                            })
+                            .collect();
+                        match tuple_types {
+                            Ok(ts) => ExprType::simple(SimpleType::Tuple(ts)),
+                            Err(e) => {
+                                errors.push(e);
+                                continue;
+                            }
+                        }
+                    }
+                    EnumVariantType::Struct(fields) => {
+                        // Struct variant like StructCase { field: Type }
+                        let struct_fields: Result<std::collections::BTreeMap<String, ExprType>, _> =
+                            fields
+                                .iter()
+                                .map(|(fname, ftype)| {
+                                    ExprType::from_ast(
+                                        ftype.clone(),
+                                        &object_types,
+                                        &custom_type_names,
+                                    )
+                                    .map(|t| (fname.node.clone(), t))
+                                })
+                                .collect();
+                        match struct_fields {
+                            Ok(fs) => ExprType::simple(SimpleType::Struct(fs)),
+                            Err(e) => {
+                                errors.push(e);
+                                continue;
+                            }
+                        }
+                    }
+                },
+            };
+
+            // Check for unguarded recursion (though enums should be guarded by the enum wrapper)
+            if self.has_unguarded_reference(&underlying_type, &qualified_name) {
+                errors.push(SemError::UnguardedRecursiveType {
+                    type_name: qualified_name.clone(),
+                    span: variant.node.name.span.clone(),
+                });
+                continue;
+            }
+
+            // Update the variant's underlying type
+            self.custom_types
+                .insert(qualified_name.clone(), underlying_type);
+
+            // Add this variant to the list for the root enum type
+            variant_simple_types.push(SimpleType::Custom(
+                name.node.clone(),
+                Some(variant.node.name.node.clone()),
+            ));
+        }
+
+        // Build the root enum type as a union of all variants
+        if !variant_simple_types.is_empty() {
+            let enum_type = ExprType::from_variants(variant_simple_types);
+            self.custom_types.insert(name.node.clone(), enum_type);
+        }
+    }
+
     fn is_primitive_type_name(name: &str) -> bool {
         matches!(
             name,
@@ -3707,14 +4191,18 @@ impl GlobalEnv {
 
     fn simple_type_has_unguarded_reference(&self, typ: &SimpleType, type_name: &str) -> bool {
         match typ {
-            SimpleType::Custom(name) if name == type_name => {
-                // Direct reference to the type we're defining - unguarded!
-                true
-            }
-            SimpleType::Custom(name) => {
+            SimpleType::Custom(root, variant) => {
+                let key = match variant {
+                    None => root.clone(),
+                    Some(v) => format!("{}::{}", root, v),
+                };
+                if key == type_name {
+                    // Direct reference to the type we're defining - unguarded!
+                    return true;
+                }
                 // Check if this custom type transitively has unguarded reference
                 // But only if it's already resolved (not a placeholder)
-                if let Some(underlying) = self.custom_types.get(name) {
+                if let Some(underlying) = self.custom_types.get(&key) {
                     // Skip if it's still a placeholder (Never type used during pass 1)
                     let placeholder = ExprType::simple(SimpleType::Never);
                     if *underlying == placeholder {

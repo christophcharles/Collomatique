@@ -175,7 +175,10 @@ pub enum ExprValue<T: EvalObject> {
     Tuple(Vec<ExprValue<T>>),
     Struct(BTreeMap<String, ExprValue<T>>),
     Custom {
+        /// The root type name (e.g., "Result" or "MyType")
         type_name: String,
+        /// The variant name if this is an enum variant (e.g., Some("Ok") for Result::Ok)
+        variant: Option<String>,
         content: Box<ExprValue<T>>,
     },
 }
@@ -220,9 +223,14 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
                     .collect();
                 write!(f, "{{{}}}", field_strs.join(", "))
             }
-            ExprValue::Custom { type_name, content } => {
-                write!(f, "{}({})", type_name, content)
-            }
+            ExprValue::Custom {
+                type_name,
+                variant,
+                content,
+            } => match variant {
+                None => write!(f, "{}({})", type_name, content),
+                Some(v) => write!(f, "{}::{}({})", type_name, v, content),
+            },
         }
     }
 }
@@ -384,9 +392,26 @@ impl<T: EvalObject> ExprValue<T> {
                 false
             }
             // Custom values only fit in Custom types with the same name
-            Self::Custom { type_name, .. } => target
-                .get_variants()
-                .contains(&SimpleType::Custom(type_name.clone())),
+            // Also handles subtype relationship: Custom(Root, Some(Variant)) fits in Custom(Root, None)
+            Self::Custom {
+                type_name, variant, ..
+            } => {
+                // Check for exact match
+                if target
+                    .get_variants()
+                    .contains(&SimpleType::Custom(type_name.clone(), variant.clone()))
+                {
+                    return true;
+                }
+                // Check if this variant fits in the root enum type (subtype relationship)
+                if variant.is_some() {
+                    target
+                        .get_variants()
+                        .contains(&SimpleType::Custom(type_name.clone(), None))
+                } else {
+                    false
+                }
+            }
         }
     }
 
@@ -401,8 +426,14 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::String(_), SimpleType::String) => true,
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
             // Custom type conversions - semantic analysis has validated these
-            (Self::Custom { type_name, .. }, SimpleType::Custom(target_name)) => {
-                type_name == target_name
+            // Enum variant can convert to root enum type (subtype relationship)
+            (
+                Self::Custom {
+                    type_name, variant, ..
+                },
+                SimpleType::Custom(target_root, target_variant),
+            ) => {
+                type_name == target_root && (variant == target_variant || target_variant.is_none())
             }
             // Custom to underlying type - semantic analysis has validated this is allowed
             // The actual conversion happens by unwrapping and converting the content
@@ -412,7 +443,7 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Value to Custom type - semantic analysis has validated this
             // At runtime, we always allow wrapping if semantic check passed
-            (_, SimpleType::Custom(_)) => {
+            (_, SimpleType::Custom(_, _)) => {
                 // Semantic analysis has validated this conversion is legal
                 // At runtime, we trust that validation
                 true
@@ -544,8 +575,9 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
-            (value, SimpleType::Custom(type_name)) => Self::Custom {
+            (value, SimpleType::Custom(type_name, variant)) => Self::Custom {
                 type_name: type_name.clone(),
+                variant: variant.clone(),
                 content: Box::new(value),
             },
             // Converting FROM a Custom type: unwrap and convert the content
@@ -589,9 +621,19 @@ impl<T: EvalObject> ExprValue<T> {
                     .collect();
                 format!("{{{}}}", inners.join(", "))
             }
-            Self::Custom { type_name, content } => {
-                format!("{}({})", type_name, content.convert_to_string(env, cache))
-            }
+            Self::Custom {
+                type_name,
+                variant,
+                content,
+            } => match variant {
+                None => format!("{}({})", type_name, content.convert_to_string(env, cache)),
+                Some(v) => format!(
+                    "{}::{}({})",
+                    type_name,
+                    v,
+                    content.convert_to_string(env, cache)
+                ),
+            },
             v => format!("{}", v),
         }
     }
@@ -1056,6 +1098,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 // Wrap in custom type
                 ExprValue::Custom {
                     type_name: type_name.node.clone(),
+                    variant: None,
                     content: Box::new(ExprValue::Struct(field_values)),
                 }
             }
@@ -1164,6 +1207,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             .collect::<Result<_, _>>()?;
                         ExprValue::Custom {
                             type_name: name.node.clone(),
+                            variant: None,
                             content: Box::new(ExprValue::Tuple(values)),
                         }
                     } else {
@@ -1171,6 +1215,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         let value = self.eval_expr(eval_history, &args[0])?;
                         ExprValue::Custom {
                             type_name: name.node.clone(),
+                            variant: None,
                             content: Box::new(value),
                         }
                     }
@@ -1184,6 +1229,72 @@ impl<T: EvalObject> LocalEnv<T> {
                         .add_fn_to_call_history(&name.node, args, true)?
                         .0
                         .into()
+                }
+            }
+            Expr::QualifiedTypeCast {
+                root,
+                variant,
+                args,
+            } => {
+                // Result::Ok(x), Option::None(), Option::None
+                let qualified_name = format!("{}::{}", root.node, variant.node);
+                let underlying_type = eval_history
+                    .ast
+                    .global_env
+                    .get_custom_type_underlying(&qualified_name)
+                    .expect("Semantic analysis should have validated this type exists")
+                    .clone();
+
+                // Check if underlying type is None (unit variant like Option::None)
+                let is_unit = underlying_type
+                    .as_simple()
+                    .map(|s| s.is_none())
+                    .unwrap_or(false);
+                // Check if it's a tuple type
+                let is_tuple = matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+
+                let content = if is_unit {
+                    // Unit variant - args should be empty or just `none`
+                    if args.is_empty() {
+                        ExprValue::None
+                    } else {
+                        // Evaluate the single arg (should be `none`)
+                        self.eval_expr(eval_history, &args[0])?
+                    }
+                } else if is_tuple {
+                    // Tuple variant - evaluate all args
+                    let values: Vec<ExprValue<T>> = args
+                        .iter()
+                        .map(|x| self.eval_expr(eval_history, &x))
+                        .collect::<Result<_, _>>()?;
+                    ExprValue::Tuple(values)
+                } else {
+                    // Single value variant
+                    self.eval_expr(eval_history, &args[0])?
+                };
+
+                ExprValue::Custom {
+                    type_name: root.node.clone(),
+                    variant: Some(variant.node.clone()),
+                    content: Box::new(content),
+                }
+            }
+            Expr::QualifiedStructCast {
+                root,
+                variant,
+                fields,
+            } => {
+                // MyEnum::StructCase { x: 1, y: 2 }
+                let mut field_values = std::collections::BTreeMap::new();
+                for (field_name, field_expr) in fields {
+                    let value = self.eval_expr(eval_history, &field_expr)?;
+                    field_values.insert(field_name.node.clone(), value);
+                }
+
+                ExprValue::Custom {
+                    type_name: root.node.clone(),
+                    variant: Some(variant.node.clone()),
+                    content: Box::new(ExprValue::Struct(field_values)),
                 }
             }
             Expr::VarCall { name, args } => {
@@ -2024,9 +2135,19 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     .collect();
                 format!("({})", pretty_values.join(","))
             }
-            ExprValue::Custom { type_name, content } => {
-                format!("{}({})", type_name, self.prettify_expr_value(content))
-            }
+            ExprValue::Custom {
+                type_name,
+                variant,
+                content,
+            } => match variant {
+                None => format!("{}({})", type_name, self.prettify_expr_value(content)),
+                Some(v) => format!(
+                    "{}::{}({})",
+                    type_name,
+                    v,
+                    self.prettify_expr_value(content)
+                ),
+            },
             ExprValue::Bool(v) => format!("{}", v),
             ExprValue::Int(v) => format!("{}", v),
             _ => format!("{:?}", value),
@@ -2152,12 +2273,17 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             }
             ExprValue::Tuple(elements) => elements.iter().all(|e| self.validate_value(e)),
             ExprValue::Struct(fields) => fields.values().all(|v| self.validate_value(v)),
-            ExprValue::Custom { type_name, content } => {
+            ExprValue::Custom {
+                type_name,
+                variant,
+                content,
+            } => {
                 // Validate that the custom type exists and recursively validate content
-                self.ast
-                    .global_env
-                    .get_custom_types()
-                    .contains_key(type_name)
+                let key = match variant {
+                    None => type_name.clone(),
+                    Some(v) => format!("{}::{}", type_name, v),
+                };
+                self.ast.global_env.get_custom_types().contains_key(&key)
                     && self.validate_value(content)
             }
         }

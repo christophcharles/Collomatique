@@ -2,6 +2,7 @@
 use super::*;
 
 mod collections;
+mod enums;
 mod expressions;
 mod extra_sum_types;
 mod folds;

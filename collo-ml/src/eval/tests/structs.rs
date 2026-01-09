@@ -751,6 +751,7 @@ fn named_struct_field_access() {
             "f",
             vec![ExprValue::Custom {
                 type_name: "Point".to_string(),
+                variant: None,
                 content: Box::new(ExprValue::Struct(point)),
             }],
         )

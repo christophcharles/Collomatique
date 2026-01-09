@@ -23,7 +23,7 @@ raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
 raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
 raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 
-statement = { let_statement | reify_statement | type_statement }
+statement = { let_statement | reify_statement | type_statement | enum_statement }
 
 docstring = ${
     "##" ~ docstring_content ~ EOL
@@ -33,12 +33,23 @@ EOL = _{ "\r\n" | "\n" | "\r" }
 
 ident_char = _{ ASCII_ALPHANUMERIC | "_" }
 ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
-reserved_keyword = {
+
+// Primitive type keywords - all built-in type names
+// Note: These are ordered longest-first for correct parsing
+primitive_type_keyword = {
     "Constraint" |
     "LinExpr" |
-    "forall" |  // before "for"
     "String" |
     "Never" |
+    "Bool" |
+    "None" |
+    "Int"
+}
+
+// All reserved keywords - primitive types plus language keywords
+reserved_keyword = {
+    primitive_type_keyword |
+    "forall" |  // before "for"
     "false" |
     "reify" |
     "where" |
@@ -47,15 +58,13 @@ reserved_keyword = {
     "panic" |
     "cast" |
     "type" |
+    "enum" |
     "fold" |
     "with" |
     "else" |
     "true" |
-    "Bool" |
-    "None" |
     "none" |
     "sum" |
-    "Int" |
     "let" |
     "pub" |
     "not" |
@@ -82,8 +91,24 @@ param = { ident ~ ":" ~ type_name }
 // ========== Type statements ==========
 type_statement = { "type" ~ ident ~ "=" ~ type_name ~ ";" }
 
+// ========== Enum statements ==========
+// enum Result = Ok(Int) | Error(String);
+// enum Option = Some(Int) | None;
+// enum MyEnum = TupleCase(Int, Bool) | StructCase { field1: Int, field2: Bool };
+enum_statement = { "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
+enum_variants = { enum_variant ~ ("|" ~ enum_variant)* }
+// Variant can be: Name(Type), Name(T1, T2), Name { field: Type }, or just Name (unit)
+// Note: variant_name allows primitive type names (None, Int, Bool, etc.) since the qualified
+// name (e.g., "MyType::Int") is distinct from the primitive type
+enum_variant = { variant_name ~ enum_variant_type? }
+variant_name = @{ primitive_type_keyword ~ !ident_char | ident }
+// Type after variant name: parens for single/tuple types, braces for struct
+enum_variant_type = { "(" ~ (type_name ~ ("," ~ type_name)* ~ ","?)? ~ ")" | struct_type }
+
 // ========== Type Names ==========
-primitive_type = { ident | "None" | "Int" | "Bool" | "LinExpr" | "Constraint" | "String" | "Never" }
+// Qualified type: Result::Ok, or simple: Result, Int, etc.
+qualified_type_name = { ident ~ "::" ~ ident }
+primitive_type = { qualified_type_name | ident | primitive_type_keyword }
 type_name = { maybe_type ~ ( "|" ~ maybe_type )* }
 maybe_type = { maybe_op* ~ list_type }
 maybe_op = @{ "?" }
@@ -157,6 +182,9 @@ primary_expr = {
     global_collection |
     var_call |
     var_list_call |
+    qualified_type_cast |  // Result::Ok(x) - must come before struct_type_cast and fn_call
+    qualified_struct_cast | // MyEnum::StructCase { x: 1 } - must come after qualified_type_cast
+    qualified_unit_value | // Option::None - must come after qualified_type_cast
     struct_type_cast |   // Must come before fn_call to parse TypeName {field: expr} correctly
     primitive_type_cast |  // Must come before fn_call to parse LinExpr(5), String(42), etc. (reserved keywords)
     fn_call |
@@ -178,13 +206,26 @@ primary_expr = {
 complex_type_cast = { (list_type_brackets | tuple_type) ~ "(" ~ args? ~ ")" }
 list_type_brackets = { "[" ~ type_name? ~ "]" }
 
+// Qualified type cast: Result::Ok(x), Option::None(), Option::None(none)
+// For enum variant construction with optional value
+// Note: variant_name allows "None" as it's commonly used as a unit variant
+qualified_type_cast = { ident ~ "::" ~ variant_name ~ "(" ~ args? ~ ")" }
+
+// Qualified struct cast: MyEnum::StructCase { field: value }
+// For enum struct variant construction
+qualified_struct_cast = { ident ~ "::" ~ variant_name ~ struct_literal }
+
+// Qualified unit value: Option::None (just the qualified name, for unit variants)
+// Must come after qualified_type_cast and qualified_struct_cast so parens/braces are captured first
+qualified_unit_value = { ident ~ "::" ~ variant_name }
+
 // Struct-style type cast: TypeName {field: value}
 struct_type_cast = { ident ~ struct_literal }
 
 // Type cast with primitive type keywords that are reserved
 // Examples: LinExpr(5), String(42), Int(x), Bool(1), Constraint(x)
+// Note: primitive_type_keyword is defined at the top of the file
 primitive_type_cast = { primitive_type_keyword ~ "(" ~ args? ~ ")" }
-primitive_type_keyword = { "LinExpr" | "Constraint" | "String" | "Bool" | "Int" }
 
 // Tuple literal: (expr, expr) or (expr, expr, expr, ...)
 // Minimum 2 elements to distinguish from grouping
@@ -245,8 +286,10 @@ path_complete = { SOI ~ path ~ EOI }
 type_name_complete = { SOI ~ type_name ~ EOI }
 let_statement_complete = { SOI ~ let_statement ~ EOI }
 reify_statement_complete = { SOI ~ reify_statement ~ EOI }
+enum_statement_complete = { SOI ~ enum_statement ~ EOI }
 ident_complete = { SOI ~ ident ~ EOI }
 tuple_type_complete = { SOI ~ tuple_type ~ EOI }
 tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }
 struct_type_complete = { SOI ~ struct_type ~ EOI }
 struct_literal_complete = { SOI ~ struct_literal ~ EOI }
+qualified_type_name_complete = { SOI ~ qualified_type_name ~ EOI }

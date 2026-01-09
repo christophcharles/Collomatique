@@ -71,6 +71,32 @@ pub enum Statement {
         name: Spanned<String>,
         underlying: Spanned<TypeName>,
     },
+    EnumDecl {
+        name: Spanned<String>,
+        variants: Vec<Spanned<EnumVariant>>,
+    },
+}
+
+/// Represents a single enum variant
+/// e.g., Ok(Int), Error(String), None, TupleCase(Int, Bool), StructCase { field: Int }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumVariant {
+    pub name: Spanned<String>,
+    /// The underlying type for this variant:
+    /// - None for unit variants (no payload)
+    /// - Some with single type for simple variants like Ok(Int)
+    /// - Some with tuple type for multi-value variants like TupleCase(Int, Bool)
+    /// - Some with struct type for struct variants like StructCase { field: Int }
+    pub underlying: Option<Spanned<EnumVariantType>>,
+}
+
+/// The type specification for an enum variant
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnumVariantType {
+    /// Single type or tuple: (Int) or (Int, Bool)
+    Tuple(Vec<Spanned<TypeName>>),
+    /// Struct type: { field1: Type1, field2: Type2 }
+    Struct(Vec<(Spanned<String>, Spanned<TypeName>)>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +126,8 @@ pub enum SimpleTypeName {
     Bool,
     String,
     Other(String), // At parse time, we don't know if it's an object or custom type
+    /// Qualified type name like Result::Ok - (root, variant)
+    Qualified(String, String),
     EmptyList,
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
@@ -279,6 +307,22 @@ pub enum Expr {
         type_name: Spanned<String>,
         fields: Vec<(Spanned<String>, Spanned<Expr>)>,
     },
+
+    // Qualified type cast: Result::Ok(x), Option::None(), Option::None
+    // For enum variant construction
+    QualifiedTypeCast {
+        root: Spanned<String>,    // The enum name (e.g., "Result")
+        variant: Spanned<String>, // The variant name (e.g., "Ok")
+        args: Vec<Spanned<Expr>>, // Arguments (empty for unit variants)
+    },
+
+    // Qualified struct cast: MyEnum::StructCase { x: 1, y: 2 }
+    // For enum struct variant construction
+    QualifiedStructCast {
+        root: Spanned<String>,                         // The enum name
+        variant: Spanned<String>,                      // The variant name
+        fields: Vec<(Spanned<String>, Spanned<Expr>)>, // Field name-value pairs
+    },
 }
 
 // ============= Error Type =============
@@ -349,8 +393,9 @@ impl Statement {
             Rule::let_statement => Self::from_let_pest(pair),
             Rule::reify_statement => Self::from_reify_pest(pair),
             Rule::type_statement => Self::from_type_pest(pair),
+            Rule::enum_statement => Self::from_enum_pest(pair),
             _ => Err(AstError::UnexpectedRule {
-                expected: "let_statement, reify_statement, or type_statement",
+                expected: "let_statement, reify_statement, type_statement, or enum_statement",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),
@@ -503,6 +548,108 @@ impl Statement {
             name: name.ok_or(AstError::MissingName(span.clone()))?,
             underlying: underlying.ok_or(AstError::MissingTypeName(span))?,
         })
+    }
+
+    fn from_enum_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // enum_statement = { "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
+        let span = Span::from_pest(&pair);
+        let mut name = None;
+        let mut variants = Vec::new();
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::ident => {
+                    if name.is_none() {
+                        name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
+                    }
+                }
+                Rule::enum_variants => {
+                    variants = parse_enum_variants(inner_pair)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Statement::EnumDecl {
+            name: name.ok_or(AstError::MissingName(span.clone()))?,
+            variants,
+        })
+    }
+}
+
+fn parse_enum_variants(pair: Pair<Rule>) -> Result<Vec<Spanned<EnumVariant>>, AstError> {
+    // enum_variants = { enum_variant ~ ("|" ~ enum_variant)* }
+    let mut variants = Vec::new();
+    for variant_pair in pair.into_inner() {
+        if variant_pair.as_rule() == Rule::enum_variant {
+            let variant_span = Span::from_pest(&variant_pair);
+            let variant = parse_enum_variant(variant_pair)?;
+            variants.push(Spanned::new(variant, variant_span));
+        }
+    }
+    Ok(variants)
+}
+
+fn parse_enum_variant(pair: Pair<Rule>) -> Result<EnumVariant, AstError> {
+    // enum_variant = { variant_name ~ enum_variant_type? }
+    // variant_name = @{ "None" ~ !ident_char | ident }
+    let span = Span::from_pest(&pair);
+    let mut name = None;
+    let mut underlying = None;
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::variant_name | Rule::ident => {
+                name = Some(Spanned::new(
+                    inner_pair.as_str().to_string(),
+                    Span::from_pest(&inner_pair),
+                ));
+            }
+            Rule::enum_variant_type => {
+                let type_span = Span::from_pest(&inner_pair);
+                let variant_type = parse_enum_variant_type(inner_pair)?;
+                underlying = Some(Spanned::new(variant_type, type_span));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(EnumVariant {
+        name: name.ok_or(AstError::MissingName(span))?,
+        underlying,
+    })
+}
+
+fn parse_enum_variant_type(pair: Pair<Rule>) -> Result<EnumVariantType, AstError> {
+    // enum_variant_type = { "(" ~ (type_name ~ ("," ~ type_name)* ~ ","?)? ~ ")" | struct_type }
+    let mut types = vec![];
+    let mut is_struct = false;
+    let mut struct_fields = vec![];
+
+    for inner_pair in pair.into_inner() {
+        match inner_pair.as_rule() {
+            Rule::type_name => {
+                let type_span = Span::from_pest(&inner_pair);
+                types.push(Spanned::new(TypeName::from_pest(inner_pair)?, type_span));
+            }
+            Rule::struct_type => {
+                is_struct = true;
+                let fields = SimpleTypeName::from_struct_type(inner_pair)?;
+                if let SimpleTypeName::Struct(field_list) = fields {
+                    struct_fields = field_list;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if is_struct {
+        Ok(EnumVariantType::Struct(struct_fields))
+    } else {
+        Ok(EnumVariantType::Tuple(types))
     }
 }
 
@@ -684,6 +831,19 @@ impl SimpleTypeName {
     fn from_primitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
         match pair.as_rule() {
             Rule::primitive_type => {
+                // Check if there's a nested qualified_type_name
+                let mut inner = pair.clone().into_inner();
+                if let Some(first) = inner.next() {
+                    if first.as_rule() == Rule::qualified_type_name {
+                        // It's a qualified type like Result::Ok
+                        let mut idents = first.into_inner();
+                        let root = idents.next().unwrap().as_str().to_string();
+                        let variant = idents.next().unwrap().as_str().to_string();
+                        return Ok(SimpleTypeName::Qualified(root, variant));
+                    }
+                }
+
+                // Otherwise, it's a simple type name
                 let type_name = pair.as_str();
                 match type_name {
                     "None" => Ok(SimpleTypeName::None),
@@ -1203,6 +1363,9 @@ impl Expr {
             Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
             Rule::var_list_call => Self::from_var_list_call(inner),
+            Rule::qualified_type_cast => Self::from_qualified_type_cast(inner),
+            Rule::qualified_struct_cast => Self::from_qualified_struct_cast(inner),
+            Rule::qualified_unit_value => Self::from_qualified_unit_value(inner),
             Rule::complex_type_cast => Self::from_complex_type_cast(inner),
             Rule::struct_type_cast => Self::from_struct_type_cast(inner),
             Rule::primitive_type_cast => Self::from_primitive_type_cast(inner),
@@ -1746,6 +1909,106 @@ impl Expr {
         Ok(Expr::FnCall {
             name: name.ok_or(AstError::MissingName(span))?,
             args,
+        })
+    }
+
+    fn from_qualified_type_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // qualified_type_cast = { ident ~ "::" ~ variant_name ~ "(" ~ args? ~ ")" }
+        let span = Span::from_pest(&pair);
+        let mut idents = vec![];
+        let mut args = Vec::new();
+
+        for element in pair.into_inner() {
+            match element.as_rule() {
+                Rule::ident | Rule::variant_name => {
+                    let ident_span = Span::from_pest(&element);
+                    idents.push(Spanned::new(element.as_str().to_string(), ident_span));
+                }
+                Rule::args => {
+                    args = parse_args(element)?;
+                }
+                _ => {}
+            }
+        }
+
+        if idents.len() < 2 {
+            return Err(AstError::MissingName(span));
+        }
+
+        Ok(Expr::QualifiedTypeCast {
+            root: idents.remove(0),
+            variant: idents.remove(0),
+            args,
+        })
+    }
+
+    fn from_qualified_unit_value(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // qualified_unit_value = { ident ~ "::" ~ variant_name }
+        let span = Span::from_pest(&pair);
+        let mut idents = vec![];
+
+        for element in pair.into_inner() {
+            if matches!(element.as_rule(), Rule::ident | Rule::variant_name) {
+                let ident_span = Span::from_pest(&element);
+                idents.push(Spanned::new(element.as_str().to_string(), ident_span));
+            }
+        }
+
+        if idents.len() < 2 {
+            return Err(AstError::MissingName(span));
+        }
+
+        // Unit value is represented as a QualifiedTypeCast with empty args
+        Ok(Expr::QualifiedTypeCast {
+            root: idents.remove(0),
+            variant: idents.remove(0),
+            args: vec![],
+        })
+    }
+
+    fn from_qualified_struct_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // qualified_struct_cast = { ident ~ "::" ~ variant_name ~ struct_literal }
+        let span = Span::from_pest(&pair);
+        let mut idents = vec![];
+        let mut fields = Vec::new();
+
+        for element in pair.into_inner() {
+            match element.as_rule() {
+                Rule::ident | Rule::variant_name => {
+                    let ident_span = Span::from_pest(&element);
+                    idents.push(Spanned::new(element.as_str().to_string(), ident_span));
+                }
+                Rule::struct_literal => {
+                    // Parse struct_literal fields (same logic as from_struct_literal)
+                    for field_pair in element.into_inner() {
+                        if field_pair.as_rule() == Rule::struct_field_expr {
+                            let mut field_inner = field_pair.into_inner();
+
+                            let field_name_pair = field_inner.next().unwrap();
+                            let field_name_span = Span::from_pest(&field_name_pair);
+                            let name =
+                                Spanned::new(field_name_pair.as_str().to_string(), field_name_span);
+
+                            let expr_pair = field_inner.next().unwrap();
+                            let expr_span = Span::from_pest(&expr_pair);
+                            let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+
+                            fields.push((name, expr));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if idents.len() < 2 {
+            return Err(AstError::MissingName(span));
+        }
+
+        Ok(Expr::QualifiedStructCast {
+            root: idents.remove(0),
+            variant: idents.remove(0),
+            fields,
         })
     }
 
