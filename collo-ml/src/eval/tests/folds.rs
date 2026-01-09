@@ -519,7 +519,7 @@ fn rfold_simple() {
 
 #[test]
 fn rfold_order_matters() {
-    let input = "pub let f() -> Int = rfold x in [48, 2] with acc = 2 { x // acc };";
+    let input = "pub let f() -> Int = rfold x in [48, 2] with acc = 2 { x / acc };";
 
     let vars = HashMap::new();
 
@@ -535,8 +535,8 @@ fn rfold_order_matters() {
 
 #[test]
 fn rfold_vs_fold_division() {
-    let fold_input = "pub let fold_f() -> Int = fold x in [48, 2] with acc = 2 { x // acc };";
-    let rfold_input = "pub let rfold_f() -> Int = rfold x in [48, 2] with acc = 2 { x // acc };";
+    let fold_input = "pub let fold_f() -> Int = fold x in [48, 2] with acc = 2 { x / acc };";
+    let rfold_input = "pub let rfold_f() -> Int = rfold x in [48, 2] with acc = 2 { x / acc };";
 
     let vars = HashMap::new();
 

@@ -76,7 +76,7 @@ fn cardinality_in_comparisons() {
 
 #[test]
 fn cardinality_with_modulo() {
-    let cases = vec!["|@[Week]| % 4", "(|@[Student]| // 2) * $Var(x)"];
+    let cases = vec!["|@[Week]| % 4", "(|@[Student]| / 2) * $Var(x)"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);

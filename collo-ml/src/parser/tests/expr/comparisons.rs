@@ -97,7 +97,7 @@ fn comparison_with_arithmetic() {
         "student.age * 2 == 36",
         "|@[Student]| > 0",
         "(a + b) <= (c * 2)",
-        "x // 2 == 3",
+        "x / 2 == 3",
         "week % 2 == 0",
         "2 * $V1(x) + 3 * $V2(y) <= 10",
     ];

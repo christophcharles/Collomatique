@@ -3,7 +3,7 @@ use super::*;
 // =============================================================================
 // ARITHMETIC EXPRESSIONS
 // =============================================================================
-// Tests for arithmetic operations: +, -, *, //, %
+// Tests for arithmetic operations: +, -, *, /, %
 
 #[test]
 fn arithmetic_accepts_addition() {
@@ -48,11 +48,11 @@ fn arithmetic_accepts_multiplication() {
 #[test]
 fn arithmetic_accepts_integer_division() {
     let cases = vec![
-        "10 // 3",
-        "20 // 4",
-        "x // 2",
-        "student.age // 10",
-        "(10 + 5) // 3",
+        "10 / 3",
+        "20 / 4",
+        "x / 2",
+        "student.age / 10",
+        "(10 + 5) / 3",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -82,8 +82,8 @@ fn arithmetic_accepts_combined_operations() {
         "10 + 2 * 5",
         "x * y + z",
         "(a + b) * (c - d)",
-        "5 * 3 // 2",
-        "10 // 2 % 3",
+        "5 * 3 / 2",
+        "10 / 2 % 3",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -114,7 +114,7 @@ fn arithmetic_respects_operator_precedence() {
         "1 + 2 * 3",     // Should be 1 + (2 * 3) = 7, not (1 + 2) * 3 = 9
         "10 - 5 - 2",    // Should be (10 - 5) - 2 = 3 (left associative)
         "2 * 3 + 4 * 5", // Should be (2 * 3) + (4 * 5)
-        "10 // 2 + 3",   // Should be (10 // 2) + 3
+        "10 / 2 + 3",    // Should be (10 / 2) + 3
         "10 % 3 + 2",    // Should be (10 % 3) + 2
     ];
     for case in cases {
@@ -176,7 +176,7 @@ fn arithmetic_with_complex_coefficients() {
         "(10 - 5) * $V(y)",
         "(a * 2) * $V(x)",
         "((a + b) * 2) * $Var(x)",
-        "(|@[Student]| // 2) * $Var(x)",
+        "(|@[Student]| / 2) * $Var(x)",
         "(week % 4 + 1) * $V(week)",
     ];
     for case in cases {
@@ -234,14 +234,14 @@ fn arithmetic_variable_times_variable() {
 }
 
 #[test]
-fn arithmetic_rejects_single_slash_division() {
-    // Only // is allowed for integer division
+fn arithmetic_accepts_single_slash_division() {
+    // Single / is used for integer division
     let cases = vec!["10 / 2", "x / y", "20 / 4"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (single slash): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (division): {:?}",
             case,
             result
         );
@@ -255,8 +255,7 @@ fn arithmetic_rejects_incomplete_expressions() {
         "+ 5",
         "* 3",
         "2 * ",
-        "10 //",
-        "// 5",
+        "10 /",
         "x % ",
         "% 2",
         "$Var(x) +",
@@ -275,7 +274,7 @@ fn arithmetic_rejects_incomplete_expressions() {
 
 #[test]
 fn arithmetic_rejets_double_operators() {
-    let cases = vec!["5 + + 3", "x * * y", "x // // y"];
+    let cases = vec!["5 + + 3", "x * * y", "x / / y"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(

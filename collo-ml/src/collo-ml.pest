@@ -1,6 +1,6 @@
 // ========== General structure ==========
 WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
-COMMENT = _{ (!"##" ~ "#") ~ (!EOL ~ ANY)* }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | (!"///" ~ "//") ~ (!EOL ~ ANY)* }
 file = { SOI ~ statement* ~ EOI }
 
 // Raw strings with delimiter syntax
@@ -26,7 +26,7 @@ raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 statement = { let_statement | reify_statement | type_statement | enum_statement }
 
 docstring = ${
-    "##" ~ docstring_content ~ EOL
+    "///" ~ docstring_content ~ EOL
 }
 docstring_content = { (!EOL ~ ANY)* }
 EOL = _{ "\r\n" | "\n" | "\r" }
@@ -263,7 +263,7 @@ panic = { "panic!" ~ expr }
 add_op = { "+" }
 sub_op = { "-" }
 mul_op = { "*" }
-div_op = { "//" }
+div_op = { "/" }
 mod_op = { "%" }
 comp_op = { "===" | "<==" | ">==" | "==" | "!=" | "<=" | ">=" | "<" | ">" }
 in_op = @{ "in" ~ !ident_char }

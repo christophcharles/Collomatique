@@ -1,6 +1,6 @@
 let group_is_not_empty_if_next_group_is_not_empty(group: Group) -> Constraint =
-    # this works for last group too - because last+1 is never attributed, the
-    # corresponding reified variable will always be zero
+    /* this works for last group too - because last+1 is never attributed, the
+       corresponding reified variable will always be zero */
     $GroupHasStudents(group) >== $GroupHasStudents(group.next);
 
 pub let constraint() -> Constraint =

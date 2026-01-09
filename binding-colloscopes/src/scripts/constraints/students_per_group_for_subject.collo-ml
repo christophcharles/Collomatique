@@ -25,7 +25,7 @@ pub let constraint() -> Constraint =
                 }
             }
             _ as None {
-                # Will never happen, just put a trivial constraint
+                // Will never happen, just put a trivial constraint
                 0 === 0
             }
         }

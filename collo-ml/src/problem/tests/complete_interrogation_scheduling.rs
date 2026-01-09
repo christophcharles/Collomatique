@@ -142,15 +142,15 @@ fn complete_interrogations_scheduling() {
             Script {
                 name: "colles_constraints".into(),
                 content: r#"
-                    ## Each student has exactly one teacher per week
+                    /// Each student has exactly one teacher per week
                     pub let one_teacher_per_week() -> [Constraint] = [
                         sum t in [0..12] { $StudentWithTeacher(s, t, w) } === 1
                         for s in [0..11]
                         for w in [0..3]
                     ];
-                    
-                    ## Each student has each subject exactly once over the 3 weeks
-                    ## Subject 0: teachers 0-3, Subject 1: teachers 4-7, Subject 2: teachers 8-11
+
+                    /// Each student has each subject exactly once over the 3 weeks
+                    /// Subject 0: teachers 0-3, Subject 1: teachers 4-7, Subject 2: teachers 8-11
                     pub let each_subject_once() -> [Constraint] = [
                         sum t in [0..4] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
                         for s in [0..11]
@@ -161,8 +161,8 @@ fn complete_interrogations_scheduling() {
                         sum t in [8..12] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
                         for s in [0..11]
                     ];
-                    
-                    ## Each teacher interrogates at most 1 students per week
+
+                    /// Each teacher interrogates at most 1 students per week
                     pub let max_students_per_teacher() -> [Constraint] = [
                         sum s in [0..11] { $StudentWithTeacher(s, t, w) } <== 1
                         for t in [0..12]

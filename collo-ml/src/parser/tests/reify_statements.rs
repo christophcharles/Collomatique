@@ -65,8 +65,8 @@ fn reify_statement_with_descriptive_names() {
 #[test]
 fn reify_statement_with_single_docstring() {
     let cases = vec![
-        "## This reifies a constraint\nreify my_constraint as $MyVar;",
-        "## Check validity\nreify is_valid as $Valid;",
+        "/// This reifies a constraint\nreify my_constraint as $MyVar;",
+        "/// Check validity\nreify is_valid as $Valid;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -77,8 +77,8 @@ fn reify_statement_with_single_docstring() {
 #[test]
 fn reify_statement_with_multiple_docstrings() {
     let cases = vec![
-        "## First line\n## Second line\nreify student_has_subject as $HasSubject;",
-        "## Documentation\n## More docs\n## Even more\nreify check as $Check;",
+        "/// First line\n/// Second line\nreify student_has_subject as $HasSubject;",
+        "/// Documentation\n/// More docs\n/// Even more\nreify check as $Check;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -89,10 +89,10 @@ fn reify_statement_with_multiple_docstrings() {
 #[test]
 fn reify_statement_with_varied_whitespace() {
     let cases = vec![
-        "reify x as $X;",                      // minimal
-        "reify   constraint   as   $Var  ;",   // extra spaces
-        "reify\nconstraint\nas\n$Var\n;",      // newlines
-        "reify constraint as $Var; # comment", // trailing comment
+        "reify x as $X;",                       // minimal
+        "reify   constraint   as   $Var  ;",    // extra spaces
+        "reify\nconstraint\nas\n$Var\n;",       // newlines
+        "reify constraint as $Var; // comment", // trailing comment
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -218,10 +218,10 @@ fn reify_statement_allows_keyword_prefixes_in_names() {
 #[test]
 fn reify_statement_realistic_examples() {
     let cases = vec![
-        "## Ensure each student has at least one slot per week\nreify has_any_slot_per_week as $HasSlot;",
-        "## Room capacity constraint\nreify room_capacity_check as $CapacityOK;",
-        "## Student availability constraint\nreify student_available as $Available;",
-        "## Maximum colles per week\nreify max_colles_per_week as $MaxColles;",
+        "/// Ensure each student has at least one slot per week\nreify has_any_slot_per_week as $HasSlot;",
+        "/// Room capacity constraint\nreify room_capacity_check as $CapacityOK;",
+        "/// Student availability constraint\nreify student_available as $Available;",
+        "/// Maximum colles per week\nreify max_colles_per_week as $MaxColles;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -231,8 +231,8 @@ fn reify_statement_realistic_examples() {
 
 #[test]
 fn reify_statement_complete_example() {
-    let input = r#"## Check if student has any slot in subject for a week
-## This is used to ensure proper distribution
+    let input = r#"/// Check if student has any slot in subject for a week
+/// This is used to ensure proper distribution
 reify has_any_slot_in_subject as $HasSubject;"#;
     let result = ColloMLParser::parse(Rule::reify_statement, input);
     assert!(

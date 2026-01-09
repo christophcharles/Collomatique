@@ -45,8 +45,8 @@ fn let_statement_with_pub_modifier() {
 #[test]
 fn let_statement_with_single_docstring() {
     let cases = vec![
-        "## This is a docstring\nlet f() -> LinExpr = 5;",
-        "## Calculate something\nlet compute() -> Int = 42;",
+        "/// This is a docstring\nlet f() -> LinExpr = 5;",
+        "/// Calculate something\nlet compute() -> Int = 42;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -57,8 +57,8 @@ fn let_statement_with_single_docstring() {
 #[test]
 fn let_statement_with_multiple_docstrings() {
     let cases = vec![
-        "## First line\n## Second line\nlet f() -> LinExpr = 5;",
-        "## Line 1\n## Line 2\n## Line 3\npub let g() -> Constraint = $V() === 1;",
+        "/// First line\n/// Second line\nlet f() -> LinExpr = 5;",
+        "/// Line 1\n/// Line 2\n/// Line 3\npub let g() -> Constraint = $V() === 1;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -72,7 +72,7 @@ fn let_statement_with_varied_whitespace() {
         "let f()->LinExpr=5;",                 // no spaces
         "let   f  (  )  ->  LinExpr  =  5  ;", // many spaces
         "let f(\n) -> LinExpr\n= 5\n;",        // newlines
-        "let f() -> LinExpr = 5; # comment",   // trailing comment
+        "let f() -> LinExpr = 5; // comment",  // trailing comment
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -388,7 +388,7 @@ fn let_statement_with_arithmetic_expressions() {
         "let f() -> Int = 2 + 3;",
         "let g() -> Int = 10 - 5;",
         "let h() -> Int = 4 * 7;",
-        "let i() -> Int = 20 // 4;",
+        "let i() -> Int = 20 / 4;",
         "let j() -> Int = 17 % 5;",
         "let k() -> Int = 2 + 3 * 4;",
         "let l() -> Int = (2 + 3) * 4;",

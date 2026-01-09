@@ -141,7 +141,7 @@ fn parse_pub_let_statement() {
 
 #[test]
 fn parse_let_with_docstring() {
-    let input = "## This is a doc\nlet f() -> LinExpr = 5;";
+    let input = "/// This is a doc\nlet f() -> LinExpr = 5;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -156,7 +156,7 @@ fn parse_let_with_docstring() {
 
 #[test]
 fn parse_let_with_multiple_docstrings() {
-    let input = "## This is a doc\n## Second line\nlet f() -> LinExpr = 5;";
+    let input = "/// This is a doc\n/// Second line\nlet f() -> LinExpr = 5;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -172,7 +172,7 @@ fn parse_let_with_multiple_docstrings() {
 
 #[test]
 fn parse_pub_let_with_docstring() {
-    let input = "## Documentation\npub let f() -> Int = 10;";
+    let input = "/// Documentation\npub let f() -> Int = 10;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -238,7 +238,7 @@ fn parse_reify_statement_with_var_list() {
 
 #[test]
 fn parse_reify_with_docstring() {
-    let input = "## Reify this constraint\nreify my_constraint as $MyVar;";
+    let input = "/// Reify this constraint\nreify my_constraint as $MyVar;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -253,7 +253,7 @@ fn parse_reify_with_docstring() {
 
 #[test]
 fn parse_reify_with_multiple_docstrings() {
-    let input = "## First line\n## Second line\nreify constraint as $Var;";
+    let input = "/// First line\n/// Second line\nreify constraint as $Var;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

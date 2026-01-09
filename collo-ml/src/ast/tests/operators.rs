@@ -77,7 +77,7 @@ fn parse_multiplication() {
 
 #[test]
 fn parse_division() {
-    let input = "let f() -> Int = 20 // 4;";
+    let input = "let f() -> Int = 20 / 4;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

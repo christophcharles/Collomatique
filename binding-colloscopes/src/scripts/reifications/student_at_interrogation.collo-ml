@@ -1,5 +1,5 @@
 let student_at_interrogation_in_group(student: Student, interrogation: Interrogation, group: Group) -> Constraint =
-    # Use inequalities to reduce the amount of helper variables
+    // Use inequalities to reduce the amount of helper variables
     $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation, group.num) >== 1;
 
 reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
@@ -10,10 +10,10 @@ let student_in_prefilled_group(student: Student, group_list: GroupList) -> Bool 
     };
 
 let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
-    # returns -1 if no group corresponds
+    // returns -1 if no group corresponds
     fold group in group_list.groups with result = -1 {
-        # with a consistent database only one such group might exists
-        # but in principle this code returns the last one found
+        /* with a consistent database only one such group might exists
+           but in principle this code returns the last one found */
         if student in group.prefilled_students {
             group.num
         } else {
@@ -31,4 +31,4 @@ pub let student_at_interrogation(student: Student, interrogation: Interrogation)
         sum group in interrogation.group_list.groups where !group.sealed {
             $StudentAtInterrogationInGroup(student, interrogation, group)
         }
-    } >== 1; # Test for bigger than one: we can't actually exceed it but this will save some reification constraints
+    } >== 1; // Test for bigger than one: we can't actually exceed it but this will save some reification constraints

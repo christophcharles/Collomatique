@@ -381,7 +381,7 @@ fn mul_chain() {
 
 #[test]
 fn div_two_ints() {
-    let input = "pub let f() -> Int = 10 // 2;";
+    let input = "pub let f() -> Int = 10 / 2;";
 
     let vars = HashMap::new();
 
@@ -395,7 +395,7 @@ fn div_two_ints() {
 
 #[test]
 fn div_integer_division() {
-    let input = "pub let f() -> Int = 7 // 2;";
+    let input = "pub let f() -> Int = 7 / 2;";
 
     let vars = HashMap::new();
 
@@ -409,7 +409,7 @@ fn div_integer_division() {
 
 #[test]
 fn div_exact() {
-    let input = "pub let f() -> Int = 42 // 6;";
+    let input = "pub let f() -> Int = 42 / 6;";
 
     let vars = HashMap::new();
 
@@ -423,7 +423,7 @@ fn div_exact() {
 
 #[test]
 fn div_with_params() {
-    let input = "pub let f(x: Int, y: Int) -> Int = x // y;";
+    let input = "pub let f(x: Int, y: Int) -> Int = x / y;";
 
     let vars = HashMap::new();
 
@@ -437,7 +437,7 @@ fn div_with_params() {
 
 #[test]
 fn div_negative_numerator() {
-    let input = "pub let f() -> Int = -10 // 3;";
+    let input = "pub let f() -> Int = -10 / 3;";
 
     let vars = HashMap::new();
 
@@ -545,7 +545,7 @@ fn mixed_add_mul_precedence() {
 
 #[test]
 fn mixed_sub_div_precedence() {
-    let input = "pub let f() -> Int = 20 - 10 // 2;";
+    let input = "pub let f() -> Int = 20 - 10 / 2;";
 
     let vars = HashMap::new();
 
@@ -574,7 +574,7 @@ fn mixed_operations_with_parentheses() {
 
 #[test]
 fn complex_arithmetic_expression() {
-    let input = "pub let f() -> Int = (10 + 5) * 2 - 8 // 4 + 3 % 2;";
+    let input = "pub let f() -> Int = (10 + 5) * 2 - 8 / 4 + 3 % 2;";
 
     let vars = HashMap::new();
 

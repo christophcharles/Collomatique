@@ -165,7 +165,7 @@ fn match_with_arithmetic_bodies() {
     let cases = vec![
         "match x { i as Int { x * 2 } other { 0 } }",
         "match value { v as Student { value.age + 10 } }",
-        "match item { i as Int { item // 2 } b as Bool { 1 } }",
+        "match item { i as Int { item / 2 } b as Bool { 1 } }",
         "match x { i as Int { (x + 5) * 2 } other { x - 1 } }",
     ];
     for case in cases {

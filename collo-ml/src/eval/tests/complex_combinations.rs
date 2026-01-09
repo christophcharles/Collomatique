@@ -497,15 +497,15 @@ fn function_composition_with_reified_vars() {
 #[test]
 fn assignment_constraint_pattern() {
     let input = r#"
-    # Each student must be assigned to exactly one time slot
-    let exactly_one_slot(student: Int, slots: [Int]) -> Constraint = 
+    // Each student must be assigned to exactly one time slot
+    let exactly_one_slot(student: Int, slots: [Int]) -> Constraint =
         sum slot in slots { $Assigned(student, slot) } === 1;
-    
-    # Total assignments per slot must not exceed capacity
-    let slot_capacity(slot: Int, students: [Int], capacity: Int) -> Constraint = 
+
+    // Total assignments per slot must not exceed capacity
+    let slot_capacity(slot: Int, students: [Int], capacity: Int) -> Constraint =
         sum student in students { $Assigned(student, slot) } <== capacity;
-    
-    pub let f(students: [Int], slots: [Int], capacity: Int) -> Constraint = 
+
+    pub let f(students: [Int], slots: [Int], capacity: Int) -> Constraint =
         forall student in students { exactly_one_slot(student, slots) } and
         forall slot in slots { slot_capacity(slot, students, capacity) };
     "#;
@@ -584,13 +584,13 @@ fn assignment_constraint_pattern() {
 #[test]
 fn conditional_constraint_with_reification() {
     let input = r#"
-    # Create an indicator variable for a constraint
-    let student_available(student: Int, time: Int) -> Constraint = 
+    // Create an indicator variable for a constraint
+    let student_available(student: Int, time: Int) -> Constraint =
         $Available(student, time) === 1;
     reify student_available as $IsAvailable;
-    
-    # Only assign if available
-    pub let f(student: Int, time: Int) -> Constraint = 
+
+    // Only assign if available
+    pub let f(student: Int, time: Int) -> Constraint =
         $Assigned(student, time) <== $IsAvailable(student, time);
     "#;
 
@@ -968,19 +968,19 @@ fn let_expr_in_deeply_nested_structure() {
 #[test]
 fn all_features_combined() {
     let input = r#"
-    # Helper to check if value is in valid range
+    // Helper to check if value is in valid range
     let in_range(x: Int, min: Int, max: Int) -> Bool = x >= min and x <= max;
-    
-    # Create base constraints
+
+    // Create base constraints
     let base_constraint(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify base_constraint as $MyVar;
-    
-    # Filter valid pairs
-    let valid_pairs(xs: [Int], ys: [Int]) -> [Int] = 
+
+    // Filter valid pairs
+    let valid_pairs(xs: [Int], ys: [Int]) -> [Int] =
         [x + y for x in xs for y in ys where in_range(x + y, 1, 10)];
-    
-    # Main constraint builder
-    pub let f(xs: [Int], ys: [Int]) -> Constraint = 
+
+    // Main constraint builder
+    pub let f(xs: [Int], ys: [Int]) -> Constraint =
         if |valid_pairs(xs, ys)| > 0 {
             forall x in xs {
                 forall y in ys where in_range(x + y, 1, 10) {
@@ -1054,36 +1054,36 @@ fn all_features_combined() {
 #[test]
 fn all_features_combined_with_let() {
     let input = r#"
-    # Helper to check if value is in valid range
-    let in_range(x: Int, min: Int, max: Int) -> Bool = 
+    // Helper to check if value is in valid range
+    let in_range(x: Int, min: Int, max: Int) -> Bool =
         let lower_check = x >= min {
             let upper_check = x <= max {
                 lower_check and upper_check
             }
         };
-    
-    # Create base constraints
+
+    // Create base constraints
     let base_constraint(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify base_constraint as $MyVar;
-    
-    # Filter valid pairs using let
-    let valid_pairs(xs: [Int], ys: [Int]) -> [Int] = 
+
+    // Filter valid pairs using let
+    let valid_pairs(xs: [Int], ys: [Int]) -> [Int] =
         let range_min = 1 {
             let range_max = 10 {
                 [x + y for x in xs for y in ys where in_range(x + y, range_min, range_max)]
             }
         };
-    
-    # Compute a threshold using let
+
+    // Compute a threshold using let
     let compute_threshold(xs: [Int]) -> Int =
         let base = |xs| {
             let multiplier = 2 {
                 base + multiplier
             }
         };
-    
-    # Main constraint builder with let expressions
-    pub let f(xs: [Int], ys: [Int]) -> Constraint = 
+
+    // Main constraint builder with let expressions
+    pub let f(xs: [Int], ys: [Int]) -> Constraint =
         let valid = valid_pairs(xs, ys) {
             let threshold = compute_threshold(xs) {
                 if |valid| > 0 {

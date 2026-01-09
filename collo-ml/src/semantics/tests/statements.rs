@@ -328,7 +328,7 @@ fn variable_call_in_constraint() {
 #[test]
 fn let_with_docstring() {
     let input = r#"
-        ## This is a docstring
+        /// This is a docstring
         pub let f() -> Int = 42;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -343,9 +343,9 @@ fn let_with_docstring() {
 #[test]
 fn let_with_multiple_docstrings() {
     let input = r#"
-        ## First line
-        ## Second line
-        ## Third line
+        /// First line
+        /// Second line
+        /// Third line
         pub let f() -> Int = 42;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -361,7 +361,7 @@ fn let_with_multiple_docstrings() {
 fn reify_with_docstring() {
     let input = r#"
         pub let c() -> Constraint = 0 === 1;
-        ## Docstring for reify
+        /// Docstring for reify
         reify c as $MyVar;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());

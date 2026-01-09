@@ -383,7 +383,7 @@ fn deeply_nested_function_origin() {
 #[test]
 fn docstring_substitution_with_args() {
     let input = r#"
-    ## @{x} must be smaller than 1.
+    /// @{x} must be smaller than 1.
     let h(x: Int) -> Constraint = x <== 1;
     pub let f() -> Constraint = h(1) and h(2);
     "#;
@@ -431,10 +431,10 @@ fn docstring_substitution_with_args() {
 #[test]
 fn multiline_docstring_multiple_params() {
     let input = r#"
-    ## Constraint on @{x} and @{y}:
-    ## - @{x} must be less than @{y}
-    ## - Their sum must be positive
-    let range_check(x: Int, y: Int) -> Constraint = 
+    /// Constraint on @{x} and @{y}:
+    /// - @{x} must be less than @{y}
+    /// - Their sum must be positive
+    let range_check(x: Int, y: Int) -> Constraint =
         (x <== y) and ((x + y) >== 0);
     pub let test() -> Constraint = range_check(5, 10);
     "#;
@@ -472,7 +472,7 @@ fn multiline_docstring_multiple_params() {
 #[test]
 fn repeated_parameter_substitution() {
     let input = r#"
-    ## The value @{val} is compared to itself: @{val} === @{val}
+    /// The value @{val} is compared to itself: @{val} === @{val}
     let self_compare(val: Int) -> Constraint = val === val;
     pub let test() -> Constraint = self_compare(42);
     "#;

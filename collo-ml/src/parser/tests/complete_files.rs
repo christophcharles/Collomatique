@@ -15,7 +15,7 @@ fn file_accepts_empty_program() {
 
 #[test]
 fn file_accepts_only_comments() {
-    let program = "# comment\n# another comment\n# more comments";
+    let program = "// comment\n// another comment\n// more comments";
     let result = ColloMLParser::parse(Rule::file, program);
     assert!(
         result.is_ok(),
@@ -96,14 +96,14 @@ pub let c() -> Constraint = $Var1() === 0 and $Var2() === 1;
 #[test]
 fn file_accepts_statements_with_docstrings() {
     let program = r#"
-## This is a docstring for the first function
+/// This is a docstring for the first function
 let compute_value() -> LinExpr = 42;
 
-## This is a constraint
-## It has multiple lines of documentation
+/// This is a constraint
+/// It has multiple lines of documentation
 reify my_constraint as $MyConstraint;
 
-## Public function
+/// Public function
 pub let final_result() -> Constraint = $MyConstraint() === 1;
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
@@ -117,14 +117,14 @@ pub let final_result() -> Constraint = $MyConstraint() === 1;
 #[test]
 fn file_accepts_statements_with_comments() {
     let program = r#"
-# This is a regular comment
+// This is a regular comment
 let a() -> LinExpr = 5;
 
-# Another comment
-let b() -> LinExpr = 10; # trailing comment
+// Another comment
+let b() -> LinExpr = 10; // trailing comment
 
-# Comment before reify
-reify constraint as $Var; # trailing comment
+// Comment before reify
+reify constraint as $Var; // trailing comment
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
     assert!(
@@ -137,19 +137,19 @@ reify constraint as $Var; # trailing comment
 #[test]
 fn file_accepts_realistic_small_program() {
     let program = r#"
-## Define a linear expression counting assignments
-let count_assignments(student: Student) -> LinExpr = 
+/// Define a linear expression counting assignments
+let count_assignments(student: Student) -> LinExpr =
     sum week in @[Week] { $Assigned(student, week) };
 
-## Ensure each student has at least one assignment
-let min_assignments(student: Student) -> Constraint = 
+/// Ensure each student has at least one assignment
+let min_assignments(student: Student) -> Constraint =
     count_assignments(student) >== 1;
 
-## Reify the minimum assignment constraint
+/// Reify the minimum assignment constraint
 reify min_assignments as $MinAssignments;
 
-## Public final constraint combining reified variables
-pub let enforce_all_rules() -> Constraint = 
+/// Public final constraint combining reified variables
+pub let enforce_all_rules() -> Constraint =
     forall s in @[Student] { $MinAssignments(s) === 1 };
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
@@ -163,23 +163,23 @@ pub let enforce_all_rules() -> Constraint =
 #[test]
 fn file_accepts_realistic_medium_program() {
     let program = r#"
-## Define a linear expression for total assignments
-let compute_total(x: Student) -> LinExpr = 
+/// Define a linear expression for total assignments
+let compute_total(x: Student) -> LinExpr =
     sum w in @[Week] { $Assigned(x, w) };
 
-## Define a capacity constraint for rooms
-let enforce_capacity() -> Constraint = 
-    forall r in @[Room] { 
-        sum s in @[Student] { $InRoom(s, r) } <== r.capacity 
+/// Define a capacity constraint for rooms
+let enforce_capacity() -> Constraint =
+    forall r in @[Room] {
+        sum s in @[Student] { $InRoom(s, r) } <== r.capacity
     };
 
-## Reify the capacity constraint
+/// Reify the capacity constraint
 reify enforce_capacity as $CapacityOK;
 
-## Public constraint combining multiple rules
-pub let final_rule() -> Constraint = 
-    $CapacityOK() === 1 and forall x in @[Student] { 
-        compute_total(x) >== 1 
+/// Public constraint combining multiple rules
+pub let final_rule() -> Constraint =
+    $CapacityOK() === 1 and forall x in @[Student] {
+        compute_total(x) >== 1
     };
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
@@ -193,37 +193,37 @@ pub let final_rule() -> Constraint =
 #[test]
 fn file_accepts_complex_realistic_program() {
     let program = r#"
-## Calculate the number of slots a student is assigned to in a week
+/// Calculate the number of slots a student is assigned to in a week
 let student_slots_per_week(student: Student, week: Week) -> LinExpr =
     sum slot in @[Slot] { $StudentInSlot(student, slot, week) };
 
-## Check if a student has a subject in a given week
+/// Check if a student has a subject in a given week
 let has_subject_in_week(subject: Subject, student: Student, week: Week) -> Constraint =
     sum slot in subject.slots { $StudentInSlot(student, slot, week) } >== 1;
 
-## Ensure students don't exceed maximum slots per week
+/// Ensure students don't exceed maximum slots per week
 let max_slots_per_week(student: Student) -> Constraint =
     forall week in @[Week] {
         student_slots_per_week(student, week) <== student.max_slots
     };
 
-## Reify the maximum slots constraint
+/// Reify the maximum slots constraint
 reify max_slots_per_week as $MaxSlots;
 
-## Ensure each student is assigned to exactly one slot per subject per week
+/// Ensure each student is assigned to exactly one slot per subject per week
 let one_slot_per_subject_per_week(student: Student) -> Constraint =
     forall subject in @[Subject] {
         forall week in @[Week] {
-            sum slot in subject.slots { 
-                $StudentInSlot(student, slot, week) 
+            sum slot in subject.slots {
+                $StudentInSlot(student, slot, week)
             } === 1
         }
     };
 
-## Reify the one slot per subject constraint
+/// Reify the one slot per subject constraint
 reify one_slot_per_subject_per_week as $OneSlotPerSubject;
 
-## Room capacity constraint
+/// Room capacity constraint
 let room_capacity_check(room: Room) -> Constraint =
     forall week in @[Week] {
         forall slot in room.slots {
@@ -233,10 +233,10 @@ let room_capacity_check(room: Room) -> Constraint =
         }
     };
 
-## Reify room capacity
+/// Reify room capacity
 reify room_capacity_check as $RoomCapacity;
 
-## Public final constraint enforcing all rules
+/// Public final constraint enforcing all rules
 pub let enforce_schedule_rules() -> Constraint =
     forall student in @[Student] {
         $MaxSlots(student) === 1 and $OneSlotPerSubject(student) === 1

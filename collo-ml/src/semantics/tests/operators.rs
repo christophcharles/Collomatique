@@ -420,7 +420,7 @@ fn multiplication() {
 
 #[test]
 fn integer_division() {
-    let input = "pub let f(x: Int, y: Int) -> Int = x // y;";
+    let input = "pub let f(x: Int, y: Int) -> Int = x / y;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
