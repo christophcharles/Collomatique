@@ -132,13 +132,16 @@ fn match_multiple_int_branches() {
     assert_eq!(result_none, ExprValue::Int(3));
 }
 
-// ========== Type Conversion (into) Tests ==========
+// ========== Type Conversion in Match Tests ==========
+// Note: The `into` keyword was removed from match branches.
+// Type conversions should be done explicitly in the body using C-like syntax: LinExpr(x)
 
 #[test]
 fn match_int_to_linexpr_conversion() {
+    // Conversion is now done in the body using LinExpr(i)
     let input = r#"
-        pub let f(x: Int) -> LinExpr = match x { 
-            i as Int into LinExpr { $V(i) } 
+        pub let f(x: Int) -> LinExpr = match x {
+            i as Int { $V(LinExpr(i)) }
         };
     "#;
 
@@ -164,11 +167,12 @@ fn match_int_to_linexpr_conversion() {
 }
 
 #[test]
-fn match_into_without_as() {
+fn match_int_branch_with_conversion_in_body() {
+    // The `into` in match branches was removed - conversion is done in the body
     let input = r#"
-        pub let f(x: Int | Bool) -> LinExpr | Bool = match x { 
-            b as Bool { b } 
-            i into LinExpr { $V(i) } 
+        pub let f(x: Int | Bool) -> LinExpr | Bool = match x {
+            b as Bool { b }
+            i as Int { $V(LinExpr(i)) }
         };
     "#;
 
@@ -199,10 +203,12 @@ fn match_into_without_as() {
 
 #[test]
 fn match_emptylist_to_list_conversion() {
+    // Note: The `into` in match branches was removed
+    // Using `as []` to match empty list, conversion in body
     let input = r#"
-        pub let f(x: [] | Int) -> [Int] | Int = match x { 
-            i as Int { i } 
-            lst into [Int] { [1, 2, 3] } 
+        pub let f(x: [] | Int) -> [Int] | Int = match x {
+            i as Int { i }
+            lst as [] { [1, 2, 3] }
         };
     "#;
 
@@ -292,9 +298,9 @@ fn match_multiple_filtered_branches() {
 #[test]
 fn match_where_with_original_variable() {
     let input = r#"
-        pub let f(x: Int) -> LinExpr = match x { 
-            i as Int into LinExpr where x > 0 { $V(i) } 
-            j as Int into LinExpr { $V2() }
+        pub let f(x: Int) -> LinExpr = match x {
+            i as Int where x > 0 { $V(LinExpr(i)) }
+            j as Int { $V2() }
         };
     "#;
 
@@ -586,9 +592,9 @@ fn match_with_list_comprehension_in_branch() {
 #[test]
 fn match_returning_linexpr() {
     let input = r#"
-        pub let f(x: Int | Bool) -> LinExpr = match x { 
-            i as Int into LinExpr { $V(i) } 
-            b as Bool { $V2() } 
+        pub let f(x: Int | Bool) -> LinExpr = match x {
+            i as Int { $V(LinExpr(i)) }
+            b as Bool { $V2() }
         };
     "#;
 
@@ -630,9 +636,9 @@ fn match_returning_linexpr() {
 #[test]
 fn match_returning_constraint() {
     let input = r#"
-        pub let f(x: Int | Bool) -> Constraint = match x { 
-            i as Int into LinExpr { $V(i) === 0 } 
-            b as Bool { if b { 0 === 0 } else { 1 === 0 } } 
+        pub let f(x: Int | Bool) -> Constraint = match x {
+            i as Int { $V(LinExpr(i)) === 0 }
+            b as Bool { if b { 0 === 0 } else { 1 === 0 } }
         };
     "#;
 
@@ -678,10 +684,10 @@ fn match_returning_constraint() {
 #[test]
 fn match_complex_type_dispatch() {
     let input = r#"
-        pub let f(value: Int | Bool | [Int]) -> Constraint = match value { 
-            i as Int into LinExpr { $V(i) === 0 } 
-            b as Bool { if b { 0 === 0 } else { 1 === 0 } } 
-            lst as [Int] { sum x in lst { $V(x into LinExpr) } === 10 } 
+        pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
+            i as Int { $V(LinExpr(i)) === 0 }
+            b as Bool { if b { 0 === 0 } else { 1 === 0 } }
+            lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;
 

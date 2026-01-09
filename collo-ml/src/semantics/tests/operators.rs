@@ -767,7 +767,7 @@ fn in_operator_type_mismatch() {
 
 #[test]
 fn in_operator_with_conversion() {
-    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = (x into LinExpr) in xs;";
+    let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = (LinExpr(x)) in xs;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

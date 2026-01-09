@@ -290,8 +290,8 @@ fn type_forward_reference_simple() {
     let input = r#"
         type A = [B];
         type B = Int;
-        pub let f() -> A = [5 into B] into A;
-        pub let unwrap(a: A) -> [Int] = [x into Int for x in a into [B]];
+        pub let f() -> A = A([B(5)]);
+        pub let unwrap(a: A) -> [Int] = [Int(x) for x in [B](a)];
     "#;
 
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
@@ -312,9 +312,9 @@ fn type_forward_reference_simple() {
 #[test]
 fn type_forward_reference_in_function() {
     let input = r#"
-        pub let f() -> B = 5 into B;
+        pub let f() -> B = B(5);
         type B = Int;
-        pub let unwrap(b: B) -> Int = b into Int;
+        pub let unwrap(b: B) -> Int = Int(b);
     "#;
 
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
@@ -340,7 +340,7 @@ fn guarded_recursion_tree_structure() {
         type Tree = (Int, [Tree]);
         pub let value(t: Tree) -> Int = t.0;
         pub let children(t: Tree) -> [Tree] = t.1;
-        pub let leaf(v: Int) -> Tree = (v, []) into Tree;
+        pub let leaf(v: Int) -> Tree = Tree(v, []);
     "#;
 
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
@@ -372,8 +372,8 @@ fn recursive_function_with_recursive_type() {
         type Tree = (Int, [Tree]);
         pub let sum_tree(t: Tree) -> Int =
             t.0 + (sum c in t.1 { sum_tree(c) });
-        pub let leaf(v: Int) -> Tree = (v, []) into Tree;
-        pub let node(v: Int, children: [Tree]) -> Tree = (v, children) into Tree;
+        pub let leaf(v: Int) -> Tree = Tree(v, []);
+        pub let node(v: Int, children: [Tree]) -> Tree = Tree(v, children);
     "#;
 
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
@@ -452,7 +452,7 @@ fn reify_forward_reference_list() {
 #[test]
 fn mixed_function_and_type_forward_refs() {
     let input = r#"
-        pub let make_point() -> Point = (0, 0) into Point;
+        pub let make_point() -> Point = Point(0, 0);
         type Point = (Int, Int);
         pub let get_x(p: Point) -> Int = p.0;
         pub let get_y(p: Point) -> Int = p.1;
@@ -478,7 +478,7 @@ fn mixed_function_and_type_forward_refs() {
 #[test]
 fn complex_forward_reference_scenario() {
     let input = r#"
-        pub let create_tree() -> Tree = (0, []) into Tree;
+        pub let create_tree() -> Tree = Tree(0, []);
         type Tree = (Int, [Tree]);
         pub let tree_value(t: Tree) -> Int = helper(t);
         let helper(t: Tree) -> Int = t.0;

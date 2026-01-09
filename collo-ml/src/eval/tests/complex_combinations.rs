@@ -342,7 +342,7 @@ fn nested_if_with_variables() {
                 $MyVar(x) 
             }
         } else { 
-            x into LinExpr 
+            LinExpr(x) 
         };
     "#;
 
@@ -988,7 +988,7 @@ fn all_features_combined() {
                 }
             } and (sum x in xs { sum y in ys { $MyVar(x, y) } } <== 5)
         } else {
-            (0 into LinExpr) === (0 into LinExpr)
+            LinExpr(0) === LinExpr(0)
         };
     "#;
 
@@ -1095,7 +1095,7 @@ fn all_features_combined_with_let() {
                         } and (sum x in xs { sum y in ys { $MyVar(x, y) } } <== bound_value)
                     }
                 } else {
-                    let zero_expr = 0 into LinExpr {
+                    let zero_expr = LinExpr(0) {
                         zero_expr === zero_expr
                     }
                 }

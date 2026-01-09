@@ -312,7 +312,7 @@ fn duplicate_parameter_names() {
 
 #[test]
 fn unknown_type_in_parameter() {
-    let input = "pub let f(x: UnknownType) -> LinExpr = 5 into LinExpr;";
+    let input = "pub let f(x: UnknownType) -> LinExpr = LinExpr(5);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 1);

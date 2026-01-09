@@ -877,7 +877,7 @@ fn conversion_in_sum_body() {
 
 #[test]
 fn explicit_cast_int_to_linexpr() {
-    let input = "pub let f() -> LinExpr = 42 into LinExpr;";
+    let input = "pub let f() -> LinExpr = LinExpr(42);";
 
     let vars = HashMap::new();
 
@@ -897,7 +897,7 @@ fn explicit_cast_int_to_linexpr() {
 
 #[test]
 fn explicit_cast_in_expression() {
-    let input = "pub let f() -> LinExpr = (5 into LinExpr) + (10 into LinExpr);";
+    let input = "pub let f() -> LinExpr = (LinExpr(5)) + (LinExpr(10));";
 
     let vars = HashMap::new();
 
@@ -917,7 +917,7 @@ fn explicit_cast_in_expression() {
 
 #[test]
 fn explicit_cast_param() {
-    let input = "pub let f(x: Int) -> LinExpr = x into LinExpr;";
+    let input = "pub let f(x: Int) -> LinExpr = LinExpr(x);";
 
     let vars = HashMap::new();
 
@@ -937,7 +937,7 @@ fn explicit_cast_param() {
 
 #[test]
 fn explicit_cast_list_type() {
-    let input = "pub let f() -> [Int] = [] into [Int];";
+    let input = "pub let f() -> [Int] = [Int]([]);";
 
     let vars = HashMap::new();
 
@@ -952,7 +952,7 @@ fn explicit_cast_list_type() {
 
 #[test]
 fn explicit_cast_list_of_linexpr() {
-    let input = "pub let f() -> [LinExpr] = [1, 2, 3] into [LinExpr];";
+    let input = "pub let f() -> [LinExpr] = [LinExpr]([1, 2, 3]);";
 
     let vars = HashMap::new();
 
@@ -973,7 +973,7 @@ fn explicit_cast_list_of_linexpr() {
 
 #[test]
 fn explicit_cast_in_sum() {
-    let input = "pub let f() -> LinExpr = sum x in [1 into LinExpr, 2, 3] { x into LinExpr };";
+    let input = "pub let f() -> LinExpr = sum x in [LinExpr(1), 2, 3] { LinExpr(x) };";
 
     let vars = HashMap::new();
 
@@ -994,7 +994,8 @@ fn explicit_cast_in_sum() {
 
 #[test]
 fn explicit_cast_in_forall() {
-    let input = "pub let f() -> Constraint = forall x in ([1, 2] into [LinExpr]) { x === (1 into LinExpr) };";
+    let input =
+        "pub let f() -> Constraint = forall x in ([LinExpr]([1, 2])) { x === (LinExpr(1)) };";
 
     let vars = HashMap::new();
 
@@ -1014,7 +1015,7 @@ fn explicit_cast_in_forall() {
 
 #[test]
 fn explicit_cast_complex_expression() {
-    let input = "pub let f(x: Int) -> LinExpr = ((x + 5) * 2) into LinExpr;";
+    let input = "pub let f(x: Int) -> LinExpr = LinExpr((x + 5) * 2);";
 
     let vars = HashMap::new();
 
@@ -1035,8 +1036,7 @@ fn explicit_cast_complex_expression() {
 
 #[test]
 fn explicit_cast_in_if_branches() {
-    let input =
-        "pub let f(x: Int) -> LinExpr = if x > 0 { x into LinExpr } else { 0 into LinExpr };";
+    let input = "pub let f(x: Int) -> LinExpr = if x > 0 { LinExpr(x) } else { LinExpr(0) };";
 
     let vars = HashMap::new();
 
@@ -1071,7 +1071,7 @@ fn explicit_cast_in_if_branches() {
 fn conversion_return_type_int_to_linexpr() {
     let input = r#"
     let helper() -> Int = 42;
-    pub let f() -> LinExpr = helper() into LinExpr;
+    pub let f() -> LinExpr = LinExpr(helper());
     "#;
 
     let vars = HashMap::new();
@@ -1094,7 +1094,7 @@ fn conversion_return_type_int_to_linexpr() {
 fn conversion_return_type_with_arithmetic() {
     let input = r#"
     let helper() -> Int = 10;
-    pub let f() -> LinExpr = (helper() + helper()) into LinExpr;
+    pub let f() -> LinExpr = LinExpr(helper() + helper());
     "#;
 
     let vars = HashMap::new();
@@ -1115,7 +1115,7 @@ fn conversion_return_type_with_arithmetic() {
 
 #[test]
 fn conversion_param_to_return_type() {
-    let input = "pub let f(x: Int) -> LinExpr = x into LinExpr;";
+    let input = "pub let f(x: Int) -> LinExpr = LinExpr(x);";
 
     let vars = HashMap::new();
 
@@ -1137,7 +1137,7 @@ fn conversion_param_to_return_type() {
 
 #[test]
 fn mixed_implicit_and_explicit_conversion() {
-    let input = "pub let f() -> LinExpr = (5 into LinExpr) + $V() + 10;";
+    let input = "pub let f() -> LinExpr = (LinExpr(5)) + $V() + 10;";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -1160,7 +1160,7 @@ fn mixed_implicit_and_explicit_conversion() {
 
 #[test]
 fn conversion_with_collection_operations() {
-    let input = "pub let f() -> [LinExpr] = ([1, 2] into [LinExpr]) + ([3, 4] into [LinExpr]);";
+    let input = "pub let f() -> [LinExpr] = ([LinExpr]([1, 2])) + ([LinExpr]([3, 4]));";
 
     let vars = HashMap::new();
 
@@ -1181,7 +1181,7 @@ fn conversion_with_collection_operations() {
 
 #[test]
 fn nested_casts() {
-    let input = "pub let f() -> LinExpr = ((5 into LinExpr) into LinExpr);";
+    let input = "pub let f() -> LinExpr = LinExpr(LinExpr(5));";
 
     let vars = HashMap::new();
 
@@ -1201,7 +1201,7 @@ fn nested_casts() {
 
 #[test]
 fn conversion_in_comparison() {
-    let input = "pub let f() -> Bool = (5 into LinExpr) == ($V() into LinExpr);";
+    let input = "pub let f() -> Bool = (LinExpr(5)) == (LinExpr($V()));";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -1242,7 +1242,7 @@ fn implicit_conversion_in_forall_body() {
 
 #[test]
 fn conversion_in_sum_to_linexpr() {
-    let input = "pub let f() -> LinExpr = sum x in [1, 2, 3] { x } into LinExpr;";
+    let input = "pub let f() -> LinExpr = LinExpr(sum x in [1, 2, 3] { x });";
 
     let vars = HashMap::new();
 
@@ -1303,7 +1303,7 @@ fn cast_linexpr_identity() {
 
 #[test]
 fn conversion_identity() {
-    let input = "pub let f(x: Int) -> Int = x into Int;";
+    let input = "pub let f(x: Int) -> Int = Int(x);";
 
     let vars = HashMap::new();
 
@@ -1318,7 +1318,7 @@ fn conversion_identity() {
 
 #[test]
 fn conversion_linexpr_identity() {
-    let input = "pub let f() -> LinExpr = $V() into LinExpr;";
+    let input = "pub let f() -> LinExpr = LinExpr($V());";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -1401,7 +1401,7 @@ fn cast_in_nested_list() {
 
 #[test]
 fn convert_int_to_string() {
-    let input = r#"pub let f() -> String = 42 into String;"#;
+    let input = r#"pub let f() -> String = String(42);"#;
 
     let vars = HashMap::new();
 
@@ -1416,7 +1416,7 @@ fn convert_int_to_string() {
 
 #[test]
 fn convert_bool_true_to_string() {
-    let input = r#"pub let f() -> String = true into String;"#;
+    let input = r#"pub let f() -> String = String(true);"#;
 
     let vars = HashMap::new();
 
@@ -1431,7 +1431,7 @@ fn convert_bool_true_to_string() {
 
 #[test]
 fn convert_bool_false_to_string() {
-    let input = r#"pub let f() -> String = false into String;"#;
+    let input = r#"pub let f() -> String = String(false);"#;
 
     let vars = HashMap::new();
 
@@ -1446,7 +1446,7 @@ fn convert_bool_false_to_string() {
 
 #[test]
 fn convert_string_to_string() {
-    let input = r#"pub let f() -> String = "hello" into String;"#;
+    let input = r#"pub let f() -> String = String("hello");"#;
 
     let vars = HashMap::new();
 
@@ -1461,7 +1461,7 @@ fn convert_string_to_string() {
 
 #[test]
 fn convert_none_to_string() {
-    let input = r#"pub let f() -> String = none into String;"#;
+    let input = r#"pub let f() -> String = String(none);"#;
 
     let vars = HashMap::new();
 
@@ -1476,7 +1476,7 @@ fn convert_none_to_string() {
 
 #[test]
 fn convert_int_list_to_string() {
-    let input = r#"pub let f() -> String = [1, 2, 3] into String;"#;
+    let input = r#"pub let f() -> String = String([1, 2, 3]);"#;
 
     let vars = HashMap::new();
 
@@ -1491,7 +1491,7 @@ fn convert_int_list_to_string() {
 
 #[test]
 fn convert_bool_list_to_string() {
-    let input = r#"pub let f() -> String = [true, false] into String;"#;
+    let input = r#"pub let f() -> String = String([true, false]);"#;
 
     let vars = HashMap::new();
 
@@ -1506,7 +1506,7 @@ fn convert_bool_list_to_string() {
 
 #[test]
 fn convert_string_list_to_string() {
-    let input = r#"pub let f() -> String = ["a", "b", "c"] into String;"#;
+    let input = r#"pub let f() -> String = String(["a", "b", "c"]);"#;
 
     let vars = HashMap::new();
 
@@ -1521,7 +1521,7 @@ fn convert_string_list_to_string() {
 
 #[test]
 fn convert_empty_list_to_string() {
-    let input = r#"pub let f() -> String = [<Int>] into String;"#;
+    let input = r#"pub let f() -> String = String([<Int>]);"#;
 
     let vars = HashMap::new();
 
@@ -1536,7 +1536,7 @@ fn convert_empty_list_to_string() {
 
 #[test]
 fn convert_nested_list_to_string() {
-    let input = r#"pub let f() -> String = [[1, 2], [3, 4]] into String;"#;
+    let input = r#"pub let f() -> String = String([[1, 2], [3, 4]]);"#;
 
     let vars = HashMap::new();
 
@@ -1551,7 +1551,7 @@ fn convert_nested_list_to_string() {
 
 #[test]
 fn convert_linexpr_to_string() {
-    let input = r#"pub let f() -> String = $V() into String;"#;
+    let input = r#"pub let f() -> String = String($V());"#;
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -1566,7 +1566,7 @@ fn convert_linexpr_to_string() {
 
 #[test]
 fn convert_to_string_in_concatenation() {
-    let input = r#"pub let f() -> String = "Value: " + (42 into String);"#;
+    let input = r#"pub let f() -> String = "Value: " + (String(42));"#;
 
     let vars = HashMap::new();
 
@@ -1581,7 +1581,7 @@ fn convert_to_string_in_concatenation() {
 
 #[test]
 fn convert_to_string_with_param() {
-    let input = r#"pub let f(x: Int) -> String = x into String;"#;
+    let input = r#"pub let f(x: Int) -> String = String(x);"#;
 
     let vars = HashMap::new();
 
@@ -1596,7 +1596,7 @@ fn convert_to_string_with_param() {
 
 #[test]
 fn convert_to_string_in_expression() {
-    let input = r#"pub let f(x: Int) -> String = "Result: " + ((x + 5) into String);"#;
+    let input = r#"pub let f(x: Int) -> String = "Result: " + String(x + 5);"#;
 
     let vars = HashMap::new();
 
@@ -1611,8 +1611,7 @@ fn convert_to_string_in_expression() {
 
 #[test]
 fn convert_to_string_in_if_expression() {
-    let input =
-        r#"pub let f(x: Bool) -> String = if x { true into String } else { false into String };"#;
+    let input = r#"pub let f(x: Bool) -> String = if x { String(true) } else { String(false) };"#;
 
     let vars = HashMap::new();
 
@@ -1631,7 +1630,7 @@ fn convert_to_string_in_if_expression() {
 
 #[test]
 fn convert_multiple_types_to_string() {
-    let input = r#"pub let f() -> String = (42 into String) + " " + (true into String);"#;
+    let input = r#"pub let f() -> String = (String(42)) + " " + (String(true));"#;
 
     let vars = HashMap::new();
 

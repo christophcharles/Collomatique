@@ -458,7 +458,7 @@ fn fold_linexpr_simple() {
 #[test]
 fn fold_linexpr_with_coefficients() {
     let input =
-        "pub let f() -> LinExpr = fold x in [1..3] with acc = 0 into LinExpr { acc + (x * $V()) };";
+        "pub let f() -> LinExpr = fold x in [1..3] with acc = LinExpr(0) { acc + (x * $V()) };";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
@@ -481,8 +481,7 @@ fn fold_linexpr_with_coefficients() {
 
 #[test]
 fn fold_linexpr_empty_list() {
-    let input =
-        "pub let f() -> LinExpr = fold x in [<Int>] with acc = 5 into LinExpr { acc + $V(x) };";
+    let input = "pub let f() -> LinExpr = fold x in [<Int>] with acc = LinExpr(5) { acc + $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 

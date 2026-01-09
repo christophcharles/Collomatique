@@ -449,7 +449,7 @@ fn struct_creation_in_list_comprehension() {
 
 #[test]
 fn struct_to_string_conversion() {
-    let input = "pub let f(s: {x: Int, y: Bool}) -> String = s into String;";
+    let input = "pub let f(s: {x: Int, y: Bool}) -> String = String(s);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -461,7 +461,7 @@ fn struct_to_string_conversion() {
 
 #[test]
 fn struct_field_to_string_conversion() {
-    let input = "pub let f(s: {x: Int}) -> String = s.x into String;";
+    let input = "pub let f(s: {x: Int}) -> String = String(s.x);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

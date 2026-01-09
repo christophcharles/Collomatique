@@ -1022,23 +1022,42 @@ impl<T: EvalObject> LocalEnv<T> {
                 // and types are relevant only in the semantic phase
                 value
             }
-            Expr::TypeConversion { expr, typ } => {
-                let value = self.eval_expr(eval_history, &expr)?;
+            Expr::ComplexTypeCast { typ, args } => {
+                // For type casts like [LinExpr]([1,2,3]) or (Int, Bool)(1, true)
+                // We expect exactly one argument
+                if args.len() != 1 {
+                    panic!("ComplexTypeCast expects exactly one argument");
+                }
+                let value = self.eval_expr(eval_history, &args[0])?;
+
                 let target_type = eval_history
                     .ast
                     .resolve_type(typ)
                     .expect("At this point types should be valid")
                     .to_simple()
-                    .expect("as should have a simple type as operand");
+                    .expect("ComplexTypeCast should have a simple type as target");
                 let concrete_target = target_type
                     .into_concrete()
                     .expect("Should be concrete at this point");
 
-                let converted_value = value
+                value
                     .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
-                    .expect("Resulting expression should be convertible to target type");
+                    .expect("Resulting expression should be convertible to target type")
+            }
+            Expr::StructTypeCast { type_name, fields } => {
+                // For type casts like MyType {field: value}
+                // Evaluate all fields
+                let mut field_values = std::collections::BTreeMap::new();
+                for (name, expr) in fields {
+                    let value = self.eval_expr(eval_history, &expr)?;
+                    field_values.insert(name.node.clone(), value);
+                }
 
-                converted_value
+                // Wrap in custom type
+                ExprValue::Custom {
+                    type_name: type_name.node.clone(),
+                    content: Box::new(ExprValue::Struct(field_values)),
+                }
             }
             Expr::CastFallible { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
@@ -1118,14 +1137,54 @@ impl<T: EvalObject> LocalEnv<T> {
                 ExprValue::List(collection)
             }
             Expr::FnCall { name, args } => {
-                let args = args
-                    .iter()
-                    .map(|x| self.eval_expr(eval_history, &x))
-                    .collect::<Result<_, _>>()?;
-                eval_history
-                    .add_fn_to_call_history(&name.node, args, true)?
-                    .0
-                    .into()
+                // Check if this is a custom type cast
+                if eval_history
+                    .ast
+                    .global_env
+                    .get_custom_types()
+                    .contains_key(&name.node)
+                {
+                    // This is a custom type cast: TypeName(value)
+                    let underlying_type = eval_history
+                        .ast
+                        .global_env
+                        .get_custom_type_underlying(&name.node)
+                        .unwrap()
+                        .clone();
+
+                    // Check if it's a tuple custom type
+                    let is_tuple =
+                        matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+
+                    if is_tuple {
+                        // For tuple custom types, evaluate all args as tuple elements
+                        let values: Vec<ExprValue<T>> = args
+                            .iter()
+                            .map(|x| self.eval_expr(eval_history, &x))
+                            .collect::<Result<_, _>>()?;
+                        ExprValue::Custom {
+                            type_name: name.node.clone(),
+                            content: Box::new(ExprValue::Tuple(values)),
+                        }
+                    } else {
+                        // Single value custom type
+                        let value = self.eval_expr(eval_history, &args[0])?;
+                        ExprValue::Custom {
+                            type_name: name.node.clone(),
+                            content: Box::new(value),
+                        }
+                    }
+                } else {
+                    // This is a function call
+                    let args = args
+                        .iter()
+                        .map(|x| self.eval_expr(eval_history, &x))
+                        .collect::<Result<_, _>>()?;
+                    eval_history
+                        .add_fn_to_call_history(&name.node, args, true)?
+                        .0
+                        .into()
+                }
             }
             Expr::VarCall { name, args } => {
                 let args: Vec<_> = args
@@ -1525,33 +1584,8 @@ impl<T: EvalObject> LocalEnv<T> {
                         continue;
                     }
 
-                    // At this point we have a valid type. We convert if needed
-                    let converted_value = match &branch.into_typ {
-                        Some(t) => {
-                            let target_type = eval_history
-                                .ast
-                                .resolve_type(t)
-                                .expect("At this point types should be valid")
-                                .to_simple()
-                                .expect("as should have a simple type as operand");
-                            let concrete_target = target_type
-                                .into_concrete()
-                                .expect("Should be concrete at this point");
-
-                            value
-                                .clone()
-                                .convert_to(
-                                    eval_history.env,
-                                    &mut eval_history.cache,
-                                    &concrete_target,
-                                )
-                                .expect("Resulting expression should be convertible to target type")
-                        }
-                        None => value.clone(),
-                    };
-
                     // Let's add the identifier to the scope
-                    self.register_identifier(&branch.ident.node, converted_value);
+                    self.register_identifier(&branch.ident.node, value.clone());
                     self.push_scope();
 
                     // Now we check the where clause

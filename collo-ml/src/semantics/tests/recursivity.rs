@@ -136,7 +136,7 @@ fn type_forward_reference_simple() {
     let input = r#"
         type A = [B];
         type B = Int;
-        let f() -> A = [5 into B] into A;
+        let f() -> A = A([B(5)]);
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
@@ -149,7 +149,7 @@ fn type_forward_reference_simple() {
 #[test]
 fn type_forward_reference_in_function() {
     let input = r#"
-        let f() -> B = 5 into B;
+        let f() -> B = B(5);
         type B = Int;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -166,7 +166,7 @@ fn type_forward_reference_chain() {
         type A = [B];
         type B = (C, Int);
         type C = Bool;
-        let f() -> A = [(true into C, 5) into B] into A;
+        let f() -> A = A([B(C(true), 5)]);
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
@@ -184,7 +184,7 @@ fn type_forward_reference_chain() {
 fn guarded_recursion_in_list() {
     let input = r#"
         type Tree = [Tree];
-        let empty_tree() -> Tree = [] into Tree;
+        let empty_tree() -> Tree = Tree([]);
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
@@ -440,7 +440,7 @@ fn multiple_reify_forward_references() {
 #[test]
 fn mixed_function_and_type_forward_refs() {
     let input = r#"
-        pub let make_point() -> Point = (0, 0) into Point;
+        pub let make_point() -> Point = Point(0, 0);
         type Point = (Int, Int);
         pub let get_x(p: Point) -> Int = p.0;
     "#;
@@ -455,7 +455,7 @@ fn mixed_function_and_type_forward_refs() {
 #[test]
 fn complex_forward_reference_scenario() {
     let input = r#"
-        pub let create_tree() -> Tree = (0, []) into Tree;
+        pub let create_tree() -> Tree = Tree(0, []);
         type Tree = (Int, [Tree]);
         pub let tree_value(t: Tree) -> Int = helper(t);
         let helper(t: Tree) -> Int = t.0;

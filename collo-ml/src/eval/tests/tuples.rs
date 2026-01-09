@@ -479,7 +479,7 @@ fn tuple_access_in_forall_false() {
 
 #[test]
 fn tuple_to_string() {
-    let input = "pub let f(t: (Int, Bool)) -> String = t into String;";
+    let input = "pub let f(t: (Int, Bool)) -> String = String(t);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
@@ -497,7 +497,7 @@ fn tuple_to_string() {
 
 #[test]
 fn tuple_to_string_three_elements() {
-    let input = "pub let f(t: (Int, Bool, String)) -> String = t into String;";
+    let input = "pub let f(t: (Int, Bool, String)) -> String = String(t);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
@@ -517,7 +517,7 @@ fn tuple_to_string_three_elements() {
 
 #[test]
 fn nested_tuple_to_string() {
-    let input = "pub let f(t: ((Int, Int), Bool)) -> String = t into String;";
+    let input = "pub let f(t: ((Int, Int), Bool)) -> String = String(t);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast

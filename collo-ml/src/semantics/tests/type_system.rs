@@ -28,7 +28,7 @@ fn bool_type() {
 
 #[test]
 fn linexpr_type_from_arithmetic() {
-    let input = "pub let f(x: Int, y: Int) -> LinExpr = (x + y) into LinExpr;";
+    let input = "pub let f(x: Int, y: Int) -> LinExpr = LinExpr(x + y);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -243,7 +243,7 @@ fn explicit_type_annotation_valid() {
 
 #[test]
 fn type_conversion_to_linexpr() {
-    let input = "pub let f() -> LinExpr = 5 into LinExpr;";
+    let input = "pub let f() -> LinExpr = LinExpr(5);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -255,7 +255,7 @@ fn type_conversion_to_linexpr() {
 
 #[test]
 fn type_conversion_invalid_cast() {
-    let input = "pub let f() -> Int = true into Int;";
+    let input = "pub let f() -> Int = Int(true);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(!errors.is_empty(), "Invalid type cast should error");
@@ -266,7 +266,7 @@ fn type_conversion_invalid_cast() {
 
 #[test]
 fn chained_type_conversions() {
-    let input = "pub let f() -> LinExpr = (5 into Int) into LinExpr;";
+    let input = "pub let f() -> LinExpr = LinExpr(Int(5));";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -280,7 +280,7 @@ fn chained_type_conversions() {
 
 #[test]
 fn int_to_string_conversion() {
-    let input = r#"pub let f() -> String = 42 into String;"#;
+    let input = r#"pub let f() -> String = String(42);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -292,7 +292,7 @@ fn int_to_string_conversion() {
 
 #[test]
 fn bool_to_string_conversion() {
-    let input = r#"pub let f() -> String = true into String;"#;
+    let input = r#"pub let f() -> String = String(true);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -304,7 +304,7 @@ fn bool_to_string_conversion() {
 
 #[test]
 fn string_to_string_conversion() {
-    let input = r#"pub let f() -> String = "hello" into String;"#;
+    let input = r#"pub let f() -> String = String("hello");"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -316,7 +316,7 @@ fn string_to_string_conversion() {
 
 #[test]
 fn linexpr_to_string_conversion() {
-    let input = r#"pub let f(x: LinExpr) -> String = x into String;"#;
+    let input = r#"pub let f(x: LinExpr) -> String = String(x);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -328,7 +328,7 @@ fn linexpr_to_string_conversion() {
 
 #[test]
 fn none_to_string_conversion() {
-    let input = r#"pub let f() -> String = none into String;"#;
+    let input = r#"pub let f() -> String = String(none);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -340,7 +340,7 @@ fn none_to_string_conversion() {
 
 #[test]
 fn int_list_to_string_conversion() {
-    let input = r#"pub let f() -> String = [1, 2, 3] into String;"#;
+    let input = r#"pub let f() -> String = String([1, 2, 3]);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -352,7 +352,7 @@ fn int_list_to_string_conversion() {
 
 #[test]
 fn string_list_to_string_conversion() {
-    let input = r#"pub let f() -> String = ["a", "b", "c"] into String;"#;
+    let input = r#"pub let f() -> String = String(["a", "b", "c"]);"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -365,7 +365,7 @@ fn string_list_to_string_conversion() {
 #[test]
 fn object_to_string_conversion() {
     let types = simple_object("Student");
-    let input = r#"pub let f(s: Student) -> String = s into String;"#;
+    let input = r#"pub let f(s: Student) -> String = String(s);"#;
     let (_, errors, _) = analyze(input, types, HashMap::new());
 
     assert!(
@@ -377,7 +377,7 @@ fn object_to_string_conversion() {
 
 #[test]
 fn conversion_to_string_in_concatenation() {
-    let input = r#"pub let f() -> String = "Value: " + (42 into String);"#;
+    let input = r#"pub let f() -> String = "Value: " + (String(42));"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -389,7 +389,7 @@ fn conversion_to_string_in_concatenation() {
 
 #[test]
 fn chained_conversion_to_string() {
-    let input = r#"pub let f() -> String = ((5 into Int) into LinExpr) into String;"#;
+    let input = r#"pub let f() -> String = String(LinExpr(Int(5)));"#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

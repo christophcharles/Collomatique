@@ -533,7 +533,7 @@ fn struct_access_in_forall_false() {
 
 #[test]
 fn struct_to_string() {
-    let input = "pub let f(s: {x: Int, y: Bool}) -> String = s into String;";
+    let input = "pub let f(s: {x: Int, y: Bool}) -> String = String(s);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
@@ -550,7 +550,7 @@ fn struct_to_string() {
 
 #[test]
 fn struct_to_string_three_fields() {
-    let input = "pub let f(s: {a: Int, b: Bool, c: String}) -> String = s into String;";
+    let input = "pub let f(s: {a: Int, b: Bool, c: String}) -> String = String(s);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
@@ -571,7 +571,7 @@ fn struct_to_string_three_fields() {
 
 #[test]
 fn nested_struct_to_string() {
-    let input = "pub let f(s: {inner: {x: Int}}) -> String = s into String;";
+    let input = "pub let f(s: {inner: {x: Int}}) -> String = String(s);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let mut inner = BTreeMap::new();
@@ -588,7 +588,7 @@ fn nested_struct_to_string() {
 
 #[test]
 fn empty_struct_to_string() {
-    let input = "pub let f(s: {}) -> String = s into String;";
+    let input = "pub let f(s: {}) -> String = String(s);";
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast

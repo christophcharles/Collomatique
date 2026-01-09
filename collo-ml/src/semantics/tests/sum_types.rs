@@ -86,17 +86,16 @@ fn option_type_annotation_valid() {
 }
 
 #[test]
-fn option_type_conversion_invalid() {
-    let input = "pub let f() -> ?Int = 5 into ?Int;";
+fn option_type_can_hold_value() {
+    // Option types are valid as return types and can hold concrete values
+    let input = "pub let f() -> ?Int = 5;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
-        !errors.is_empty(),
-        "Option type conversion should be invalid",
+        errors.is_empty(),
+        "Option type should accept Int value: {:?}",
+        errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::NonConcreteType { .. })),);
 }
 
 // =============================================================================
@@ -429,8 +428,8 @@ fn coercion_to_sum_type_valid() {
 
 #[test]
 fn conversion_within_sum_type_explicit() {
-    // 5 into LinExpr should work when target is LinExpr | Bool
-    let input = "pub let f() -> LinExpr | Bool = 5 into LinExpr;";
+    // LinExpr(5) should work when target is LinExpr | Bool
+    let input = "pub let f() -> LinExpr | Bool = LinExpr(5);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

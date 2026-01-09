@@ -373,7 +373,7 @@ fn coerced_type_in_arithmetic_operation() {
 
 #[test]
 fn nested_list_int_converts_to_nested_list_linexpr() {
-    let input = "pub let f() -> [[LinExpr]] = [[1, 2], [3, 4]] into [[LinExpr]];";
+    let input = "pub let f() -> [[LinExpr]] = [[LinExpr]]([[1, 2], [3, 4]]);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(

@@ -8,8 +8,8 @@ use super::*;
 fn custom_type_wrap_and_unwrap() {
     let input = r#"
         type MyInt = Int;
-        pub let wrap(x: Int) -> MyInt = x into MyInt;
-        pub let unwrap(x: MyInt) -> Int = x into Int;
+        pub let wrap(x: Int) -> MyInt = MyInt(x);
+        pub let unwrap(x: MyInt) -> Int = Int(x);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -38,7 +38,7 @@ fn custom_type_wrap_and_unwrap() {
 fn custom_type_roundtrip() {
     let input = r#"
         type MyInt = Int;
-        pub let roundtrip(x: Int) -> Int = (x into MyInt) into Int;
+        pub let roundtrip(x: Int) -> Int = Int(MyInt(x));
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -53,7 +53,7 @@ fn custom_type_roundtrip() {
 fn custom_type_with_tuple() {
     let input = r#"
         type Point = (Int, Int);
-        pub let make_point(x: Int, y: Int) -> Point = (x, y) into Point;
+        pub let make_point(x: Int, y: Int) -> Point = Point(x, y);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -74,7 +74,7 @@ fn custom_type_with_tuple() {
 fn custom_type_with_list() {
     let input = r#"
         type IntList = [Int];
-        pub let make_list() -> IntList = [1, 2, 3] into IntList;
+        pub let make_list() -> IntList = IntList([1, 2, 3]);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -161,7 +161,7 @@ fn custom_type_nested_tuple_field_access() {
 fn custom_type_in_list() {
     let input = r#"
         type MyInt = Int;
-        pub let make_list() -> [MyInt] = [1 into MyInt, 2 into MyInt, 3 into MyInt];
+        pub let make_list() -> [MyInt] = [MyInt(1), MyInt(2), MyInt(3)];
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -192,7 +192,7 @@ fn custom_type_in_list() {
 fn sum_over_custom_type_list() {
     let input = r#"
         type MyInt = Int;
-        pub let total(xs: [MyInt]) -> Int = sum x in xs { x into Int };
+        pub let total(xs: [MyInt]) -> Int = sum x in xs { Int(x) };
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -226,7 +226,7 @@ fn sum_over_custom_type_list() {
 fn custom_type_in_if_expression() {
     let input = r#"
         type MyInt = Int;
-        pub let f(b: Bool) -> MyInt = if b { 1 into MyInt } else { 0 into MyInt };
+        pub let f(b: Bool) -> MyInt = if b { MyInt(1) } else { MyInt(0) };
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -257,7 +257,7 @@ fn custom_type_in_if_expression() {
 fn custom_type_in_let_expression() {
     let input = r#"
         type MyInt = Int;
-        pub let f() -> Int = let x = 42 into MyInt { x into Int };
+        pub let f() -> Int = let x = MyInt(42) { Int(x) };
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -276,7 +276,7 @@ fn custom_type_in_let_expression() {
 fn custom_type_to_string() {
     let input = r#"
         type MyInt = Int;
-        pub let to_str(x: MyInt) -> String = x into String;
+        pub let to_str(x: MyInt) -> String = String(x);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -296,7 +296,7 @@ fn custom_type_to_string() {
 fn custom_type_tuple_to_string() {
     let input = r#"
         type Point = (Int, Int);
-        pub let to_str(p: Point) -> String = p into String;
+        pub let to_str(p: Point) -> String = String(p);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -321,8 +321,8 @@ fn multiple_custom_types() {
     let input = r#"
         type TypeA = Int;
         type TypeB = Int;
-        pub let make_a(x: Int) -> TypeA = x into TypeA;
-        pub let make_b(x: Int) -> TypeB = x into TypeB;
+        pub let make_a(x: Int) -> TypeA = TypeA(x);
+        pub let make_b(x: Int) -> TypeB = TypeB(x);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -356,7 +356,7 @@ fn custom_type_referencing_another() {
     let input = r#"
         type Inner = Int;
         type Outer = [Inner];
-        pub let make() -> Outer = [1 into Inner, 2 into Inner] into Outer;
+        pub let make() -> Outer = Outer([Inner(1), Inner(2)]);
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -390,7 +390,7 @@ fn custom_type_referencing_another() {
 fn custom_type_in_fold() {
     let input = r#"
         type MyInt = Int;
-        pub let sum_custom(xs: [MyInt]) -> Int = fold x in xs with acc = 0 { acc + (x into Int) };
+        pub let sum_custom(xs: [MyInt]) -> Int = fold x in xs with acc = 0 { acc + (Int(x)) };
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
@@ -424,7 +424,7 @@ fn custom_type_in_fold() {
 fn custom_type_in_list_comprehension() {
     let input = r#"
         type MyInt = Int;
-        pub let double_all(xs: [MyInt]) -> [MyInt] = [((x into Int) * 2) into MyInt for x in xs];
+        pub let double_all(xs: [MyInt]) -> [MyInt] = [MyInt(Int(x) * 2) for x in xs];
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 

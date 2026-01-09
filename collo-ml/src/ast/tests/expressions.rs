@@ -598,18 +598,18 @@ fn parse_explicit_type_for_empty_typed_list() {
     }
 }
 
-// ============= Type Conversions =============
+// ============= Type Conversions (C-like syntax) =============
 
 #[test]
 fn parse_type_conversion_annotation() {
-    let input = "let f() -> LinExpr = x into LinExpr;";
+    // C-like syntax: LinExpr(x) instead of x into LinExpr
+    let input = "let f() -> LinExpr = LinExpr(x);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::TypeConversion { expr, typ } => {
-                assert!(matches!(expr.node, Expr::Ident(_)));
+            Expr::ComplexTypeCast { typ, args } => {
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(
                     typ.node.types[0].node,
@@ -618,8 +618,10 @@ fn parse_type_conversion_annotation() {
                         inner: SimpleTypeName::LinExpr,
                     }
                 );
+                assert_eq!(args.len(), 1);
+                assert!(matches!(args[0].node, Expr::Ident(_)));
             }
-            _ => panic!("Expected ExplicitType"),
+            _ => panic!("Expected ComplexTypeCast, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -627,14 +629,14 @@ fn parse_type_conversion_annotation() {
 
 #[test]
 fn parse_type_conversion_with_number() {
-    let input = "let f() -> Int = 5 into Int;";
+    // C-like syntax: Int(5) instead of 5 into Int
+    let input = "let f() -> Int = Int(5);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::TypeConversion { expr, typ } => {
-                assert!(matches!(expr.node, Expr::Number(5)));
+            Expr::ComplexTypeCast { typ, args } => {
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(
                     typ.node.types[0].node,
@@ -643,8 +645,10 @@ fn parse_type_conversion_with_number() {
                         inner: SimpleTypeName::Int,
                     }
                 );
+                assert_eq!(args.len(), 1);
+                assert!(matches!(args[0].node, Expr::Number(5)));
             }
-            _ => panic!("Expected ExplicitType"),
+            _ => panic!("Expected ComplexTypeCast, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -652,13 +656,14 @@ fn parse_type_conversion_with_number() {
 
 #[test]
 fn parse_type_conversion_with_list() {
-    let input = "let f() -> [Int] = x into [Int];";
+    // C-like syntax: [Int](x) instead of x into [Int]
+    let input = "let f() -> [Int] = [Int](x);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::TypeConversion { typ, .. } => {
+            Expr::ComplexTypeCast { typ, args } => {
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(typ.node.types[0].node.maybe_count, 0);
                 match &typ.node.types[0].node.inner {
@@ -674,8 +679,9 @@ fn parse_type_conversion_with_list() {
                     }
                     _ => panic!("Expected List type"),
                 }
+                assert_eq!(args.len(), 1);
             }
-            _ => panic!("Expected ExplicitType"),
+            _ => panic!("Expected ComplexTypeCast, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }

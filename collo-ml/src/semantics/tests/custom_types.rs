@@ -8,7 +8,7 @@ use super::*;
 fn custom_type_declaration_basic() {
     let input = r#"
         type MyInt = Int;
-        let f() -> MyInt = 5 into MyInt;
+        let f() -> MyInt = MyInt(5);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -18,7 +18,7 @@ fn custom_type_declaration_basic() {
 fn custom_type_declaration_with_tuple() {
     let input = r#"
         type Point = (Int, Int);
-        let origin() -> Point = (0, 0) into Point;
+        let origin() -> Point = Point(0, 0);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -28,7 +28,7 @@ fn custom_type_declaration_with_tuple() {
 fn custom_type_declaration_with_list() {
     let input = r#"
         type IntList = [Int];
-        let empty() -> IntList = [] into IntList;
+        let empty() -> IntList = IntList([]);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -52,7 +52,7 @@ fn custom_type_referencing_previous_custom_type() {
     let input = r#"
         type MyInt = Int;
         type MyIntList = [MyInt];
-        let make_list() -> MyIntList = [5 into MyInt] into MyIntList;
+        let make_list() -> MyIntList = MyIntList([MyInt(5)]);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -66,7 +66,7 @@ fn custom_type_referencing_previous_custom_type() {
 fn into_custom_type_basic() {
     let input = r#"
         type MyInt = Int;
-        let wrap(x: Int) -> MyInt = x into MyInt;
+        let wrap(x: Int) -> MyInt = MyInt(x);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -76,7 +76,7 @@ fn into_custom_type_basic() {
 fn into_underlying_type() {
     let input = r#"
         type MyInt = Int;
-        let unwrap(x: MyInt) -> Int = x into Int;
+        let unwrap(x: MyInt) -> Int = Int(x);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -86,7 +86,7 @@ fn into_underlying_type() {
 fn into_roundtrip() {
     let input = r#"
         type MyInt = Int;
-        let roundtrip(x: Int) -> Int = (x into MyInt) into Int;
+        let roundtrip(x: Int) -> Int = Int(MyInt(x));
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -100,7 +100,7 @@ fn into_roundtrip() {
 fn custom_type_as_parameter() {
     let input = r#"
         type MyInt = Int;
-        let process(x: MyInt) -> Int = x into Int;
+        let process(x: MyInt) -> Int = Int(x);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -110,7 +110,7 @@ fn custom_type_as_parameter() {
 fn custom_type_as_return_type() {
     let input = r#"
         type MyInt = Int;
-        let create() -> MyInt = 42 into MyInt;
+        let create() -> MyInt = MyInt(42);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -121,7 +121,7 @@ fn multiple_custom_types_in_function() {
     let input = r#"
         type TypeA = Int;
         type TypeB = Bool;
-        let combine(a: TypeA, b: TypeB) -> Int = if b into Bool { a into Int } else { 0 };
+        let combine(a: TypeA, b: TypeB) -> Int = if Bool(b) { Int(a) } else { 0 };
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -293,7 +293,7 @@ fn error_incompatible_custom_types() {
     let input = r#"
         type TypeA = Int;
         type TypeB = Int;
-        let f(x: TypeA) -> TypeB = x into TypeB;
+        let f(x: TypeA) -> TypeB = TypeB(x);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     // TypeA cannot be converted to TypeB directly, even though both are Int underneath
@@ -312,7 +312,7 @@ fn error_incompatible_custom_types() {
 fn custom_type_in_list() {
     let input = r#"
         type MyInt = Int;
-        let make_list() -> [MyInt] = [1 into MyInt, 2 into MyInt];
+        let make_list() -> [MyInt] = [MyInt(1), MyInt(2)];
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -322,7 +322,7 @@ fn custom_type_in_list() {
 fn sum_with_custom_type() {
     let input = r#"
         type MyInt = Int;
-        let total(xs: [MyInt]) -> Int = sum x in xs { x into Int };
+        let total(xs: [MyInt]) -> Int = sum x in xs { Int(x) };
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -336,7 +336,7 @@ fn sum_with_custom_type() {
 fn forall_with_custom_type() {
     let input = r#"
         type MyInt = Int;
-        let check(xs: [MyInt]) -> Bool = forall x in xs { (x into Int) > 0 };
+        let check(xs: [MyInt]) -> Bool = forall x in xs { (Int(x)) > 0 };
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(errors.is_empty(), "Errors: {:?}", errors);
@@ -362,7 +362,7 @@ fn error_unknown_custom_type() {
 fn forward_reference_to_custom_type_now_allowed() {
     // Forward references to types are now allowed
     let input = r#"
-        let f() -> B = 5 into B;
+        let f() -> B = B(5);
         type B = Int;
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());

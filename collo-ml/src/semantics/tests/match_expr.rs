@@ -113,39 +113,21 @@ fn match_catchall_has_remaining_type() {
     );
 }
 
-// ========== Type Conversion (into) ==========
+// ========== Type Conversion in Body ==========
 
 #[test]
 fn match_converts_int_to_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
-        pub let f(x: Int) -> LinExpr = match x { 
-            i as Int into LinExpr { $V(i) } 
+        pub let f(x: Int) -> LinExpr = match x {
+            i as Int { $V(LinExpr(i)) }
         };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(
         errors.is_empty(),
-        "Match should convert Int to LinExpr: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn match_into_without_as() {
-    let vars = var_with_args("V", vec![SimpleType::LinExpr]);
-    let input = r#"
-        pub let f(x: Int | Bool) -> LinExpr | Bool = match x { 
-            b as Bool { b } 
-            i into LinExpr { $V(i) }
-        };
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
-
-    assert!(
-        errors.is_empty(),
-        "Match should allow into without as: {:?}",
+        "Match should convert Int to LinExpr in body: {:?}",
         errors
     );
 }
@@ -153,47 +135,29 @@ fn match_into_without_as() {
 #[test]
 fn match_converts_emptylist_to_list() {
     let input = r#"
-        pub let f(x: [] | Int) -> [Int] | Int = match x { 
-            i as Int { i } 
-            lst into [Int] { [1, 2, 3] }
+        pub let f(x: [] | Int) -> [Int] | Int = match x {
+            i as Int { i }
+            lst as [] { [Int]([1, 2, 3]) }
         };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Match should convert EmptyList to List: {:?}",
+        "Match should convert EmptyList to List in body: {:?}",
         errors
     );
 }
 
 #[test]
-fn match_invalid_conversion() {
-    let input = r#"
-        pub let f(x: Bool) -> Int = match x { 
-            b as Bool into Int { 5 } 
-        };
-    "#;
+fn match_non_exhaustive_with_only_where() {
+    // Match with only a filtered branch is not exhaustive
+    let input = "pub let f(x: Int) -> Int = match x { i as Int where i > 0 { i } };";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         !errors.is_empty(),
-        "Match should reject invalid conversion (Bool to Int)"
-    );
-}
-
-#[test]
-fn match_into_must_be_concrete() {
-    let input = r#"
-        pub let f(x: Int) -> Int | Bool = match x { 
-            i as Int into Int | Bool { i } 
-        };
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        !errors.is_empty(),
-        "Match into type must be concrete (not a union)"
+        "Match with only filtered branch should error (non-exhaustive)"
     );
 }
 
@@ -244,11 +208,11 @@ fn match_where_does_not_refine_type() {
 }
 
 #[test]
-fn match_combined_into_and_where() {
+fn match_where_with_conversion_in_body() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
-        pub let f(x: Int) -> LinExpr | Int = match x { 
-            i as Int into LinExpr where x > 0 { $V(i) }
+        pub let f(x: Int) -> LinExpr | Int = match x {
+            i as Int where x > 0 { $V(LinExpr(i)) }
             j as Int { j }
         };
     "#;
@@ -256,7 +220,7 @@ fn match_combined_into_and_where() {
 
     assert!(
         errors.is_empty(),
-        "Match with into and where should work: {:?}",
+        "Match with where and conversion in body should work: {:?}",
         errors
     );
 }
@@ -325,17 +289,6 @@ fn match_non_exhaustive_partial_union() {
     assert!(
         !errors.is_empty(),
         "Non-exhaustive match should error (missing None)"
-    );
-}
-
-#[test]
-fn match_empty_not_allowed() {
-    let input = "pub let f(x: Int) -> Int = match x { };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        !errors.is_empty(),
-        "Empty match should error (non-exhaustive)"
     );
 }
 
@@ -483,15 +436,15 @@ fn match_emptylist_exhausts_list() {
 #[test]
 fn match_list_conversion() {
     let input = r#"
-        pub let f(x: [Int]) -> [LinExpr] = match x { 
-            lst as [Int] into [LinExpr] { lst } 
+        pub let f(x: [Int]) -> [LinExpr] = match x {
+            lst as [Int] { [LinExpr](lst) }
         };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
         errors.is_empty(),
-        "Match should convert [Int] to [LinExpr]: {:?}",
+        "Match should convert [Int] to [LinExpr] in body: {:?}",
         errors
     );
 }
@@ -689,10 +642,10 @@ fn forall_with_match_in_body() {
 fn match_complex_type_dispatch() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
-        pub let f(value: Int | Bool | [Int]) -> Constraint = match value { 
-            i as Int into LinExpr { $V(i) === 0 } 
-            b as Bool { if b { 0 === 0 } else { 1 === 0 } } 
-            lst as [Int] { sum x in lst { $V(x into LinExpr) } === 10 } 
+        pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
+            i as Int { $V(LinExpr(i)) === 0 }
+            b as Bool { if b { 0 === 0 } else { 1 === 0 } }
+            lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
@@ -744,11 +697,11 @@ fn match_optional_handling() {
 fn match_list_processing_with_conversion() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
-        pub let f(items: [Int] | Int) -> Constraint = match items { 
-            lst as [Int] into [LinExpr] { 
-                sum x in lst { $V(x) } === 100 
-            } 
-            i as Int into LinExpr { $V(i) === 0 } 
+        pub let f(items: [Int] | Int) -> Constraint = match items {
+            lst as [Int] {
+                sum x in lst { $V(LinExpr(x)) } === 100
+            }
+            i as Int { $V(LinExpr(i)) === 0 }
         };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), vars);

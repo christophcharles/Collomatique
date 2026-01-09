@@ -118,7 +118,6 @@ pub enum PathSegment {
 pub struct MatchBranch {
     pub ident: Spanned<String>,
     pub as_typ: Option<Spanned<TypeName>>,
-    pub into_typ: Option<Spanned<TypeName>>,
     pub filter: Option<Spanned<Expr>>,
     pub body: Spanned<Expr>,
 }
@@ -254,10 +253,6 @@ pub enum Expr {
     Cardinality(Box<Spanned<Expr>>),
 
     // Typed term
-    TypeConversion {
-        expr: Box<Spanned<Expr>>,
-        typ: Spanned<TypeName>,
-    },
     ExplicitType {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
@@ -271,6 +266,18 @@ pub enum Expr {
     CastPanic {
         expr: Box<Spanned<Expr>>,
         typ: Spanned<TypeName>,
+    },
+
+    // Type cast with complex type: [LinExpr]([1,2,3]), (Int,Bool)(1,true)
+    ComplexTypeCast {
+        typ: Spanned<TypeName>,
+        args: Vec<Spanned<Expr>>,
+    },
+
+    // Struct-style type cast: TypeName {field: value}
+    StructTypeCast {
+        type_name: Spanned<String>,
+        fields: Vec<(Spanned<String>, Spanned<Expr>)>,
     },
 }
 
@@ -977,11 +984,11 @@ impl Expr {
         let mut inner = pair.into_inner();
 
         let first = inner.next().unwrap();
-        let mut result = Self::from_type_conversion(first)?;
+        let mut result = Self::from_cast_expr(first)?;
 
         while let Some(op_pair) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_type_conversion(right_pair)?;
+            let right = Self::from_cast_expr(right_pair)?;
 
             let result_span = span.clone();
             result = match op_pair.as_rule() {
@@ -1008,38 +1015,6 @@ impl Expr {
         }
 
         Ok(result)
-    }
-
-    fn from_type_conversion(pair: Pair<Rule>) -> Result<Self, AstError> {
-        let span = Span::from_pest(&pair);
-        if pair.as_rule() != Rule::type_conversion {
-            return Err(AstError::UnexpectedRule {
-                expected: "type_conversion",
-                found: pair.as_rule(),
-                span,
-            });
-        }
-
-        let mut inner = pair.into_inner();
-
-        // First is always cast_expr
-        let expr_pair = inner.next().unwrap();
-        let expr_span = Span::from_pest(&expr_pair);
-        let expr = Self::from_cast_expr(expr_pair)?;
-
-        // Check if there's a type annotation (into Type)
-        if let Some(type_pair) = inner.next() {
-            let type_span = Span::from_pest(&type_pair);
-            let typ = TypeName::from_pest(type_pair)?;
-
-            Ok(Expr::TypeConversion {
-                expr: Box::new(Spanned::new(expr, expr_span)),
-                typ: Spanned::new(typ, type_span),
-            })
-        } else {
-            // No type annotation, just return the expression
-            Ok(expr)
-        }
     }
 
     fn from_cast_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -1228,6 +1203,9 @@ impl Expr {
             Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
             Rule::var_list_call => Self::from_var_list_call(inner),
+            Rule::complex_type_cast => Self::from_complex_type_cast(inner),
+            Rule::struct_type_cast => Self::from_struct_type_cast(inner),
+            Rule::primitive_type_cast => Self::from_primitive_type_cast(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::string_literal => Self::from_string_literal(inner),
             Rule::boolean => Self::from_boolean(inner),
@@ -1313,7 +1291,7 @@ impl Expr {
     }
 
     fn from_match_branch(pair: Pair<Rule>) -> Result<MatchBranch, AstError> {
-        // match_branch = { ident ~ (as_op ~ type_name)? ~ (into_op ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+        // match_branch = { ident ~ (as_op ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
         let span = Span::from_pest(&pair);
         let mut inner = pair.into_inner();
 
@@ -1323,29 +1301,21 @@ impl Expr {
         let ident = Spanned::new(ident_pair.as_str().to_string(), ident_span);
 
         let mut as_typ = None;
-        let mut into_typ = None;
         let mut filter = None;
         let mut body = None;
         let mut has_filter = false;
 
         // Track which operator we just saw
         let mut last_op_was_as = false;
-        let mut last_op_was_into = false;
 
         for element in inner {
             match element.as_rule() {
                 Rule::as_op => {
                     last_op_was_as = true;
-                    last_op_was_into = false;
-                }
-                Rule::into_op => {
-                    last_op_was_into = true;
-                    last_op_was_as = false;
                 }
                 Rule::where_op => {
                     has_filter = true;
                     last_op_was_as = false;
-                    last_op_was_into = false;
                 }
                 Rule::type_name => {
                     let type_span = Span::from_pest(&element);
@@ -1354,9 +1324,6 @@ impl Expr {
                     if last_op_was_as {
                         as_typ = Some(parsed_type);
                         last_op_was_as = false;
-                    } else if last_op_was_into {
-                        into_typ = Some(parsed_type);
-                        last_op_was_into = false;
                     }
                 }
                 Rule::expr => {
@@ -1376,7 +1343,6 @@ impl Expr {
         Ok(MatchBranch {
             ident,
             as_typ,
-            into_typ,
             filter,
             body: body.ok_or(AstError::MissingBody(span))?,
         })
@@ -1781,6 +1747,150 @@ impl Expr {
             name: name.ok_or(AstError::MissingName(span))?,
             args,
         })
+    }
+
+    fn from_complex_type_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // complex_type_cast = { (list_type_brackets | tuple_type) ~ "(" ~ args? ~ ")" }
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        // First is the type (list_type_brackets or tuple_type)
+        let type_pair = inner
+            .next()
+            .ok_or(AstError::MissingTypeName(span.clone()))?;
+        let type_span = Span::from_pest(&type_pair);
+
+        // Convert to SimpleTypeName based on rule
+        let simple_type = match type_pair.as_rule() {
+            Rule::list_type_brackets => {
+                // list_type_brackets = { "[" ~ type_name? ~ "]" }
+                let inner_type = type_pair.into_inner().next();
+                match inner_type {
+                    None => SimpleTypeName::EmptyList,
+                    Some(inner_pair) => {
+                        let inner_span = Span::from_pest(&inner_pair);
+                        SimpleTypeName::List(Spanned::new(
+                            TypeName::from_pest(inner_pair)?,
+                            inner_span,
+                        ))
+                    }
+                }
+            }
+            Rule::tuple_type => SimpleTypeName::from_tuple_type(type_pair)?,
+            _ => {
+                return Err(AstError::UnexpectedRule {
+                    expected: "list_type_brackets or tuple_type",
+                    found: type_pair.as_rule(),
+                    span: type_span,
+                })
+            }
+        };
+
+        let maybe_type = MaybeTypeName {
+            maybe_count: 0,
+            inner: simple_type,
+        };
+        let typ = Spanned::new(
+            TypeName {
+                types: vec![Spanned::new(maybe_type, type_span.clone())],
+            },
+            type_span,
+        );
+
+        // Parse args
+        let mut args = Vec::new();
+        for element in inner {
+            if element.as_rule() == Rule::args {
+                args = parse_args(element)?;
+            }
+        }
+
+        Ok(Expr::ComplexTypeCast { typ, args })
+    }
+
+    fn from_struct_type_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // struct_type_cast = { ident ~ struct_literal }
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        // First is the type name (ident)
+        let name_pair = inner.next().ok_or(AstError::MissingName(span.clone()))?;
+        let name_span = Span::from_pest(&name_pair);
+        let type_name = Spanned::new(name_pair.as_str().to_string(), name_span);
+
+        // Second is the struct_literal
+        let struct_pair = inner.next().ok_or(AstError::MissingBody(span))?;
+
+        // Parse struct_literal fields (same logic as from_struct_literal)
+        let mut fields = Vec::new();
+        for field_pair in struct_pair.into_inner() {
+            if field_pair.as_rule() == Rule::struct_field_expr {
+                let mut field_inner = field_pair.into_inner();
+
+                let field_name_pair = field_inner.next().unwrap();
+                let field_name_span = Span::from_pest(&field_name_pair);
+                let name = Spanned::new(field_name_pair.as_str().to_string(), field_name_span);
+
+                let expr_pair = field_inner.next().unwrap();
+                let expr_span = Span::from_pest(&expr_pair);
+                let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+
+                fields.push((name, expr));
+            }
+        }
+
+        Ok(Expr::StructTypeCast { type_name, fields })
+    }
+
+    fn from_primitive_type_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // primitive_type_cast = { primitive_type_keyword ~ "(" ~ args? ~ ")" }
+        // primitive_type_keyword = { "LinExpr" | "Constraint" | "String" | "Bool" | "Int" }
+        let span = Span::from_pest(&pair);
+        let mut inner = pair.into_inner();
+
+        // First is the primitive_type_keyword
+        let keyword_pair = inner
+            .next()
+            .ok_or(AstError::MissingTypeName(span.clone()))?;
+        let keyword_span = Span::from_pest(&keyword_pair);
+        let keyword = keyword_pair.as_str();
+
+        // Convert keyword to SimpleTypeName
+        let simple_type = match keyword {
+            "Int" => SimpleTypeName::Int,
+            "Bool" => SimpleTypeName::Bool,
+            "String" => SimpleTypeName::String,
+            "LinExpr" => SimpleTypeName::LinExpr,
+            "Constraint" => SimpleTypeName::Constraint,
+            _ => {
+                return Err(AstError::UnexpectedRule {
+                    expected: "Int, Bool, String, LinExpr, or Constraint",
+                    found: keyword_pair.as_rule(),
+                    span: keyword_span,
+                })
+            }
+        };
+
+        let maybe_type = MaybeTypeName {
+            maybe_count: 0,
+            inner: simple_type,
+        };
+        let typ = Spanned::new(
+            TypeName {
+                types: vec![Spanned::new(maybe_type, keyword_span.clone())],
+            },
+            keyword_span,
+        );
+
+        // Parse args
+        let mut args = Vec::new();
+        for element in inner {
+            if element.as_rule() == Rule::args {
+                args = parse_args(element)?;
+            }
+        }
+
+        Ok(Expr::ComplexTypeCast { typ, args })
     }
 
     fn from_boolean(pair: Pair<Rule>) -> Result<Self, AstError> {

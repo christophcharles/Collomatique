@@ -347,7 +347,7 @@ fn tuple_creation_in_list_comprehension() {
 
 #[test]
 fn tuple_to_string_conversion() {
-    let input = "pub let f(t: (Int, Bool)) -> String = t into String;";
+    let input = "pub let f(t: (Int, Bool)) -> String = String(t);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -359,7 +359,7 @@ fn tuple_to_string_conversion() {
 
 #[test]
 fn tuple_element_to_string_conversion() {
-    let input = "pub let f(t: (Int, Bool)) -> String = t.0 into String;";
+    let input = "pub let f(t: (Int, Bool)) -> String = String(t.0);";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert!(
@@ -443,7 +443,7 @@ fn tuple_with_linexpr() {
 fn tuple_element_explicit_conversion_to_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     // Explicit conversion is needed for Int to LinExpr in tuple elements
-    let input = "pub let f(x: Int) -> (LinExpr, LinExpr) = (x into LinExpr, $V(x));";
+    let input = "pub let f(x: Int) -> (LinExpr, LinExpr) = (LinExpr(x), $V(x));";
     let (_, errors, _) = analyze(input, HashMap::new(), vars);
 
     assert!(

@@ -54,7 +54,6 @@ reserved_keyword = {
     "Bool" |
     "None" |
     "none" |
-    "into" |
     "sum" |
     "Int" |
     "let" |
@@ -128,9 +127,8 @@ relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 
 // Arithmetic
 add_sub_expr = { mul_div_mod_expr ~ ((add_op | sub_op) ~ mul_div_mod_expr)* }
-mul_div_mod_expr = { type_conversion ~ ((mul_op | div_op | mod_op) ~ type_conversion)* }
+mul_div_mod_expr = { cast_expr ~ ((mul_op | div_op | mod_op) ~ cast_expr)* }
 
-type_conversion = { cast_expr ~ ( "into" ~ type_name)? }
 cast_expr = { explicit_type ~ (cast_op ~ type_name)? }
 cast_op = { "cast?" | "cast!" }
 explicit_type = { path ~ ( "as" ~ type_name)? }
@@ -151,13 +149,16 @@ primary_expr = {
     fold |
     rfold |
     cardinality |
-    empty_typed_list | // Must the first list to parse correctly
+    empty_typed_list | // Must come first to parse [Type]() correctly
+    complex_type_cast |  // Must come before list_literal to parse [Type](expr) correctly
     list_comprehension |  // Must come before list_literal to parse correctly
     list_range | // Must come before list_literal to parse correctly
     list_literal |
     global_collection |
     var_call |
     var_list_call |
+    struct_type_cast |   // Must come before fn_call to parse TypeName {field: expr} correctly
+    primitive_type_cast |  // Must come before fn_call to parse LinExpr(5), String(42), etc. (reserved keywords)
     fn_call |
     string_literal |
     boolean |
@@ -170,6 +171,20 @@ primary_expr = {
     ident |
     "(" ~ expr ~ ")"
 }
+
+// Type cast with complex type (list brackets or tuple)
+// Examples: [LinExpr]([1,2,3]), (Int, Bool)(1, true)
+// Note: We use list_type_brackets instead of list_type to avoid matching primitive types like Int
+complex_type_cast = { (list_type_brackets | tuple_type) ~ "(" ~ args? ~ ")" }
+list_type_brackets = { "[" ~ type_name? ~ "]" }
+
+// Struct-style type cast: TypeName {field: value}
+struct_type_cast = { ident ~ struct_literal }
+
+// Type cast with primitive type keywords that are reserved
+// Examples: LinExpr(5), String(42), Int(x), Bool(1), Constraint(x)
+primitive_type_cast = { primitive_type_keyword ~ "(" ~ args? ~ ")" }
+primitive_type_keyword = { "LinExpr" | "Constraint" | "String" | "Bool" | "Int" }
 
 // Tuple literal: (expr, expr) or (expr, expr, expr, ...)
 // Minimum 2 elements to distinguish from grouping
@@ -184,7 +199,7 @@ struct_field_expr = { ident ~ ":" ~ expr }
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
 match_expr = { "match" ~ expr ~ "{" ~ match_branch* ~ "}" }
-match_branch = { ident ~ (as_op ~ type_name)? ~ (into_op ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
+match_branch = { ident ~ (as_op ~ type_name)? ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 fold = { "fold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 rfold = { "rfold" ~ ident ~ in_op ~ expr ~ with_op ~ ident ~ "=" ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
@@ -218,7 +233,6 @@ not_op = @{ "!" | "not" ~ !ident_char }
 
 where_op = @{ "where" ~ !ident_char }
 with_op = @{ "with" ~ !ident_char }
-into_op = @{ "into" ~ !ident_char }
 as_op = @{ "as" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }

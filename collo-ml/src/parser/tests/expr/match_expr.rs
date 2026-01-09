@@ -34,12 +34,13 @@ fn match_accepts_else_clause() {
 }
 
 #[test]
-fn match_accepts_into_type_conversion() {
+fn match_with_type_conversion_in_body() {
+    // Type conversions are now done with C-like syntax in the body
     let cases = vec![
-        "match x { y as Int into Bool { true } }",
-        "match value { v as Student into Int { 1 } }",
-        "match item { i as Int into LinExpr { x } other { 0 } }",
-        "match x { y as Bool into Constraint { $V(x) === 1 } }",
+        "match x { y as Int { Bool(true) } }",
+        "match value { v as Student { Int(1) } }",
+        "match item { i as Int { LinExpr(x) } other { LinExpr(0) } }",
+        "match x { y as Bool { $V(x) === 1 } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -62,11 +63,12 @@ fn match_accepts_where_filters() {
 }
 
 #[test]
-fn match_accepts_combined_into_and_where() {
+fn match_accepts_where_with_conversion_in_body() {
+    // Type conversions are now done in the body, not with 'into'
     let cases = vec![
-        "match x { y as Int into Bool where x > 5 { true } }",
-        "match value { v as Student into Int where value.age > 18 { 1 } }",
-        "match item { i as Int into LinExpr where item > 0 { $V(item) } other { 0 } }",
+        "match x { y as Int where x > 5 { Bool(true) } }",
+        "match value { v as Student where value.age > 18 { Int(1) } }",
+        "match item { i as Int where item > 0 { LinExpr($V(item)) } other { LinExpr(0) } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -122,7 +124,7 @@ fn match_accepts_multiple_branches() {
         "match x { i as Int { 1 } b as Bool { 2 } other { 3 } }",
         "match value { s as Student { a } t as Teacher { b } n as None { 0 } }",
         "match item { i as Int where x > 0 { 1 } j as Int where x < 0 { -1 } other { 0 } }",
-        "match x { i as Int into Bool { true } b as Bool into Int { 1 } }",
+        "match x { i as Int { Bool(true) } b as Bool { Int(1) } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -313,7 +315,6 @@ fn match_rejects_missing_identifier() {
     let cases = vec![
         "match x { as Int { 10 } }",
         "match x { where x > 5 { 10 } }",
-        "match x { into Bool { true } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -331,11 +332,18 @@ fn match_rejects_missing_expression() {
 }
 
 #[test]
-fn match_accepts_no_branches() {
+fn match_requires_at_least_one_branch() {
+    // Empty match is ambiguous with struct type cast syntax: `match x { }` could be `x { }` (empty struct cast)
+    // This is a grammar ambiguity, so empty match expressions don't parse
     let cases = vec!["match x { }"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
-        assert!(result.is_ok(), "Should accept '{}': {:?}", case, result);
+        assert!(
+            result.is_err(),
+            "Should reject empty match '{}': {:?}",
+            case,
+            result
+        );
     }
 }
 
@@ -343,9 +351,7 @@ fn match_accepts_no_branches() {
 fn match_rejects_malformed_patterns() {
     let cases = vec![
         "match x { y as Int where { 10 } }",
-        "match x { y as Int into { 10 } }",
-        "match x { into Bool where x { true } }",
-        "match x { where x into Bool { true } }",
+        "match x { y as { 10 } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -365,8 +371,8 @@ fn match_complex_real_world_examples() {
         // List processing
         "match items { lst as [Int] { sum i in items where i > 0 { i } } other { 0 } }",
 
-        // Nested type patterns with conversion
-        "match data { i as Int into LinExpr { $V(data) } lst as [Int] into Constraint { sum x in data { $V(x) } === 10 } }",
+        // Type-based dispatch with conversion in body
+        "match data { i as Int { LinExpr($V(data)) } lst as [Int] { (sum x in data { $V(x) }) === 10 } }",
 
         // Complex filtering
         "match students { s as [Student] where |students| > 0 { forall s in students { s.age >== 18 } } other { true } }",

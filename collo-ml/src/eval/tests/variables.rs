@@ -863,7 +863,7 @@ fn var_in_if_expression() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
-    pub let g(x: Int, use_var: Bool) -> LinExpr = if use_var { $MyVar(x) } else { 0 into LinExpr };
+    pub let g(x: Int, use_var: Bool) -> LinExpr = if use_var { $MyVar(x) } else { LinExpr(0) };
     "#;
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);

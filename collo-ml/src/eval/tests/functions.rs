@@ -312,7 +312,7 @@ fn fn_returning_list_of_linexpr() {
 fn fn_call_int_to_linexpr_conversion() {
     let input = r#"
     let get_int() -> Int = 42;
-    pub let f() -> LinExpr = get_int() into LinExpr;
+    pub let f() -> LinExpr = LinExpr(get_int());
     "#;
 
     let vars = HashMap::new();

@@ -28,7 +28,6 @@ fn parse_simple_match_with_one_type_branch() {
                 // First branch: Int { 10 }
                 assert!(branches[0].as_typ.is_some());
                 assert_eq!(branches[0].as_typ.as_ref().unwrap().node.types.len(), 1);
-                assert!(branches[0].into_typ.is_none());
                 assert!(branches[0].filter.is_none());
                 assert!(matches!(branches[0].body.node, Expr::Number(10)));
             }
@@ -66,31 +65,8 @@ fn parse_match_with_else_branch() {
     }
 }
 
-#[test]
-fn parse_match_with_into_conversion() {
-    let input = "let f(x: Int) -> Bool = match x { y as Int into Bool { true } };";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => match &body.node {
-            Expr::Match { branches, .. } => {
-                assert_eq!(branches.len(), 1);
-
-                assert!(branches[0].into_typ.is_some());
-
-                // Check the "into" type is Bool
-                let into_typ = branches[0].into_typ.as_ref().unwrap();
-                assert_eq!(into_typ.node.types.len(), 1);
-
-                assert!(branches[0].filter.is_none());
-                assert!(matches!(branches[0].body.node, Expr::Boolean(true)));
-            }
-            _ => panic!("Expected Match expression"),
-        },
-        _ => panic!("Expected Let statement"),
-    }
-}
+// NOTE: The `into` keyword was removed from match branches.
+// Type conversions in match branches should be done explicitly in the body.
 
 #[test]
 fn parse_match_with_where_filter() {
@@ -103,7 +79,6 @@ fn parse_match_with_where_filter() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 1);
 
-                assert!(branches[0].into_typ.is_none());
                 assert!(branches[0].filter.is_some());
 
                 // Check the filter is a comparison
@@ -118,34 +93,8 @@ fn parse_match_with_where_filter() {
     }
 }
 
-#[test]
-fn parse_match_with_into_and_where() {
-    let input = "let f(x: Int) -> Bool = match x { y as Int into Bool where x > 0 { true } };";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => match &body.node {
-            Expr::Match { branches, .. } => {
-                assert_eq!(branches.len(), 1);
-
-                // Check both into and where are present
-                assert!(branches[0].into_typ.is_some());
-                assert!(branches[0].filter.is_some());
-
-                // Verify the filter is a comparison
-                assert!(matches!(
-                    branches[0].filter.as_ref().unwrap().node,
-                    Expr::Gt(_, _)
-                ));
-
-                assert!(matches!(branches[0].body.node, Expr::Boolean(true)));
-            }
-            _ => panic!("Expected Match expression"),
-        },
-        _ => panic!("Expected Let statement"),
-    }
-}
+// NOTE: The `into` keyword was removed from match branches.
+// Tests for `into` combined with `where` are no longer applicable.
 
 #[test]
 fn parse_match_with_multiple_type_branches() {
@@ -592,11 +541,12 @@ fn parse_match_multiple_conditions_same_type() {
 
 #[test]
 fn parse_complex_match_real_world() {
-    let input = r#"let f(x: Int | Bool) -> Constraint = 
-        match x { 
-            i as Int into LinExpr where x > 0 { $V(x) === x } 
-            b as Bool { if x { $V(1) === 1 } else { $V(0) === 0 } } 
-            other { $V(0) === 0 } 
+    // NOTE: Removed 'into LinExpr' as that syntax was removed
+    let input = r#"let f(x: Int | Bool) -> Constraint =
+        match x {
+            i as Int where x > 0 { $V(x) === LinExpr(x) }
+            b as Bool { if x { $V(1) === 1 } else { $V(0) === 0 } }
+            other { $V(0) === 0 }
         };"#;
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
@@ -606,13 +556,12 @@ fn parse_complex_match_real_world() {
             Expr::Match { branches, .. } => {
                 assert_eq!(branches.len(), 3);
 
-                // First branch: Int with into and where
-                assert!(branches[0].into_typ.is_some());
+                // First branch: Int with where filter
+                assert!(branches[0].as_typ.is_some());
                 assert!(branches[0].filter.is_some());
 
                 // Second branch: Bool
                 assert!(branches[1].as_typ.is_some());
-                assert!(branches[1].into_typ.is_none());
                 assert!(branches[1].filter.is_none());
                 assert!(matches!(branches[1].body.node, Expr::If { .. }));
 
