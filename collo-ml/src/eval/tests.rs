@@ -24,5 +24,6 @@ mod panic;
 mod quantifiers;
 mod recursivity;
 mod strings;
+mod structs;
 mod tuples;
 mod variables;

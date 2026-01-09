@@ -774,7 +774,6 @@ fn let_statement_rejects_invalid_parameter_syntax() {
         "let f(x) -> LinExpr = 5;",                  // missing type annotation
         "let f(: Student) -> LinExpr = 5;",          // missing parameter name
         "let f(x Student) -> LinExpr = 5;",          // missing colon
-        "let f(x: Student, ) -> LinExpr = 5;",       // trailing comma
         "let f(x: Student y: Week) -> LinExpr = 5;", // missing comma
     ];
     for case in cases {
@@ -784,6 +783,23 @@ fn let_statement_rejects_invalid_parameter_syntax() {
             "Should reject '{}' (invalid parameter syntax): {:?}",
             case,
             result
+        );
+    }
+}
+
+#[test]
+fn let_statement_accepts_trailing_comma_in_params() {
+    let cases = vec![
+        "let f(x: Student, ) -> LinExpr = 5;", // trailing comma is now allowed
+        "let f(x: Student, y: Week, ) -> Int = 5;", // trailing comma with multiple params
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
+            case,
+            result.err()
         );
     }
 }

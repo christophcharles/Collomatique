@@ -173,6 +173,7 @@ pub enum ExprValue<T: EvalObject> {
     Object(T),
     List(Vec<ExprValue<T>>),
     Tuple(Vec<ExprValue<T>>),
+    Struct(BTreeMap<String, ExprValue<T>>),
     Custom {
         type_name: String,
         content: Box<ExprValue<T>>,
@@ -211,6 +212,13 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
             ExprValue::Tuple(elements) => {
                 let strs: Vec<_> = elements.iter().map(|x| x.to_string()).collect();
                 write!(f, "({})", strs.join(", "))
+            }
+            ExprValue::Struct(fields) => {
+                let field_strs: Vec<_> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect();
+                write!(f, "{{{}}}", field_strs.join(", "))
             }
             ExprValue::Custom { type_name, content } => {
                 write!(f, "{}({})", type_name, content)
@@ -277,6 +285,12 @@ impl<T: EvalObject> ExprValue<T> {
             ExprValue::Tuple(elements) => {
                 ExprValue::Tuple(elements.iter().map(|x| x.with_origin(origin)).collect())
             }
+            ExprValue::Struct(fields) => ExprValue::Struct(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.with_origin(origin)))
+                    .collect(),
+            ),
             _ => self.clone(),
         }
     }
@@ -341,6 +355,29 @@ impl<T: EvalObject> ExprValue<T> {
                         .zip(target_elems.iter())
                         .all(|(e, t)| e.fits_in_typ(env, t))
                     {
+                        return true;
+                    }
+                }
+                false
+            }
+            // Structs must match field-wise
+            Self::Struct(fields) => {
+                for variant in target.get_variants() {
+                    let SimpleType::Struct(target_fields) = variant else {
+                        continue;
+                    };
+                    if fields.len() != target_fields.len() {
+                        continue;
+                    }
+                    if !fields.keys().all(|k| target_fields.contains_key(k)) {
+                        continue;
+                    }
+                    if fields.iter().all(|(k, v)| {
+                        target_fields
+                            .get(k)
+                            .map(|t| v.fits_in_typ(env, t))
+                            .unwrap_or(false)
+                    }) {
                         return true;
                     }
                 }
@@ -412,6 +449,29 @@ impl<T: EvalObject> ExprValue<T> {
                     e.can_convert_to(env, &t_concrete)
                 })
             }
+            // Structs: field-wise conversion
+            (Self::Struct(fields), SimpleType::Struct(target_fields)) => {
+                if fields.len() != target_fields.len() {
+                    return false;
+                }
+                if !fields.keys().all(|k| target_fields.contains_key(k)) {
+                    return false;
+                }
+                fields.iter().all(|(k, v)| {
+                    target_fields
+                        .get(k)
+                        .map(|t| {
+                            let t_concrete = t
+                                .as_simple()
+                                .expect("Type should be concrete")
+                                .clone()
+                                .into_concrete()
+                                .expect("Type should be concrete");
+                            v.can_convert_to(env, &t_concrete)
+                        })
+                        .unwrap_or(false)
+                })
+            }
             // Everything else forbidden
             _ => false,
         }
@@ -464,6 +524,24 @@ impl<T: EvalObject> ExprValue<T> {
                     .collect();
                 Self::Tuple(converted?)
             }
+            // Structs: field-wise conversion
+            (Self::Struct(fields), SimpleType::Struct(target_fields)) => {
+                let converted: Option<BTreeMap<_, _>> = fields
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let target_type = target_fields.get(&k)?;
+                        let t_concrete = target_type
+                            .as_simple()
+                            .expect("Type should be concrete")
+                            .clone()
+                            .into_concrete()
+                            .expect("Type should be concrete");
+                        let converted_v = v.convert_to(env, cache, &t_concrete)?;
+                        Some((k, converted_v))
+                    })
+                    .collect();
+                Self::Struct(converted?)
+            }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
             (value, SimpleType::Custom(type_name)) => Self::Custom {
@@ -503,6 +581,13 @@ impl<T: EvalObject> ExprValue<T> {
                     .map(|x| x.convert_to_string(env, cache))
                     .collect();
                 format!("({})", inners.join(", "))
+            }
+            Self::Struct(fields) => {
+                let inners: Vec<_> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.convert_to_string(env, cache)))
+                    .collect();
+                format!("{{{}}}", inners.join(", "))
             }
             Self::Custom { type_name, content } => {
                 format!("{}({})", type_name, content.convert_to_string(env, cache))
@@ -838,21 +923,28 @@ impl<T: EvalObject> LocalEnv<T> {
                         PathSegment::Field(field_name) => {
                             // Unwrap Custom types for field access
                             let unwrapped = unwrap_custom(current_value);
-                            let obj = match unwrapped {
-                                ExprValue::Object(obj) => obj,
-                                _ => panic!("Object expected for field access"),
-                            };
-                            current_value = obj
-                                .field_access(
-                                    &eval_history.env,
-                                    &mut eval_history.cache,
-                                    field_name,
-                                )
-                                .ok_or(EvalError::MissingObjectField {
-                                    object: format!("{:?}", obj),
-                                    typ: obj.typ_name(&eval_history.env),
-                                    field: field_name.clone(),
-                                })?;
+                            match unwrapped {
+                                ExprValue::Object(obj) => {
+                                    current_value = obj
+                                        .field_access(
+                                            &eval_history.env,
+                                            &mut eval_history.cache,
+                                            field_name,
+                                        )
+                                        .ok_or(EvalError::MissingObjectField {
+                                            object: format!("{:?}", obj),
+                                            typ: obj.typ_name(&eval_history.env),
+                                            field: field_name.clone(),
+                                        })?;
+                                }
+                                ExprValue::Struct(fields) => {
+                                    current_value = fields
+                                        .get(field_name)
+                                        .cloned()
+                                        .expect("Field should exist after type checking");
+                                }
+                                _ => panic!("Object or Struct expected for field access"),
+                            }
                         }
                         PathSegment::TupleIndex(index) => {
                             // Unwrap Custom types for tuple index access
@@ -1779,6 +1871,17 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 ExprValue::Tuple(element_values)
             }
+
+            Expr::StructLiteral { fields } => {
+                let field_values: BTreeMap<_, _> = fields
+                    .iter()
+                    .map(|(name, expr)| {
+                        Ok((name.node.clone(), self.eval_expr(eval_history, expr)?))
+                    })
+                    .collect::<Result<_, EvalError<T>>>()?;
+
+                ExprValue::Struct(field_values)
+            }
         })
     }
 
@@ -2014,6 +2117,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 true
             }
             ExprValue::Tuple(elements) => elements.iter().all(|e| self.validate_value(e)),
+            ExprValue::Struct(fields) => fields.values().all(|v| self.validate_value(v)),
             ExprValue::Custom { type_name, content } => {
                 // Validate that the custom type exists and recursively validate content
                 self.ast

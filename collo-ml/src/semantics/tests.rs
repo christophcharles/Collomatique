@@ -16,6 +16,7 @@ mod operators;
 mod recursivity;
 mod scoping;
 mod statements;
+mod structs;
 mod sum_types;
 mod tuples;
 mod type_system;

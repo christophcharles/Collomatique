@@ -103,6 +103,7 @@ pub enum SimpleTypeName {
     EmptyList,
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
+    Struct(Vec<(Spanned<String>, Spanned<TypeName>)>), // {field1: Type1, field2: Type2}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,6 +194,9 @@ pub enum Expr {
     },
     TupleLiteral {
         elements: Vec<Spanned<Expr>>, // (expr, expr, ...) - at least 2 elements
+    },
+    StructLiteral {
+        fields: Vec<(Spanned<String>, Spanned<Expr>)>, // {field1: expr1, field2: expr2}
     },
 
     // Arithmetic
@@ -621,8 +625,9 @@ impl SimpleTypeName {
                         )))
                     }
                     Rule::tuple_type => Self::from_tuple_type(inner_pair),
+                    Rule::struct_type => Self::from_struct_type(inner_pair),
                     _ => Err(AstError::UnexpectedRule {
-                        expected: "primitive_type, type_name, or tuple_type",
+                        expected: "primitive_type, type_name, tuple_type, or struct_type",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     }),
@@ -632,9 +637,10 @@ impl SimpleTypeName {
     }
 
     fn from_tuple_type(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ")" }
+        // tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ","? ~ ")" }
         let elements: Result<Vec<_>, _> = pair
             .into_inner()
+            .filter(|p| p.as_rule() == Rule::type_name)
             .map(|type_pair| {
                 let type_span = Span::from_pest(&type_pair);
                 Ok(Spanned::new(TypeName::from_pest(type_pair)?, type_span))
@@ -642,6 +648,30 @@ impl SimpleTypeName {
             .collect();
 
         Ok(SimpleTypeName::Tuple(elements?))
+    }
+
+    fn from_struct_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // struct_type = { "{" ~ (struct_field_type ~ ("," ~ struct_field_type)* ~ ","?)? ~ "}" }
+        // struct_field_type = { ident ~ ":" ~ type_name }
+        let mut fields = Vec::new();
+
+        for field_pair in pair.into_inner() {
+            if field_pair.as_rule() == Rule::struct_field_type {
+                let mut inner = field_pair.into_inner();
+
+                let name_pair = inner.next().unwrap();
+                let name_span = Span::from_pest(&name_pair);
+                let name = Spanned::new(name_pair.as_str().to_string(), name_span);
+
+                let type_pair = inner.next().unwrap();
+                let type_span = Span::from_pest(&type_pair);
+                let field_type = Spanned::new(TypeName::from_pest(type_pair)?, type_span);
+
+                fields.push((name, field_type));
+            }
+        }
+
+        Ok(SimpleTypeName::Struct(fields))
     }
 
     fn from_primitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -1204,6 +1234,7 @@ impl Expr {
             Rule::none => Self::from_none(inner),
             Rule::neg => Self::from_neg(inner),
             Rule::panic => Self::from_panic(inner),
+            Rule::struct_literal => Self::from_struct_literal(inner),
             Rule::tuple_literal => Self::from_tuple_literal(inner),
             Rule::number => {
                 let num_str = inner.as_str();
@@ -1515,7 +1546,7 @@ impl Expr {
     }
 
     fn from_tuple_literal(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ")" }
+        // tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
         let elements: Result<Vec<_>, _> = pair
             .into_inner()
             .filter(|p| p.as_rule() == Rule::expr)
@@ -1528,6 +1559,30 @@ impl Expr {
         Ok(Expr::TupleLiteral {
             elements: elements?,
         })
+    }
+
+    fn from_struct_literal(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // struct_literal = { "{" ~ (struct_field_expr ~ ("," ~ struct_field_expr)* ~ ","?)? ~ "}" }
+        // struct_field_expr = { ident ~ ":" ~ expr }
+        let mut fields = Vec::new();
+
+        for field_pair in pair.into_inner() {
+            if field_pair.as_rule() == Rule::struct_field_expr {
+                let mut inner = field_pair.into_inner();
+
+                let name_pair = inner.next().unwrap();
+                let name_span = Span::from_pest(&name_pair);
+                let name = Spanned::new(name_pair.as_str().to_string(), name_span);
+
+                let expr_pair = inner.next().unwrap();
+                let expr_span = Span::from_pest(&expr_pair);
+                let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+
+                fields.push((name, expr));
+            }
+        }
+
+        Ok(Expr::StructLiteral { fields })
     }
 
     fn from_empty_typed_list(pair: Pair<Rule>) -> Result<Self, AstError> {

@@ -134,6 +134,7 @@ impl GlobalEnv {
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
             SimpleType::Custom(typ_name) => self.custom_types.contains_key(typ_name),
             SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
+            SimpleType::Struct(fields) => fields.values().all(|t| self.validate_type(t)),
         }
     }
 
@@ -375,6 +376,20 @@ pub enum SemError {
     #[error("Cannot access field \"{field}\" on non-object type {typ} at {span:?}")]
     FieldAccessOnNonObject {
         typ: ExprType,
+        field: String,
+        span: Span,
+    },
+    #[error(
+        "Duplicate field \"{field}\" in struct literal at {span:?} (first defined at {previous:?})"
+    )]
+    DuplicateStructField {
+        field: String,
+        span: Span,
+        previous: Span,
+    },
+    #[error("Unknown field \"{field}\" on struct type {struct_type} at {span:?}")]
+    UnknownStructField {
+        struct_type: String,
         field: String,
         span: Span,
     },
@@ -2507,6 +2522,49 @@ impl LocalEnv {
                 Some(SimpleType::Tuple(element_types).into())
             }
 
+            Expr::StructLiteral { fields } => {
+                use std::collections::{BTreeMap, HashMap};
+                let mut field_types: BTreeMap<String, ExprType> = BTreeMap::new();
+                let mut seen_fields: HashMap<String, Span> = HashMap::new();
+                let mut all_ok = true;
+
+                for (field_name, field_expr) in fields {
+                    // Check for duplicate field names
+                    if let Some(prev_span) = seen_fields.get(&field_name.node) {
+                        errors.push(SemError::DuplicateStructField {
+                            field: field_name.node.clone(),
+                            span: field_name.span.clone(),
+                            previous: prev_span.clone(),
+                        });
+                        all_ok = false;
+                        continue;
+                    }
+                    seen_fields.insert(field_name.node.clone(), field_name.span.clone());
+
+                    // Type-check the field expression
+                    if let Some(field_type) = self.check_expr(
+                        global_env,
+                        &field_expr.node,
+                        &field_expr.span,
+                        type_info,
+                        expr_types,
+                        errors,
+                        warnings,
+                    ) {
+                        field_types.insert(field_name.node.clone(), field_type);
+                    } else {
+                        all_ok = false;
+                    }
+                }
+
+                // If any field failed to type-check, we can't form a valid struct type
+                if !all_ok {
+                    return None;
+                }
+
+                Some(SimpleType::Struct(field_types).into())
+            }
+
             Expr::ListRange { start, end } => {
                 let start_type = self.check_expr(
                     global_env,
@@ -2828,8 +2886,24 @@ impl LocalEnv {
                                     }
                                 }
                             }
+                            SimpleType::Struct(fields) => {
+                                // Look up the field in this struct type
+                                match fields.get(field_name) {
+                                    Some(field_type) => {
+                                        variants.extend(field_type.clone().into_variants());
+                                    }
+                                    None => {
+                                        errors.push(SemError::UnknownStructField {
+                                            struct_type: SimpleType::Struct(fields).to_string(),
+                                            field: field_name.clone(),
+                                            span: segment.span.clone(),
+                                        });
+                                        return None;
+                                    }
+                                }
+                            }
                             _ => {
-                                // Can't access fields on non-object types
+                                // Can't access fields on non-object/non-struct types
                                 errors.push(SemError::FieldAccessOnNonObject {
                                     typ: current_type.clone().into(),
                                     field: field_name.clone(),

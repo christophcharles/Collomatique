@@ -76,7 +76,8 @@ var_list_name = ${ "$[" ~ ident ~ "]" }
 // ========== Let statements ==========
 let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
 pub_modifier = { "pub" }
-params = { param ~ ("," ~ param)* }
+// Supports trailing comma: (a: Int, b: Bool,)
+params = { param ~ ("," ~ param)* ~ ","? }
 param = { ident ~ ":" ~ type_name }
 
 // ========== Type statements ==========
@@ -90,12 +91,19 @@ maybe_op = @{ "?" }
 list_type = {
     "[" ~ type_name? ~ "]" |
     tuple_type |
+    struct_type |
     primitive_type
 }
 
 // Tuple type: (Type1, Type2) or (Type1, Type2, Type3, ...)
 // Minimum 2 elements to distinguish from grouping
-tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ")" }
+// Supports trailing comma: (Int, Bool,)
+tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ","? ~ ")" }
+
+// Struct type: {field1: Type1, field2: Type2}
+// Supports empty struct {} and trailing comma
+struct_type = { "{" ~ (struct_field_type ~ ("," ~ struct_field_type)* ~ ","?)? ~ "}" }
+struct_field_type = { ident ~ ":" ~ type_name }
 
 // ========== Unified Expressions ==========
 expr = { null_coalesce_expr }
@@ -157,6 +165,7 @@ primary_expr = {
     number |
     neg |
     panic |
+    struct_literal |   // Must come before ident to parse {field: expr} correctly
     tuple_literal |    // Must come before "(" ~ expr ~ ")" to parse correctly
     ident |
     "(" ~ expr ~ ")"
@@ -164,7 +173,13 @@ primary_expr = {
 
 // Tuple literal: (expr, expr) or (expr, expr, expr, ...)
 // Minimum 2 elements to distinguish from grouping
-tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ")" }
+// Supports trailing comma: (1, 2,)
+tuple_literal = { "(" ~ expr ~ "," ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
+
+// Struct literal: {field1: expr1, field2: expr2}
+// Supports empty struct {} and trailing comma
+struct_literal = { "{" ~ (struct_field_expr ~ ("," ~ struct_field_expr)* ~ ","?)? ~ "}" }
+struct_field_expr = { ident ~ ":" ~ expr }
 
 let_expr = { "let" ~ ident ~ "=" ~ expr ~ "{" ~ expr ~ "}" }
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
@@ -182,7 +197,8 @@ global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
 var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }
-args = { arg ~ ("," ~ arg)* }
+// Supports trailing comma: f(1, 2,)
+args = { arg ~ ("," ~ arg)* ~ ","? }
 arg = { expr }
 neg = { "-" ~ expr }
 panic = { "panic!" ~ expr }
@@ -218,3 +234,5 @@ reify_statement_complete = { SOI ~ reify_statement ~ EOI }
 ident_complete = { SOI ~ ident ~ EOI }
 tuple_type_complete = { SOI ~ tuple_type ~ EOI }
 tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }
+struct_type_complete = { SOI ~ struct_type ~ EOI }
+struct_literal_complete = { SOI ~ struct_literal ~ EOI }

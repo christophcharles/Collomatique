@@ -1,7 +1,7 @@
 use super::SemError;
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     ops::Deref,
 };
 
@@ -24,8 +24,9 @@ pub enum SimpleType {
     EmptyList,
     List(ExprType),
     Object(String),
-    Custom(String),       // User-defined type wrapping another type
-    Tuple(Vec<ExprType>), // (Int, Bool), (Int, Bool, String), etc.
+    Custom(String),                     // User-defined type wrapping another type
+    Tuple(Vec<ExprType>),               // (Int, Bool), (Int, Bool, String), etc.
+    Struct(BTreeMap<String, ExprType>), // {field1: Type1, field2: Type2}
 }
 
 /// Represents a sum type (or a simple type if there is only one type in it)
@@ -155,10 +156,22 @@ impl SimpleType {
         }
     }
 
+    pub fn is_struct(&self) -> bool {
+        matches!(self, SimpleType::Struct(_))
+    }
+
+    pub fn get_struct_fields(&self) -> Option<&BTreeMap<String, ExprType>> {
+        match self {
+            SimpleType::Struct(fields) => Some(fields),
+            _ => None,
+        }
+    }
+
     pub fn is_concrete(&self) -> bool {
         match self {
             SimpleType::List(inner) => inner.is_concrete(),
             SimpleType::Tuple(elements) => elements.iter().all(|e| e.is_concrete()),
+            SimpleType::Struct(fields) => fields.values().all(|t| t.is_concrete()),
             _ => true,
         }
     }
@@ -190,6 +203,17 @@ impl SimpleType {
                         .iter()
                         .zip(elems2.iter())
                         .all(|(e1, e2)| e1.is_subtype_of(e2))
+            }
+            // Structs: same fields with subtype relationship
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| v1.is_subtype_of(v2))
+                            .unwrap_or(false)
+                    })
             }
             // For all other combination, it's not
             _ => false,
@@ -230,6 +254,26 @@ impl SimpleType {
                         e1.can_convert_to(&e2_concrete)
                     })
             }
+            // Structs: field-wise conversion
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| {
+                                let v2_simple = v2
+                                    .as_simple()
+                                    .expect("target type should be concrete and so simple");
+                                let v2_concrete = v2_simple
+                                    .clone()
+                                    .into_concrete()
+                                    .expect("target type should be concrete");
+                                v1.can_convert_to(&v2_concrete)
+                            })
+                            .unwrap_or(false)
+                    })
+            }
             // Anything can convert to String
             (_, SimpleType::String) => true,
             // Anything else: no conversion
@@ -268,6 +312,21 @@ impl SimpleType {
             // Tuples don't overlap with non-tuples
             (SimpleType::Tuple(_), _) | (_, SimpleType::Tuple(_)) => false,
 
+            // Structs overlap if same fields and all field types overlap
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| v1.overlaps_with(v2))
+                            .unwrap_or(false)
+                    })
+            }
+
+            // Structs don't overlap with non-structs
+            (SimpleType::Struct(_), _) | (_, SimpleType::Struct(_)) => false,
+
             // Different primitive types don't overlap
             (SimpleType::Int, _)
             | (_, SimpleType::Int)
@@ -304,6 +363,11 @@ impl SimpleType {
                     elem.assert_invariant();
                 }
             }
+            SimpleType::Struct(fields) => {
+                for field_type in fields.values() {
+                    field_type.assert_invariant();
+                }
+            }
             _ => {}
         }
     }
@@ -326,6 +390,13 @@ impl std::fmt::Display for SimpleType {
             SimpleType::Tuple(elements) => {
                 let types: Vec<_> = elements.iter().map(|t| t.to_string()).collect();
                 write!(f, "({})", types.join(", "))
+            }
+            SimpleType::Struct(fields) => {
+                let field_strs: Vec<_> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect();
+                write!(f, "{{{}}}", field_strs.join(", "))
             }
         }
     }
@@ -353,6 +424,13 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
                     .map(|e| ExprType::try_from(e))
                     .collect::<Result<_, _>>()?;
                 Ok(SimpleType::Tuple(converted))
+            }
+            SimpleTypeName::Struct(fields) => {
+                let converted: BTreeMap<String, ExprType> = fields
+                    .into_iter()
+                    .map(|(name, typ)| Ok((name.node, ExprType::try_from(typ)?)))
+                    .collect::<Result<_, SemError>>()?;
+                Ok(SimpleType::Struct(converted))
             }
         }
     }
@@ -467,6 +545,18 @@ impl SimpleType {
                     .map(|e| ExprType::from_ast(e, object_types, custom_types))
                     .collect::<Result<_, _>>()?;
                 Ok(SimpleType::Tuple(converted))
+            }
+            SimpleTypeName::Struct(fields) => {
+                let converted: BTreeMap<String, ExprType> = fields
+                    .into_iter()
+                    .map(|(name, typ)| {
+                        Ok((
+                            name.node,
+                            ExprType::from_ast(typ, object_types, custom_types)?,
+                        ))
+                    })
+                    .collect::<Result<_, SemError>>()?;
+                Ok(SimpleType::Struct(converted))
             }
         }
     }

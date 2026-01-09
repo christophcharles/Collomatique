@@ -87,15 +87,15 @@ fn fn_call_rejects_wrong_brackets() {
 }
 
 #[test]
-fn fn_call_rejects_trailing_comma() {
+fn fn_call_accepts_trailing_comma() {
     let cases = vec!["compute(x, )", "func(a, b, )"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (trailing comma): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
             case,
-            result
+            result.err()
         );
     }
 }
@@ -248,15 +248,15 @@ fn var_call_rejects_wrong_brackets() {
 }
 
 #[test]
-fn var_call_rejects_trailing_comma() {
+fn var_call_accepts_trailing_comma() {
     let cases = vec!["$Var(x, )", "$V(a, b, )"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (trailing comma): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
             case,
-            result
+            result.err()
         );
     }
 }

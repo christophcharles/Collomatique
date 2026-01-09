@@ -9,4 +9,5 @@ mod ident;
 mod let_statements;
 mod reify_statements;
 mod string_literals;
+mod structs;
 mod sum_types;
