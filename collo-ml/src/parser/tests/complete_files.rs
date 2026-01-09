@@ -369,12 +369,146 @@ fn file_rejects_invalid_statement_syntax() {
 fn file_rejects_incomplete_program() {
     let program = r#"
 let a() -> LinExpr = 5;
-let b() -> LinExpr = 
+let b() -> LinExpr =
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
     assert!(
         result.is_err(),
         "Should reject incomplete program: {:?}",
+        result
+    );
+}
+
+// =============================================================================
+// MULTI-LINE COMMENT TESTS
+// =============================================================================
+
+#[test]
+fn file_accepts_only_multiline_comments() {
+    let program = "/* this is a multi-line comment */";
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse file with only multi-line comment: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_multiline_comment_spanning_lines() {
+    let program = r#"/* this comment
+spans multiple
+lines */"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse multi-line comment spanning lines: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_multiline_comment_with_asterisks() {
+    let program = r#"/*
+ * This is a C-style block comment
+ * with asterisks on each line
+ * commonly used for documentation
+ */"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse multi-line comment with asterisks: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_statements_with_multiline_comments() {
+    let program = r#"
+/* Define a simple function */
+let a() -> LinExpr = 5;
+
+/* This function
+   does something else */
+let b() -> LinExpr = 10;
+
+/* Reify the constraint */
+reify constraint as $Var;
+"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse statements with multi-line comments: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_trailing_multiline_comment() {
+    let program = "let f() -> Int = 5; /* trailing comment */";
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse trailing multi-line comment: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_inline_multiline_comment() {
+    let program = "let f() -> Int = /* inline */ 5;";
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse inline multi-line comment: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_mixed_comment_styles() {
+    let program = r#"
+// Single-line comment
+let a() -> LinExpr = 5;
+
+/* Multi-line comment */
+let b() -> LinExpr = 10;
+
+/* Multi-line
+   spanning lines */
+let c() -> LinExpr = 15; // trailing single-line
+
+let d() -> LinExpr = 20; /* trailing multi-line */
+"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse mixed comment styles: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_accepts_multiline_comment_in_expression() {
+    let program = r#"
+let f(x: Int, y: Int) -> Int =
+    x /* first operand */ + /* plus */ y /* second operand */;
+"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse multi-line comments in expression: {:?}",
+        result
+    );
+}
+
+#[test]
+fn file_rejects_unclosed_multiline_comment() {
+    let program = "/* this comment is never closed";
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_err(),
+        "Should reject unclosed multi-line comment: {:?}",
         result
     );
 }
