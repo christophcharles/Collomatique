@@ -395,13 +395,17 @@ fn multiple_lets_and_reifies() {
 }
 
 #[test]
-fn forward_declaration_not_allowed() {
+fn forward_declaration_now_allowed() {
+    // Forward references to functions are now allowed
     let input = r#"
         pub let use_func() -> Int = helper(5);
         pub let helper(x: Int) -> Int = x;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
-    // Forward declaration should fail
-    assert!(!errors.is_empty(), "Forward declaration should not work");
+    assert!(
+        errors.is_empty(),
+        "Forward declaration should now be allowed: {:?}",
+        errors
+    );
 }

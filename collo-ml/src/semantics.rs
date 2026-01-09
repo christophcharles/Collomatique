@@ -1,5 +1,5 @@
 use crate::ast::{Expr, Param, Span, Spanned};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub mod string_case;
 #[cfg(test)]
@@ -432,9 +432,9 @@ pub enum SemError {
     #[error("Type \"{type_name}\" at {span:?} shadows a previously defined custom type")]
     TypeShadowsCustomType { type_name: String, span: Span },
     #[error(
-        "Type \"{type_name}\" at {span:?} is recursive (references itself directly or indirectly)"
+        "Type \"{type_name}\" at {span:?} has unguarded recursion (must be inside a list or tuple)"
     )]
-    RecursiveTypeDefinition { type_name: String, span: Span },
+    UnguardedRecursiveType { type_name: String, span: Span },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -503,12 +503,6 @@ fn ident_can_be_shadowed(ident: &str) -> bool {
 impl LocalEnv {
     fn new() -> Self {
         LocalEnv::default()
-    }
-
-    fn lookup_in_pending_scope(&self, ident: &str) -> Option<(ExprType, Span)> {
-        self.pending_scope
-            .get(ident)
-            .map(|(typ, span, _used)| (typ.clone(), span.clone()))
     }
 
     fn lookup_ident(&mut self, ident: &str) -> Option<(ExprType, Span)> {
@@ -582,6 +576,19 @@ impl LocalEnv {
         Ok(())
     }
 
+    /// Register an identifier without duplicate checking (for pass 2 where we already validated)
+    fn register_identifier_no_check(&mut self, ident: &str, typ: ExprType) {
+        // Use a dummy span since params were already registered in type_info during pass 1
+        self.pending_scope.insert(
+            ident.to_string(),
+            (
+                typ,
+                Span { start: 0, end: 0 },
+                should_be_used_by_default(ident),
+            ),
+        );
+    }
+
     fn check_expr(
         &mut self,
         global_env: &mut GlobalEnv,
@@ -649,24 +656,46 @@ impl LocalEnv {
     /// For Custom types, recursively resolves through the underlying ExprType (which may be a union).
     /// Returns all the leaf SimpleTypes after resolving custom types.
     fn resolve_type_for_access(&self, global_env: &GlobalEnv, typ: &ExprType) -> Vec<SimpleType> {
+        let mut visited = HashSet::new();
+        self.resolve_type_for_access_impl(global_env, typ, &mut visited)
+    }
+
+    fn resolve_type_for_access_impl(
+        &self,
+        global_env: &GlobalEnv,
+        typ: &ExprType,
+        visited: &mut HashSet<String>,
+    ) -> Vec<SimpleType> {
         let mut result = Vec::new();
         for variant in typ.get_variants() {
-            result.extend(self.resolve_simple_type_for_access(global_env, variant));
+            result.extend(self.resolve_simple_type_for_access_impl(global_env, variant, visited));
         }
         result
     }
 
     /// Resolve a single SimpleType, unwrapping Custom types recursively.
-    fn resolve_simple_type_for_access(
+    fn resolve_simple_type_for_access_impl(
         &self,
         global_env: &GlobalEnv,
         typ: &SimpleType,
+        visited: &mut HashSet<String>,
     ) -> Vec<SimpleType> {
         match typ {
             SimpleType::Custom(name) => {
+                if visited.contains(name) {
+                    // If has_unguarded_reference is correct, we should NEVER hit this.
+                    // Panic to catch bugs in validation.
+                    panic!(
+                        "Cycle detected in type resolution for '{}'. \
+                         This indicates a bug in has_unguarded_reference validation.",
+                        name
+                    );
+                }
+                visited.insert(name.clone());
+
                 if let Some(underlying) = global_env.get_custom_type_underlying(name) {
                     // Recursively resolve the underlying ExprType
-                    self.resolve_type_for_access(global_env, underlying)
+                    self.resolve_type_for_access_impl(global_env, underlying, visited)
                 } else {
                     // Unknown custom type - return empty (error will be caught elsewhere)
                     vec![]
@@ -2972,14 +3001,93 @@ impl GlobalEnv {
         let mut errors = vec![];
         let mut warnings = vec![];
 
+        // ====================================================================
+        // PASS 1a: Register all type names with placeholders
+        // This allows forward references between types
+        // ====================================================================
         for statement in &file.statements {
-            temp_env.expand_with_statement(
-                &statement.node,
-                &mut type_info,
-                &mut expr_types,
-                &mut errors,
-                &mut warnings,
-            );
+            if let crate::ast::Statement::TypeDecl { name, .. } = &statement.node {
+                temp_env.expand_with_type_decl_pass1(name, &mut errors);
+            }
+        }
+
+        // ====================================================================
+        // PASS 1b: Resolve all type definitions
+        // Now all type names are known, we can resolve underlying types
+        // ====================================================================
+        for statement in &file.statements {
+            if let crate::ast::Statement::TypeDecl { name, underlying } = &statement.node {
+                temp_env.expand_with_type_decl_pass2(name, underlying, &mut errors);
+            }
+        }
+
+        // ====================================================================
+        // PASS 2a: Register all function signatures
+        // Now all types are resolved, we can build function signatures
+        // ====================================================================
+        for statement in &file.statements {
+            if let crate::ast::Statement::Let {
+                public,
+                name,
+                params,
+                output_type,
+                body,
+                docstring,
+            } = &statement.node
+            {
+                temp_env.expand_with_let_statement_pass1(
+                    *public,
+                    name,
+                    params,
+                    output_type,
+                    body,
+                    docstring,
+                    &mut type_info,
+                    &mut errors,
+                    &mut warnings,
+                );
+            }
+        }
+
+        // ====================================================================
+        // PASS 2b: Process reify statements
+        // Now all function signatures are known, reify can verify them
+        // Variables created here can be used in function bodies
+        // ====================================================================
+        for statement in &file.statements {
+            if let crate::ast::Statement::Reify {
+                constraint_name,
+                name,
+                var_list,
+                ..
+            } = &statement.node
+            {
+                temp_env.expand_with_reify_statement(
+                    constraint_name,
+                    name,
+                    *var_list,
+                    &mut type_info,
+                    &mut errors,
+                    &mut warnings,
+                );
+            }
+        }
+
+        // ====================================================================
+        // PASS 2c: Validate all function bodies
+        // Now all function signatures AND variables are known
+        // ====================================================================
+        for statement in &file.statements {
+            if let crate::ast::Statement::Let { name, body, .. } = &statement.node {
+                temp_env.expand_with_let_statement_pass2(
+                    name,
+                    body,
+                    &mut type_info,
+                    &mut expr_types,
+                    &mut errors,
+                    &mut warnings,
+                );
+            }
         }
 
         temp_env.check_unused_fn(&mut warnings);
@@ -3019,54 +3127,9 @@ impl GlobalEnv {
         }
     }
 
-    fn expand_with_statement(
-        &mut self,
-        statement: &crate::ast::Statement,
-        type_info: &mut TypeInfo,
-        expr_types: &mut HashMap<Span, ExprType>,
-        errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
-    ) {
-        match statement {
-            crate::ast::Statement::Let {
-                docstring,
-                public,
-                name,
-                params,
-                output_type,
-                body,
-            } => self.expand_with_let_statement(
-                *public,
-                name,
-                params,
-                output_type,
-                body,
-                docstring,
-                type_info,
-                expr_types,
-                errors,
-                warnings,
-            ),
-            crate::ast::Statement::Reify {
-                docstring: _,
-                constraint_name,
-                name,
-                var_list,
-            } => self.expand_with_reify_statement(
-                constraint_name,
-                name,
-                *var_list,
-                type_info,
-                errors,
-                warnings,
-            ),
-            crate::ast::Statement::TypeDecl { name, underlying } => {
-                self.expand_with_type_decl(name, underlying, errors);
-            }
-        }
-    }
-
-    fn expand_with_let_statement(
+    /// Pass 1: Register function signature (for forward references)
+    /// Does NOT validate the function body - that happens in pass 2
+    fn expand_with_let_statement_pass1(
         &mut self,
         public: bool,
         name: &Spanned<String>,
@@ -3075,135 +3138,156 @@ impl GlobalEnv {
         body: &Spanned<Expr>,
         docstring: &Vec<String>,
         type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) {
+        // Check for duplicate function name
+        if let Some((_fn_type, span)) = self.lookup_fn(&name.node) {
+            errors.push(SemError::FunctionAlreadyDefined {
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                here: span.clone(),
+            });
+            return;
+        }
+
+        // Naming convention warning for function
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::SnakeCase,
+        ) {
+            warnings.push(SemWarning::FunctionNamingConvention {
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
+        }
+
+        // Resolve and validate parameter types
+        let mut error_in_typs = false;
+        let mut params_typ = vec![];
+        let mut seen_param_names: HashMap<String, Span> = HashMap::new();
+
+        for param in params {
+            match self.resolve_type(&param.typ) {
+                Err(e) => {
+                    errors.push(e);
+                    error_in_typs = true;
+                }
+                Ok(param_typ) => {
+                    params_typ.push(param_typ.clone());
+                    if !self.validate_type(&param_typ) {
+                        errors.push(SemError::UnknownType {
+                            typ: param_typ.to_string(),
+                            span: param.typ.span.clone(),
+                        });
+                        error_in_typs = true;
+                    }
+                }
+            }
+
+            // Check for duplicate parameter names
+            if let Some(prev_span) = seen_param_names.get(&param.name.node) {
+                errors.push(SemError::ParameterAlreadyDefined {
+                    identifier: param.name.node.clone(),
+                    span: param.name.span.clone(),
+                    here: prev_span.clone(),
+                });
+            } else {
+                seen_param_names.insert(param.name.node.clone(), param.name.span.clone());
+
+                // Naming convention warning for parameter
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &param.name.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: param.name.node.clone(),
+                        span: param.name.span.clone(),
+                        suggestion,
+                    });
+                }
+            }
+        }
+
+        // Resolve and validate output type
+        let out_typ = match self.resolve_type(output_type) {
+            Err(e) => {
+                errors.push(e);
+                return;
+            }
+            Ok(typ) => {
+                if !self.validate_type(&typ) {
+                    errors.push(SemError::UnknownType {
+                        typ: typ.to_string(),
+                        span: output_type.span.clone(),
+                    });
+                    return;
+                }
+                typ
+            }
+        };
+
+        // Register the function (body will be validated in pass 2)
+        if !error_in_typs {
+            let fn_typ = FunctionType {
+                args: params_typ,
+                output: out_typ,
+            };
+            self.register_fn(
+                &name.node,
+                name.span.clone(),
+                fn_typ,
+                public,
+                params.iter().map(|x| x.name.node.clone()).collect(),
+                body.clone(),
+                docstring.clone(),
+                type_info,
+            );
+        }
+    }
+
+    /// Pass 2: Validate function body (now all function signatures are known)
+    fn expand_with_let_statement_pass2(
+        &mut self,
+        name: &Spanned<String>,
+        body: &Spanned<Expr>,
+        type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
-        match self.lookup_fn(&name.node) {
-            Some((_fn_type, span)) => {
-                errors.push(SemError::FunctionAlreadyDefined {
-                    identifier: name.node.clone(),
-                    span: name.span.clone(),
-                    here: span.clone(),
+        // Skip if function wasn't registered in pass 1
+        let fn_desc = match self.functions.get(&name.node) {
+            Some(desc) => desc.clone(),
+            None => return,
+        };
+
+        // Build LocalEnv with parameters
+        let mut local_env = LocalEnv::new();
+        for (param_name, param_typ) in fn_desc.arg_names.iter().zip(fn_desc.typ.args.iter()) {
+            // We don't need to check for duplicate params here - already done in pass 1
+            // Just register them in the local environment
+            local_env.register_identifier_no_check(param_name, param_typ.clone());
+        }
+
+        // Validate body
+        local_env.push_scope();
+        let body_type_opt = local_env.check_expr(
+            self, &body.node, &body.span, type_info, expr_types, errors, warnings,
+        );
+        local_env.pop_scope(warnings);
+
+        // Check body type matches declared return type
+        if let Some(body_type) = body_type_opt {
+            let types_match = body_type.is_subtype_of(&fn_desc.typ.output);
+            if !types_match {
+                errors.push(SemError::BodyTypeMismatch {
+                    func: name.node.clone(),
+                    span: body.span.clone(),
+                    expected: fn_desc.typ.output.clone(),
+                    found: body_type,
                 });
-            }
-            None => {
-                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
-                    &name.node,
-                    string_case::NamingConvention::SnakeCase,
-                ) {
-                    warnings.push(SemWarning::FunctionNamingConvention {
-                        identifier: name.node.clone(),
-                        span: name.span.clone(),
-                        suggestion,
-                    });
-                }
-
-                let mut local_env = LocalEnv::new();
-                let mut error_in_typs = false;
-                let mut params_typ = vec![];
-                for param in params {
-                    match self.resolve_type(&param.typ) {
-                        Err(e) => {
-                            errors.push(e);
-                            error_in_typs = true;
-                        }
-                        Ok(param_typ) => {
-                            params_typ.push(param_typ.clone());
-                            if !self.validate_type(&param_typ) {
-                                errors.push(SemError::UnknownType {
-                                    typ: param_typ.to_string(),
-                                    span: param.typ.span.clone(),
-                                });
-                                error_in_typs = true;
-                            } else if let Some((_typ, span)) =
-                                local_env.lookup_in_pending_scope(&param.name.node)
-                            {
-                                errors.push(SemError::ParameterAlreadyDefined {
-                                    identifier: param.name.node.clone(),
-                                    span: param.name.span.clone(),
-                                    here: span,
-                                });
-                            } else {
-                                if let Some(suggestion) =
-                                    string_case::generate_suggestion_for_naming_convention(
-                                        &param.name.node,
-                                        string_case::NamingConvention::SnakeCase,
-                                    )
-                                {
-                                    warnings.push(SemWarning::ParameterNamingConvention {
-                                        identifier: param.name.node.clone(),
-                                        span: param.name.span.clone(),
-                                        suggestion,
-                                    });
-                                }
-                                if let Err(e) = local_env.register_identifier(
-                                    &param.name.node,
-                                    param.name.span.clone(),
-                                    param_typ,
-                                    type_info,
-                                    warnings,
-                                ) {
-                                    errors.push(e);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                local_env.push_scope();
-                let body_type_opt = local_env.check_expr(
-                    self, &body.node, &body.span, type_info, expr_types, errors, warnings,
-                );
-                local_env.pop_scope(warnings);
-
-                match self.resolve_type(output_type) {
-                    Err(e) => {
-                        errors.push(e);
-                    }
-                    Ok(out_typ) => {
-                        if !self.validate_type(&out_typ) {
-                            errors.push(SemError::UnknownType {
-                                typ: out_typ.to_string(),
-                                span: output_type.span.clone(),
-                            });
-                        } else {
-                            if let Some(body_type) = body_type_opt {
-                                // Allow subtyping
-                                let types_match = match (out_typ.clone(), body_type.clone()) {
-                                    (a, b) if b.is_subtype_of(&a) => true,
-                                    _ => false,
-                                };
-
-                                if !types_match {
-                                    errors.push(SemError::BodyTypeMismatch {
-                                        func: name.node.clone(),
-                                        span: body.span.clone(),
-                                        expected: out_typ.clone(),
-                                        found: body_type,
-                                    });
-                                }
-                            }
-                        }
-
-                        if !error_in_typs {
-                            let fn_typ = FunctionType {
-                                args: params_typ,
-                                output: out_typ,
-                            };
-                            self.register_fn(
-                                &name.node,
-                                name.span.clone(),
-                                fn_typ,
-                                public,
-                                params.iter().map(|x| x.name.node.clone()).collect(),
-                                body.clone(),
-                                docstring.clone(),
-                                type_info,
-                            );
-                        }
-                    }
-                };
             }
         }
     }
@@ -3306,12 +3390,8 @@ impl GlobalEnv {
         }
     }
 
-    fn expand_with_type_decl(
-        &mut self,
-        name: &Spanned<String>,
-        underlying: &Spanned<crate::ast::TypeName>,
-        errors: &mut Vec<SemError>,
-    ) {
+    /// Pass 1: Register type name with placeholder (for forward references)
+    fn expand_with_type_decl_pass1(&mut self, name: &Spanned<String>, errors: &mut Vec<SemError>) {
         // Check if type name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
@@ -3330,7 +3410,7 @@ impl GlobalEnv {
             return;
         }
 
-        // Check if type name shadows a previous custom type
+        // Check if type name shadows a previous custom type (duplicate in same file)
         if self.custom_types.contains_key(&name.node) {
             errors.push(SemError::TypeShadowsCustomType {
                 type_name: name.node.clone(),
@@ -3339,7 +3419,24 @@ impl GlobalEnv {
             return;
         }
 
-        // Build the context for type resolution
+        // Register with placeholder - will be resolved in pass 2
+        self.custom_types
+            .insert(name.node.clone(), ExprType::simple(SimpleType::Never));
+    }
+
+    /// Pass 2: Resolve underlying type and check for unguarded recursion
+    fn expand_with_type_decl_pass2(
+        &mut self,
+        name: &Spanned<String>,
+        underlying: &Spanned<crate::ast::TypeName>,
+        errors: &mut Vec<SemError>,
+    ) {
+        // Skip if pass 1 failed (type wasn't registered)
+        if !self.custom_types.contains_key(&name.node) {
+            return;
+        }
+
+        // Build the context for type resolution - all type names are now known
         let object_types: std::collections::HashSet<String> =
             self.defined_types.keys().cloned().collect();
         let custom_type_names: std::collections::HashSet<String> =
@@ -3355,16 +3452,16 @@ impl GlobalEnv {
                 }
             };
 
-        // Check for recursive type (type references itself)
-        if self.type_references_custom(&underlying_type, &name.node) {
-            errors.push(SemError::RecursiveTypeDefinition {
+        // Check for unguarded recursive type (type references itself without being inside a container)
+        if self.has_unguarded_reference(&underlying_type, &name.node) {
+            errors.push(SemError::UnguardedRecursiveType {
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
             return;
         }
 
-        // Register the custom type
+        // Update the placeholder with the actual type
         self.custom_types.insert(name.node.clone(), underlying_type);
     }
 
@@ -3375,29 +3472,45 @@ impl GlobalEnv {
         )
     }
 
-    fn type_references_custom(&self, typ: &ExprType, custom_name: &str) -> bool {
-        typ.get_variants()
-            .iter()
-            .any(|v| self.simple_type_references_custom(v, custom_name))
+    /// Check if type_name appears as an unguarded variant in typ.
+    /// Unguarded = direct union variant, not inside List/Tuple.
+    /// This detects invalid recursive types like `type A = Int | A;`
+    /// but allows guarded recursion like `type A = Int | [A];`
+    fn has_unguarded_reference(&self, typ: &ExprType, type_name: &str) -> bool {
+        for variant in typ.get_variants() {
+            if self.simple_type_has_unguarded_reference(variant, type_name) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn simple_type_references_custom(&self, typ: &SimpleType, custom_name: &str) -> bool {
+    fn simple_type_has_unguarded_reference(&self, typ: &SimpleType, type_name: &str) -> bool {
         match typ {
+            SimpleType::Custom(name) if name == type_name => {
+                // Direct reference to the type we're defining - unguarded!
+                true
+            }
             SimpleType::Custom(name) => {
-                if name == custom_name {
-                    return true;
-                }
-                // Also check if the custom type we reference itself references the target
+                // Check if this custom type transitively has unguarded reference
+                // But only if it's already resolved (not a placeholder)
                 if let Some(underlying) = self.custom_types.get(name) {
-                    self.type_references_custom(underlying, custom_name)
+                    // Skip if it's still a placeholder (Never type used during pass 1)
+                    let placeholder = ExprType::simple(SimpleType::Never);
+                    if *underlying == placeholder {
+                        false
+                    } else {
+                        self.has_unguarded_reference(underlying, type_name)
+                    }
                 } else {
                     false
                 }
             }
-            SimpleType::List(inner) => self.type_references_custom(inner, custom_name),
-            SimpleType::Tuple(elements) => elements
-                .iter()
-                .any(|e| self.type_references_custom(e, custom_name)),
+            SimpleType::List(_) | SimpleType::Tuple(_) => {
+                // Guarded - recursion inside containers is allowed
+                // Don't recurse into containers
+                false
+            }
             _ => false,
         }
     }

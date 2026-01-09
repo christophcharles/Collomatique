@@ -22,6 +22,7 @@ mod objects;
 mod origins;
 mod panic;
 mod quantifiers;
+mod recursivity;
 mod strings;
 mod tuples;
 mod variables;

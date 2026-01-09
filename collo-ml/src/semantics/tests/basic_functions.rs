@@ -371,18 +371,17 @@ fn recursive_function_call_should_fail() {
 }
 
 #[test]
-fn mutually_recursive_functions_should_fail() {
+fn mutually_recursive_functions_now_allowed() {
+    // Mutual recursion is now allowed with forward references
     let input = r#"
         pub let is_even(n: Int) -> Bool = if n == 0 { true } else { is_odd(n - 1) };
         pub let is_odd(n: Int) -> Bool = if n == 0 { false } else { is_even(n - 1) };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
-    // This should fail as is_odd is not defined.
     assert!(
+        errors.is_empty(),
+        "Mutually recursive functions should now be allowed: {:?}",
         errors
-            .iter()
-            .any(|e| matches!(e, SemError::UnknownIdentifer { .. })),
-        "Mutually recursive functions should not be recognized"
     );
 }

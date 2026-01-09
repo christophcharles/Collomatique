@@ -13,6 +13,7 @@ mod folds;
 mod let_expr;
 mod match_expr;
 mod operators;
+mod recursivity;
 mod scoping;
 mod statements;
 mod sum_types;

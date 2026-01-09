@@ -209,41 +209,42 @@ fn error_shadowing_previous_custom_type() {
 // ERROR CASES - RECURSIVE TYPES
 // =============================================================================
 
+// =============================================================================
+// GUARDED RECURSIVE TYPES (NOW ALLOWED)
+// Recursion inside containers (List, Tuple) is valid
+// =============================================================================
+
 #[test]
-fn error_recursive_type_direct() {
-    // Direct self-reference is caught as an unknown type because the type
-    // is not yet defined when we try to resolve the underlying type.
+fn recursive_type_in_list() {
+    // Self-reference inside a list is guarded recursion - now allowed
     let input = r#"
         type A = [A];
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
-    assert!(!errors.is_empty(), "Should error on self-referencing type");
-    // The error is UnknownType because A is not yet defined
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(
+        errors.is_empty(),
+        "Guarded recursion in list should be allowed: {:?}",
+        errors
+    );
 }
 
 #[test]
-fn error_recursive_type_in_tuple() {
-    // Same as above - self-reference is caught as unknown type
+fn recursive_type_in_tuple() {
+    // Self-reference inside a tuple is guarded recursion - now allowed
     let input = r#"
         type A = (Int, A);
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
-        !errors.is_empty(),
-        "Should error on self-referencing type in tuple"
+        errors.is_empty(),
+        "Guarded recursion in tuple should be allowed: {:?}",
+        errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
 }
 
 #[test]
-fn error_recursive_type_indirect() {
-    // Indirect recursion: A references B which exists, but B references A
-    // This is caught as a RecursiveTypeDefinition error
+fn recursive_type_indirect_guarded() {
+    // Indirect recursion inside containers is guarded - now allowed
     let input = r#"
         type A = Int;
         type B = [A];
@@ -251,13 +252,10 @@ fn error_recursive_type_indirect() {
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
-        !errors.is_empty(),
-        "Should error on indirect recursive type"
+        errors.is_empty(),
+        "Guarded indirect recursion should be allowed: {:?}",
+        errors
     );
-    // Self-reference is still caught as unknown type
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
 }
 
 // =============================================================================
@@ -361,15 +359,17 @@ fn error_unknown_custom_type() {
 }
 
 #[test]
-fn error_forward_reference_to_custom_type() {
+fn forward_reference_to_custom_type_now_allowed() {
+    // Forward references to types are now allowed
     let input = r#"
         let f() -> B = 5 into B;
         type B = Int;
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new());
     assert!(
-        !errors.is_empty(),
-        "Should error on forward reference to custom type"
+        errors.is_empty(),
+        "Forward reference to custom type should now be allowed: {:?}",
+        errors
     );
 }
 
