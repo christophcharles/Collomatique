@@ -8,6 +8,7 @@ mod collections;
 mod comparisons;
 mod complex_combinations;
 mod constraints;
+mod custom_types;
 mod eval_with_variables;
 mod extra_sum_types;
 mod folds;

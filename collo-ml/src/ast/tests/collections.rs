@@ -318,7 +318,7 @@ fn parse_global_collection() {
                     name.node.types[0].node,
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::Object("Student".into()),
+                        inner: SimpleTypeName::Other("Student".into()),
                     }
                 );
             }

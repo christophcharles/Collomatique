@@ -1,6 +1,9 @@
 use super::SemError;
 
-use std::{collections::BTreeSet, ops::Deref};
+use std::{
+    collections::{BTreeSet, HashSet},
+    ops::Deref,
+};
 
 #[cfg(test)]
 mod tests;
@@ -8,7 +11,7 @@ mod tests;
 /// Represents a type that appears in a sum type
 ///
 /// These can be primitive types (Int, Bool, LinExpr, etc)
-/// or objects or even lists
+/// or objects, custom types, or even lists
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleType {
     Never,
@@ -21,6 +24,7 @@ pub enum SimpleType {
     EmptyList,
     List(ExprType),
     Object(String),
+    Custom(String),       // User-defined type wrapping another type
     Tuple(Vec<ExprType>), // (Int, Bool), (Int, Bool, String), etc.
 }
 
@@ -104,6 +108,10 @@ impl SimpleType {
         matches!(self, SimpleType::Object(_))
     }
 
+    pub fn is_custom(&self) -> bool {
+        matches!(self, SimpleType::Custom(_))
+    }
+
     pub fn get_inner_object_type(&self) -> Option<&String> {
         match self {
             SimpleType::Object(typ) => Some(typ),
@@ -114,6 +122,20 @@ impl SimpleType {
     pub fn to_inner_object_type(self) -> Option<String> {
         match self {
             SimpleType::Object(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
+    pub fn get_inner_custom_type(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
+    pub fn to_inner_custom_type(self) -> Option<String> {
+        match self {
+            SimpleType::Custom(typ) => Some(typ),
             _ => None,
         }
     }
@@ -228,6 +250,9 @@ impl SimpleType {
             // Same object type overlaps
             (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
 
+            // Same custom type overlaps
+            (SimpleType::Custom(s_name), SimpleType::Custom(o_name)) => s_name == o_name,
+
             // Never overlaps with everything: it is a subtype of everything
             (SimpleType::Never, _) | (_, SimpleType::Never) => true,
 
@@ -256,6 +281,8 @@ impl SimpleType {
             | (_, SimpleType::Constraint)
             | (SimpleType::Object(_), _)
             | (_, SimpleType::Object(_))
+            | (SimpleType::Custom(_), _)
+            | (_, SimpleType::Custom(_))
             | (SimpleType::String, _)
             | (_, SimpleType::String) => false,
 
@@ -295,6 +322,7 @@ impl std::fmt::Display for SimpleType {
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
             SimpleType::Object(typ) => write!(f, "{}", typ),
+            SimpleType::Custom(typ) => write!(f, "{}", typ),
             SimpleType::Tuple(elements) => {
                 let types: Vec<_> = elements.iter().map(|t| t.to_string()).collect();
                 write!(f, "({})", types.join(", "))
@@ -316,7 +344,7 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
             SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
             SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
             SimpleTypeName::String => Ok(SimpleType::String),
-            SimpleTypeName::Object(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::Other(name) => Ok(SimpleType::Object(name)),
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),
             SimpleTypeName::Tuple(elements) => {
@@ -394,6 +422,143 @@ impl TryFrom<crate::ast::Spanned<crate::ast::TypeName>> for ExprType {
 impl From<SimpleType> for ExprType {
     fn from(value: SimpleType) -> Self {
         ExprType::simple(value)
+    }
+}
+
+/// Context-aware type conversion from AST types
+///
+/// These methods are used during semantic analysis when we have access to
+/// the object_types and custom_types sets.
+impl SimpleType {
+    /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
+    /// to either Object or Custom based on the provided sets.
+    pub fn from_ast(
+        value: crate::ast::SimpleTypeName,
+        object_types: &HashSet<String>,
+        custom_types: &HashSet<String>,
+    ) -> Result<Self, TypeResolutionError> {
+        use crate::ast::SimpleTypeName;
+        match value {
+            SimpleTypeName::Never => Ok(SimpleType::Never),
+            SimpleTypeName::None => Ok(SimpleType::None),
+            SimpleTypeName::Bool => Ok(SimpleType::Bool),
+            SimpleTypeName::Int => Ok(SimpleType::Int),
+            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
+            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
+            SimpleTypeName::String => Ok(SimpleType::String),
+            SimpleTypeName::Other(name) => {
+                if object_types.contains(&name) {
+                    Ok(SimpleType::Object(name))
+                } else if custom_types.contains(&name) {
+                    Ok(SimpleType::Custom(name))
+                } else {
+                    Err(TypeResolutionError::UnknownType(name))
+                }
+            }
+            SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
+            SimpleTypeName::List(inner) => Ok(SimpleType::List(ExprType::from_ast(
+                inner,
+                object_types,
+                custom_types,
+            )?)),
+            SimpleTypeName::Tuple(elements) => {
+                let converted: Vec<ExprType> = elements
+                    .into_iter()
+                    .map(|e| ExprType::from_ast(e, object_types, custom_types))
+                    .collect::<Result<_, _>>()?;
+                Ok(SimpleType::Tuple(converted))
+            }
+        }
+    }
+}
+
+impl ExprType {
+    /// Convert an AST TypeName to an ExprType, resolving named types
+    /// to either Object or Custom based on the provided sets.
+    pub fn from_ast(
+        value: crate::ast::Spanned<crate::ast::TypeName>,
+        object_types: &HashSet<String>,
+        custom_types: &HashSet<String>,
+    ) -> Result<Self, SemError> {
+        if value.node.types.is_empty() {
+            panic!("It should not be possible to form 0-length typenames");
+        }
+        let mut flattened = Vec::with_capacity(value.node.types.len());
+        for typ in value.node.types {
+            let inner_typ =
+                SimpleType::from_ast(typ.node.inner.clone(), object_types, custom_types)
+                    .map_err(|e| e.into_sem_error(typ.span.clone()))?;
+            let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
+            match typ.node.maybe_count {
+                0 => flattened.push(spanned_inner),
+                1 => {
+                    if spanned_inner.node.is_none() {
+                        return Err(SemError::OptionMarkerOnNone(spanned_inner.span));
+                    }
+                    flattened.push(crate::ast::Spanned::new(
+                        SimpleType::None,
+                        spanned_inner.span.clone(),
+                    ));
+                    flattened.push(spanned_inner);
+                }
+                _ => {
+                    return Err(SemError::MultipleOptionMarkers {
+                        typ: spanned_inner.node,
+                        span: spanned_inner.span,
+                    });
+                }
+            };
+        }
+        use std::collections::BTreeMap;
+        let mut span_map = BTreeMap::new();
+        for spanned_typ in flattened {
+            let current_span = spanned_typ.span.clone();
+            let old_span_opt = span_map.insert(spanned_typ.node.clone(), spanned_typ.span);
+            if let Some(old_span) = old_span_opt {
+                return Err(SemError::MultipleTypeInSum {
+                    typ: spanned_typ.node,
+                    span1: current_span,
+                    span2: old_span,
+                    sum_span: value.span,
+                });
+            }
+        }
+        let variants: BTreeSet<_> = span_map.keys().cloned().collect();
+        if let Some((variant1, variant2)) = ExprType::check_subtypes(&variants) {
+            let span1 = span_map.remove(variant1).unwrap();
+            let span2 = span_map.remove(variant2).unwrap();
+            return Err(SemError::SubtypeAndTypePresent {
+                typ1: variant1.clone(),
+                span1,
+                typ2: variant2.clone(),
+                span2,
+                sum_span: value.span,
+            });
+        }
+        Ok(ExprType { variants }.assert_before_return())
+    }
+}
+
+/// Error type for type resolution (before we have span information)
+#[derive(Debug, Clone)]
+pub enum TypeResolutionError {
+    UnknownType(String),
+    /// Wraps a SemError from nested type resolution (List/Tuple elements)
+    Nested(Box<SemError>),
+}
+
+impl TypeResolutionError {
+    pub fn into_sem_error(self, span: crate::ast::Span) -> SemError {
+        match self {
+            TypeResolutionError::UnknownType(typ) => SemError::UnknownType { typ, span },
+            TypeResolutionError::Nested(e) => *e,
+        }
+    }
+}
+
+impl From<SemError> for TypeResolutionError {
+    fn from(e: SemError) -> Self {
+        TypeResolutionError::Nested(Box::new(e))
     }
 }
 

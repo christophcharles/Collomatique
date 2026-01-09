@@ -23,7 +23,7 @@ raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
 raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
 raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 
-statement = { let_statement | reify_statement }
+statement = { let_statement | reify_statement | type_statement }
 
 docstring = ${
     "##" ~ docstring_content ~ EOL
@@ -46,6 +46,7 @@ reserved_keyword = {
     "match" |
     "panic" |
     "cast" |
+    "type" |
     "fold" |
     "with" |
     "else" |
@@ -77,6 +78,9 @@ let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ "
 pub_modifier = { "pub" }
 params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ type_name }
+
+// ========== Type statements ==========
+type_statement = { "type" ~ ident ~ "=" ~ type_name ~ ";" }
 
 // ========== Type Names ==========
 primitive_type = { ident | "None" | "Int" | "Bool" | "LinExpr" | "Constraint" | "String" | "Never" }

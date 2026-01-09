@@ -8,6 +8,7 @@ mod basic_functions;
 mod coercion;
 mod collections;
 mod control_flow;
+mod custom_types;
 mod folds;
 mod let_expr;
 mod match_expr;

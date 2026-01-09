@@ -104,7 +104,7 @@ fn parse_option_custom_object_type() {
             assert_eq!(output_type.node.types[0].node.maybe_count, 1);
             assert_eq!(
                 output_type.node.types[0].node.inner,
-                SimpleTypeName::Object("Student".into())
+                SimpleTypeName::Other("Student".into())
             );
         }
         _ => panic!("Expected Let statement"),
@@ -270,15 +270,15 @@ fn parse_sum_type_custom_objects() {
 
             assert_eq!(
                 output_type.node.types[0].node.inner,
-                SimpleTypeName::Object("Student".into())
+                SimpleTypeName::Other("Student".into())
             );
             assert_eq!(
                 output_type.node.types[1].node.inner,
-                SimpleTypeName::Object("Teacher".into())
+                SimpleTypeName::Other("Teacher".into())
             );
             assert_eq!(
                 output_type.node.types[2].node.inner,
-                SimpleTypeName::Object("Admin".into())
+                SimpleTypeName::Other("Admin".into())
             );
         }
         _ => panic!("Expected Let statement"),
@@ -508,7 +508,7 @@ fn parse_triplicate_types_in_sum() {
             assert_eq!(output_type.node.types.len(), 3);
             // All three are Student
             for variant in &output_type.node.types {
-                assert_eq!(variant.node.inner, SimpleTypeName::Object("Student".into()));
+                assert_eq!(variant.node.inner, SimpleTypeName::Other("Student".into()));
             }
         }
         _ => panic!("Expected Let statement"),

@@ -122,7 +122,7 @@ fn parse_custom_object_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Object("Student".into()),
+                    inner: SimpleTypeName::Other("Student".into()),
                 }
             );
         }
@@ -205,7 +205,7 @@ fn parse_list_of_object() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Object("Student".into()),
+                            inner: SimpleTypeName::Other("Student".into()),
                         }
                     );
                 }

@@ -67,6 +67,10 @@ pub enum Statement {
         var_list: bool,
         name: Spanned<String>,
     },
+    TypeDecl {
+        name: Spanned<String>,
+        underlying: Spanned<TypeName>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +99,7 @@ pub enum SimpleTypeName {
     Int,
     Bool,
     String,
-    Object(String), // Student, Week, etc
+    Other(String), // At parse time, we don't know if it's an object or custom type
     EmptyList,
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
@@ -307,7 +311,7 @@ impl File {
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
                 Rule::statement => {
-                    // statement is a wrapper containing let_statement or reify_statement
+                    // statement is a wrapper containing let_statement, reify_statement, or type_statement
                     let span = Span::from_pest(&inner_pair);
                     let actual_stmt = inner_pair.into_inner().next().unwrap();
                     let stmt = Statement::from_pest(actual_stmt)?;
@@ -316,7 +320,7 @@ impl File {
                 Rule::EOI => {}
                 _ => {
                     return Err(AstError::UnexpectedRule {
-                        expected: "let_statement, reify_statement, or EOI",
+                        expected: "let_statement, reify_statement, type_statement, or EOI",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     });
@@ -333,8 +337,9 @@ impl Statement {
         match pair.as_rule() {
             Rule::let_statement => Self::from_let_pest(pair),
             Rule::reify_statement => Self::from_reify_pest(pair),
+            Rule::type_statement => Self::from_type_pest(pair),
             _ => Err(AstError::UnexpectedRule {
-                expected: "let_statement or reify_statement",
+                expected: "let_statement, reify_statement, or type_statement",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),
@@ -453,6 +458,39 @@ impl Statement {
             constraint_name: constraint_name.ok_or(AstError::MissingName(span.clone()))?,
             name: name.ok_or(AstError::MissingName(span))?,
             var_list,
+        })
+    }
+
+    fn from_type_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // type_statement = { "type" ~ ident ~ "=" ~ type_name ~ ";" }
+        let span = Span::from_pest(&pair);
+        let mut name = None;
+        let mut underlying = None;
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::ident => {
+                    if name.is_none() {
+                        name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
+                    }
+                }
+                Rule::type_name => {
+                    let type_name_span = Span::from_pest(&inner_pair);
+                    underlying = Some(Spanned::new(
+                        TypeName::from_pest(inner_pair)?,
+                        type_name_span,
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Statement::TypeDecl {
+            name: name.ok_or(AstError::MissingName(span.clone()))?,
+            underlying: underlying.ok_or(AstError::MissingTypeName(span))?,
         })
     }
 }
@@ -618,7 +656,7 @@ impl SimpleTypeName {
                     "Constraint" => Ok(SimpleTypeName::Constraint),
                     "String" => Ok(SimpleTypeName::String),
                     "Never" => Ok(SimpleTypeName::Never),
-                    _ => Ok(SimpleTypeName::Object(type_name.to_string())),
+                    _ => Ok(SimpleTypeName::Other(type_name.to_string())),
                 }
             }
             _ => Err(AstError::UnexpectedRule {

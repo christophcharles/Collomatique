@@ -47,6 +47,7 @@ pub struct VariableDesc {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
     defined_types: HashMap<String, ObjectFields>,
+    custom_types: HashMap<String, ExprType>, // Maps custom type name → underlying type
     functions: HashMap<String, FunctionDesc>,
     external_variables: HashMap<String, ArgsType>,
     internal_variables: HashMap<String, VariableDesc>,
@@ -131,6 +132,7 @@ impl GlobalEnv {
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
+            SimpleType::Custom(typ_name) => self.custom_types.contains_key(typ_name),
             SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
         }
     }
@@ -139,6 +141,25 @@ impl GlobalEnv {
         typ.get_variants()
             .iter()
             .all(|x| self.validate_simple_type(x))
+    }
+
+    /// Resolve an AST type to an ExprType using the current context (objects + custom types)
+    pub fn resolve_type(&self, typ: &Spanned<crate::ast::TypeName>) -> Result<ExprType, SemError> {
+        let object_types: std::collections::HashSet<String> =
+            self.defined_types.keys().cloned().collect();
+        let custom_type_names: std::collections::HashSet<String> =
+            self.custom_types.keys().cloned().collect();
+        ExprType::from_ast(typ.clone(), &object_types, &custom_type_names)
+    }
+
+    /// Get the underlying type for a custom type
+    pub fn get_custom_type_underlying(&self, name: &str) -> Option<&ExprType> {
+        self.custom_types.get(name)
+    }
+
+    /// Get all custom types
+    pub fn get_custom_types(&self) -> &HashMap<String, ExprType> {
+        &self.custom_types
     }
 
     pub fn get_functions(&self) -> &HashMap<String, FunctionDesc> {
@@ -404,6 +425,16 @@ pub enum SemError {
     ListIndexNotInt { span: Span, found: ExprType },
     #[error("Cannot index into non-list type {typ} at {span:?}")]
     IndexOnNonList { typ: ExprType, span: Span },
+    #[error("Type \"{type_name}\" at {span:?} shadows a primitive type")]
+    TypeShadowsPrimitive { type_name: String, span: Span },
+    #[error("Type \"{type_name}\" at {span:?} shadows an object type")]
+    TypeShadowsObject { type_name: String, span: Span },
+    #[error("Type \"{type_name}\" at {span:?} shadows a previously defined custom type")]
+    TypeShadowsCustomType { type_name: String, span: Span },
+    #[error(
+        "Type \"{type_name}\" at {span:?} is recursive (references itself directly or indirectly)"
+    )]
+    RecursiveTypeDefinition { type_name: String, span: Span },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -570,6 +601,73 @@ impl LocalEnv {
         result
     }
 
+    /// Check if a type can be converted considering custom type wrapping/unwrapping
+    fn can_convert_with_custom_types(
+        &self,
+        global_env: &GlobalEnv,
+        from: &ExprType,
+        to: &ConcreteType,
+    ) -> bool {
+        let to_simple = to.inner();
+
+        // Check if target is a custom type and source can convert to underlying
+        if let SimpleType::Custom(custom_name) = to_simple {
+            if let Some(underlying) = global_env.get_custom_type_underlying(custom_name) {
+                // Can convert if source can convert to the underlying type
+                if underlying.is_concrete() {
+                    let underlying_concrete = underlying
+                        .clone()
+                        .to_simple()
+                        .unwrap()
+                        .into_concrete()
+                        .unwrap();
+                    if from.can_convert_to(&underlying_concrete) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Check if source is a custom type and underlying can convert to target
+        if from.is_concrete() {
+            if let Some(from_simple) = from.clone().to_simple() {
+                if let SimpleType::Custom(custom_name) = from_simple {
+                    if let Some(underlying) = global_env.get_custom_type_underlying(&custom_name) {
+                        // Can convert if the underlying type can convert to target
+                        if underlying.can_convert_to(to) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Resolve a SimpleType that might be a Custom type to its underlying type for field/index access
+    /// Returns the underlying type for Custom types (recursively), or the original type otherwise
+    fn resolve_custom_type_for_access(
+        &self,
+        global_env: &GlobalEnv,
+        typ: &SimpleType,
+    ) -> Option<SimpleType> {
+        match typ {
+            SimpleType::Custom(name) => {
+                if let Some(underlying) = global_env.get_custom_type_underlying(name) {
+                    // Custom type underlying should be concrete for field access
+                    if underlying.is_concrete() {
+                        let underlying_simple = underlying.clone().to_simple()?;
+                        // Recursively resolve in case of nested custom types
+                        return self.resolve_custom_type_for_access(global_env, &underlying_simple);
+                    }
+                }
+                None
+            }
+            other => Some(other.clone()),
+        }
+    }
+
     fn check_expr_internal(
         &mut self,
         global_env: &mut GlobalEnv,
@@ -612,23 +710,14 @@ impl LocalEnv {
                     global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
                 );
 
-                // Convert the declared type
-                let target_type = match ExprType::try_from(typ.clone()) {
+                // Resolve the target type using proper context (objects + custom types)
+                let target_type = match global_env.resolve_type(typ) {
                     Ok(t) => t,
                     Err(e) => {
                         errors.push(e);
                         return expr_type; // Fallback to inferred type
                     }
                 };
-
-                // Validate that the target type is actually valid
-                if !global_env.validate_type(&target_type) {
-                    errors.push(SemError::UnknownType {
-                        typ: target_type.to_string(),
-                        span: typ.span.clone(),
-                    });
-                    return expr_type; // Fallback to inferred type
-                }
 
                 // Validate that the target type is concrete for type conversion
                 if !target_type.is_concrete() {
@@ -643,8 +732,15 @@ impl LocalEnv {
 
                 if let Some(inferred) = expr_type {
                     // Check if the inferred type can convert to the target type
-                    if !inferred.can_convert_to(&concrete_target) {
-                        // Error: can't convert
+                    // For custom types, we also allow conversion between custom type and its underlying type
+                    let can_convert = inferred.can_convert_to(&concrete_target)
+                        || self.can_convert_with_custom_types(
+                            global_env,
+                            &inferred,
+                            &concrete_target,
+                        );
+
+                    if !can_convert {
                         errors.push(SemError::ImpossibleConversion {
                             span: expr.span.clone(),
                             found: inferred,
@@ -662,7 +758,7 @@ impl LocalEnv {
                 );
 
                 // Convert the declared type
-                let target_type = match ExprType::try_from(typ.clone()) {
+                let target_type = match global_env.resolve_type(typ) {
                     Ok(t) => t,
                     Err(e) => {
                         errors.push(e);
@@ -703,7 +799,7 @@ impl LocalEnv {
                 );
 
                 // Convert the declared type
-                let target_type = match ExprType::try_from(typ.clone()) {
+                let target_type = match global_env.resolve_type(typ) {
                     Ok(t) => t,
                     Err(e) => {
                         errors.push(e);
@@ -743,7 +839,7 @@ impl LocalEnv {
                 );
 
                 // Convert the declared type
-                let target_type = match ExprType::try_from(typ.clone()) {
+                let target_type = match global_env.resolve_type(typ) {
                     Ok(t) => t,
                     Err(e) => {
                         errors.push(e);
@@ -1959,7 +2055,7 @@ impl LocalEnv {
 
                 for branch in branches {
                     let as_type = if let Some(bt) = &branch.as_typ {
-                        match ExprType::try_from(bt.clone()) {
+                        match global_env.resolve_type(bt) {
                             Ok(t) => {
                                 if !global_env.validate_type(&t) {
                                     errors.push(SemError::UnknownType {
@@ -1980,7 +2076,7 @@ impl LocalEnv {
                     };
 
                     let into_type = if let Some(it) = &branch.into_typ {
-                        match ExprType::try_from(it.clone()) {
+                        match global_env.resolve_type(it) {
                             Ok(t) => {
                                 if !global_env.validate_type(&t) {
                                     errors.push(SemError::UnknownType {
@@ -2284,7 +2380,7 @@ impl LocalEnv {
 
             // ========== Collections ==========
             Expr::GlobalList(type_name) => {
-                let typ = match ExprType::try_from(type_name.clone()) {
+                let typ = match global_env.resolve_type(type_name) {
                     Ok(t) => t,
                     Err(e) => {
                         errors.push(e);
@@ -2666,11 +2762,14 @@ impl LocalEnv {
                 PathSegment::Field(field_name) => {
                     let mut variants = BTreeSet::new();
                     for variant in current_type.get_variants() {
-                        match variant {
-                            a if a.is_object() => {
-                                let type_name = a.get_inner_object_type().unwrap();
+                        // Resolve custom types to their underlying type for field access
+                        let resolved_variant =
+                            self.resolve_custom_type_for_access(global_env, variant);
+
+                        match resolved_variant {
+                            Some(SimpleType::Object(type_name)) => {
                                 // Look up the field in this object type
-                                match global_env.lookup_field(type_name, field_name) {
+                                match global_env.lookup_field(&type_name, field_name) {
                                     Some(field_type) => {
                                         variants.extend(field_type.into_variants());
                                     }
@@ -2702,8 +2801,12 @@ impl LocalEnv {
                 PathSegment::TupleIndex(index) => {
                     let mut variants = BTreeSet::new();
                     for variant in current_type.get_variants() {
-                        match variant {
-                            SimpleType::Tuple(elements) => {
+                        // Resolve custom types to their underlying type for tuple access
+                        let resolved_variant =
+                            self.resolve_custom_type_for_access(global_env, variant);
+
+                        match resolved_variant {
+                            Some(SimpleType::Tuple(elements)) => {
                                 if *index >= elements.len() {
                                     errors.push(SemError::TupleIndexOutOfBounds {
                                         index: *index,
@@ -2806,6 +2909,7 @@ impl GlobalEnv {
     > {
         let mut temp_env = GlobalEnv {
             defined_types,
+            custom_types: HashMap::new(),
             functions: HashMap::new(),
             external_variables: variables
                 .into_iter()
@@ -2932,6 +3036,9 @@ impl GlobalEnv {
                 errors,
                 warnings,
             ),
+            crate::ast::Statement::TypeDecl { name, underlying } => {
+                self.expand_with_type_decl(name, underlying, errors);
+            }
         }
     }
 
@@ -2972,7 +3079,7 @@ impl GlobalEnv {
                 let mut error_in_typs = false;
                 let mut params_typ = vec![];
                 for param in params {
-                    match ExprType::try_from(param.typ.clone()) {
+                    match self.resolve_type(&param.typ) {
                         Err(e) => {
                             errors.push(e);
                             error_in_typs = true;
@@ -3026,7 +3133,7 @@ impl GlobalEnv {
                 );
                 local_env.pop_scope(warnings);
 
-                match ExprType::try_from(output_type.clone()) {
+                match self.resolve_type(output_type) {
                     Err(e) => {
                         errors.push(e);
                     }
@@ -3172,6 +3279,102 @@ impl GlobalEnv {
                     }
                 }
             }
+        }
+    }
+
+    fn expand_with_type_decl(
+        &mut self,
+        name: &Spanned<String>,
+        underlying: &Spanned<crate::ast::TypeName>,
+        errors: &mut Vec<SemError>,
+    ) {
+        // Check if type name shadows a primitive type
+        if Self::is_primitive_type_name(&name.node) {
+            errors.push(SemError::TypeShadowsPrimitive {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Check if type name shadows an object type
+        if self.defined_types.contains_key(&name.node) {
+            errors.push(SemError::TypeShadowsObject {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Check if type name shadows a previous custom type
+        if self.custom_types.contains_key(&name.node) {
+            errors.push(SemError::TypeShadowsCustomType {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Build the context for type resolution
+        let object_types: std::collections::HashSet<String> =
+            self.defined_types.keys().cloned().collect();
+        let custom_type_names: std::collections::HashSet<String> =
+            self.custom_types.keys().cloned().collect();
+
+        // Resolve the underlying type
+        let underlying_type =
+            match ExprType::from_ast(underlying.clone(), &object_types, &custom_type_names) {
+                Ok(typ) => typ,
+                Err(e) => {
+                    errors.push(e);
+                    return;
+                }
+            };
+
+        // Check for recursive type (type references itself)
+        if self.type_references_custom(&underlying_type, &name.node) {
+            errors.push(SemError::RecursiveTypeDefinition {
+                type_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        }
+
+        // Register the custom type
+        self.custom_types.insert(name.node.clone(), underlying_type);
+    }
+
+    fn is_primitive_type_name(name: &str) -> bool {
+        matches!(
+            name,
+            "Int" | "Bool" | "String" | "None" | "LinExpr" | "Constraint" | "Never"
+        )
+    }
+
+    fn type_references_custom(&self, typ: &ExprType, custom_name: &str) -> bool {
+        typ.get_variants()
+            .iter()
+            .any(|v| self.simple_type_references_custom(v, custom_name))
+    }
+
+    fn simple_type_references_custom(&self, typ: &SimpleType, custom_name: &str) -> bool {
+        match typ {
+            SimpleType::Custom(name) => {
+                if name == custom_name {
+                    return true;
+                }
+                // Also check if the custom type we reference itself references the target
+                if let Some(underlying) = self.custom_types.get(name) {
+                    self.type_references_custom(underlying, custom_name)
+                } else {
+                    false
+                }
+            }
+            SimpleType::List(inner) => self.type_references_custom(inner, custom_name),
+            SimpleType::Tuple(elements) => elements
+                .iter()
+                .any(|e| self.type_references_custom(e, custom_name)),
+            _ => false,
         }
     }
 }

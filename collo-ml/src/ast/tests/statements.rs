@@ -80,7 +80,7 @@ fn parse_let_with_multiple_params() {
                 params[2].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Object("Student".into()),
+                    inner: SimpleTypeName::Other("Student".into()),
                 }
             );
         }

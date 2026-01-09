@@ -173,6 +173,10 @@ pub enum ExprValue<T: EvalObject> {
     Object(T),
     List(Vec<ExprValue<T>>),
     Tuple(Vec<ExprValue<T>>),
+    Custom {
+        type_name: String,
+        content: Box<ExprValue<T>>,
+    },
 }
 
 impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
@@ -207,6 +211,9 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
             ExprValue::Tuple(elements) => {
                 let strs: Vec<_> = elements.iter().map(|x| x.to_string()).collect();
                 write!(f, "({})", strs.join(", "))
+            }
+            ExprValue::Custom { type_name, content } => {
+                write!(f, "{}({})", type_name, content)
             }
         }
     }
@@ -339,6 +346,10 @@ impl<T: EvalObject> ExprValue<T> {
                 }
                 false
             }
+            // Custom values only fit in Custom types with the same name
+            Self::Custom { type_name, .. } => target
+                .get_variants()
+                .contains(&SimpleType::Custom(type_name.clone())),
         }
     }
 
@@ -352,6 +363,23 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Constraint(_), SimpleType::Constraint) => true,
             (Self::String(_), SimpleType::String) => true,
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
+            // Custom type conversions - semantic analysis has validated these
+            (Self::Custom { type_name, .. }, SimpleType::Custom(target_name)) => {
+                type_name == target_name
+            }
+            // Custom to underlying type - semantic analysis has validated this is allowed
+            // The actual conversion happens by unwrapping and converting the content
+            (Self::Custom { content, .. }, target_typ) => {
+                content.can_convert_to(env, target) || matches!(target_typ, SimpleType::String)
+                // Everything converts to String
+            }
+            // Value to Custom type - semantic analysis has validated this
+            // At runtime, we always allow wrapping if semantic check passed
+            (_, SimpleType::Custom(_)) => {
+                // Semantic analysis has validated this conversion is legal
+                // At runtime, we trust that validation
+                true
+            }
             // For empty list, we can convert to any list type
             (Self::List(list), SimpleType::EmptyList) if list.is_empty() => true,
             (Self::List(list), SimpleType::List(_)) if list.is_empty() => true,
@@ -436,6 +464,21 @@ impl<T: EvalObject> ExprValue<T> {
                     .collect();
                 Self::Tuple(converted?)
             }
+            // Custom type conversions
+            // Converting TO a Custom type: wrap the value
+            (value, SimpleType::Custom(type_name)) => Self::Custom {
+                type_name: type_name.clone(),
+                content: Box::new(value),
+            },
+            // Converting FROM a Custom type: unwrap and convert the content
+            (Self::Custom { content, .. }, target_typ) => {
+                // Recursively convert the inner content to the target type
+                let inner_target = target_typ
+                    .clone()
+                    .into_concrete()
+                    .expect("Should be concrete");
+                content.convert_to(env, cache, &inner_target)?
+            }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
         })
@@ -460,6 +503,9 @@ impl<T: EvalObject> ExprValue<T> {
                     .map(|x| x.convert_to_string(env, cache))
                     .collect();
                 format!("({})", inners.join(", "))
+            }
+            Self::Custom { type_name, content } => {
+                format!("{}({})", type_name, content.convert_to_string(env, cache))
             }
             v => format!("{}", v),
         }
@@ -627,6 +673,18 @@ impl<T: EvalObject> CheckedAST<T> {
         &self.warnings
     }
 
+    /// Resolve a type name to ExprType with proper handling of object and custom types
+    pub fn resolve_type(
+        &self,
+        typ: &crate::ast::Spanned<crate::ast::TypeName>,
+    ) -> Result<ExprType, SemError> {
+        use std::collections::HashSet;
+        let object_types: HashSet<String> = self.global_env.get_types().keys().cloned().collect();
+        let custom_types: HashSet<String> =
+            self.global_env.get_custom_types().keys().cloned().collect();
+        ExprType::from_ast(typ.clone(), &object_types, &custom_types)
+    }
+
     pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
         self.global_env
             .get_functions()
@@ -767,10 +825,20 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 let mut current_value = self.eval_expr(eval_history, &object)?;
 
+                // Helper to unwrap Custom values for field/index access
+                fn unwrap_custom<T: EvalObject>(value: ExprValue<T>) -> ExprValue<T> {
+                    match value {
+                        ExprValue::Custom { content, .. } => unwrap_custom(*content),
+                        other => other,
+                    }
+                }
+
                 for segment in segments {
                     match &segment.node {
                         PathSegment::Field(field_name) => {
-                            let obj = match current_value {
+                            // Unwrap Custom types for field access
+                            let unwrapped = unwrap_custom(current_value);
+                            let obj = match unwrapped {
                                 ExprValue::Object(obj) => obj,
                                 _ => panic!("Object expected for field access"),
                             };
@@ -787,7 +855,9 @@ impl<T: EvalObject> LocalEnv<T> {
                                 })?;
                         }
                         PathSegment::TupleIndex(index) => {
-                            let tuple = match current_value {
+                            // Unwrap Custom types for tuple index access
+                            let unwrapped = unwrap_custom(current_value);
+                            let tuple = match unwrapped {
                                 ExprValue::Tuple(elements) => elements,
                                 _ => panic!("Tuple expected for index access"),
                             };
@@ -802,7 +872,9 @@ impl<T: EvalObject> LocalEnv<T> {
                                 panic!("Index should be Int after type checking");
                             };
 
-                            let ExprValue::List(elements) = current_value else {
+                            // Unwrap Custom types for list index access
+                            let unwrapped = unwrap_custom(current_value);
+                            let ExprValue::List(elements) = unwrapped else {
                                 panic!("Should be list after type checking");
                             };
 
@@ -819,7 +891,9 @@ impl<T: EvalObject> LocalEnv<T> {
                                 panic!("Index should be Int after type checking");
                             };
 
-                            let ExprValue::List(elements) = current_value else {
+                            // Unwrap Custom types for list index access
+                            let unwrapped = unwrap_custom(current_value);
+                            let ExprValue::List(elements) = unwrapped else {
                                 panic!("Should be list after type checking");
                             };
 
@@ -858,7 +932,9 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::TypeConversion { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = ExprType::try_from(typ.clone())
+                let target_type = eval_history
+                    .ast
+                    .resolve_type(typ)
                     .expect("At this point types should be valid")
                     .to_simple()
                     .expect("as should have a simple type as operand");
@@ -874,8 +950,10 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::CastFallible { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type =
-                    ExprType::try_from(typ.clone()).expect("At this point types should be valid");
+                let target_type = eval_history
+                    .ast
+                    .resolve_type(typ)
+                    .expect("At this point types should be valid");
 
                 // Check if value fits in target type
                 if value.fits_in_typ(eval_history.env, &target_type) {
@@ -886,8 +964,10 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::CastPanic { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type =
-                    ExprType::try_from(typ.clone()).expect("At this point types should be valid");
+                let target_type = eval_history
+                    .ast
+                    .resolve_type(typ)
+                    .expect("At this point types should be valid");
 
                 // Check if value fits in target type
                 if value.fits_in_typ(eval_history.env, &target_type) {
@@ -928,7 +1008,9 @@ impl<T: EvalObject> LocalEnv<T> {
                 )
             }
             Expr::GlobalList(typ_name) => {
-                let expr_type = ExprType::try_from(typ_name.clone())
+                let expr_type = eval_history
+                    .ast
+                    .resolve_type(typ_name)
                     .expect("At this point, types should be valid");
 
                 let mut collection = vec![];
@@ -1338,7 +1420,9 @@ impl<T: EvalObject> LocalEnv<T> {
                 for branch in branches {
                     let does_typ_match = match &branch.as_typ {
                         Some(t) => {
-                            let target_type = ExprType::try_from(t.clone())
+                            let target_type = eval_history
+                                .ast
+                                .resolve_type(t)
                                 .expect("At this point types should be valid");
                             value.fits_in_typ(&eval_history.env, &target_type)
                         }
@@ -1352,7 +1436,9 @@ impl<T: EvalObject> LocalEnv<T> {
                     // At this point we have a valid type. We convert if needed
                     let converted_value = match &branch.into_typ {
                         Some(t) => {
-                            let target_type = ExprType::try_from(t.clone())
+                            let target_type = eval_history
+                                .ast
+                                .resolve_type(t)
                                 .expect("At this point types should be valid")
                                 .to_simple()
                                 .expect("as should have a simple type as operand");
@@ -1801,6 +1887,9 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     .collect();
                 format!("({})", pretty_values.join(","))
             }
+            ExprValue::Custom { type_name, content } => {
+                format!("{}({})", type_name, self.prettify_expr_value(content))
+            }
             ExprValue::Bool(v) => format!("{}", v),
             ExprValue::Int(v) => format!("{}", v),
             _ => format!("{:?}", value),
@@ -1925,6 +2014,14 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 true
             }
             ExprValue::Tuple(elements) => elements.iter().all(|e| self.validate_value(e)),
+            ExprValue::Custom { type_name, content } => {
+                // Validate that the custom type exists and recursively validate content
+                self.ast
+                    .global_env
+                    .get_custom_types()
+                    .contains_key(type_name)
+                    && self.validate_value(content)
+            }
         }
     }
 

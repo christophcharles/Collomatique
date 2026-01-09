@@ -40,7 +40,7 @@ fn parse_let_with_option_custom_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 1,
-                    inner: SimpleTypeName::Object("Student".into()),
+                    inner: SimpleTypeName::Other("Student".into()),
                 }
             );
         }
@@ -272,14 +272,14 @@ fn parse_let_with_sum_of_custom_types() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Object("Student".into()),
+                    inner: SimpleTypeName::Other("Student".into()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Object("Teacher".into()),
+                    inner: SimpleTypeName::Other("Teacher".into()),
                 }
             );
         }
@@ -507,7 +507,7 @@ fn parse_let_with_many_question_marks() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 4, // Four question marks!
-                    inner: SimpleTypeName::Object("Student".into()),
+                    inner: SimpleTypeName::Other("Student".into()),
                 }
             );
         }
@@ -661,7 +661,7 @@ fn parse_let_with_multiple_option_and_sum_params() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Object("Student".into()),
+                            inner: SimpleTypeName::Other("Student".into()),
                         }
                     );
                 }

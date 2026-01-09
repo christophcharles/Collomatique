@@ -131,7 +131,7 @@ fn complex_with_all_features() {
         "if flag { forall x in (@[X] - excluded) where x > 0 { sum y in @[Y] { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |@[Y]| } } else { sum x in @[X] { $V2(x) } >= 1 }",
 
         // Another complex one
-        "forall s in @[Student] + @[Teacher] where s.active { (if s.type == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
+        "forall s in @[Student] + @[Teacher] where s.active { (if s.kind == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
