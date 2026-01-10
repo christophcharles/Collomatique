@@ -20,7 +20,7 @@ fn enum_decl_basic() {
 
     assert_eq!(file.statements.len(), 1);
     match &file.statements[0].node {
-        Statement::EnumDecl { name, variants } => {
+        Statement::EnumDecl { name, variants, .. } => {
             assert_eq!(name.node, "Result");
             assert_eq!(variants.len(), 2);
             assert_eq!(variants[0].node.name.node, "Ok");
@@ -37,7 +37,7 @@ fn enum_decl_unit_variant() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::EnumDecl { name, variants } => {
+        Statement::EnumDecl { name, variants, .. } => {
             assert_eq!(name.node, "Option");
             assert_eq!(variants.len(), 2);
 

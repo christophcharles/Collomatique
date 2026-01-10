@@ -111,6 +111,25 @@ fn enum_statement_with_complex_types() {
 }
 
 #[test]
+fn enum_statement_with_pub_modifier() {
+    // Enum statements can have pub modifier for module visibility
+    let cases = vec![
+        "pub enum Result = Ok(Int) | Error(String);",
+        "pub enum Option = Some(Int) | None;",
+        "pub enum Color = Red | Green | Blue;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::enum_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should accept pub modifier '{}': {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
 fn enum_statement_rejects_missing_equals() {
     let result = ColloMLParser::parse(Rule::enum_statement_complete, "enum Result Ok | Error;");
     assert!(result.is_err(), "Should reject missing '='");

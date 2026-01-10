@@ -346,12 +346,11 @@ fn file_rejects_statement_without_semicolon() {
 #[test]
 fn file_rejects_invalid_statement_syntax() {
     let cases = vec![
-        "let f() -> = 5;",               // missing type
-        "f() -> LinExpr = 5;",           // missing 'let'
-        "let -> LinExpr = 5;",           // missing name
-        "reify as $Var;",                // missing constraint name
-        "reify constraint as;",          // missing variable name
-        "pub reify constraint as $Var;", // pub on reify (not allowed)
+        "let f() -> = 5;",      // missing type
+        "f() -> LinExpr = 5;",  // missing 'let'
+        "let -> LinExpr = 5;",  // missing name
+        "reify as $Var;",       // missing constraint name
+        "reify constraint as;", // missing variable name
     ];
 
     for case in cases {
@@ -359,6 +358,26 @@ fn file_rejects_invalid_statement_syntax() {
         assert!(
             result.is_err(),
             "Should reject invalid statement '{}': {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
+fn file_accepts_pub_type_and_pub_enum() {
+    // Type and enum statements can have pub modifier for module visibility
+    let cases = vec![
+        "pub type MyInt = Int;",
+        "pub type OptionalInt = ?Int;",
+        "pub enum Result = Ok(Int) | Error(String);",
+        "pub enum Option = Some(Int) | None;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::file, case);
+        assert!(
+            result.is_ok(),
+            "Should accept pub modifier on type/enum '{}': {:?}",
             case,
             result
         );

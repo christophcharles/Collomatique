@@ -41,6 +41,7 @@ pub struct VariableDesc {
     pub args: ArgsType,
     pub span: Span,
     pub used: bool,
+    pub public: bool,
     pub referenced_fn: String,
 }
 
@@ -283,6 +284,7 @@ impl GlobalEnv {
         name: &str,
         args_typ: ArgsType,
         span: Span,
+        public: bool,
         referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
@@ -295,6 +297,7 @@ impl GlobalEnv {
                 args: args_typ.clone(),
                 span: span.clone(),
                 used: should_be_used_by_default(name),
+                public,
                 referenced_fn,
             },
         );
@@ -315,6 +318,7 @@ impl GlobalEnv {
         name: &str,
         args_typ: ArgsType,
         span: Span,
+        public: bool,
         referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
@@ -326,6 +330,7 @@ impl GlobalEnv {
                 args: args_typ.clone(),
                 span: span.clone(),
                 used: should_be_used_by_default(name),
+                public,
                 referenced_fn,
             },
         );
@@ -3519,7 +3524,7 @@ impl GlobalEnv {
                 crate::ast::Statement::TypeDecl { name, .. } => {
                     temp_env.expand_with_type_decl_pass1(name, &mut errors);
                 }
-                crate::ast::Statement::EnumDecl { name, variants } => {
+                crate::ast::Statement::EnumDecl { name, variants, .. } => {
                     temp_env.expand_with_enum_decl_pass1(name, variants, &mut errors);
                 }
                 _ => {}
@@ -3532,10 +3537,10 @@ impl GlobalEnv {
         // ====================================================================
         for statement in &file.statements {
             match &statement.node {
-                crate::ast::Statement::TypeDecl { name, underlying } => {
+                crate::ast::Statement::TypeDecl { name, underlying, .. } => {
                     temp_env.expand_with_type_decl_pass2(name, underlying, &mut errors);
                 }
-                crate::ast::Statement::EnumDecl { name, variants } => {
+                crate::ast::Statement::EnumDecl { name, variants, .. } => {
                     temp_env.expand_with_enum_decl_pass2(name, variants, &mut errors);
                 }
                 _ => {}
@@ -3580,6 +3585,7 @@ impl GlobalEnv {
                 constraint_name,
                 name,
                 var_list,
+                public,
                 ..
             } = &statement.node
             {
@@ -3587,6 +3593,7 @@ impl GlobalEnv {
                     constraint_name,
                     name,
                     *var_list,
+                    *public,
                     &mut type_info,
                     &mut errors,
                     &mut warnings,
@@ -3853,6 +3860,7 @@ impl GlobalEnv {
         constraint_name: &Spanned<String>,
         name: &Spanned<String>,
         var_list: bool,
+        public: bool,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
@@ -3907,6 +3915,7 @@ impl GlobalEnv {
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
+                                public,
                                 constraint_name.node.clone(),
                                 type_info,
                             );
@@ -3936,6 +3945,7 @@ impl GlobalEnv {
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
+                                public,
                                 constraint_name.node.clone(),
                                 type_info,
                             );

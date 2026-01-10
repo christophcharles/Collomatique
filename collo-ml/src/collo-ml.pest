@@ -77,7 +77,7 @@ reserved_keyword = {
 }
 
 // ========== Reify statements ==========
-reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ (var_name | var_list_name) ~ ";" }
+reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ ident ~ "as" ~ (var_name | var_list_name) ~ ";" }
 var_name = ${ "$" ~ ident }
 var_list_name = ${ "$[" ~ ident ~ "]" }
 
@@ -89,13 +89,13 @@ params = { param ~ ("," ~ param)* ~ ","? }
 param = { ident ~ ":" ~ type_name }
 
 // ========== Type statements ==========
-type_statement = { "type" ~ ident ~ "=" ~ type_name ~ ";" }
+type_statement = { pub_modifier? ~ "type" ~ ident ~ "=" ~ type_name ~ ";" }
 
 // ========== Enum statements ==========
 // enum Result = Ok(Int) | Error(String);
 // enum Option = Some(Int) | None;
 // enum MyEnum = TupleCase(Int, Bool) | StructCase { field1: Int, field2: Bool };
-enum_statement = { "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
+enum_statement = { pub_modifier? ~ "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
 enum_variants = { enum_variant ~ ("|" ~ enum_variant)* }
 // Variant can be: Name(Type), Name(T1, T2), Name { field: Type }, or just Name (unit)
 // Note: variant_name allows primitive type names (None, Int, Bool, etc.) since the qualified

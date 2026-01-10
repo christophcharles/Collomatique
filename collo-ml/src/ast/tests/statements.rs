@@ -216,6 +216,7 @@ fn parse_reify_statement() {
             name,
             docstring,
             var_list,
+            ..
         } => {
             assert_eq!(constraint_name.node, "my_constraint");
             assert_eq!(name.node, "MyVar");
@@ -239,6 +240,7 @@ fn parse_reify_statement_with_var_list() {
             name,
             docstring,
             var_list,
+            ..
         } => {
             assert_eq!(constraint_name.node, "my_constraint");
             assert_eq!(name.node, "MyVarList");

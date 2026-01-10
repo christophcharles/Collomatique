@@ -518,8 +518,8 @@ fn reify_statement_rejects_reserved_keywords_as_variable_names() {
 }
 
 #[test]
-fn reify_statement_rejects_pub_modifier() {
-    // Reify statements cannot have pub modifier (only let statements can)
+fn reify_statement_accepts_pub_modifier() {
+    // Reify statements can have pub modifier for module visibility
     let cases = vec![
         "pub reify constraint as $Var;",
         "pub reify check as $Check;",
@@ -527,8 +527,8 @@ fn reify_statement_rejects_pub_modifier() {
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (pub not allowed on reify): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (pub allowed on reify): {:?}",
             case,
             result
         );

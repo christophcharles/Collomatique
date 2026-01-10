@@ -236,15 +236,18 @@ pub enum Statement {
     },
     Reify {
         docstring: Vec<DocstringLine>,
+        public: bool,
         constraint_name: Spanned<String>,
         var_list: bool,
         name: Spanned<String>,
     },
     TypeDecl {
+        public: bool,
         name: Spanned<String>,
         underlying: Spanned<TypeName>,
     },
     EnumDecl {
+        public: bool,
         name: Spanned<String>,
         variants: Vec<Spanned<EnumVariant>>,
     },
@@ -647,6 +650,7 @@ impl Statement {
     fn from_reify_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let mut docstring = Vec::new();
+        let mut public = false;
         let mut constraint_name = None;
         let mut name = None;
         let mut var_list = false;
@@ -662,6 +666,9 @@ impl Statement {
                         .unwrap_or_default();
                     let parsed_line = parse_docstring_line(&content, docstring_span.start)?;
                     docstring.push(parsed_line);
+                }
+                Rule::pub_modifier => {
+                    public = true;
                 }
                 Rule::ident => {
                     if constraint_name.is_none() {
@@ -696,6 +703,7 @@ impl Statement {
 
         Ok(Statement::Reify {
             docstring,
+            public,
             constraint_name: constraint_name.ok_or(AstError::MissingName(span.clone()))?,
             name: name.ok_or(AstError::MissingName(span))?,
             var_list,
@@ -703,13 +711,17 @@ impl Statement {
     }
 
     fn from_type_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // type_statement = { "type" ~ ident ~ "=" ~ type_name ~ ";" }
+        // type_statement = { pub_modifier? ~ "type" ~ ident ~ "=" ~ type_name ~ ";" }
         let span = Span::from_pest(&pair);
+        let mut public = false;
         let mut name = None;
         let mut underlying = None;
 
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
+                Rule::pub_modifier => {
+                    public = true;
+                }
                 Rule::ident => {
                     if name.is_none() {
                         name = Some(Spanned::new(
@@ -730,19 +742,24 @@ impl Statement {
         }
 
         Ok(Statement::TypeDecl {
+            public,
             name: name.ok_or(AstError::MissingName(span.clone()))?,
             underlying: underlying.ok_or(AstError::MissingTypeName(span))?,
         })
     }
 
     fn from_enum_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // enum_statement = { "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
+        // enum_statement = { pub_modifier? ~ "enum" ~ ident ~ "=" ~ enum_variants ~ ";" }
         let span = Span::from_pest(&pair);
+        let mut public = false;
         let mut name = None;
         let mut variants = Vec::new();
 
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
+                Rule::pub_modifier => {
+                    public = true;
+                }
                 Rule::ident => {
                     if name.is_none() {
                         name = Some(Spanned::new(
@@ -759,6 +776,7 @@ impl Statement {
         }
 
         Ok(Statement::EnumDecl {
+            public,
             name: name.ok_or(AstError::MissingName(span.clone()))?,
             variants,
         })
