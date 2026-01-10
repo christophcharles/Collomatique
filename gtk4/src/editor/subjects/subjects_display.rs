@@ -225,7 +225,7 @@ impl FactoryComponent for Entry {
                     add_css_class: "spacer",
                 },
                 gtk::Button {
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Supprimer la matière"),
                     connect_clicked => EntryInput::DeleteClicked,

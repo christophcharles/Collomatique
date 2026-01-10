@@ -175,7 +175,7 @@ impl Component for Dialog {
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: !model.is_running && !model.end_with_error && model.commands.is_empty(),
-                        gtk::Image::from_icon_name("emblem-warning-symbolic") {
+                        gtk::Image::from_icon_name("dialog-warning-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
                         },
@@ -189,7 +189,7 @@ impl Component for Dialog {
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: !model.is_running && model.end_with_error,
-                        gtk::Image::from_icon_name("emblem-error-symbolic") {
+                        gtk::Image::from_icon_name("dialog-error-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
                         },

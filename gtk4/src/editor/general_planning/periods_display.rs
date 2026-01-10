@@ -122,7 +122,7 @@ impl FactoryComponent for Entry {
                     connect_clicked => EntryInput::MergeClicked,
                 },
                 gtk::Button {
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Supprimer la période"),
                     connect_clicked => EntryInput::DeleteClicked,

@@ -161,7 +161,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_success(),
                                 gtk::Image {
-                                    set_icon_name: Some("emblem-success"),
+                                    set_icon_name: Some("emblem-ok-symbolic"),
                                 },
                             },
                             gtk::Box {
@@ -169,7 +169,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_error(),
                                 gtk::Image {
-                                    set_icon_name: Some("emblem-error"),
+                                    set_icon_name: Some("dialog-error"),
                                 },
                             },
                             gtk::Box {
@@ -178,7 +178,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
-                                    set_icon_name: Some("emblem-warning"),
+                                    set_icon_name: Some("dialog-warning"),
                                 },
                                 gtk::Label {
                                     #[watch]
@@ -198,7 +198,7 @@ impl Component for Colloscope {
                         add_css_class: "accent",
                         set_margin_all: 5,
                         adw::ButtonContent {
-                            set_icon_name: "run-build-configure",
+                            set_icon_name: "system-run-symbolic",
                             set_label: "Générer le colloscope automatiquement",
                         },
                         connect_clicked => ColloscopeInput::SolveColloscopeClicked,

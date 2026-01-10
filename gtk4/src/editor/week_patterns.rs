@@ -254,7 +254,7 @@ impl FactoryComponent for Entry {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
-                set_icon_name: "edit-delete",
+                set_icon_name: "edit-delete-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
                 set_tooltip_text: Some("Supprimer le modèle"),

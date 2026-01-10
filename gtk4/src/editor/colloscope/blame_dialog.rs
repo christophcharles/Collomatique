@@ -75,7 +75,7 @@ impl SimpleComponent for Dialog {
                             set_visible: matches!(&model.warnings, Some(Ok(w)) if w.is_empty()),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
-                                set_icon_name: Some("emblem-success"),
+                                set_icon_name: Some("emblem-ok-symbolic"),
                             },
                             gtk::Label {
                                 set_label: "Toutes les contraintes sont satisfaites",
@@ -97,7 +97,7 @@ impl SimpleComponent for Dialog {
                             set_visible: matches!(&model.warnings, Some(Err(_))),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
-                                set_icon_name: Some("emblem-error"),
+                                set_icon_name: Some("dialog-error"),
                             },
                             gtk::Label {
                                 #[watch]
@@ -206,7 +206,7 @@ enum EntryInput {
 impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
-            EntryData::Warning(_) => "emblem-warning".into(),
+            EntryData::Warning(_) => "dialog-warning".into(),
         }
     }
 

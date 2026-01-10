@@ -90,7 +90,7 @@ impl Component for GroupLists {
                             set_sensitive: false,
                             set_margin_all: 5,
                             adw::ButtonContent {
-                                set_icon_name: "run-build-configure",
+                                set_icon_name: "system-run-symbolic",
                                 set_label: "Générer des listes automatiquement",
                             },
                         },

@@ -1078,7 +1078,7 @@ impl FactoryComponent for Block {
                 set_title: &self.generate_title_text(),
                 add_suffix = &gtk::Button {
                     add_css_class: "flat",
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     connect_clicked[sender] => move |_widget| {
                         sender.input(BlockInput::DeleteBlock);
                     }

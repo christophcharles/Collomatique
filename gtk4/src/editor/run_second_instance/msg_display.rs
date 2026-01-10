@@ -18,9 +18,9 @@ pub struct Entry {
 impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
-            EntryData::Success(_) => "emblem-success".into(),
-            EntryData::Invalid(_) => "emblem-error".into(),
-            EntryData::Failed(_) => "emblem-warning".into(),
+            EntryData::Success(_) => "emblem-ok-symbolic".into(),
+            EntryData::Invalid(_) => "dialog-error".into(),
+            EntryData::Failed(_) => "dialog-warning".into(),
         }
     }
 

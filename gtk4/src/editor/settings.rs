@@ -400,7 +400,7 @@ impl FactoryComponent for StudentEntry {
                 set_visible: self.data.limits.is_some(),
             },
             gtk::Button {
-                set_icon_name: "edit-delete",
+                set_icon_name: "edit-delete-symbolic",
                 add_css_class: "flat",
                 connect_clicked => StudentEntryInput::DeleteClicked,
                 #[watch]

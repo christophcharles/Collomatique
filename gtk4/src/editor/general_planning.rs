@@ -123,7 +123,7 @@ impl Component for GeneralPlanning {
                         gtk::Button {
                             #[watch]
                             set_sensitive: model.periods.first_week.is_some(),
-                            set_icon_name: "edit-delete",
+                            set_icon_name: "edit-delete-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Effacer"),
                             connect_clicked => GeneralPlanningInput::DeleteFirstWeekClicked,
