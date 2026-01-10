@@ -2027,6 +2027,19 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 ExprValue::Struct(field_values)
             }
+            // Qualified module variable calls - not yet implemented
+            Expr::QualifiedVarCall { module, .. } => {
+                panic!(
+                    "Qualified module variable access ({}::$...) is not yet implemented",
+                    module.node
+                )
+            }
+            Expr::QualifiedVarListCall { module, .. } => {
+                panic!(
+                    "Qualified module variable list access ({}::$[...]) is not yet implemented",
+                    module.node
+                )
+            }
         })
     }
 

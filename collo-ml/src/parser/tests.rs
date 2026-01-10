@@ -7,6 +7,7 @@ mod elementary_bits;
 mod enums;
 mod expr;
 mod ident;
+mod imports;
 mod let_statements;
 mod reify_statements;
 mod string_literals;

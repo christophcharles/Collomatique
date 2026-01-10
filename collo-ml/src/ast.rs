@@ -251,6 +251,20 @@ pub enum Statement {
         name: Spanned<String>,
         variants: Vec<Spanned<EnumVariant>>,
     },
+    /// Import statement: import "module_name" as mod; or import "module_name" as *;
+    Import {
+        module_path: Spanned<String>,
+        alias: ImportAlias,
+    },
+}
+
+/// Import alias for import statements
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportAlias {
+    /// Named import: import "foo" as bar;
+    Named(Spanned<String>),
+    /// Wildcard import: import "foo" as *;
+    Wildcard(Span),
 }
 
 /// Represents a single enum variant
@@ -381,6 +395,18 @@ pub enum Expr {
         args: Vec<Spanned<Expr>>,
     },
     VarListCall {
+        name: Spanned<String>,
+        args: Vec<Spanned<Expr>>,
+    },
+    /// Qualified variable call: mod::$Var(args)
+    QualifiedVarCall {
+        module: Spanned<String>,
+        name: Spanned<String>,
+        args: Vec<Spanned<Expr>>,
+    },
+    /// Qualified variable list call: mod::$[VarList](args)
+    QualifiedVarListCall {
+        module: Spanned<String>,
         name: Spanned<String>,
         args: Vec<Spanned<Expr>>,
     },
@@ -559,7 +585,7 @@ impl File {
                 Rule::EOI => {}
                 _ => {
                     return Err(AstError::UnexpectedRule {
-                        expected: "let_statement, reify_statement, type_statement, or EOI",
+                        expected: "let_statement, reify_statement, type_statement, import_statement, or EOI",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     });
@@ -578,8 +604,9 @@ impl Statement {
             Rule::reify_statement => Self::from_reify_pest(pair),
             Rule::type_statement => Self::from_type_pest(pair),
             Rule::enum_statement => Self::from_enum_pest(pair),
+            Rule::import_statement => Self::from_import_pest(pair),
             _ => Err(AstError::UnexpectedRule {
-                expected: "let_statement, reify_statement, type_statement, or enum_statement",
+                expected: "let_statement, reify_statement, type_statement, enum_statement, or import_statement",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),
@@ -781,6 +808,59 @@ impl Statement {
             variants,
         })
     }
+
+    fn from_import_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // import_statement = { "import" ~ string_literal ~ "as" ~ import_target ~ ";" }
+        // import_target = { wildcard_import | ident }
+        // wildcard_import = { "*" }
+        let span = Span::from_pest(&pair);
+        let mut module_path = None;
+        let mut alias = None;
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::string_literal => {
+                    let lit_span = Span::from_pest(&inner_pair);
+                    let raw = inner_pair.as_str();
+                    // Extract the actual string content (remove quotes and tildes)
+                    let content = parse_string_literal(raw);
+                    module_path = Some(Spanned::new(content, lit_span));
+                }
+                Rule::import_target => {
+                    // import_target contains either wildcard_import or ident
+                    let target_pair = inner_pair.into_inner().next().unwrap();
+                    match target_pair.as_rule() {
+                        Rule::wildcard_import => {
+                            alias = Some(ImportAlias::Wildcard(Span::from_pest(&target_pair)));
+                        }
+                        Rule::ident => {
+                            alias = Some(ImportAlias::Named(Spanned::new(
+                                target_pair.as_str().to_string(),
+                                Span::from_pest(&target_pair),
+                            )));
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Statement::Import {
+            module_path: module_path.ok_or(AstError::MissingName(span.clone()))?,
+            alias: alias.ok_or(AstError::MissingName(span))?,
+        })
+    }
+}
+
+/// Parse a string literal, removing quotes and tilde delimiters
+fn parse_string_literal(raw: &str) -> String {
+    // Count leading tildes
+    let tilde_count = raw.chars().take_while(|&c| c == '~').count();
+    // Remove tildes and quotes from start and end
+    let start = tilde_count + 1; // skip ~...~"
+    let end = raw.len() - tilde_count - 1; // skip "~...~
+    raw[start..end].to_string()
 }
 
 fn parse_enum_variants(pair: Pair<Rule>) -> Result<Vec<Spanned<EnumVariant>>, AstError> {
@@ -1564,6 +1644,8 @@ impl Expr {
             Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
             Rule::global_collection => Self::from_global_collection(inner),
+            Rule::qualified_var_call => Self::from_qualified_var_call(inner),
+            Rule::qualified_var_list_call => Self::from_qualified_var_list_call(inner),
             Rule::var_call => Self::from_var_call(inner),
             Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::qualified_type_cast => Self::from_qualified_type_cast(inner),
@@ -2089,6 +2171,64 @@ impl Expr {
             name: name.ok_or(AstError::MissingName(span))?,
             args,
         })
+    }
+
+    fn from_qualified_var_call(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // qualified_var_call = { ident ~ "::" ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
+        let span = Span::from_pest(&pair);
+        let mut idents = vec![];
+        let mut args = Vec::new();
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let name_span = Span::from_pest(&inner);
+                    idents.push(Spanned::new(inner.as_str().to_string(), name_span));
+                }
+                Rule::args => {
+                    args = parse_args(inner)?;
+                }
+                _ => {}
+            }
+        }
+
+        if idents.len() != 2 {
+            return Err(AstError::MissingName(span));
+        }
+
+        let name = idents.pop().unwrap();
+        let module = idents.pop().unwrap();
+
+        Ok(Expr::QualifiedVarCall { module, name, args })
+    }
+
+    fn from_qualified_var_list_call(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // qualified_var_list_call = { ident ~ "::" ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
+        let span = Span::from_pest(&pair);
+        let mut idents = vec![];
+        let mut args = Vec::new();
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::ident => {
+                    let name_span = Span::from_pest(&inner);
+                    idents.push(Spanned::new(inner.as_str().to_string(), name_span));
+                }
+                Rule::args => {
+                    args = parse_args(inner)?;
+                }
+                _ => {}
+            }
+        }
+
+        if idents.len() != 2 {
+            return Err(AstError::MissingName(span));
+        }
+
+        let name = idents.pop().unwrap();
+        let module = idents.pop().unwrap();
+
+        Ok(Expr::QualifiedVarListCall { module, name, args })
     }
 
     fn from_fn_call(pair: Pair<Rule>) -> Result<Self, AstError> {

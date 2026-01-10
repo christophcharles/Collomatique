@@ -503,6 +503,10 @@ pub enum SemError {
         "Type \"{type_name}\" at {span:?} has unguarded recursion (must be inside a list or tuple)"
     )]
     UnguardedRecursiveType { type_name: String, span: Span },
+    #[error("Module \"{module}\" at {span:?} is unknown")]
+    UnknownModule { module: String, span: Span },
+    #[error("Qualified module access at {span:?} is not yet implemented")]
+    QualifiedAccessNotYetSupported { span: Span },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -2515,6 +2519,21 @@ impl LocalEnv {
                         Some(SimpleType::List(SimpleType::LinExpr.into()).into())
                     }
                 }
+            }
+
+            // ========== Qualified Module Variable Calls (not yet implemented) ==========
+            Expr::QualifiedVarCall { module, .. } => {
+                errors.push(SemError::QualifiedAccessNotYetSupported {
+                    span: module.span.clone(),
+                });
+                Some(SimpleType::LinExpr.into())
+            }
+
+            Expr::QualifiedVarListCall { module, .. } => {
+                errors.push(SemError::QualifiedAccessNotYetSupported {
+                    span: module.span.clone(),
+                });
+                Some(SimpleType::List(SimpleType::LinExpr.into()).into())
             }
 
             // ========== Function Calls / Custom Type Casts ==========

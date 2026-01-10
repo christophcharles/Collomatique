@@ -23,7 +23,14 @@ raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
 raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
 raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 
-statement = { let_statement | reify_statement | type_statement | enum_statement }
+statement = { import_statement | let_statement | reify_statement | type_statement | enum_statement }
+
+// ========== Import statements ==========
+// import "module_name" as mod;    - Named import
+// import "module_name" as *;      - Wildcard import (pub items only)
+import_statement = { "import" ~ string_literal ~ "as" ~ import_target ~ ";" }
+import_target = { wildcard_import | ident }
+wildcard_import = { "*" }
 
 docstring = ${
     "///" ~ docstring_content ~ EOL
@@ -49,6 +56,7 @@ primitive_type_keyword = {
 // All reserved keywords - primitive types plus language keywords
 reserved_keyword = {
     primitive_type_keyword |
+    "import" |  // before "in"
     "forall" |  // before "for"
     "false" |
     "reify" |
@@ -180,9 +188,11 @@ primary_expr = {
     list_range | // Must come before list_literal to parse correctly
     list_literal |
     global_collection |
+    qualified_var_call |   // mod::$Var(args) - must come before var_call
+    qualified_var_list_call | // mod::$[VarList](args) - must come before var_list_call
     var_call |
     var_list_call |
-    qualified_type_cast |  // Result::Ok(x) - must come before struct_type_cast and fn_call
+    qualified_type_cast |  // Result::Ok(x) or mod::func(x) - must come before struct_type_cast and fn_call
     qualified_struct_cast | // MyEnum::StructCase { x: 1 } - must come after qualified_type_cast
     qualified_unit_value | // Option::None - must come after qualified_type_cast
     struct_type_cast |   // Must come before fn_call to parse TypeName {field: expr} correctly
@@ -252,6 +262,11 @@ list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
 var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
+// Qualified variable calls: mod::$Var(args), mod::$[VarList](args)
+qualified_var_call = { ident ~ "::" ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
+qualified_var_list_call = { ident ~ "::" ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
+// Note: qualified function calls (mod::func(args)) are parsed as qualified_type_cast
+// since they have the same grammar pattern. Semantic analysis distinguishes them.
 fn_call = { ident ~ "(" ~ args? ~ ")" }
 // Supports trailing comma: f(1, 2,)
 args = { arg ~ ("," ~ arg)* ~ ","? }
@@ -293,3 +308,6 @@ tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }
 struct_type_complete = { SOI ~ struct_type ~ EOI }
 struct_literal_complete = { SOI ~ struct_literal ~ EOI }
 qualified_type_name_complete = { SOI ~ qualified_type_name ~ EOI }
+import_statement_complete = { SOI ~ import_statement ~ EOI }
+qualified_var_call_complete = { SOI ~ qualified_var_call ~ EOI }
+qualified_var_list_call_complete = { SOI ~ qualified_var_list_call ~ EOI }
