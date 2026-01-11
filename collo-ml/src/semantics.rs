@@ -159,12 +159,8 @@ impl GlobalEnv {
     ) -> Result<ExprType, SemError> {
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        // Extract just the name part from (module, name) tuples
-        let custom_type_names: std::collections::HashSet<String> = self
-            .custom_types
-            .keys()
-            .map(|(_, name)| name.clone())
-            .collect();
+        let custom_type_names: std::collections::HashSet<(String, String)> =
+            self.custom_types.keys().cloned().collect();
         ExprType::from_ast(
             typ.clone(),
             current_module,
@@ -4388,12 +4384,8 @@ impl GlobalEnv {
         // Build the context for type resolution - all type names are now known
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        // Extract just the type names from tuple keys
-        let custom_type_names: std::collections::HashSet<String> = self
-            .custom_types
-            .keys()
-            .map(|(_, name)| name.clone())
-            .collect();
+        let custom_type_names: std::collections::HashSet<(String, String)> =
+            self.custom_types.keys().cloned().collect();
 
         // Resolve the underlying type
         let underlying_type = match ExprType::from_ast(
@@ -4503,12 +4495,8 @@ impl GlobalEnv {
         // Build the context for type resolution
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        // Extract just the type names from tuple keys
-        let custom_type_names: std::collections::HashSet<String> = self
-            .custom_types
-            .keys()
-            .map(|(_, name)| name.clone())
-            .collect();
+        let custom_type_names: std::collections::HashSet<(String, String)> =
+            self.custom_types.keys().cloned().collect();
 
         // Process each variant and collect their SimpleTypes for the root enum
         let mut variant_simple_types = Vec::new();

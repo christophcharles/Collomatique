@@ -835,13 +835,8 @@ impl<T: EvalObject> CheckedAST<T> {
     ) -> Result<ExprType, SemError> {
         use std::collections::HashSet;
         let object_types: HashSet<String> = self.global_env.get_types().keys().cloned().collect();
-        // Extract just the type name from (module, name) tuples
-        let custom_types: HashSet<String> = self
-            .global_env
-            .get_custom_types()
-            .keys()
-            .map(|(_, name)| name.clone())
-            .collect();
+        let custom_types: HashSet<(String, String)> =
+            self.global_env.get_custom_types().keys().cloned().collect();
         ExprType::from_ast(typ.clone(), module, &object_types, &custom_types)
     }
 

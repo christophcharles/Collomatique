@@ -468,15 +468,15 @@ impl SimpleType {
     /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
     /// to either Object or Custom based on the provided sets.
     ///
-    /// For custom_types, the set contains:
-    /// - Simple type names like "MyInt" for `type MyInt = Int;`
-    /// - Qualified names like "Result::Ok" for enum variants
-    /// - Root enum names like "Result" for `enum Result = Ok(Int) | Error(String);`
+    /// For custom_types, the set contains (module, name) tuples:
+    /// - ("main", "MyInt") for `type MyInt = Int;`
+    /// - ("main", "Result::Ok") for enum variants
+    /// - ("main", "Result") for `enum Result = Ok(Int) | Error(String);`
     pub fn from_ast(
         value: crate::ast::SimpleTypeName,
         current_module: &str,
         object_types: &HashSet<String>,
-        custom_types: &HashSet<String>,
+        custom_types: &HashSet<(String, String)>,
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
@@ -494,7 +494,8 @@ impl SimpleType {
                     _ => {
                         if object_types.contains(&name) {
                             Ok(SimpleType::Object(name))
-                        } else if custom_types.contains(&name) {
+                        } else if custom_types.contains(&(current_module.to_string(), name.clone()))
+                        {
                             Ok(SimpleType::Custom(current_module.to_string(), name, None))
                         } else {
                             Err(TypeResolutionError::UnknownType(name))
@@ -504,7 +505,7 @@ impl SimpleType {
             }
             SimpleTypeName::Qualified(root, variant) => {
                 let qualified_name = format!("{}::{}", root, variant);
-                if custom_types.contains(&qualified_name) {
+                if custom_types.contains(&(current_module.to_string(), qualified_name.clone())) {
                     Ok(SimpleType::Custom(
                         current_module.to_string(),
                         root,
@@ -551,7 +552,7 @@ impl ExprType {
         value: crate::ast::Spanned<crate::ast::TypeName>,
         current_module: &str,
         object_types: &HashSet<String>,
-        custom_types: &HashSet<String>,
+        custom_types: &HashSet<(String, String)>,
     ) -> Result<Self, SemError> {
         if value.node.types.is_empty() {
             panic!("It should not be possible to form 0-length typenames");
