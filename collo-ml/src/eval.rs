@@ -944,26 +944,42 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Number(val) => ExprValue::Int(*val),
             Expr::StringLiteral(val) => ExprValue::String(val.clone()),
             Expr::IdentPath(path) => {
-                // Handle single-segment path (variable reference) or two-segment (unit enum variant)
-                let segments = &path.node.segments;
-                match segments.len() {
-                    1 => {
-                        // Simple variable reference
-                        let name = &segments[0];
-                        self.lookup_ident(&name.node)
-                            .expect("Identifiers should be defined in a checked AST")
+                // Check if it's a local variable first (eval's local env)
+                if path.node.segments.len() == 1 {
+                    let name = &path.node.segments[0].node;
+                    if let Some(value) = self.lookup_ident(name) {
+                        return Ok(value);
                     }
-                    2 => {
-                        // Qualified unit value: Enum::UnitVariant (e.g., Option::None)
-                        let root = &segments[0];
-                        let variant = &segments[1];
-                        ExprValue::Custom {
-                            type_name: root.node.clone(),
-                            variant: Some(variant.node.clone()),
-                            content: Box::new(ExprValue::None),
+                }
+
+                // Use resolve_path for type-level resolution
+                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                    .expect("Path should be valid in a checked AST");
+
+                match resolved {
+                    ResolvedPathKind::LocalVariable(name) => {
+                        // Shouldn't reach here since we checked locals above
+                        self.lookup_ident(&name)
+                            .expect("Local variable should exist")
+                    }
+                    ResolvedPathKind::Function(_) => {
+                        panic!("Function reference without call should not appear in IdentPath")
+                    }
+                    ResolvedPathKind::Type(simple_type) => {
+                        // Unit enum variant or None type
+                        match simple_type {
+                            SimpleType::None => ExprValue::None,
+                            SimpleType::Custom(root, Some(variant)) => {
+                                // Qualified unit value: Enum::UnitVariant
+                                ExprValue::Custom {
+                                    type_name: root,
+                                    variant: Some(variant),
+                                    content: Box::new(ExprValue::None),
+                                }
+                            }
+                            _ => panic!("Unexpected type in IdentPath: {:?}", simple_type),
                         }
                     }
-                    _ => panic!("Paths with more than 2 segments not supported in eval"),
                 }
             }
             Expr::Path { object, segments } => {
@@ -1107,19 +1123,13 @@ impl<T: EvalObject> LocalEnv<T> {
                     .expect("Resulting expression should be convertible to target type")
             }
             Expr::StructCall { path, fields } => {
-                // Handle both simple (TypeName {field: expr}) and qualified (Enum::Variant {field: expr})
-                let segments = &path.node.segments;
+                // Use resolve_path to determine what this path refers to
+                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                    .expect("Path should be valid in a checked AST");
 
-                let (type_name, variant_name) = match segments.len() {
-                    1 => {
-                        // Simple: TypeName {field: expr}
-                        (segments[0].node.clone(), None)
-                    }
-                    2 => {
-                        // Qualified: Enum::Variant {field: expr}
-                        (segments[0].node.clone(), Some(segments[1].node.clone()))
-                    }
-                    _ => panic!("Struct calls with more than 2 path segments not supported"),
+                let (type_name, variant_name) = match resolved {
+                    ResolvedPathKind::Type(SimpleType::Custom(root, variant)) => (root, variant),
+                    _ => panic!("StructCall should resolve to a Custom type"),
                 };
 
                 // Evaluate all fields
@@ -1214,141 +1224,29 @@ impl<T: EvalObject> LocalEnv<T> {
                 ExprValue::List(collection)
             }
             Expr::GenericCall { path, args } => {
-                // Handle func(args), Type(x), Enum::Variant(x)
-                let segments = &path.node.segments;
+                // Use resolve_path to determine what this path refers to
+                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                    .expect("Path should be valid in a checked AST");
 
-                match segments.len() {
-                    1 => {
-                        // Single segment: function call, built-in type cast, or custom type cast
-                        let name = &segments[0];
-
-                        // Check if this is a built-in type cast
-                        let builtin_type = match name.node.as_str() {
-                            "Int" => Some(SimpleType::Int),
-                            "Bool" => Some(SimpleType::Bool),
-                            "LinExpr" => Some(SimpleType::LinExpr),
-                            "Constraint" => Some(SimpleType::Constraint),
-                            "String" => Some(SimpleType::String),
-                            "None" => Some(SimpleType::None),
-                            "Never" => Some(SimpleType::Never),
-                            _ => None,
-                        };
-
-                        if let Some(target_type) = builtin_type {
-                            // Semantics already validated exactly 1 argument
-                            assert!(
-                                args.len() == 1,
-                                "Built-in type cast should have exactly 1 argument"
-                            );
-                            let value = self.eval_expr(eval_history, &args[0])?;
-                            let concrete_target = target_type
-                                .into_concrete()
-                                .expect("Built-in types are always concrete");
-                            value
-                                .convert_to(
-                                    eval_history.env,
-                                    &mut eval_history.cache,
-                                    &concrete_target,
-                                )
-                                .expect("Semantic analysis should have validated conversion")
-                        } else if eval_history
-                            .ast
-                            .global_env
-                            .get_custom_types()
-                            .contains_key(&name.node)
-                        {
-                            // This is a custom type cast: TypeName(value)
-                            let underlying_type = eval_history
-                                .ast
-                                .global_env
-                                .get_custom_type_underlying(&name.node)
-                                .unwrap()
-                                .clone();
-
-                            // Check if it's a tuple custom type
-                            let is_tuple =
-                                matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
-
-                            if is_tuple {
-                                // For tuple custom types, evaluate all args as tuple elements
-                                let values: Vec<ExprValue<T>> = args
-                                    .iter()
-                                    .map(|x| self.eval_expr(eval_history, &x))
-                                    .collect::<Result<_, _>>()?;
-                                ExprValue::Custom {
-                                    type_name: name.node.clone(),
-                                    variant: None,
-                                    content: Box::new(ExprValue::Tuple(values)),
-                                }
-                            } else {
-                                // Single value custom type
-                                let value = self.eval_expr(eval_history, &args[0])?;
-                                ExprValue::Custom {
-                                    type_name: name.node.clone(),
-                                    variant: None,
-                                    content: Box::new(value),
-                                }
-                            }
-                        } else {
-                            // This is a function call
-                            let args = args
-                                .iter()
-                                .map(|x| self.eval_expr(eval_history, &x))
-                                .collect::<Result<_, _>>()?;
-                            eval_history
-                                .add_fn_to_call_history(&name.node, args, true)?
-                                .0
-                                .into()
-                        }
+                match resolved {
+                    ResolvedPathKind::LocalVariable(_) => {
+                        panic!("Cannot call a local variable")
                     }
-                    2 => {
-                        // Two segments: Enum::Variant(x)
-                        let root = &segments[0];
-                        let variant = &segments[1];
-                        let qualified_name = format!("{}::{}", root.node, variant.node);
-                        let underlying_type = eval_history
-                            .ast
-                            .global_env
-                            .get_custom_type_underlying(&qualified_name)
-                            .expect("Semantic analysis should have validated this type exists")
-                            .clone();
-
-                        // Check if underlying type is None (unit variant like Option::None)
-                        let is_unit = underlying_type
-                            .as_simple()
-                            .map(|s| s.is_none())
-                            .unwrap_or(false);
-                        // Check if it's a tuple type
-                        let is_tuple =
-                            matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
-
-                        let content = if is_unit {
-                            // Unit variant - args should be empty or just `none`
-                            if args.is_empty() {
-                                ExprValue::None
-                            } else {
-                                // Evaluate the single arg (should be `none`)
-                                self.eval_expr(eval_history, &args[0])?
-                            }
-                        } else if is_tuple {
-                            // Tuple variant - evaluate all args
-                            let values: Vec<ExprValue<T>> = args
-                                .iter()
-                                .map(|x| self.eval_expr(eval_history, &x))
-                                .collect::<Result<_, _>>()?;
-                            ExprValue::Tuple(values)
-                        } else {
-                            // Single value variant
-                            self.eval_expr(eval_history, &args[0])?
-                        };
-
-                        ExprValue::Custom {
-                            type_name: root.node.clone(),
-                            variant: Some(variant.node.clone()),
-                            content: Box::new(content),
-                        }
+                    ResolvedPathKind::Function(name) => {
+                        // Function call
+                        let args = args
+                            .iter()
+                            .map(|x| self.eval_expr(eval_history, &x))
+                            .collect::<Result<_, _>>()?;
+                        eval_history
+                            .add_fn_to_call_history(&name, args, true)?
+                            .0
+                            .into()
                     }
-                    _ => panic!("Generic calls with more than 2 path segments not supported"),
+                    ResolvedPathKind::Type(simple_type) => {
+                        // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
+                        self.eval_generic_call_type_cast(eval_history, &simple_type, args)?
+                    }
                 }
             }
             Expr::VarCall { name, args } => {
@@ -2095,6 +1993,89 @@ impl<T: EvalObject> LocalEnv<T> {
                 )
             }
         })
+    }
+
+    /// Helper for evaluating type casts in GenericCall expressions
+    fn eval_generic_call_type_cast(
+        &mut self,
+        eval_history: &mut EvalHistory<'_, T>,
+        simple_type: &SimpleType,
+        args: &Vec<Spanned<crate::ast::Expr>>,
+    ) -> Result<ExprValue<T>, EvalError<T>> {
+        match simple_type {
+            // Built-in type casts: Int(x), Bool(x), String(x), etc.
+            SimpleType::Int
+            | SimpleType::Bool
+            | SimpleType::String
+            | SimpleType::LinExpr
+            | SimpleType::Constraint
+            | SimpleType::None
+            | SimpleType::Never => {
+                assert!(
+                    args.len() == 1,
+                    "Built-in type cast should have exactly 1 argument"
+                );
+                let value = self.eval_expr(eval_history, &args[0])?;
+                let concrete_target = simple_type
+                    .clone()
+                    .into_concrete()
+                    .expect("Built-in types are always concrete");
+                Ok(value
+                    .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
+                    .expect("Semantic analysis should have validated conversion"))
+            }
+
+            // Custom type casts: CustomType(x), Enum::Variant(x)
+            SimpleType::Custom(root, variant_opt) => {
+                let qualified_name = match variant_opt {
+                    Some(v) => format!("{}::{}", root, v),
+                    None => root.clone(),
+                };
+
+                let underlying_type = eval_history
+                    .ast
+                    .global_env
+                    .get_custom_type_underlying(&qualified_name)
+                    .expect("Semantic analysis should have validated this type exists")
+                    .clone();
+
+                // Check if underlying type is None (unit variant like Option::None)
+                let is_unit = underlying_type
+                    .as_simple()
+                    .map(|s| s.is_none())
+                    .unwrap_or(false);
+                // Check if it's a tuple type
+                let is_tuple = matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+
+                let content = if is_unit {
+                    // Unit variant - args should be empty or just `none`
+                    if args.is_empty() {
+                        ExprValue::None
+                    } else {
+                        self.eval_expr(eval_history, &args[0])?
+                    }
+                } else if is_tuple {
+                    // Tuple variant - evaluate all args
+                    let values: Vec<ExprValue<T>> = args
+                        .iter()
+                        .map(|x| self.eval_expr(eval_history, &x))
+                        .collect::<Result<_, _>>()?;
+                    ExprValue::Tuple(values)
+                } else {
+                    // Single value variant
+                    self.eval_expr(eval_history, &args[0])?
+                };
+
+                Ok(ExprValue::Custom {
+                    type_name: root.clone(),
+                    variant: variant_opt.clone(),
+                    content: Box::new(content),
+                })
+            }
+
+            // Other types shouldn't appear in GenericCall
+            _ => panic!("Unexpected type in GenericCall: {:?}", simple_type),
+        }
     }
 
     fn build_naked_list_for_list_comprehension(
