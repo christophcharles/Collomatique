@@ -47,12 +47,12 @@ pub struct VariableDesc {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
-    object_types: HashMap<String, ObjectFields>,
-    custom_types: HashMap<String, ExprType>, // Maps custom type name → underlying type
-    functions: HashMap<String, FunctionDesc>,
-    external_variables: HashMap<String, ArgsType>,
-    internal_variables: HashMap<String, VariableDesc>,
-    variable_lists: HashMap<String, VariableDesc>,
+    object_types: HashMap<String, ObjectFields>, // external, no module
+    custom_types: HashMap<(String, String), ExprType>, // (module, name) → type
+    functions: HashMap<(String, String), FunctionDesc>, // (module, name) → desc
+    external_variables: HashMap<String, ArgsType>, // external, no module
+    internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
+    variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -133,12 +133,12 @@ impl GlobalEnv {
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
             SimpleType::Object(typ_name) => self.validate_object_type(&typ_name),
-            SimpleType::Custom(_, root, variant) => {
-                let key = match variant {
+            SimpleType::Custom(module, root, variant) => {
+                let name = match variant {
                     None => root.clone(),
                     Some(v) => format!("{}::{}", root, v),
                 };
-                self.custom_types.contains_key(&key)
+                self.custom_types.contains_key(&(module.clone(), name))
             }
             SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
             SimpleType::Struct(fields) => fields.values().all(|t| self.validate_type(t)),
@@ -159,8 +159,12 @@ impl GlobalEnv {
     ) -> Result<ExprType, SemError> {
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<String> =
-            self.custom_types.keys().cloned().collect();
+        // Extract just the name part from (module, name) tuples
+        let custom_type_names: std::collections::HashSet<String> = self
+            .custom_types
+            .keys()
+            .map(|(_, name)| name.clone())
+            .collect();
         ExprType::from_ast(
             typ.clone(),
             current_module,
@@ -170,21 +174,23 @@ impl GlobalEnv {
     }
 
     /// Get the underlying type for a custom type
-    pub fn get_custom_type_underlying(&self, name: &str) -> Option<&ExprType> {
-        self.custom_types.get(name)
+    pub fn get_custom_type_underlying(&self, module: &str, name: &str) -> Option<&ExprType> {
+        self.custom_types
+            .get(&(module.to_string(), name.to_string()))
     }
 
     /// Get all custom types
-    pub fn get_custom_types(&self) -> &HashMap<String, ExprType> {
+    pub fn get_custom_types(&self) -> &HashMap<(String, String), ExprType> {
         &self.custom_types
     }
 
     /// Get all variant names for an enum (e.g., for "Result", returns ["Ok", "Error"])
-    pub fn get_enum_variants(&self, enum_name: &str) -> Vec<String> {
+    pub fn get_enum_variants(&self, module: &str, enum_name: &str) -> Vec<String> {
         let prefix = format!("{}::", enum_name);
         self.custom_types
-            .keys()
-            .filter_map(|k| k.strip_prefix(&prefix).map(|v| v.to_string()))
+            .iter()
+            .filter(|((m, _), _)| m == module)
+            .filter_map(|((_, k), _)| k.strip_prefix(&prefix).map(|v| v.to_string()))
             .collect()
     }
 
@@ -196,7 +202,7 @@ impl GlobalEnv {
             .iter()
             .flat_map(|v| {
                 if let SimpleType::Custom(module, root, None) = v {
-                    let variants = self.get_enum_variants(root);
+                    let variants = self.get_enum_variants(module, root);
                     if variants.is_empty() {
                         // Not an enum or no variants found, keep as-is
                         vec![v.clone()]
@@ -221,7 +227,7 @@ impl GlobalEnv {
         expanded_from.substract(to_remove)
     }
 
-    pub fn get_functions(&self) -> &HashMap<String, FunctionDesc> {
+    pub fn get_functions(&self) -> &HashMap<(String, String), FunctionDesc> {
         &self.functions
     }
 
@@ -229,11 +235,11 @@ impl GlobalEnv {
         &self.external_variables
     }
 
-    pub fn get_vars(&self) -> &HashMap<String, VariableDesc> {
+    pub fn get_vars(&self) -> &HashMap<(String, String), VariableDesc> {
         &self.internal_variables
     }
 
-    pub fn get_var_lists(&self) -> &HashMap<String, VariableDesc> {
+    pub fn get_var_lists(&self) -> &HashMap<(String, String), VariableDesc> {
         &self.variable_lists
     }
 
@@ -241,14 +247,17 @@ impl GlobalEnv {
         &self.object_types
     }
 
-    fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
-        let fn_desc = self.functions.get_mut(name)?;
+    fn lookup_fn(&mut self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
+        let fn_desc = self
+            .functions
+            .get_mut(&(module.to_string(), name.to_string()))?;
         fn_desc.used = true;
         Some((fn_desc.typ.clone(), fn_desc.body.span.clone()))
     }
 
     fn register_fn(
         &mut self,
+        module: &str,
         name: &str,
         name_span: Span,
         fn_typ: FunctionType,
@@ -258,10 +267,11 @@ impl GlobalEnv {
         docstring: Vec<DocstringLine>,
         type_info: &mut TypeInfo,
     ) {
-        assert!(!self.functions.contains_key(name));
+        let key = (module.to_string(), name.to_string());
+        assert!(!self.functions.contains_key(&key));
 
         self.functions.insert(
-            name.to_string(),
+            key,
             FunctionDesc {
                 name_span,
                 typ: fn_typ.clone(),
@@ -276,12 +286,14 @@ impl GlobalEnv {
         type_info.types.insert(body.span, fn_typ.into());
     }
 
-    fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
+    fn lookup_var(&mut self, module: &str, name: &str) -> Option<(ArgsType, Option<Span>)> {
         if let Some(ext_var) = self.external_variables.get(name) {
             return Some((ext_var.clone(), None));
         };
 
-        let var_desc = self.internal_variables.get_mut(name)?;
+        let var_desc = self
+            .internal_variables
+            .get_mut(&(module.to_string(), name.to_string()))?;
 
         var_desc.used = true;
 
@@ -290,6 +302,7 @@ impl GlobalEnv {
 
     fn register_var(
         &mut self,
+        module: &str,
         name: &str,
         args_typ: ArgsType,
         span: Span,
@@ -297,11 +310,12 @@ impl GlobalEnv {
         referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
+        let key = (module.to_string(), name.to_string());
         assert!(!self.external_variables.contains_key(name));
-        assert!(!self.internal_variables.contains_key(name));
+        assert!(!self.internal_variables.contains_key(&key));
 
         self.internal_variables.insert(
-            name.to_string(),
+            key,
             VariableDesc {
                 args: args_typ.clone(),
                 span: span.clone(),
@@ -314,8 +328,10 @@ impl GlobalEnv {
         type_info.types.insert(span, args_typ.into());
     }
 
-    fn lookup_var_list(&mut self, name: &str) -> Option<(ArgsType, Span)> {
-        let var_desc = self.variable_lists.get_mut(name)?;
+    fn lookup_var_list(&mut self, module: &str, name: &str) -> Option<(ArgsType, Span)> {
+        let var_desc = self
+            .variable_lists
+            .get_mut(&(module.to_string(), name.to_string()))?;
 
         var_desc.used = true;
 
@@ -324,6 +340,7 @@ impl GlobalEnv {
 
     fn register_var_list(
         &mut self,
+        module: &str,
         name: &str,
         args_typ: ArgsType,
         span: Span,
@@ -331,10 +348,11 @@ impl GlobalEnv {
         referenced_fn: String,
         type_info: &mut TypeInfo,
     ) {
-        assert!(!self.variable_lists.contains_key(name));
+        let key = (module.to_string(), name.to_string());
+        assert!(!self.variable_lists.contains_key(&key));
 
         self.variable_lists.insert(
-            name.to_string(),
+            key,
             VariableDesc {
                 args: args_typ.clone(),
                 span: span.clone(),
@@ -661,7 +679,8 @@ impl LocalEnv {
         }
 
         // Check if identifier shadows a function name
-        if global_env.functions.contains_key(ident) {
+        let fn_key = (self.current_module().to_string(), ident.to_string());
+        if global_env.get_functions().contains_key(&fn_key) {
             return Err(SemError::LocalIdentShadowsFunction {
                 identifier: ident.to_string(),
                 span,
@@ -712,12 +731,12 @@ pub enum ResolvedPathKind {
     LocalVariable(String),
 
     /// A function in scope: `foo`, `helper`
-    Function(String),
+    Function { module: String, func: String },
 
     /// A type (built-in, custom, or enum variant)
     /// - Built-in: `Int` → Type(SimpleType::Int)
-    /// - Custom: `MyType` → Type(SimpleType::Custom("MyType", None))
-    /// - Enum variant: `Result::Ok` → Type(SimpleType::Custom("Result", Some("Ok")))
+    /// - Custom: `MyType` → Type(SimpleType::Custom("main", "MyType", None))
+    /// - Enum variant: `Result::Ok` → Type(SimpleType::Custom("main", "Result", Some("Ok")))
     Type(SimpleType),
 }
 
@@ -804,8 +823,10 @@ fn resolve_single_segment(
         return Ok(ResolvedPathKind::Type(builtin));
     }
 
+    let key = (current_module.to_string(), name.to_string());
+
     // 2. Check custom types (including enum root types)
-    if global_env.custom_types.contains_key(name) {
+    if global_env.custom_types.contains_key(&key) {
         return Ok(ResolvedPathKind::Type(SimpleType::Custom(
             current_module.to_string(),
             name.to_string(),
@@ -814,8 +835,11 @@ fn resolve_single_segment(
     }
 
     // 3. Check functions (before local variables for safety)
-    if global_env.functions.contains_key(name) {
-        return Ok(ResolvedPathKind::Function(name.to_string()));
+    if global_env.functions.contains_key(&key) {
+        return Ok(ResolvedPathKind::Function {
+            module: current_module.to_string(),
+            func: name.to_string(),
+        });
     }
 
     // 4. Check local variables (if local_env provided)
@@ -848,9 +872,10 @@ fn resolve_two_segments(
     global_env: &GlobalEnv,
 ) -> Result<ResolvedPathKind, PathResolutionError> {
     let qualified_name = format!("{}::{}", root, variant);
+    let key = (current_module.to_string(), qualified_name.clone());
 
     // Check if this is a valid enum variant
-    if global_env.custom_types.contains_key(&qualified_name) {
+    if global_env.custom_types.contains_key(&key) {
         return Ok(ResolvedPathKind::Type(SimpleType::Custom(
             current_module.to_string(),
             root.to_string(),
@@ -908,12 +933,12 @@ impl LocalEnv {
         let to_simple = to.inner();
 
         // Check if target is a custom type and source can convert to underlying
-        if let SimpleType::Custom(_, root, variant) = to_simple {
+        if let SimpleType::Custom(module, root, variant) = to_simple {
             let key = match variant {
                 None => root.clone(),
                 Some(v) => format!("{}::{}", root, v),
             };
-            if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
+            if let Some(underlying) = global_env.get_custom_type_underlying(module, &key) {
                 // Can convert if source can convert to the underlying type
                 if underlying.is_concrete() {
                     let underlying_concrete = underlying
@@ -932,12 +957,12 @@ impl LocalEnv {
         // Check if source is a custom type and underlying can convert to target
         if from.is_concrete() {
             if let Some(from_simple) = from.clone().to_simple() {
-                if let SimpleType::Custom(_, root, variant) = from_simple {
+                if let SimpleType::Custom(module, root, variant) = from_simple {
                     let key = match variant {
                         None => root.clone(),
                         Some(v) => format!("{}::{}", root, v),
                     };
-                    if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
+                    if let Some(underlying) = global_env.get_custom_type_underlying(&module, &key) {
                         // Can convert if the underlying type can convert to target
                         if underlying.can_convert_to(to) {
                             return true;
@@ -979,7 +1004,7 @@ impl LocalEnv {
         visited: &mut HashSet<String>,
     ) -> Vec<SimpleType> {
         match typ {
-            SimpleType::Custom(_, root, variant) => {
+            SimpleType::Custom(module, root, variant) => {
                 let key = match variant {
                     None => root.clone(),
                     Some(v) => format!("{}::{}", root, v),
@@ -995,7 +1020,7 @@ impl LocalEnv {
                 }
                 visited.insert(key.clone());
 
-                if let Some(underlying) = global_env.get_custom_type_underlying(&key) {
+                if let Some(underlying) = global_env.get_custom_type_underlying(module, &key) {
                     // Recursively resolve the underlying ExprType
                     self.resolve_type_for_access_impl(global_env, underlying, visited)
                 } else {
@@ -2530,7 +2555,7 @@ impl LocalEnv {
 
             // ========== ILP Variables ==========
             Expr::VarCall { name, args } => {
-                match global_env.lookup_var(&name.node) {
+                match global_env.lookup_var(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
                             var: name.node.clone(),
@@ -2581,7 +2606,7 @@ impl LocalEnv {
             }
 
             Expr::VarListCall { name, args } => {
-                match global_env.lookup_var_list(&name.node) {
+                match global_env.lookup_var_list(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
                             var: name.node.clone(),
@@ -2668,13 +2693,13 @@ impl LocalEnv {
                         });
                         None
                     }
-                    ResolvedPathKind::Function(name) => {
+                    ResolvedPathKind::Function { module, func } => {
                         // Function call
-                        match global_env.lookup_fn(&name) {
+                        match global_env.lookup_fn(&module, &func) {
                             None => {
                                 // Shouldn't happen: resolve_path said it's a function
                                 errors.push(SemError::UnknownIdentifer {
-                                    identifier: name,
+                                    identifier: func,
                                     span: path.span.clone(),
                                 });
                                 None
@@ -2682,7 +2707,7 @@ impl LocalEnv {
                             Some((fn_type, _)) => {
                                 if args.len() != fn_type.args.len() {
                                     errors.push(SemError::ArgumentCountMismatch {
-                                        identifier: name.clone(),
+                                        identifier: func.clone(),
                                         span: args
                                             .last()
                                             .map(|a| a.span.clone())
@@ -2709,7 +2734,7 @@ impl LocalEnv {
                                                 context: format!(
                                                     "argument {} to function {}",
                                                     i + 1,
-                                                    name
+                                                    func
                                                 ),
                                             });
                                         }
@@ -2749,10 +2774,18 @@ impl LocalEnv {
                     };
 
                 match resolved {
-                    ResolvedPathKind::LocalVariable(name) | ResolvedPathKind::Function(name) => {
-                        // Cannot use struct syntax with variables or functions
+                    ResolvedPathKind::LocalVariable(name) => {
+                        // Cannot use struct syntax with variables
                         errors.push(SemError::UnknownType {
                             typ: name,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
+                    ResolvedPathKind::Function { func, .. } => {
+                        // Cannot use struct syntax with functions
+                        errors.push(SemError::UnknownType {
+                            typ: func,
                             span: path.span.clone(),
                         });
                         None
@@ -3217,23 +3250,24 @@ impl LocalEnv {
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)
-            SimpleType::Custom(_, root, variant_opt) => {
+            SimpleType::Custom(module, root, variant_opt) => {
                 let qualified_name = match variant_opt {
                     Some(v) => format!("{}::{}", root, v),
                     None => root.clone(),
                 };
 
-                let target_type = match global_env.custom_types.get(&qualified_name) {
-                    Some(t) => t.clone(),
-                    None => {
-                        // Shouldn't happen: resolve_path said it exists
-                        errors.push(SemError::UnknownType {
-                            typ: qualified_name,
-                            span: span.clone(),
-                        });
-                        return None;
-                    }
-                };
+                let target_type =
+                    match global_env.get_custom_type_underlying(module, &qualified_name) {
+                        Some(t) => t.clone(),
+                        None => {
+                            // Shouldn't happen: resolve_path said it exists
+                            errors.push(SemError::UnknownType {
+                                typ: qualified_name,
+                                span: span.clone(),
+                            });
+                            return None;
+                        }
+                    };
 
                 let underlying_simple = target_type.to_simple();
                 let is_unit = underlying_simple
@@ -3347,8 +3381,9 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
-        let (type_name, variant_name, qualified_name) = match simple_type {
-            SimpleType::Custom(_, root, variant) => (
+        let (module, type_name, variant_name, qualified_name) = match simple_type {
+            SimpleType::Custom(module, root, variant) => (
+                module.clone(),
                 root.clone(),
                 variant.clone(),
                 match variant {
@@ -3367,7 +3402,7 @@ impl LocalEnv {
         };
 
         // Look up the custom type
-        let underlying = match global_env.custom_types.get(&qualified_name) {
+        let underlying = match global_env.get_custom_type_underlying(&module, &qualified_name) {
             Some(t) => t.clone(),
             None => {
                 errors.push(SemError::UnknownType {
@@ -3492,13 +3527,13 @@ impl LocalEnv {
                     .expect("resolve_path said this is a local variable, but lookup_ident failed");
                 Some(typ)
             }
-            ResolvedPathKind::Function(name) => {
+            ResolvedPathKind::Function { func, .. } => {
                 // Functions cannot be used as values without calling them
                 // This currently falls through to UnknownIdentifier in the original code
                 // because functions weren't in the lookup path for IdentPath.
                 // To maintain compatibility, we'll error similarly.
                 errors.push(SemError::UnknownIdentifer {
-                    identifier: name,
+                    identifier: func,
                     span: path.span.clone(),
                 });
                 None
@@ -3522,11 +3557,12 @@ impl LocalEnv {
                     // None is valid as a unit value
                     SimpleType::None => Some(SimpleType::None.into()),
                     // Custom types: check if it's a unit variant
-                    SimpleType::Custom(_, root, variant_opt) => {
+                    SimpleType::Custom(module, root, variant_opt) => {
                         if let Some(variant) = variant_opt {
                             // Enum variant: check if it's a unit variant
                             let qualified_name = format!("{}::{}", root, variant);
-                            if let Some(target_type) = global_env.custom_types.get(&qualified_name)
+                            if let Some(target_type) =
+                                global_env.get_custom_type_underlying(module, &qualified_name)
                             {
                                 let underlying_simple = target_type.clone().to_simple();
                                 let is_unit = underlying_simple
@@ -3834,10 +3870,15 @@ impl GlobalEnv {
         for statement in &file.statements {
             match &statement.node {
                 crate::ast::Statement::TypeDecl { name, .. } => {
-                    temp_env.expand_with_type_decl_pass1(name, &mut errors);
+                    temp_env.expand_with_type_decl_pass1(&current_module, name, &mut errors);
                 }
                 crate::ast::Statement::EnumDecl { name, variants, .. } => {
-                    temp_env.expand_with_enum_decl_pass1(name, variants, &mut errors);
+                    temp_env.expand_with_enum_decl_pass1(
+                        &current_module,
+                        name,
+                        variants,
+                        &mut errors,
+                    );
                 }
                 _ => {}
             }
@@ -3915,6 +3956,7 @@ impl GlobalEnv {
             } = &statement.node
             {
                 temp_env.expand_with_reify_statement(
+                    &current_module,
                     constraint_name,
                     name,
                     *var_list,
@@ -3951,10 +3993,10 @@ impl GlobalEnv {
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
-        for (name, fn_desc) in &self.functions {
+        for ((_, fn_name), fn_desc) in &self.functions {
             if !fn_desc.public && !fn_desc.used {
                 warnings.push(SemWarning::UnusedFunction {
-                    identifier: name.clone(),
+                    identifier: fn_name.clone(),
                     span: fn_desc.body.span.clone(),
                 });
             }
@@ -3962,19 +4004,19 @@ impl GlobalEnv {
     }
 
     fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
-        for (name, var_desc) in &self.internal_variables {
+        for ((_, var_name), var_desc) in &self.internal_variables {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
-                    identifier: name.clone(),
+                    identifier: var_name.clone(),
                     span: var_desc.span.clone(),
                 });
             }
         }
 
-        for (name, var_desc) in &self.variable_lists {
+        for ((_, var_name), var_desc) in &self.variable_lists {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
-                    identifier: name.clone(),
+                    identifier: var_name.clone(),
                     span: var_desc.span.clone(),
                 });
             }
@@ -3997,7 +4039,7 @@ impl GlobalEnv {
         warnings: &mut Vec<SemWarning>,
     ) {
         // Check for duplicate function name
-        if let Some((_fn_type, span)) = self.lookup_fn(&name.node) {
+        if let Some((_fn_type, span)) = self.lookup_fn(current_module, &name.node) {
             errors.push(SemError::FunctionAlreadyDefined {
                 identifier: name.node.clone(),
                 span: name.span.clone(),
@@ -4090,6 +4132,7 @@ impl GlobalEnv {
                 output: out_typ,
             };
             self.register_fn(
+                current_module,
                 &name.node,
                 name.span.clone(),
                 fn_typ,
@@ -4137,7 +4180,8 @@ impl GlobalEnv {
         warnings: &mut Vec<SemWarning>,
     ) {
         // Skip if function wasn't registered in pass 1
-        let fn_desc = match self.functions.get(&name.node) {
+        let fn_key = (current_module.to_string(), name.node.clone());
+        let fn_desc = match self.functions.get(&fn_key) {
             Some(desc) => desc.clone(),
             None => return,
         };
@@ -4185,6 +4229,7 @@ impl GlobalEnv {
 
     fn expand_with_reify_statement(
         &mut self,
+        current_module: &str,
         constraint_name: &Spanned<String>,
         name: &Spanned<String>,
         var_list: bool,
@@ -4193,7 +4238,7 @@ impl GlobalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
-        match self.lookup_fn(&constraint_name.node) {
+        match self.lookup_fn(current_module, &constraint_name.node) {
             None => errors.push(SemError::UnknownIdentifer {
                 identifier: constraint_name.node.clone(),
                 span: constraint_name.span.clone(),
@@ -4220,7 +4265,7 @@ impl GlobalEnv {
                 }
 
                 if var_list {
-                    match self.lookup_var_list(&name.node) {
+                    match self.lookup_var_list(current_module, &name.node) {
                         Some((_args, span)) => errors.push(SemError::VariableAlreadyDefined {
                             identifier: name.node.clone(),
                             span: name.span.clone(),
@@ -4240,6 +4285,7 @@ impl GlobalEnv {
                                 });
                             }
                             self.register_var_list(
+                                current_module,
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
@@ -4250,7 +4296,7 @@ impl GlobalEnv {
                         }
                     }
                 } else {
-                    match self.lookup_var(&name.node) {
+                    match self.lookup_var(current_module, &name.node) {
                         Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
                             identifier: name.node.clone(),
                             span: name.span.clone(),
@@ -4270,6 +4316,7 @@ impl GlobalEnv {
                                 });
                             }
                             self.register_var(
+                                current_module,
                                 &name.node,
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
@@ -4285,7 +4332,12 @@ impl GlobalEnv {
     }
 
     /// Pass 1: Register type name with placeholder (for forward references)
-    fn expand_with_type_decl_pass1(&mut self, name: &Spanned<String>, errors: &mut Vec<SemError>) {
+    fn expand_with_type_decl_pass1(
+        &mut self,
+        current_module: &str,
+        name: &Spanned<String>,
+        errors: &mut Vec<SemError>,
+    ) {
         // Check if type name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
@@ -4305,7 +4357,8 @@ impl GlobalEnv {
         }
 
         // Check if type name shadows a previous custom type (duplicate in same file)
-        if self.custom_types.contains_key(&name.node) {
+        let type_key = (current_module.to_string(), name.node.clone());
+        if self.custom_types.contains_key(&type_key) {
             errors.push(SemError::TypeShadowsCustomType {
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -4315,7 +4368,7 @@ impl GlobalEnv {
 
         // Register with placeholder - will be resolved in pass 2
         self.custom_types
-            .insert(name.node.clone(), ExprType::simple(SimpleType::Never));
+            .insert(type_key, ExprType::simple(SimpleType::Never));
     }
 
     /// Pass 2: Resolve underlying type and check for unguarded recursion
@@ -4327,15 +4380,20 @@ impl GlobalEnv {
         errors: &mut Vec<SemError>,
     ) {
         // Skip if pass 1 failed (type wasn't registered)
-        if !self.custom_types.contains_key(&name.node) {
+        let type_key = (current_module.to_string(), name.node.clone());
+        if !self.custom_types.contains_key(&type_key) {
             return;
         }
 
         // Build the context for type resolution - all type names are now known
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<String> =
-            self.custom_types.keys().cloned().collect();
+        // Extract just the type names from tuple keys
+        let custom_type_names: std::collections::HashSet<String> = self
+            .custom_types
+            .keys()
+            .map(|(_, name)| name.clone())
+            .collect();
 
         // Resolve the underlying type
         let underlying_type = match ExprType::from_ast(
@@ -4361,12 +4419,13 @@ impl GlobalEnv {
         }
 
         // Update the placeholder with the actual type
-        self.custom_types.insert(name.node.clone(), underlying_type);
+        self.custom_types.insert(type_key, underlying_type);
     }
 
     /// Pass 1 for enum declarations: Register the enum name and all variant names with placeholders
     fn expand_with_enum_decl_pass1(
         &mut self,
+        current_module: &str,
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
@@ -4389,7 +4448,8 @@ impl GlobalEnv {
             return;
         }
 
-        if self.custom_types.contains_key(&name.node) {
+        let type_key = (current_module.to_string(), name.node.clone());
+        if self.custom_types.contains_key(&type_key) {
             errors.push(SemError::TypeShadowsCustomType {
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -4399,17 +4459,18 @@ impl GlobalEnv {
 
         // Register the root enum type with a placeholder
         self.custom_types
-            .insert(name.node.clone(), ExprType::simple(SimpleType::Never));
+            .insert(type_key, ExprType::simple(SimpleType::Never));
 
         // Register all variant types with placeholders
         for variant in variants {
             let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
+            let variant_key = (current_module.to_string(), qualified_name.clone());
 
             // Note: Primitive type names ARE allowed as variant names since the qualified name
             // (e.g., "MyType::Int", "Option::None") is distinct from the primitive type.
             // Only the root enum name must not shadow primitives.
 
-            if self.custom_types.contains_key(&qualified_name) {
+            if self.custom_types.contains_key(&variant_key) {
                 errors.push(SemError::TypeShadowsCustomType {
                     type_name: qualified_name.clone(),
                     span: variant.node.name.span.clone(),
@@ -4418,7 +4479,7 @@ impl GlobalEnv {
             }
 
             self.custom_types
-                .insert(qualified_name, ExprType::simple(SimpleType::Never));
+                .insert(variant_key, ExprType::simple(SimpleType::Never));
         }
     }
 
@@ -4434,24 +4495,30 @@ impl GlobalEnv {
         use crate::ast::EnumVariantType;
 
         // Skip if pass 1 failed
-        if !self.custom_types.contains_key(&name.node) {
+        let type_key = (current_module.to_string(), name.node.clone());
+        if !self.custom_types.contains_key(&type_key) {
             return;
         }
 
         // Build the context for type resolution
         let object_types: std::collections::HashSet<String> =
             self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<String> =
-            self.custom_types.keys().cloned().collect();
+        // Extract just the type names from tuple keys
+        let custom_type_names: std::collections::HashSet<String> = self
+            .custom_types
+            .keys()
+            .map(|(_, name)| name.clone())
+            .collect();
 
         // Process each variant and collect their SimpleTypes for the root enum
         let mut variant_simple_types = Vec::new();
 
         for variant in variants {
             let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
+            let variant_key = (current_module.to_string(), qualified_name.clone());
 
             // Skip if this variant wasn't registered in pass 1
-            if !self.custom_types.contains_key(&qualified_name) {
+            if !self.custom_types.contains_key(&variant_key) {
                 continue;
             }
 
@@ -4538,8 +4605,7 @@ impl GlobalEnv {
             }
 
             // Update the variant's underlying type
-            self.custom_types
-                .insert(qualified_name.clone(), underlying_type);
+            self.custom_types.insert(variant_key, underlying_type);
 
             // Add this variant to the list for the root enum type
             variant_simple_types.push(SimpleType::Custom(
@@ -4552,7 +4618,7 @@ impl GlobalEnv {
         // Build the root enum type as a union of all variants
         if !variant_simple_types.is_empty() {
             let enum_type = ExprType::from_variants(variant_simple_types);
-            self.custom_types.insert(name.node.clone(), enum_type);
+            self.custom_types.insert(type_key, enum_type);
         }
     }
 
@@ -4578,7 +4644,7 @@ impl GlobalEnv {
 
     fn simple_type_has_unguarded_reference(&self, typ: &SimpleType, type_name: &str) -> bool {
         match typ {
-            SimpleType::Custom(_, root, variant) => {
+            SimpleType::Custom(module, root, variant) => {
                 let key = match variant {
                     None => root.clone(),
                     Some(v) => format!("{}::{}", root, v),
@@ -4589,7 +4655,8 @@ impl GlobalEnv {
                 }
                 // Check if this custom type transitively has unguarded reference
                 // But only if it's already resolved (not a placeholder)
-                if let Some(underlying) = self.custom_types.get(&key) {
+                let type_key = (module.clone(), key);
+                if let Some(underlying) = self.custom_types.get(&type_key) {
                     // Skip if it's still a placeholder (Never type used during pass 1)
                     let placeholder = ExprType::simple(SimpleType::Never);
                     if *underlying == placeholder {

@@ -749,11 +749,12 @@ fn named_struct_field_access() {
     let result = checked_ast
         .quick_eval_fn(
             "f",
-            vec![ExprValue::Custom {
+            vec![ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "Point".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Struct(point)),
-            }],
+                content: ExprValue::Struct(point),
+            }))],
         )
         .expect("Should evaluate");
 

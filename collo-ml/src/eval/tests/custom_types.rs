@@ -20,11 +20,12 @@ fn custom_type_wrap_and_unwrap() {
 
     assert_eq!(
         wrapped,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 
     // Test unwrapping
@@ -64,11 +65,12 @@ fn custom_type_with_tuple() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Point".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]))
-        }
+            content: ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
+        }))
     );
 }
 
@@ -86,15 +88,16 @@ fn custom_type_with_list() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "IntList".to_string(),
             variant: None,
-            content: Box::new(ExprValue::List(vec![
+            content: ExprValue::List(vec![
                 ExprValue::Int(1),
                 ExprValue::Int(2),
                 ExprValue::Int(3)
-            ]))
-        }
+            ]),
+        }))
     );
 }
 
@@ -111,14 +114,12 @@ fn custom_type_tuple_field_access() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let point = ExprValue::Custom {
+    let point = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "Point".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
-            ExprValue::Int(10),
-            ExprValue::Int(20),
-        ])),
-    };
+        content: ExprValue::Tuple(vec![ExprValue::Int(10), ExprValue::Int(20)]),
+    }));
 
     let x = checked_ast
         .quick_eval_fn("get_x", vec![point.clone()])
@@ -140,18 +141,20 @@ fn custom_type_nested_tuple_field_access() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let named_point = ExprValue::Custom {
+    let named_point = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "NamedPoint".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
+        content: ExprValue::Tuple(vec![
             ExprValue::String("origin".to_string()),
-            ExprValue::Custom {
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "Point".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Int(0)])),
-            },
-        ])),
-    };
+                content: ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Int(0)]),
+            })),
+        ]),
+    }));
 
     let x = checked_ast
         .quick_eval_fn("get_x", vec![named_point])
@@ -178,21 +181,24 @@ fn custom_type_in_list() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom {
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Int(1))
-            },
-            ExprValue::Custom {
+                content: ExprValue::Int(1),
+            })),
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Int(2))
-            },
-            ExprValue::Custom {
+                content: ExprValue::Int(2),
+            })),
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Int(3))
-            }
+                content: ExprValue::Int(3),
+            })),
         ])
     );
 }
@@ -206,21 +212,24 @@ fn sum_over_custom_type_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1)),
-        },
-        ExprValue::Custom {
+            content: ExprValue::Int(1),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(2)),
-        },
-        ExprValue::Custom {
+            content: ExprValue::Int(2),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(3)),
-        },
+            content: ExprValue::Int(3),
+        })),
     ]);
 
     let result = checked_ast
@@ -247,11 +256,12 @@ fn custom_type_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1))
-        }
+            content: ExprValue::Int(1),
+        }))
     );
 
     let result_false = checked_ast
@@ -259,11 +269,12 @@ fn custom_type_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(0))
-        }
+            content: ExprValue::Int(0),
+        }))
     );
 }
 
@@ -294,11 +305,12 @@ fn custom_type_to_string() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let value = ExprValue::Custom {
+    let value = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "MyInt".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Int(42)),
-    };
+        content: ExprValue::Int(42),
+    }));
 
     let result = checked_ast
         .quick_eval_fn("to_str", vec![value])
@@ -315,11 +327,12 @@ fn custom_type_tuple_to_string() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let value = ExprValue::Custom {
+    let value = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "Point".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)])),
-    };
+        content: ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
+    }));
 
     let result = checked_ast
         .quick_eval_fn("to_str", vec![value])
@@ -352,19 +365,21 @@ fn multiple_custom_types() {
     // Even though both are Int underneath, they should be different custom types
     assert_eq!(
         a,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "TypeA".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1))
-        }
+            content: ExprValue::Int(1),
+        }))
     );
     assert_eq!(
         b,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "TypeB".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1))
-        }
+            content: ExprValue::Int(1),
+        }))
     );
     assert_ne!(a, b);
 }
@@ -384,22 +399,25 @@ fn custom_type_referencing_another() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Outer".to_string(),
             variant: None,
-            content: Box::new(ExprValue::List(vec![
-                ExprValue::Custom {
+            content: ExprValue::List(vec![
+                ExprValue::Custom(Box::new(CustomValue {
+                    module: "main".to_string(),
                     type_name: "Inner".to_string(),
                     variant: None,
-                    content: Box::new(ExprValue::Int(1))
-                },
-                ExprValue::Custom {
+                    content: ExprValue::Int(1),
+                })),
+                ExprValue::Custom(Box::new(CustomValue {
+                    module: "main".to_string(),
                     type_name: "Inner".to_string(),
                     variant: None,
-                    content: Box::new(ExprValue::Int(2))
-                }
-            ]))
-        }
+                    content: ExprValue::Int(2),
+                })),
+            ]),
+        }))
     );
 }
 
@@ -416,21 +434,24 @@ fn custom_type_in_fold() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1)),
-        },
-        ExprValue::Custom {
+            content: ExprValue::Int(1),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(2)),
-        },
-        ExprValue::Custom {
+            content: ExprValue::Int(2),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(3)),
-        },
+            content: ExprValue::Int(3),
+        })),
     ]);
 
     let result = checked_ast
@@ -453,16 +474,18 @@ fn custom_type_in_list_comprehension() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(1)),
-        },
-        ExprValue::Custom {
+            content: ExprValue::Int(1),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Int(2)),
-        },
+            content: ExprValue::Int(2),
+        })),
     ]);
 
     let result = checked_ast
@@ -472,16 +495,18 @@ fn custom_type_in_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom {
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Int(2))
-            },
-            ExprValue::Custom {
+                content: ExprValue::Int(2),
+            })),
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: Box::new(ExprValue::Int(4))
-            }
+                content: ExprValue::Int(4),
+            })),
         ])
     );
 }
@@ -500,28 +525,27 @@ fn custom_type_wrapping_union_tuple_index() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     // Test with first variant (Int, Bool)
-    let value1 = ExprValue::Custom {
+    let value1 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
-            ExprValue::Int(42),
-            ExprValue::Bool(true),
-        ])),
-    };
+        content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
+    }));
     let result1 = checked_ast
         .quick_eval_fn("get_second", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Bool(true));
 
     // Test with second variant (String, Bool)
-    let value2 = ExprValue::Custom {
+    let value2 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
+        content: ExprValue::Tuple(vec![
             ExprValue::String("hello".to_string()),
             ExprValue::Bool(false),
-        ])),
-    };
+        ]),
+    }));
     let result2 = checked_ast
         .quick_eval_fn("get_second", vec![value2])
         .expect("Should evaluate");
@@ -538,28 +562,27 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     // Test with first variant (Int, Bool)
-    let value1 = ExprValue::Custom {
+    let value1 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
-            ExprValue::Int(42),
-            ExprValue::Bool(true),
-        ])),
-    };
+        content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
+    }));
     let result1 = checked_ast
         .quick_eval_fn("get_first", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(42));
 
     // Test with second variant (String, Bool)
-    let value2 = ExprValue::Custom {
+    let value2 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
+        content: ExprValue::Tuple(vec![
             ExprValue::String("hello".to_string()),
             ExprValue::Bool(false),
-        ])),
-    };
+        ]),
+    }));
     let result2 = checked_ast
         .quick_eval_fn("get_first", vec![value2])
         .expect("Should evaluate");
@@ -577,29 +600,32 @@ fn custom_type_wrapping_nested_custom_type_union() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     // Test with A variant (wrapped in B)
-    let value1 = ExprValue::Custom {
+    let value1 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "B".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Custom {
+        content: ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "A".to_string(),
             variant: None,
-            content: Box::new(ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)])),
-        }),
-    };
+            content: ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
+        })),
+    }));
     let result1 = checked_ast
         .quick_eval_fn("get_second", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(2));
 
     // Test with (String, Int) variant
-    let value2 = ExprValue::Custom {
+    let value2 = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "B".to_string(),
         variant: None,
-        content: Box::new(ExprValue::Tuple(vec![
+        content: ExprValue::Tuple(vec![
             ExprValue::String("test".to_string()),
             ExprValue::Int(99),
-        ])),
-    };
+        ]),
+    }));
     let result2 = checked_ast
         .quick_eval_fn("get_second", vec![value2])
         .expect("Should evaluate");

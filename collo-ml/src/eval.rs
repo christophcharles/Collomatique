@@ -183,13 +183,19 @@ pub enum ExprValue<T: EvalObject> {
     List(Vec<ExprValue<T>>),
     Tuple(Vec<ExprValue<T>>),
     Struct(BTreeMap<String, ExprValue<T>>),
-    Custom {
-        /// The root type name (e.g., "Result" or "MyType")
-        type_name: String,
-        /// The variant name if this is an enum variant (e.g., Some("Ok") for Result::Ok)
-        variant: Option<String>,
-        content: Box<ExprValue<T>>,
-    },
+    Custom(Box<CustomValue<T>>),
+}
+
+/// Data for custom type values (boxed to keep ExprValue enum small)
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CustomValue<T: EvalObject> {
+    /// The module where this type is defined
+    pub module: String,
+    /// The root type name (e.g., "Result" or "MyType")
+    pub type_name: String,
+    /// The variant name if this is an enum variant (e.g., Some("Ok") for Result::Ok)
+    pub variant: Option<String>,
+    pub content: ExprValue<T>,
 }
 
 impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
@@ -232,13 +238,9 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
                     .collect();
                 write!(f, "{{{}}}", field_strs.join(", "))
             }
-            ExprValue::Custom {
-                type_name,
-                variant,
-                content,
-            } => match variant {
-                None => write!(f, "{}({})", type_name, content),
-                Some(v) => write!(f, "{}::{}({})", type_name, v, content),
+            ExprValue::Custom(custom) => match &custom.variant {
+                None => write!(f, "{}({})", custom.type_name, custom.content),
+                Some(v) => write!(f, "{}::{}({})", custom.type_name, v, custom.content),
             },
         }
     }
@@ -402,22 +404,20 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Custom values only fit in Custom types with the same name
             // Also handles subtype relationship: Custom(Root, Some(Variant)) fits in Custom(Root, None)
-            Self::Custom {
-                type_name, variant, ..
-            } => {
+            Self::Custom(custom) => {
                 // Check for exact match
                 if target.get_variants().contains(&SimpleType::Custom(
-                    "main".to_string(),
-                    type_name.clone(),
-                    variant.clone(),
+                    custom.module.clone(),
+                    custom.type_name.clone(),
+                    custom.variant.clone(),
                 )) {
                     return true;
                 }
                 // Check if this variant fits in the root enum type (subtype relationship)
-                if variant.is_some() {
+                if custom.variant.is_some() {
                     target.get_variants().contains(&SimpleType::Custom(
-                        "main".to_string(),
-                        type_name.clone(),
+                        custom.module.clone(),
+                        custom.type_name.clone(),
                         None,
                     ))
                 } else {
@@ -439,18 +439,15 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
             // Custom type conversions - semantic analysis has validated these
             // Enum variant can convert to root enum type (subtype relationship)
-            (
-                Self::Custom {
-                    type_name, variant, ..
-                },
-                SimpleType::Custom(_, target_root, target_variant),
-            ) => {
-                type_name == target_root && (variant == target_variant || target_variant.is_none())
+            (Self::Custom(custom), SimpleType::Custom(_, target_root, target_variant)) => {
+                custom.type_name == *target_root
+                    && (custom.variant == *target_variant || target_variant.is_none())
             }
             // Custom to underlying type - semantic analysis has validated this is allowed
             // The actual conversion happens by unwrapping and converting the content
-            (Self::Custom { content, .. }, target_typ) => {
-                content.can_convert_to(env, target) || matches!(target_typ, SimpleType::String)
+            (Self::Custom(custom), target_typ) => {
+                custom.content.can_convert_to(env, target)
+                    || matches!(target_typ, SimpleType::String)
                 // Everything converts to String
             }
             // Value to Custom type - semantic analysis has validated this
@@ -587,19 +584,25 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
-            (value, SimpleType::Custom(_, type_name, variant)) => Self::Custom {
-                type_name: type_name.clone(),
-                variant: variant.clone(),
-                content: Box::new(value),
-            },
+            (value, SimpleType::Custom(module, type_name, variant)) => {
+                Self::Custom(Box::new(CustomValue {
+                    module: module.clone(),
+                    type_name: type_name.clone(),
+                    variant: variant.clone(),
+                    content: value,
+                }))
+            }
             // Converting FROM a Custom type: unwrap and convert the content
-            (Self::Custom { content, .. }, target_typ) => {
+            (Self::Custom(custom), target_typ) => {
                 // Recursively convert the inner content to the target type
                 let inner_target = target_typ
                     .clone()
                     .into_concrete()
                     .expect("Should be concrete");
-                content.convert_to(env, cache, &inner_target)?
+                custom
+                    .content
+                    .clone()
+                    .convert_to(env, cache, &inner_target)?
             }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
@@ -633,17 +636,17 @@ impl<T: EvalObject> ExprValue<T> {
                     .collect();
                 format!("{{{}}}", inners.join(", "))
             }
-            Self::Custom {
-                type_name,
-                variant,
-                content,
-            } => match variant {
-                None => format!("{}({})", type_name, content.convert_to_string(env, cache)),
+            Self::Custom(custom) => match &custom.variant {
+                None => format!(
+                    "{}({})",
+                    custom.type_name,
+                    custom.content.convert_to_string(env, cache)
+                ),
                 Some(v) => format!(
                     "{}::{}({})",
-                    type_name,
+                    custom.type_name,
                     v,
-                    content.convert_to_string(env, cache)
+                    custom.content.convert_to_string(env, cache)
                 ),
             },
             v => format!("{}", v),
@@ -815,20 +818,26 @@ impl<T: EvalObject> CheckedAST<T> {
     /// Resolve a type name to ExprType with proper handling of object and custom types
     pub fn resolve_type(
         &self,
+        module: &str,
         typ: &crate::ast::Spanned<crate::ast::TypeName>,
     ) -> Result<ExprType, SemError> {
         use std::collections::HashSet;
         let object_types: HashSet<String> = self.global_env.get_types().keys().cloned().collect();
-        let custom_types: HashSet<String> =
-            self.global_env.get_custom_types().keys().cloned().collect();
-        ExprType::from_ast(typ.clone(), "main", &object_types, &custom_types)
+        // Extract just the type name from (module, name) tuples
+        let custom_types: HashSet<String> = self
+            .global_env
+            .get_custom_types()
+            .keys()
+            .map(|(_, name)| name.clone())
+            .collect();
+        ExprType::from_ast(typ.clone(), module, &object_types, &custom_types)
     }
 
     pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
         self.global_env
             .get_functions()
             .iter()
-            .filter_map(|(fn_name, fn_desc)| {
+            .filter_map(|((_, fn_name), fn_desc)| {
                 if !fn_desc.public {
                     return None;
                 }
@@ -844,7 +853,7 @@ impl<T: EvalObject> CheckedAST<T> {
         self.global_env
             .get_vars()
             .iter()
-            .map(|(var_name, var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
+            .map(|((_, var_name), var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
             .collect()
     }
 
@@ -852,7 +861,7 @@ impl<T: EvalObject> CheckedAST<T> {
         self.global_env
             .get_var_lists()
             .iter()
-            .map(|(var_name, var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
+            .map(|((_, var_name), var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
             .collect()
     }
 
@@ -965,8 +974,13 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 // Use resolve_path for type-level resolution
-                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
-                    .expect("Path should be valid in a checked AST");
+                let resolved = resolve_path(
+                    path,
+                    self.current_module(),
+                    &eval_history.ast.global_env,
+                    None,
+                )
+                .expect("Path should be valid in a checked AST");
 
                 match resolved {
                     ResolvedPathKind::LocalVariable(name) => {
@@ -974,20 +988,21 @@ impl<T: EvalObject> LocalEnv<T> {
                         self.lookup_ident(&name)
                             .expect("Local variable should exist")
                     }
-                    ResolvedPathKind::Function(_) => {
+                    ResolvedPathKind::Function { .. } => {
                         panic!("Function reference without call should not appear in IdentPath")
                     }
                     ResolvedPathKind::Type(simple_type) => {
                         // Unit enum variant or None type
                         match simple_type {
                             SimpleType::None => ExprValue::None,
-                            SimpleType::Custom(_, root, Some(variant)) => {
+                            SimpleType::Custom(module, root, Some(variant)) => {
                                 // Qualified unit value: Enum::UnitVariant
-                                ExprValue::Custom {
+                                ExprValue::Custom(Box::new(CustomValue {
+                                    module,
                                     type_name: root,
                                     variant: Some(variant),
-                                    content: Box::new(ExprValue::None),
-                                }
+                                    content: ExprValue::None,
+                                }))
                             }
                             _ => panic!("Unexpected type in IdentPath: {:?}", simple_type),
                         }
@@ -1003,7 +1018,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 // Helper to unwrap Custom values for field/index access
                 fn unwrap_custom<T: EvalObject>(value: ExprValue<T>) -> ExprValue<T> {
                     match value {
-                        ExprValue::Custom { content, .. } => unwrap_custom(*content),
+                        ExprValue::Custom(custom) => unwrap_custom(custom.content),
                         other => other,
                     }
                 }
@@ -1122,7 +1137,7 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 let target_type = eval_history
                     .ast
-                    .resolve_type(typ)
+                    .resolve_type(self.current_module(), typ)
                     .expect("At this point types should be valid")
                     .to_simple()
                     .expect("ComplexTypeCast should have a simple type as target");
@@ -1136,11 +1151,18 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
-                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
-                    .expect("Path should be valid in a checked AST");
+                let resolved = resolve_path(
+                    path,
+                    self.current_module(),
+                    &eval_history.ast.global_env,
+                    None,
+                )
+                .expect("Path should be valid in a checked AST");
 
-                let (type_name, variant_name) = match resolved {
-                    ResolvedPathKind::Type(SimpleType::Custom(_, root, variant)) => (root, variant),
+                let (module, type_name, variant_name) = match resolved {
+                    ResolvedPathKind::Type(SimpleType::Custom(module, root, variant)) => {
+                        (module, root, variant)
+                    }
                     _ => panic!("StructCall should resolve to a Custom type"),
                 };
 
@@ -1152,17 +1174,18 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 // Wrap in custom type
-                ExprValue::Custom {
+                ExprValue::Custom(Box::new(CustomValue {
+                    module,
                     type_name,
                     variant: variant_name,
-                    content: Box::new(ExprValue::Struct(field_values)),
-                }
+                    content: ExprValue::Struct(field_values),
+                }))
             }
             Expr::CastFallible { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
                 let target_type = eval_history
                     .ast
-                    .resolve_type(typ)
+                    .resolve_type(self.current_module(), typ)
                     .expect("At this point types should be valid");
 
                 // Check if value fits in target type
@@ -1176,7 +1199,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 let value = self.eval_expr(eval_history, &expr)?;
                 let target_type = eval_history
                     .ast
-                    .resolve_type(typ)
+                    .resolve_type(self.current_module(), typ)
                     .expect("At this point types should be valid");
 
                 // Check if value fits in target type
@@ -1220,7 +1243,7 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::GlobalList(typ_name) => {
                 let expr_type = eval_history
                     .ast
-                    .resolve_type(typ_name)
+                    .resolve_type(self.current_module(), typ_name)
                     .expect("At this point, types should be valid");
 
                 let mut collection = vec![];
@@ -1237,21 +1260,26 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to
-                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
-                    .expect("Path should be valid in a checked AST");
+                let resolved = resolve_path(
+                    path,
+                    self.current_module(),
+                    &eval_history.ast.global_env,
+                    None,
+                )
+                .expect("Path should be valid in a checked AST");
 
                 match resolved {
                     ResolvedPathKind::LocalVariable(_) => {
                         panic!("Cannot call a local variable")
                     }
-                    ResolvedPathKind::Function(name) => {
+                    ResolvedPathKind::Function { module, func } => {
                         // Function call
                         let args = args
                             .iter()
                             .map(|x| self.eval_expr(eval_history, &x))
                             .collect::<Result<_, _>>()?;
                         eval_history
-                            .add_fn_to_call_history(self.current_module(), &name, args, true)?
+                            .add_fn_to_call_history(&module, &func, args, true)?
                             .0
                             .into()
                     }
@@ -1278,8 +1306,11 @@ impl<T: EvalObject> LocalEnv<T> {
                         name.node.clone(),
                         args,
                     ))))
-                } else if let Some(var_desc) =
-                    eval_history.ast.global_env.get_vars().get(&name.node)
+                } else if let Some(var_desc) = eval_history
+                    .ast
+                    .global_env
+                    .get_vars()
+                    .get(&(self.current_module().to_string(), name.node.clone()))
                 {
                     eval_history.vars.insert(
                         (name.node.clone(), args.clone()),
@@ -1650,7 +1681,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         Some(t) => {
                             let target_type = eval_history
                                 .ast
-                                .resolve_type(t)
+                                .resolve_type(self.current_module(), t)
                                 .expect("At this point types should be valid");
                             value.fits_in_typ(&eval_history.env, &target_type)
                         }
@@ -2043,7 +2074,7 @@ impl<T: EvalObject> LocalEnv<T> {
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)
-            SimpleType::Custom(_, root, variant_opt) => {
+            SimpleType::Custom(module, root, variant_opt) => {
                 let qualified_name = match variant_opt {
                     Some(v) => format!("{}::{}", root, v),
                     None => root.clone(),
@@ -2052,7 +2083,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 let underlying_type = eval_history
                     .ast
                     .global_env
-                    .get_custom_type_underlying(&qualified_name)
+                    .get_custom_type_underlying(module, &qualified_name)
                     .expect("Semantic analysis should have validated this type exists")
                     .clone();
 
@@ -2083,11 +2114,12 @@ impl<T: EvalObject> LocalEnv<T> {
                     self.eval_expr(eval_history, &args[0])?
                 };
 
-                Ok(ExprValue::Custom {
+                Ok(ExprValue::Custom(Box::new(CustomValue {
+                    module: module.clone(),
                     type_name: root.clone(),
                     variant: variant_opt.clone(),
-                    content: Box::new(content),
-                })
+                    content,
+                })))
             }
 
             // Other types shouldn't appear in GenericCall
@@ -2215,7 +2247,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             .ast
             .global_env
             .get_functions()
-            .get(fn_name)
+            .get(&(module.to_string(), fn_name.to_string()))
             .ok_or(EvalError::UnknownFunction(fn_name.to_string()))?;
 
         if !allow_private {
@@ -2299,18 +2331,17 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             }
             ExprValue::Tuple(elements) => elements.iter().all(|e| self.validate_value(e)),
             ExprValue::Struct(fields) => fields.values().all(|v| self.validate_value(v)),
-            ExprValue::Custom {
-                type_name,
-                variant,
-                content,
-            } => {
+            ExprValue::Custom(custom) => {
                 // Validate that the custom type exists and recursively validate content
-                let key = match variant {
-                    None => type_name.clone(),
-                    Some(v) => format!("{}::{}", type_name, v),
+                let key = match &custom.variant {
+                    None => custom.type_name.clone(),
+                    Some(v) => format!("{}::{}", custom.type_name, v),
                 };
-                self.ast.global_env.get_custom_types().contains_key(&key)
-                    && self.validate_value(content)
+                self.ast
+                    .global_env
+                    .get_custom_types()
+                    .contains_key(&(custom.module.clone(), key))
+                    && self.validate_value(&custom.content)
             }
         }
     }

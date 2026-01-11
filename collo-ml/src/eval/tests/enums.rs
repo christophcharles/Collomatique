@@ -19,11 +19,12 @@ fn enum_basic_construction() {
 
     assert_eq!(
         ok_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 
     let error_result = checked_ast
@@ -32,11 +33,12 @@ fn enum_basic_construction() {
 
     assert_eq!(
         error_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Error".to_string()),
-            content: Box::new(ExprValue::String("oops".to_string()))
-        }
+            content: ExprValue::String("oops".to_string()),
+        }))
     );
 }
 
@@ -55,11 +57,12 @@ fn enum_unit_variant() {
 
     assert_eq!(
         some_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("Some".to_string()),
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 
     let none_result = checked_ast
@@ -68,11 +71,12 @@ fn enum_unit_variant() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: Box::new(ExprValue::None)
-        }
+            content: ExprValue::None,
+        }))
     );
 }
 
@@ -90,11 +94,12 @@ fn enum_unit_variant_with_empty_parens() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: Box::new(ExprValue::None)
-        }
+            content: ExprValue::None,
+        }))
     );
 }
 
@@ -112,11 +117,12 @@ fn enum_unit_variant_with_explicit_none() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: Box::new(ExprValue::None)
-        }
+            content: ExprValue::None,
+        }))
     );
 }
 
@@ -139,11 +145,12 @@ fn enum_variant_as_return_type() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 }
 
@@ -163,11 +170,12 @@ fn enum_variant_subtype_of_root() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 }
 
@@ -189,14 +197,12 @@ fn enum_tuple_variant() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyEnum".to_string(),
             variant: Some("TupleCase".to_string()),
-            content: Box::new(ExprValue::Tuple(vec![
-                ExprValue::Int(42),
-                ExprValue::Bool(true)
-            ]))
-        }
+            content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
+        }))
     );
 }
 
@@ -218,18 +224,19 @@ fn enum_struct_variant() {
 
     assert_eq!(
         result,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "MyEnum".to_string(),
             variant: Some("StructCase".to_string()),
-            content: Box::new(ExprValue::Struct(
+            content: ExprValue::Struct(
                 [
                     ("x".to_string(), ExprValue::Int(42)),
                     ("y".to_string(), ExprValue::Bool(true))
                 ]
                 .into_iter()
                 .collect()
-            ))
-        }
+            ),
+        }))
     );
 }
 
@@ -248,21 +255,23 @@ fn enum_match_expression() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let ok_value = ExprValue::Custom {
+    let ok_value = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Ok".to_string()),
-        content: Box::new(ExprValue::Int(42)),
-    };
+        content: ExprValue::Int(42),
+    }));
     let result1 = checked_ast
         .quick_eval_fn("extract", vec![ok_value])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(42));
 
-    let error_value = ExprValue::Custom {
+    let error_value = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Error".to_string()),
-        content: Box::new(ExprValue::String("oops".to_string())),
-    };
+        content: ExprValue::String("oops".to_string()),
+    }));
     let result2 = checked_ast
         .quick_eval_fn("extract", vec![error_value])
         .expect("Should evaluate");
@@ -286,11 +295,12 @@ fn enum_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: Box::new(ExprValue::Int(1))
-        }
+            content: ExprValue::Int(1),
+        }))
     );
 
     let result_false = checked_ast
@@ -298,11 +308,12 @@ fn enum_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Error".to_string()),
-            content: Box::new(ExprValue::String("no".to_string()))
-        }
+            content: ExprValue::String("no".to_string()),
+        }))
     );
 }
 
@@ -318,11 +329,12 @@ fn qualified_type_in_function_param() {
     "#;
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
-    let value = ExprValue::Custom {
+    let value = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Ok".to_string()),
-        content: Box::new(ExprValue::Int(42)),
-    };
+        content: ExprValue::Int(42),
+    }));
 
     let result = checked_ast
         .quick_eval_fn("extract_ok", vec![value])
@@ -346,16 +358,18 @@ fn qualified_type_in_list() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom {
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "Result".to_string(),
                 variant: Some("Ok".to_string()),
-                content: Box::new(ExprValue::Int(1))
-            },
-            ExprValue::Custom {
+                content: ExprValue::Int(1),
+            })),
+            ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
                 type_name: "Result".to_string(),
                 variant: Some("Ok".to_string()),
-                content: Box::new(ExprValue::Int(2))
-            }
+                content: ExprValue::Int(2),
+            }))
         ])
     );
 }
@@ -373,11 +387,12 @@ fn qualified_type_maybe() {
         .expect("Should evaluate");
     assert_eq!(
         result_some,
-        ExprValue::Custom {
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: Box::new(ExprValue::Int(42))
-        }
+            content: ExprValue::Int(42),
+        }))
     );
 
     let result_none = checked_ast

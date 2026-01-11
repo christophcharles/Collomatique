@@ -302,7 +302,7 @@ fn type_forward_reference_simple() {
 
     // The result is a custom type wrapping [5]
     match result {
-        ExprValue::Custom { .. } => {
+        ExprValue::Custom(_) => {
             // Custom type created successfully
         }
         _ => panic!("Expected Custom type"),
