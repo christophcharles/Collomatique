@@ -3989,10 +3989,10 @@ impl GlobalEnv {
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
-        for ((_, fn_name), fn_desc) in &self.functions {
+        for ((module, fn_name), fn_desc) in &self.functions {
             if !fn_desc.public && !fn_desc.used {
                 warnings.push(SemWarning::UnusedFunction {
-                    identifier: fn_name.clone(),
+                    identifier: format!("{}::{}", module, fn_name),
                     span: fn_desc.body.span.clone(),
                 });
             }
@@ -4000,19 +4000,19 @@ impl GlobalEnv {
     }
 
     fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
-        for ((_, var_name), var_desc) in &self.internal_variables {
+        for ((module, var_name), var_desc) in &self.internal_variables {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
-                    identifier: var_name.clone(),
+                    identifier: format!("{}::{}", module, var_name),
                     span: var_desc.span.clone(),
                 });
             }
         }
 
-        for ((_, var_name), var_desc) in &self.variable_lists {
+        for ((module, var_name), var_desc) in &self.variable_lists {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
-                    identifier: var_name.clone(),
+                    identifier: format!("{}::{}", module, var_name),
                     span: var_desc.span.clone(),
                 });
             }
