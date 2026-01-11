@@ -174,10 +174,10 @@ fn parse_simple_path() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Ident(name) => {
-                assert_eq!(name.node, "x");
+            Expr::IdentPath(path) => {
+                assert_eq!(path.node.segments[0].node, "x");
             }
-            _ => panic!("Expected Ident"),
+            _ => panic!("Expected IdentPath"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -193,10 +193,10 @@ fn parse_path_with_field_access() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Path { object, segments } => {
                 match &object.node {
-                    Expr::Ident(ident) => {
-                        assert_eq!(ident.node, "student");
+                    Expr::IdentPath(path) => {
+                        assert_eq!(path.node.segments[0].node, "student");
                     }
-                    _ => panic!("Expected Ident"),
+                    _ => panic!("Expected IdentPath"),
                 }
                 assert_eq!(segments.len(), 1);
                 assert_eq!(segments[0].node, PathSegment::Field("age".to_string()));
@@ -217,10 +217,10 @@ fn parse_deep_path() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Path { object, segments } => {
                 match &object.node {
-                    Expr::Ident(ident) => {
-                        assert_eq!(ident.node, "a");
+                    Expr::IdentPath(path) => {
+                        assert_eq!(path.node.segments[0].node, "a");
                     }
-                    _ => panic!("Expected Ident"),
+                    _ => panic!("Expected IdentPath"),
                 }
                 assert_eq!(segments.len(), 3);
                 assert_eq!(segments[0].node, PathSegment::Field("b".to_string()));
@@ -243,11 +243,11 @@ fn parse_function_call_no_args() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "foo");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "foo");
                 assert_eq!(args.len(), 0);
             }
-            _ => panic!("Expected FnCall"),
+            _ => panic!("Expected GenericCall"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -261,12 +261,12 @@ fn parse_function_call_one_arg() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "foo");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "foo");
                 assert_eq!(args.len(), 1);
                 assert!(matches!(args[0].node, Expr::Number(42)));
             }
-            _ => panic!("Expected FnCall"),
+            _ => panic!("Expected GenericCall"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -280,14 +280,14 @@ fn parse_function_call_multiple_args() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "foo");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "foo");
                 assert_eq!(args.len(), 3);
                 assert!(matches!(args[0].node, Expr::Number(1)));
                 assert!(matches!(args[1].node, Expr::Number(2)));
                 assert!(matches!(args[2].node, Expr::Number(3)));
             }
-            _ => panic!("Expected FnCall"),
+            _ => panic!("Expected GenericCall"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -301,8 +301,8 @@ fn parse_function_call_with_complex_args() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "foo");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "foo");
                 assert_eq!(args.len(), 3);
                 assert!(matches!(
                     args[0].node,
@@ -311,10 +311,10 @@ fn parse_function_call_with_complex_args() {
                         segments: _
                     }
                 ));
-                assert!(matches!(args[1].node, Expr::FnCall { .. }));
+                assert!(matches!(args[1].node, Expr::GenericCall { .. }));
                 assert!(matches!(args[2].node, Expr::Number(42)));
             }
-            _ => panic!("Expected FnCall"),
+            _ => panic!("Expected GenericCall"),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -495,7 +495,7 @@ fn parse_explicit_type_annotation() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ExplicitType { expr, typ } => {
-                assert!(matches!(expr.node, Expr::Ident(_)));
+                assert!(matches!(expr.node, Expr::IdentPath(_)));
                 assert_eq!(typ.node.types.len(), 1);
                 assert_eq!(
                     typ.node.types[0].node,
@@ -611,12 +611,12 @@ fn parse_type_conversion_annotation() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "LinExpr");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "LinExpr");
                 assert_eq!(args.len(), 1);
-                assert!(matches!(args[0].node, Expr::Ident(_)));
+                assert!(matches!(args[0].node, Expr::IdentPath(_)));
             }
-            _ => panic!("Expected FnCall, got {:?}", body.node),
+            _ => panic!("Expected GenericCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -624,19 +624,19 @@ fn parse_type_conversion_annotation() {
 
 #[test]
 fn parse_type_conversion_with_number() {
-    // Int(5) is now parsed as FnCall (resolved to type cast in semantics)
+    // Int(5) is now parsed as GenericCall (resolved to type cast in semantics)
     let input = "let f() -> Int = Int(5);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::FnCall { name, args } => {
-                assert_eq!(name.node, "Int");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments[0].node, "Int");
                 assert_eq!(args.len(), 1);
                 assert!(matches!(args[0].node, Expr::Number(5)));
             }
-            _ => panic!("Expected FnCall, got {:?}", body.node),
+            _ => panic!("Expected GenericCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -708,8 +708,8 @@ fn parse_let_in_with_variable_value() {
                 assert_eq!(var.node, "doubled");
                 assert!(matches!(value.node, Expr::Mul(_, _)));
                 match &body.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "doubled"),
-                    _ => panic!("Expected Ident in body"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "doubled"),
+                    _ => panic!("Expected IdentPath in body"),
                 }
             }
             _ => panic!("Expected LetIn expression"),
@@ -822,19 +822,19 @@ fn parse_let_in_with_membership_test() {
                 match &value.node {
                     Expr::In { item, collection } => {
                         match &item.node {
-                            Expr::Ident(name) => assert_eq!(name.node, "x"),
-                            _ => panic!("Expected Ident for item"),
+                            Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "x"),
+                            _ => panic!("Expected IdentPath for item"),
                         }
                         match &collection.node {
-                            Expr::Ident(name) => assert_eq!(name.node, "list"),
-                            _ => panic!("Expected Ident for collection"),
+                            Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "list"),
+                            _ => panic!("Expected IdentPath for collection"),
                         }
                     }
                     _ => panic!("Expected In expression"),
                 }
                 match &body.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "is_member"),
-                    _ => panic!("Expected Ident in body"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "is_member"),
+                    _ => panic!("Expected IdentPath in body"),
                 }
             }
             _ => panic!("Expected LetIn expression"),
@@ -854,11 +854,11 @@ fn parse_let_in_with_function_call_value() {
             Expr::Let { var, value, body } => {
                 assert_eq!(var.node, "result");
                 match &value.node {
-                    Expr::FnCall { name, args } => {
-                        assert_eq!(name.node, "helper");
+                    Expr::GenericCall { path, args } => {
+                        assert_eq!(path.node.segments[0].node, "helper");
                         assert_eq!(args.len(), 1);
                     }
-                    _ => panic!("Expected FnCall"),
+                    _ => panic!("Expected GenericCall"),
                 }
                 assert!(matches!(body.node, Expr::Add(_, _)));
             }
@@ -885,8 +885,8 @@ fn parse_let_in_with_list_literal() {
                     _ => panic!("Expected ListLiteral"),
                 }
                 match &body.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "items"),
-                    _ => panic!("Expected Ident in body"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "items"),
+                    _ => panic!("Expected IdentPath in body"),
                 }
             }
             _ => panic!("Expected LetIn expression"),
@@ -907,8 +907,8 @@ fn parse_let_in_with_list_range() {
                 assert_eq!(var.node, "range");
                 assert!(matches!(value.node, Expr::ListRange { .. }));
                 match &body.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "range"),
-                    _ => panic!("Expected Ident in body"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "range"),
+                    _ => panic!("Expected IdentPath in body"),
                 }
             }
             _ => panic!("Expected LetIn expression"),
@@ -957,8 +957,8 @@ fn parse_let_in_with_constraint_value() {
                 assert_eq!(var.node, "c");
                 assert!(matches!(value.node, Expr::ConstraintEq(_, _)));
                 match &body.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "c"),
-                    _ => panic!("Expected Ident in body"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "c"),
+                    _ => panic!("Expected IdentPath in body"),
                 }
             }
             _ => panic!("Expected LetIn expression"),
@@ -979,7 +979,7 @@ fn parse_let_in_with_path_value() {
                 assert_eq!(var.node, "age");
                 match &value.node {
                     Expr::Path { object, segments } => {
-                        matches!(object.node, Expr::Ident(_));
+                        matches!(object.node, Expr::IdentPath(_));
                         assert_eq!(segments.len(), 1);
                         assert_eq!(segments[0].node, PathSegment::Field("age".to_string()));
                     }

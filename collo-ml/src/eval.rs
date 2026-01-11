@@ -943,9 +943,29 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Boolean(val) => ExprValue::Bool(*val),
             Expr::Number(val) => ExprValue::Int(*val),
             Expr::StringLiteral(val) => ExprValue::String(val.clone()),
-            Expr::Ident(ident) => self
-                .lookup_ident(&ident.node)
-                .expect("Identifiers should be defined in a checked AST"),
+            Expr::IdentPath(path) => {
+                // Handle single-segment path (variable reference) or two-segment (unit enum variant)
+                let segments = &path.node.segments;
+                match segments.len() {
+                    1 => {
+                        // Simple variable reference
+                        let name = &segments[0];
+                        self.lookup_ident(&name.node)
+                            .expect("Identifiers should be defined in a checked AST")
+                    }
+                    2 => {
+                        // Qualified unit value: Enum::UnitVariant (e.g., Option::None)
+                        let root = &segments[0];
+                        let variant = &segments[1];
+                        ExprValue::Custom {
+                            type_name: root.node.clone(),
+                            variant: Some(variant.node.clone()),
+                            content: Box::new(ExprValue::None),
+                        }
+                    }
+                    _ => panic!("Paths with more than 2 segments not supported in eval"),
+                }
+            }
             Expr::Path { object, segments } => {
                 use crate::ast::PathSegment;
                 assert!(!segments.is_empty());
@@ -1086,8 +1106,22 @@ impl<T: EvalObject> LocalEnv<T> {
                     .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
                     .expect("Resulting expression should be convertible to target type")
             }
-            Expr::StructTypeCast { type_name, fields } => {
-                // For type casts like MyType {field: value}
+            Expr::StructCall { path, fields } => {
+                // Handle both simple (TypeName {field: expr}) and qualified (Enum::Variant {field: expr})
+                let segments = &path.node.segments;
+
+                let (type_name, variant_name) = match segments.len() {
+                    1 => {
+                        // Simple: TypeName {field: expr}
+                        (segments[0].node.clone(), None)
+                    }
+                    2 => {
+                        // Qualified: Enum::Variant {field: expr}
+                        (segments[0].node.clone(), Some(segments[1].node.clone()))
+                    }
+                    _ => panic!("Struct calls with more than 2 path segments not supported"),
+                };
+
                 // Evaluate all fields
                 let mut field_values = std::collections::BTreeMap::new();
                 for (name, expr) in fields {
@@ -1097,8 +1131,8 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 // Wrap in custom type
                 ExprValue::Custom {
-                    type_name: type_name.node.clone(),
-                    variant: None,
+                    type_name,
+                    variant: variant_name,
                     content: Box::new(ExprValue::Struct(field_values)),
                 }
             }
@@ -1179,146 +1213,142 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 ExprValue::List(collection)
             }
-            Expr::FnCall { name, args } => {
-                // Check if this is a built-in type cast
-                let builtin_type = match name.node.as_str() {
-                    "Int" => Some(SimpleType::Int),
-                    "Bool" => Some(SimpleType::Bool),
-                    "LinExpr" => Some(SimpleType::LinExpr),
-                    "Constraint" => Some(SimpleType::Constraint),
-                    "String" => Some(SimpleType::String),
-                    "None" => Some(SimpleType::None),
-                    "Never" => Some(SimpleType::Never),
-                    _ => None,
-                };
+            Expr::GenericCall { path, args } => {
+                // Handle func(args), Type(x), Enum::Variant(x)
+                let segments = &path.node.segments;
 
-                if let Some(target_type) = builtin_type {
-                    // Semantics already validated exactly 1 argument
-                    assert!(
-                        args.len() == 1,
-                        "Built-in type cast should have exactly 1 argument"
-                    );
-                    let value = self.eval_expr(eval_history, &args[0])?;
-                    let concrete_target = target_type
-                        .into_concrete()
-                        .expect("Built-in types are always concrete");
-                    value
-                        .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
-                        .expect("Semantic analysis should have validated conversion")
-                } else if eval_history
-                    .ast
-                    .global_env
-                    .get_custom_types()
-                    .contains_key(&name.node)
-                {
-                    // This is a custom type cast: TypeName(value)
-                    let underlying_type = eval_history
-                        .ast
-                        .global_env
-                        .get_custom_type_underlying(&name.node)
-                        .unwrap()
-                        .clone();
+                match segments.len() {
+                    1 => {
+                        // Single segment: function call, built-in type cast, or custom type cast
+                        let name = &segments[0];
 
-                    // Check if it's a tuple custom type
-                    let is_tuple =
-                        matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+                        // Check if this is a built-in type cast
+                        let builtin_type = match name.node.as_str() {
+                            "Int" => Some(SimpleType::Int),
+                            "Bool" => Some(SimpleType::Bool),
+                            "LinExpr" => Some(SimpleType::LinExpr),
+                            "Constraint" => Some(SimpleType::Constraint),
+                            "String" => Some(SimpleType::String),
+                            "None" => Some(SimpleType::None),
+                            "Never" => Some(SimpleType::Never),
+                            _ => None,
+                        };
 
-                    if is_tuple {
-                        // For tuple custom types, evaluate all args as tuple elements
-                        let values: Vec<ExprValue<T>> = args
-                            .iter()
-                            .map(|x| self.eval_expr(eval_history, &x))
-                            .collect::<Result<_, _>>()?;
-                        ExprValue::Custom {
-                            type_name: name.node.clone(),
-                            variant: None,
-                            content: Box::new(ExprValue::Tuple(values)),
-                        }
-                    } else {
-                        // Single value custom type
-                        let value = self.eval_expr(eval_history, &args[0])?;
-                        ExprValue::Custom {
-                            type_name: name.node.clone(),
-                            variant: None,
-                            content: Box::new(value),
+                        if let Some(target_type) = builtin_type {
+                            // Semantics already validated exactly 1 argument
+                            assert!(
+                                args.len() == 1,
+                                "Built-in type cast should have exactly 1 argument"
+                            );
+                            let value = self.eval_expr(eval_history, &args[0])?;
+                            let concrete_target = target_type
+                                .into_concrete()
+                                .expect("Built-in types are always concrete");
+                            value
+                                .convert_to(
+                                    eval_history.env,
+                                    &mut eval_history.cache,
+                                    &concrete_target,
+                                )
+                                .expect("Semantic analysis should have validated conversion")
+                        } else if eval_history
+                            .ast
+                            .global_env
+                            .get_custom_types()
+                            .contains_key(&name.node)
+                        {
+                            // This is a custom type cast: TypeName(value)
+                            let underlying_type = eval_history
+                                .ast
+                                .global_env
+                                .get_custom_type_underlying(&name.node)
+                                .unwrap()
+                                .clone();
+
+                            // Check if it's a tuple custom type
+                            let is_tuple =
+                                matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+
+                            if is_tuple {
+                                // For tuple custom types, evaluate all args as tuple elements
+                                let values: Vec<ExprValue<T>> = args
+                                    .iter()
+                                    .map(|x| self.eval_expr(eval_history, &x))
+                                    .collect::<Result<_, _>>()?;
+                                ExprValue::Custom {
+                                    type_name: name.node.clone(),
+                                    variant: None,
+                                    content: Box::new(ExprValue::Tuple(values)),
+                                }
+                            } else {
+                                // Single value custom type
+                                let value = self.eval_expr(eval_history, &args[0])?;
+                                ExprValue::Custom {
+                                    type_name: name.node.clone(),
+                                    variant: None,
+                                    content: Box::new(value),
+                                }
+                            }
+                        } else {
+                            // This is a function call
+                            let args = args
+                                .iter()
+                                .map(|x| self.eval_expr(eval_history, &x))
+                                .collect::<Result<_, _>>()?;
+                            eval_history
+                                .add_fn_to_call_history(&name.node, args, true)?
+                                .0
+                                .into()
                         }
                     }
-                } else {
-                    // This is a function call
-                    let args = args
-                        .iter()
-                        .map(|x| self.eval_expr(eval_history, &x))
-                        .collect::<Result<_, _>>()?;
-                    eval_history
-                        .add_fn_to_call_history(&name.node, args, true)?
-                        .0
-                        .into()
-                }
-            }
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                // Result::Ok(x), Option::None(), Option::None
-                let qualified_name = format!("{}::{}", root.node, variant.node);
-                let underlying_type = eval_history
-                    .ast
-                    .global_env
-                    .get_custom_type_underlying(&qualified_name)
-                    .expect("Semantic analysis should have validated this type exists")
-                    .clone();
+                    2 => {
+                        // Two segments: Enum::Variant(x)
+                        let root = &segments[0];
+                        let variant = &segments[1];
+                        let qualified_name = format!("{}::{}", root.node, variant.node);
+                        let underlying_type = eval_history
+                            .ast
+                            .global_env
+                            .get_custom_type_underlying(&qualified_name)
+                            .expect("Semantic analysis should have validated this type exists")
+                            .clone();
 
-                // Check if underlying type is None (unit variant like Option::None)
-                let is_unit = underlying_type
-                    .as_simple()
-                    .map(|s| s.is_none())
-                    .unwrap_or(false);
-                // Check if it's a tuple type
-                let is_tuple = matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
+                        // Check if underlying type is None (unit variant like Option::None)
+                        let is_unit = underlying_type
+                            .as_simple()
+                            .map(|s| s.is_none())
+                            .unwrap_or(false);
+                        // Check if it's a tuple type
+                        let is_tuple =
+                            matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
 
-                let content = if is_unit {
-                    // Unit variant - args should be empty or just `none`
-                    if args.is_empty() {
-                        ExprValue::None
-                    } else {
-                        // Evaluate the single arg (should be `none`)
-                        self.eval_expr(eval_history, &args[0])?
+                        let content = if is_unit {
+                            // Unit variant - args should be empty or just `none`
+                            if args.is_empty() {
+                                ExprValue::None
+                            } else {
+                                // Evaluate the single arg (should be `none`)
+                                self.eval_expr(eval_history, &args[0])?
+                            }
+                        } else if is_tuple {
+                            // Tuple variant - evaluate all args
+                            let values: Vec<ExprValue<T>> = args
+                                .iter()
+                                .map(|x| self.eval_expr(eval_history, &x))
+                                .collect::<Result<_, _>>()?;
+                            ExprValue::Tuple(values)
+                        } else {
+                            // Single value variant
+                            self.eval_expr(eval_history, &args[0])?
+                        };
+
+                        ExprValue::Custom {
+                            type_name: root.node.clone(),
+                            variant: Some(variant.node.clone()),
+                            content: Box::new(content),
+                        }
                     }
-                } else if is_tuple {
-                    // Tuple variant - evaluate all args
-                    let values: Vec<ExprValue<T>> = args
-                        .iter()
-                        .map(|x| self.eval_expr(eval_history, &x))
-                        .collect::<Result<_, _>>()?;
-                    ExprValue::Tuple(values)
-                } else {
-                    // Single value variant
-                    self.eval_expr(eval_history, &args[0])?
-                };
-
-                ExprValue::Custom {
-                    type_name: root.node.clone(),
-                    variant: Some(variant.node.clone()),
-                    content: Box::new(content),
-                }
-            }
-            Expr::QualifiedStructCast {
-                root,
-                variant,
-                fields,
-            } => {
-                // MyEnum::StructCase { x: 1, y: 2 }
-                let mut field_values = std::collections::BTreeMap::new();
-                for (field_name, field_expr) in fields {
-                    let value = self.eval_expr(eval_history, &field_expr)?;
-                    field_values.insert(field_name.node.clone(), value);
-                }
-
-                ExprValue::Custom {
-                    type_name: root.node.clone(),
-                    variant: Some(variant.node.clone()),
-                    content: Box::new(ExprValue::Struct(field_values)),
+                    _ => panic!("Generic calls with more than 2 path segments not supported"),
                 }
             }
             Expr::VarCall { name, args } => {

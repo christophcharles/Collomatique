@@ -100,6 +100,10 @@ variant_name = @{ ident }
 // Type after variant name: parens for single/tuple types, braces for struct
 enum_variant_type = { "(" ~ (type_name ~ ("," ~ type_name)* ~ ","?)? ~ ")" | struct_type }
 
+// ========== Namespace Paths ==========
+// Namespace path: ident or ident::ident or ident::ident::ident...
+namespace_path = { ident ~ ("::" ~ ident)* }
+
 // ========== Type Names ==========
 // Qualified type: Result::Ok, or simple: Result, Int, etc.
 qualified_type_name = { ident ~ "::" ~ ident }
@@ -179,20 +183,17 @@ primary_expr = {
     qualified_var_list_call | // mod::$[VarList](args) - must come before var_list_call
     var_call |
     var_list_call |
-    qualified_type_cast |  // Result::Ok(x) or mod::func(x) - must come before struct_type_cast and fn_call
-    qualified_struct_cast | // MyEnum::StructCase { x: 1 } - must come after qualified_type_cast
-    qualified_unit_value | // Option::None - must come after qualified_type_cast
-    struct_type_cast |   // Must come before fn_call to parse TypeName {field: expr} correctly
-    fn_call |
+    generic_call |   // path(args) - unifies fn_call + qualified_type_cast
+    struct_call |    // path{fields} - unifies struct_type_cast + qualified_struct_cast
     string_literal |
     boolean |
     none |
     number |
     neg |
     panic |
-    struct_literal |   // Must come before ident to parse {field: expr} correctly
+    struct_literal |   // Must come before namespace_path to parse {field: expr} correctly
     tuple_literal |    // Must come before "(" ~ expr ~ ")" to parse correctly
-    ident |
+    namespace_path |   // path - for ident or Option::None style unit values
     "(" ~ expr ~ ")"
 }
 
@@ -202,21 +203,13 @@ primary_expr = {
 complex_type_cast = { (list_type_brackets | tuple_type) ~ "(" ~ args? ~ ")" }
 list_type_brackets = { "[" ~ type_name? ~ "]" }
 
-// Qualified type cast: Result::Ok(x), Option::None(), Option::None(none)
-// For enum variant construction with optional value
-// Note: variant_name allows "None" as it's commonly used as a unit variant
-qualified_type_cast = { ident ~ "::" ~ variant_name ~ "(" ~ args? ~ ")" }
+// Generic call with parens: path(args) or path()
+// Unifies fn_call and qualified_type_cast: func(x), Type(x), Enum::Variant(x), mod::func(x)
+generic_call = { namespace_path ~ "(" ~ args? ~ ")" }
 
-// Qualified struct cast: MyEnum::StructCase { field: value }
-// For enum struct variant construction
-qualified_struct_cast = { ident ~ "::" ~ variant_name ~ struct_literal }
-
-// Qualified unit value: Option::None (just the qualified name, for unit variants)
-// Must come after qualified_type_cast and qualified_struct_cast so parens/braces are captured first
-qualified_unit_value = { ident ~ "::" ~ variant_name }
-
-// Struct-style type cast: TypeName {field: value}
-struct_type_cast = { ident ~ struct_literal }
+// Struct-style call with braces: path { fields }
+// Unifies struct_type_cast and qualified_struct_cast: Type{x:1}, Enum::Variant{x:1}
+struct_call = { namespace_path ~ struct_literal }
 
 // Tuple literal: (expr, expr) or (expr, expr, expr, ...)
 // Minimum 2 elements to distinguish from grouping
@@ -246,9 +239,8 @@ var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 // Qualified variable calls: mod::$Var(args), mod::$[VarList](args)
 qualified_var_call = { ident ~ "::" ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
 qualified_var_list_call = { ident ~ "::" ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
-// Note: qualified function calls (mod::func(args)) are parsed as qualified_type_cast
-// since they have the same grammar pattern. Semantic analysis distinguishes them.
-fn_call = { ident ~ "(" ~ args? ~ ")" }
+// Note: fn_call, qualified_type_cast, struct_type_cast, qualified_struct_cast, qualified_unit_value
+// are all unified into generic_call, struct_call, and namespace_path rules.
 // Supports trailing comma: f(1, 2,)
 args = { arg ~ ("," ~ arg)* ~ ","? }
 arg = { expr }

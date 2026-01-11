@@ -31,7 +31,7 @@ fn parse_negation() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Neg(term) => {
-                assert!(matches!(term.node, Expr::Ident(_)));
+                assert!(matches!(term.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Neg, got {:?}", body.node),
         },
@@ -518,7 +518,7 @@ fn parse_and_has_higher_precedence_than_or() {
             // Should parse as a or (b and c) since and has higher precedence
             match &body.node {
                 Expr::Or(left, right) => {
-                    assert!(matches!(left.node, Expr::Ident(_)));
+                    assert!(matches!(left.node, Expr::IdentPath(_)));
                     assert!(matches!(right.node, Expr::And(_, _)));
                 }
                 _ => panic!("Expected Or with And on right"),

@@ -128,7 +128,7 @@ fn parse_forall_with_path_collection() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Forall { collection, .. } => {
-                assert!(matches!(collection.node, Expr::Ident(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Forall"),
         },

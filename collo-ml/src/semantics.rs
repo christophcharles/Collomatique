@@ -507,6 +507,16 @@ pub enum SemError {
     UnknownModule { module: String, span: Span },
     #[error("Qualified module access at {span:?} is not yet implemented")]
     QualifiedAccessNotYetSupported { span: Span },
+    #[error("Primitive type \"{type_name}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))")]
+    PrimitiveTypeAsValue { type_name: String, span: Span },
+    #[error("Enum variant {enum_name}::{variant_name} at {span:?} requires arguments")]
+    MissingEnumVariantArguments {
+        enum_name: String,
+        variant_name: String,
+        span: Span,
+    },
+    #[error("Unsupported feature: {feature} at {span:?}")]
+    UnsupportedFeature { feature: String, span: Span },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -808,15 +818,8 @@ impl LocalEnv {
             Expr::Boolean(_) => Some(SimpleType::Bool.into()),
             Expr::StringLiteral(_) => Some(SimpleType::String.into()),
 
-            Expr::Ident(ident) => self
-                .check_ident(
-                    global_env,
-                    &ident.node,
-                    &ident.span,
-                    type_info,
-                    errors,
-                    warnings,
-                )
+            Expr::IdentPath(path) => self
+                .check_ident_path(global_env, path, type_info, errors, warnings)
                 .map(|x| x.into()),
             Expr::Path { object, segments } => self
                 .check_path(
@@ -1007,16 +1010,45 @@ impl LocalEnv {
                 Some(concrete_target.into_inner().into())
             }
 
-            // ========== Struct Type Cast: TypeName {field: expr} ==========
-            Expr::StructTypeCast { type_name, fields } => {
-                // Look up the custom type
-                let custom_type = global_env.custom_types.get(&type_name.node);
+            // ========== Struct Call: TypeName {field: expr} or Enum::Variant {field: expr} ==========
+            Expr::StructCall { path, fields } => {
+                let segments = &path.node.segments;
+
+                // Determine the type name and variant (if any) based on path length
+                let (type_name, variant_name, qualified_name) = match segments.len() {
+                    1 => {
+                        // Simple: TypeName {field: expr}
+                        let name = &segments[0];
+                        (name.node.clone(), None, name.node.clone())
+                    }
+                    2 => {
+                        // Qualified: Enum::Variant {field: expr}
+                        let root = &segments[0];
+                        let variant = &segments[1];
+                        (
+                            root.node.clone(),
+                            Some(variant.node.clone()),
+                            format!("{}::{}", root.node, variant.node),
+                        )
+                    }
+                    _ => {
+                        errors.push(SemError::UnsupportedFeature {
+                            feature: "Struct calls with more than 2 path segments".to_string(),
+                            span: path.span.clone(),
+                        });
+                        return None;
+                    }
+                };
+
+                // Look up the custom type (for qualified paths, use qualified_name)
+                let custom_type = global_env.custom_types.get(&qualified_name);
+                let first_span = &segments[0].span;
 
                 match custom_type {
                     None => {
                         errors.push(SemError::UnknownType {
-                            typ: type_name.node.clone(),
-                            span: type_name.span.clone(),
+                            typ: qualified_name.clone(),
+                            span: first_span.clone(),
                         });
                         None
                     }
@@ -1030,7 +1062,7 @@ impl LocalEnv {
                         match expected_struct {
                             None => {
                                 errors.push(SemError::NonConcreteType {
-                                    span: type_name.span.clone(),
+                                    span: first_span.clone(),
                                     found: underlying.clone(),
                                     context:
                                         "Struct-style type cast requires a type that wraps a struct"
@@ -1060,7 +1092,7 @@ impl LocalEnv {
                                     match expected_type {
                                         None => {
                                             errors.push(SemError::UnknownField {
-                                                object_type: type_name.node.clone(),
+                                                object_type: qualified_name.clone(),
                                                 field: field_name.node.clone(),
                                                 span: field_name.span.clone(),
                                             });
@@ -1097,15 +1129,15 @@ impl LocalEnv {
                                 for exp_name in expected_fields.keys() {
                                     if !found_fields.contains_key(exp_name) {
                                         errors.push(SemError::UnknownField {
-                                            object_type: type_name.node.clone(),
+                                            object_type: qualified_name.clone(),
                                             field: exp_name.clone(),
-                                            span: type_name.span.clone(),
+                                            span: first_span.clone(),
                                         });
                                     }
                                 }
 
                                 // Return the custom type
-                                Some(SimpleType::Custom(type_name.node.clone(), None).into())
+                                Some(SimpleType::Custom(type_name, variant_name).into())
                             }
                         }
                     }
@@ -2536,276 +2568,58 @@ impl LocalEnv {
                 Some(SimpleType::List(SimpleType::LinExpr.into()).into())
             }
 
-            // ========== Function Calls / Type Casts ==========
-            // FnCall can be a function call, a built-in type cast, or a custom type cast
-            // We disambiguate by checking if the name is a built-in type or custom type
-            Expr::FnCall { name, args } => {
-                // Check if this is a built-in type cast
-                let builtin_type = match name.node.as_str() {
-                    "Int" => Some(SimpleType::Int),
-                    "Bool" => Some(SimpleType::Bool),
-                    "LinExpr" => Some(SimpleType::LinExpr),
-                    "Constraint" => Some(SimpleType::Constraint),
-                    "String" => Some(SimpleType::String),
-                    "None" => Some(SimpleType::None),
-                    "Never" => Some(SimpleType::Never),
-                    _ => None,
-                };
+            // ========== Generic Calls: func(args), Type(x), Enum::Variant(x) ==========
+            Expr::GenericCall { path, args } => {
+                let segments = &path.node.segments;
 
-                if let Some(target_simple_type) = builtin_type {
-                    // Built-in type casts require exactly 1 argument
-                    if args.len() != 1 {
-                        errors.push(SemError::ArgumentCountMismatch {
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            expected: 1,
-                            found: args.len(),
-                        });
-                        return Some(target_simple_type.into());
-                    }
+                match segments.len() {
+                    1 => {
+                        // Single segment: function call, built-in type cast, or custom type cast
+                        let name = &segments[0];
 
-                    // Check the argument type and validate conversion
-                    let arg = &args[0];
-                    let arg_type = self.check_expr(
-                        global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings,
-                    );
+                        // Check if this is a built-in type cast
+                        let builtin_type = match name.node.as_str() {
+                            "Int" => Some(SimpleType::Int),
+                            "Bool" => Some(SimpleType::Bool),
+                            "LinExpr" => Some(SimpleType::LinExpr),
+                            "Constraint" => Some(SimpleType::Constraint),
+                            "String" => Some(SimpleType::String),
+                            "None" => Some(SimpleType::None),
+                            "Never" => Some(SimpleType::Never),
+                            _ => None,
+                        };
 
-                    if let Some(inferred) = arg_type {
-                        // Check if the argument can be converted to the target type
-                        // Same logic as ComplexTypeCast: try direct conversion and custom type conversion
-                        if let Some(concrete_target) = target_simple_type.clone().into_concrete() {
-                            let can_convert = inferred.can_convert_to(&concrete_target)
-                                || self.can_convert_with_custom_types(
-                                    global_env,
-                                    &inferred,
-                                    &concrete_target,
-                                );
-
-                            if !can_convert {
-                                errors.push(SemError::ImpossibleConversion {
-                                    span: arg.span.clone(),
-                                    found: inferred,
-                                    target: concrete_target,
-                                });
-                            }
-                        }
-                    }
-
-                    Some(target_simple_type.into())
-                } else if let Some(target_type) = global_env.custom_types.get(&name.node) {
-                    // This is a custom type cast: TypeName(value)
-                    // Get the underlying type of the custom type
-                    let underlying_type = target_type.clone();
-                    let underlying_simple = underlying_type.to_simple();
-
-                    // Check if it's a tuple custom type (multiple args allowed)
-                    let is_tuple = matches!(underlying_simple, Some(SimpleType::Tuple(_)));
-
-                    // For tuple custom types, args match tuple elements
-                    // For other custom types, expect exactly 1 argument
-                    if !is_tuple && args.len() != 1 {
-                        errors.push(SemError::ArgumentCountMismatch {
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            expected: 1,
-                            found: args.len(),
-                        });
-                    }
-
-                    // Check args
-                    for arg in args {
-                        self.check_expr(
-                            global_env, &arg.node, &arg.span, type_info, expr_types, errors,
-                            warnings,
-                        );
-                    }
-
-                    // If tuple type, check arg count matches tuple size
-                    if is_tuple {
-                        if let Some(SimpleType::Tuple(tuple_types)) = underlying_simple.as_ref() {
-                            if args.len() != tuple_types.len() {
+                        if let Some(target_simple_type) = builtin_type {
+                            // Built-in type casts require exactly 1 argument
+                            if args.len() != 1 {
                                 errors.push(SemError::ArgumentCountMismatch {
                                     identifier: name.node.clone(),
                                     span: name.span.clone(),
-                                    expected: tuple_types.len(),
+                                    expected: 1,
                                     found: args.len(),
                                 });
-                            }
-                        }
-                    } else if let (Some(arg), Some(underlying)) =
-                        (args.first(), underlying_simple.as_ref())
-                    {
-                        // Single arg - check conversion
-                        let arg_type = self.check_expr(
-                            global_env, &arg.node, &arg.span, type_info, expr_types, errors,
-                            warnings,
-                        );
-
-                        if let Some(inferred) = arg_type {
-                            // Convert underlying to ConcreteType for comparison
-                            if let Some(concrete_target) = underlying.clone().into_concrete() {
-                                // For custom type casts, we only allow direct conversion
-                                // without the can_convert_with_custom_types helper
-                                // This ensures TypeA cannot be wrapped in TypeB directly
-                                if !inferred.can_convert_to(&concrete_target) {
-                                    errors.push(SemError::ImpossibleConversion {
-                                        span: arg.span.clone(),
-                                        found: inferred,
-                                        target: concrete_target,
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    // Return type is the custom type
-                    Some(SimpleType::Custom(name.node.clone(), None).into())
-                } else {
-                    // This is a function call
-                    match global_env.lookup_fn(&name.node) {
-                        None => {
-                            errors.push(SemError::UnknownIdentifer {
-                                identifier: name.node.clone(),
-                                span: name.span.clone(),
-                            });
-                            None
-                        }
-                        Some((fn_type, _)) => {
-                            if args.len() != fn_type.args.len() {
-                                errors.push(SemError::ArgumentCountMismatch {
-                                    identifier: name.node.clone(),
-                                    span: args
-                                        .last()
-                                        .map(|a| a.span.clone())
-                                        .unwrap_or_else(|| name.span.clone()),
-                                    expected: fn_type.args.len(),
-                                    found: args.len(),
-                                });
+                                return Some(target_simple_type.into());
                             }
 
-                            for (i, (arg, expected_type)) in
-                                args.iter().zip(fn_type.args.iter()).enumerate()
-                            {
-                                let arg_type = self.check_expr(
-                                    global_env, &arg.node, &arg.span, type_info, expr_types,
-                                    errors, warnings,
-                                );
-
-                                if let Some(found_type) = arg_type {
-                                    if !found_type.is_subtype_of(expected_type) {
-                                        errors.push(SemError::TypeMismatch {
-                                            span: arg.span.clone(),
-                                            expected: expected_type.clone(),
-                                            found: found_type,
-                                            context: format!(
-                                                "argument {} to function {}",
-                                                i + 1,
-                                                name.node
-                                            ),
-                                        });
-                                    }
-                                }
-                            }
-
-                            Some(fn_type.output)
-                        }
-                    }
-                }
-            }
-
-            // ========== Qualified Type Cast (Enum Variants) ==========
-            // Result::Ok(x), Option::None(), Option::None
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                let qualified_name = format!("{}::{}", root.node, variant.node);
-
-                // Check if this qualified type exists
-                if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
-                    let underlying_type = target_type.clone();
-                    let underlying_simple = underlying_type.to_simple();
-
-                    // Check if it's a unit type (underlying is None)
-                    let is_unit = underlying_simple
-                        .as_ref()
-                        .map(|s| s.is_none())
-                        .unwrap_or(false);
-                    // Check if it's a tuple type
-                    let is_tuple = matches!(underlying_simple, Some(SimpleType::Tuple(_)));
-
-                    // For unit variants, args should be empty (or just `none`)
-                    if is_unit {
-                        if args.len() > 1 {
-                            errors.push(SemError::ArgumentCountMismatch {
-                                identifier: qualified_name.clone(),
-                                span: root.span.clone(),
-                                expected: 0,
-                                found: args.len(),
-                            });
-                        }
-                        // Check single arg if present (should be none)
-                        if let Some(arg) = args.first() {
-                            let arg_type = self.check_expr(
-                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
-                                warnings,
-                            );
-                            if let Some(inferred) = arg_type {
-                                if !inferred.is_none() {
-                                    let none_concrete = SimpleType::None.into_concrete().unwrap();
-                                    if !inferred.can_convert_to(&none_concrete) {
-                                        errors.push(SemError::ImpossibleConversion {
-                                            span: arg.span.clone(),
-                                            found: inferred,
-                                            target: none_concrete,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    } else if is_tuple {
-                        // Tuple variant - check arg count matches tuple size
-                        if let Some(SimpleType::Tuple(tuple_types)) = underlying_simple.as_ref() {
-                            if args.len() != tuple_types.len() {
-                                errors.push(SemError::ArgumentCountMismatch {
-                                    identifier: qualified_name.clone(),
-                                    span: root.span.clone(),
-                                    expected: tuple_types.len(),
-                                    found: args.len(),
-                                });
-                            }
-                            // Check each arg's type
-                            for arg in args {
-                                self.check_expr(
-                                    global_env, &arg.node, &arg.span, type_info, expr_types,
-                                    errors, warnings,
-                                );
-                            }
-                        }
-                    } else {
-                        // Single value variant - expect exactly 1 argument
-                        if args.len() != 1 {
-                            errors.push(SemError::ArgumentCountMismatch {
-                                identifier: qualified_name.clone(),
-                                span: root.span.clone(),
-                                expected: 1,
-                                found: args.len(),
-                            });
-                        }
-
-                        // Check single arg conversion
-                        if let (Some(arg), Some(underlying)) =
-                            (args.first(), underlying_simple.as_ref())
-                        {
+                            // Check the argument type and validate conversion
+                            let arg = &args[0];
                             let arg_type = self.check_expr(
                                 global_env, &arg.node, &arg.span, type_info, expr_types, errors,
                                 warnings,
                             );
 
                             if let Some(inferred) = arg_type {
-                                if let Some(concrete_target) = underlying.clone().into_concrete() {
-                                    if !inferred.can_convert_to(&concrete_target) {
+                                if let Some(concrete_target) =
+                                    target_simple_type.clone().into_concrete()
+                                {
+                                    let can_convert = inferred.can_convert_to(&concrete_target)
+                                        || self.can_convert_with_custom_types(
+                                            global_env,
+                                            &inferred,
+                                            &concrete_target,
+                                        );
+
+                                    if !can_convert {
                                         errors.push(SemError::ImpossibleConversion {
                                             span: arg.span.clone(),
                                             found: inferred,
@@ -2814,98 +2628,210 @@ impl LocalEnv {
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    // Return type is the qualified custom type (enum variant)
-                    Some(SimpleType::Custom(root.node.clone(), Some(variant.node.clone())).into())
-                } else {
-                    errors.push(SemError::UnknownType {
-                        typ: qualified_name,
-                        span: root.span.clone(),
-                    });
-                    None
-                }
-            }
+                            Some(target_simple_type.into())
+                        } else if let Some(target_type) = global_env.custom_types.get(&name.node) {
+                            // Custom type cast: TypeName(value)
+                            let underlying_type = target_type.clone();
+                            let underlying_simple = underlying_type.to_simple();
+                            let is_tuple = matches!(underlying_simple, Some(SimpleType::Tuple(_)));
 
-            // ========== Qualified Struct Cast (Enum Struct Variants) ==========
-            // MyEnum::StructCase { x: 1, y: 2 }
-            Expr::QualifiedStructCast {
-                root,
-                variant,
-                fields,
-            } => {
-                let qualified_name = format!("{}::{}", root.node, variant.node);
+                            if !is_tuple && args.len() != 1 {
+                                errors.push(SemError::ArgumentCountMismatch {
+                                    identifier: name.node.clone(),
+                                    span: name.span.clone(),
+                                    expected: 1,
+                                    found: args.len(),
+                                });
+                            }
 
-                // Check if this qualified type exists
-                if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
-                    let underlying_type = target_type.clone();
+                            for arg in args {
+                                self.check_expr(
+                                    global_env, &arg.node, &arg.span, type_info, expr_types,
+                                    errors, warnings,
+                                );
+                            }
 
-                    // The underlying type should be a struct
-                    let expected_struct = match underlying_type.clone().to_simple() {
-                        Some(SimpleType::Struct(fields)) => Some(fields),
-                        _ => None,
-                    };
-
-                    match expected_struct {
-                        None => {
-                            errors.push(SemError::NonConcreteType {
-                                span: root.span.clone(),
-                                found: underlying_type,
-                                context:
-                                    "Struct-style type cast requires a type that wraps a struct"
-                                        .to_string(),
-                            });
-                            None
-                        }
-                        Some(expected_fields) => {
-                            // Check fields match
-                            let mut found_fields: std::collections::HashMap<String, Span> =
-                                std::collections::HashMap::new();
-                            for (field_name, field_expr) in fields {
-                                if let Some(prev_span) = found_fields.get(&field_name.node) {
-                                    errors.push(SemError::ParameterAlreadyDefined {
-                                        identifier: field_name.node.clone(),
-                                        span: field_name.span.clone(),
-                                        here: prev_span.clone(),
-                                    });
-                                    continue;
-                                }
-                                found_fields
-                                    .insert(field_name.node.clone(), field_name.span.clone());
-
-                                // Check if field exists
-                                let expected_type = expected_fields.get(&field_name.node);
-
-                                match expected_type {
-                                    None => {
-                                        errors.push(SemError::UnknownField {
-                                            object_type: qualified_name.clone(),
-                                            field: field_name.node.clone(),
-                                            span: field_name.span.clone(),
+                            if is_tuple {
+                                if let Some(SimpleType::Tuple(tuple_types)) =
+                                    underlying_simple.as_ref()
+                                {
+                                    if args.len() != tuple_types.len() {
+                                        errors.push(SemError::ArgumentCountMismatch {
+                                            identifier: name.node.clone(),
+                                            span: name.span.clone(),
+                                            expected: tuple_types.len(),
+                                            found: args.len(),
                                         });
                                     }
-                                    Some(exp_typ) => {
-                                        let inferred = self.check_expr(
-                                            global_env,
-                                            &field_expr.node,
-                                            &field_expr.span,
-                                            type_info,
-                                            expr_types,
-                                            errors,
-                                            warnings,
+                                }
+                            } else if let (Some(arg), Some(underlying)) =
+                                (args.first(), underlying_simple.as_ref())
+                            {
+                                let arg_type = self.check_expr(
+                                    global_env, &arg.node, &arg.span, type_info, expr_types,
+                                    errors, warnings,
+                                );
+
+                                if let Some(inferred) = arg_type {
+                                    if let Some(concrete_target) =
+                                        underlying.clone().into_concrete()
+                                    {
+                                        if !inferred.can_convert_to(&concrete_target) {
+                                            errors.push(SemError::ImpossibleConversion {
+                                                span: arg.span.clone(),
+                                                found: inferred,
+                                                target: concrete_target,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+
+                            Some(SimpleType::Custom(name.node.clone(), None).into())
+                        } else {
+                            // Function call
+                            match global_env.lookup_fn(&name.node) {
+                                None => {
+                                    errors.push(SemError::UnknownIdentifer {
+                                        identifier: name.node.clone(),
+                                        span: name.span.clone(),
+                                    });
+                                    None
+                                }
+                                Some((fn_type, _)) => {
+                                    if args.len() != fn_type.args.len() {
+                                        errors.push(SemError::ArgumentCountMismatch {
+                                            identifier: name.node.clone(),
+                                            span: args
+                                                .last()
+                                                .map(|a| a.span.clone())
+                                                .unwrap_or_else(|| name.span.clone()),
+                                            expected: fn_type.args.len(),
+                                            found: args.len(),
+                                        });
+                                    }
+
+                                    for (i, (arg, expected_type)) in
+                                        args.iter().zip(fn_type.args.iter()).enumerate()
+                                    {
+                                        let arg_type = self.check_expr(
+                                            global_env, &arg.node, &arg.span, type_info,
+                                            expr_types, errors, warnings,
                                         );
 
-                                        if let Some(inf) = inferred {
-                                            if !inf.is_subtype_of(exp_typ) {
+                                        if let Some(found_type) = arg_type {
+                                            if !found_type.is_subtype_of(expected_type) {
                                                 errors.push(SemError::TypeMismatch {
-                                                    span: field_expr.span.clone(),
-                                                    expected: exp_typ.clone(),
-                                                    found: inf,
+                                                    span: arg.span.clone(),
+                                                    expected: expected_type.clone(),
+                                                    found: found_type,
                                                     context: format!(
-                                                        "Field '{}' has wrong type",
-                                                        field_name.node
+                                                        "argument {} to function {}",
+                                                        i + 1,
+                                                        name.node
                                                     ),
+                                                });
+                                            }
+                                        }
+                                    }
+
+                                    Some(fn_type.output)
+                                }
+                            }
+                        }
+                    }
+                    2 => {
+                        // Two segments: Enum::Variant(x) or mod::func(x)
+                        let root = &segments[0];
+                        let variant = &segments[1];
+                        let qualified_name = format!("{}::{}", root.node, variant.node);
+
+                        // Check if this qualified type exists (enum variant)
+                        if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
+                            let underlying_type = target_type.clone();
+                            let underlying_simple = underlying_type.to_simple();
+
+                            let is_unit = underlying_simple
+                                .as_ref()
+                                .map(|s| s.is_none())
+                                .unwrap_or(false);
+                            let is_tuple = matches!(underlying_simple, Some(SimpleType::Tuple(_)));
+
+                            if is_unit {
+                                if args.len() > 1 {
+                                    errors.push(SemError::ArgumentCountMismatch {
+                                        identifier: qualified_name.clone(),
+                                        span: root.span.clone(),
+                                        expected: 0,
+                                        found: args.len(),
+                                    });
+                                }
+                                if let Some(arg) = args.first() {
+                                    let arg_type = self.check_expr(
+                                        global_env, &arg.node, &arg.span, type_info, expr_types,
+                                        errors, warnings,
+                                    );
+                                    if let Some(inferred) = arg_type {
+                                        if !inferred.is_none() {
+                                            let none_concrete =
+                                                SimpleType::None.into_concrete().unwrap();
+                                            if !inferred.can_convert_to(&none_concrete) {
+                                                errors.push(SemError::ImpossibleConversion {
+                                                    span: arg.span.clone(),
+                                                    found: inferred,
+                                                    target: none_concrete,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if is_tuple {
+                                if let Some(SimpleType::Tuple(tuple_types)) =
+                                    underlying_simple.as_ref()
+                                {
+                                    if args.len() != tuple_types.len() {
+                                        errors.push(SemError::ArgumentCountMismatch {
+                                            identifier: qualified_name.clone(),
+                                            span: root.span.clone(),
+                                            expected: tuple_types.len(),
+                                            found: args.len(),
+                                        });
+                                    }
+                                    for arg in args {
+                                        self.check_expr(
+                                            global_env, &arg.node, &arg.span, type_info,
+                                            expr_types, errors, warnings,
+                                        );
+                                    }
+                                }
+                            } else {
+                                if args.len() != 1 {
+                                    errors.push(SemError::ArgumentCountMismatch {
+                                        identifier: qualified_name.clone(),
+                                        span: root.span.clone(),
+                                        expected: 1,
+                                        found: args.len(),
+                                    });
+                                }
+
+                                if let (Some(arg), Some(underlying)) =
+                                    (args.first(), underlying_simple.as_ref())
+                                {
+                                    let arg_type = self.check_expr(
+                                        global_env, &arg.node, &arg.span, type_info, expr_types,
+                                        errors, warnings,
+                                    );
+
+                                    if let Some(inferred) = arg_type {
+                                        if let Some(concrete_target) =
+                                            underlying.clone().into_concrete()
+                                        {
+                                            if !inferred.can_convert_to(&concrete_target) {
+                                                errors.push(SemError::ImpossibleConversion {
+                                                    span: arg.span.clone(),
+                                                    found: inferred,
+                                                    target: concrete_target,
                                                 });
                                             }
                                         }
@@ -2913,30 +2839,27 @@ impl LocalEnv {
                                 }
                             }
 
-                            // Check for missing fields
-                            for exp_name in expected_fields.keys() {
-                                if !found_fields.contains_key(exp_name) {
-                                    errors.push(SemError::UnknownField {
-                                        object_type: qualified_name.clone(),
-                                        field: exp_name.clone(),
-                                        span: root.span.clone(),
-                                    });
-                                }
-                            }
-
-                            // Return the qualified custom type (enum variant)
                             Some(
                                 SimpleType::Custom(root.node.clone(), Some(variant.node.clone()))
                                     .into(),
                             )
+                        } else {
+                            // Not an enum variant - could be a module-qualified function
+                            // For now, report as unknown type
+                            errors.push(SemError::UnknownType {
+                                typ: qualified_name,
+                                span: root.span.clone(),
+                            });
+                            None
                         }
                     }
-                } else {
-                    errors.push(SemError::UnknownType {
-                        typ: qualified_name,
-                        span: root.span.clone(),
-                    });
-                    None
+                    _ => {
+                        errors.push(SemError::UnsupportedFeature {
+                            feature: "Generic calls with more than 2 path segments".to_string(),
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
                 }
             }
 
@@ -3314,27 +3237,108 @@ impl LocalEnv {
         }
     }
 
-    fn check_ident(
+    fn check_ident_path(
         &mut self,
-        _global_env: &GlobalEnv,
-        ident: &String,
-        span: &Span,
+        global_env: &GlobalEnv,
+        path: &Spanned<crate::ast::NamespacePath>,
         _type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         _warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
-        let typ = match self.lookup_ident(&ident) {
-            Some((typ, _)) => typ,
-            None => {
-                errors.push(SemError::UnknownIdentifer {
-                    identifier: ident.clone(),
-                    span: span.clone(),
-                });
-                return None;
-            }
-        };
+        let segments = &path.node.segments;
 
-        Some(typ)
+        match segments.len() {
+            1 => {
+                // Single segment: variable reference or primitive type name error
+                let name = &segments[0];
+
+                // Check for primitive type names used without call → ERROR
+                // (except None which is valid as a unit value, but that's handled by the `none` keyword)
+                match name.node.as_str() {
+                    "Int" | "Bool" | "String" | "LinExpr" | "Constraint" | "Never" => {
+                        errors.push(SemError::PrimitiveTypeAsValue {
+                            type_name: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                        return None;
+                    }
+                    "None" => {
+                        // This shouldn't normally be reached since `none` is a keyword
+                        // But if someone uses `None` as an identifier, it would come here
+                        // Let's check if it's a variable first
+                        if let Some((typ, _)) = self.lookup_ident(&name.node) {
+                            return Some(typ);
+                        }
+                        // Otherwise treat as None literal
+                        return Some(SimpleType::None.into());
+                    }
+                    _ => {
+                        // Variable reference: look up in scope
+                        let typ = match self.lookup_ident(&name.node) {
+                            Some((typ, _)) => typ,
+                            None => {
+                                errors.push(SemError::UnknownIdentifer {
+                                    identifier: name.node.clone(),
+                                    span: name.span.clone(),
+                                });
+                                return None;
+                            }
+                        };
+                        Some(typ)
+                    }
+                }
+            }
+            2 => {
+                // Two segments: enum unit variant like Option::None, Color::Red
+                let root = &segments[0];
+                let variant = &segments[1];
+                let qualified_name = format!("{}::{}", root.node, variant.node);
+
+                // Check if this qualified type exists (enum variant)
+                if let Some(target_type) = global_env.custom_types.get(&qualified_name) {
+                    let underlying_type = target_type.clone();
+                    let underlying_simple = underlying_type.to_simple();
+
+                    // Check if it's a unit variant (None underlying type)
+                    let is_unit = underlying_simple
+                        .as_ref()
+                        .map(|s| s.is_none())
+                        .unwrap_or(false);
+
+                    if is_unit {
+                        // Unit variant: Option::None, Color::Red, etc.
+                        Some(
+                            SimpleType::Custom(root.node.clone(), Some(variant.node.clone()))
+                                .into(),
+                        )
+                    } else {
+                        // Variant with data: must use with arguments
+                        errors.push(SemError::ArgumentCountMismatch {
+                            identifier: qualified_name,
+                            span: path.span.clone(),
+                            expected: 1,
+                            found: 0,
+                        });
+                        None
+                    }
+                } else {
+                    // Not a known qualified type
+                    errors.push(SemError::UnknownType {
+                        typ: qualified_name,
+                        span: root.span.clone(),
+                    });
+                    None
+                }
+            }
+            _ => {
+                // More than 2 segments: not yet supported
+                errors.push(SemError::UnsupportedFeature {
+                    feature: "Namespace paths with more than 2 segments".to_string(),
+                    span: path.span.clone(),
+                });
+                None
+            }
+        }
     }
 
     fn check_path(

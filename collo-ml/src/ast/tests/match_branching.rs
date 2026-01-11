@@ -18,8 +18,8 @@ fn parse_simple_match_with_one_type_branch() {
             } => {
                 // Check matched expression
                 match &expr.node {
-                    Expr::Ident(name) => assert_eq!(name.node, "x"),
-                    _ => panic!("Expected Ident in match expression"),
+                    Expr::IdentPath(path) => assert_eq!(path.node.segments[0].node, "x"),
+                    _ => panic!("Expected IdentPath in match expression"),
                 }
 
                 // Check branches

@@ -122,16 +122,13 @@ fn qualified_type_cast_ast() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                assert_eq!(root.node, "Result");
-                assert_eq!(variant.node, "Ok");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments.len(), 2);
+                assert_eq!(path.node.segments[0].node, "Result");
+                assert_eq!(path.node.segments[1].node, "Ok");
                 assert_eq!(args.len(), 1);
             }
-            _ => panic!("Expected QualifiedTypeCast, got {:?}", body.node),
+            _ => panic!("Expected GenericCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -145,16 +142,12 @@ fn qualified_type_cast_unit_variant_no_parens() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                assert_eq!(root.node, "Option");
-                assert_eq!(variant.node, "None");
-                assert!(args.is_empty(), "Unit variant should have no args");
+            Expr::IdentPath(path) => {
+                assert_eq!(path.node.segments.len(), 2);
+                assert_eq!(path.node.segments[0].node, "Option");
+                assert_eq!(path.node.segments[1].node, "None");
             }
-            _ => panic!("Expected QualifiedTypeCast, got {:?}", body.node),
+            _ => panic!("Expected IdentPath, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -168,16 +161,13 @@ fn qualified_type_cast_unit_variant_empty_parens() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                assert_eq!(root.node, "Option");
-                assert_eq!(variant.node, "None");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments.len(), 2);
+                assert_eq!(path.node.segments[0].node, "Option");
+                assert_eq!(path.node.segments[1].node, "None");
                 assert!(args.is_empty());
             }
-            _ => panic!("Expected QualifiedTypeCast, got {:?}", body.node),
+            _ => panic!("Expected GenericCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -191,16 +181,13 @@ fn qualified_type_cast_tuple_variant() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::QualifiedTypeCast {
-                root,
-                variant,
-                args,
-            } => {
-                assert_eq!(root.node, "Pair");
-                assert_eq!(variant.node, "P");
+            Expr::GenericCall { path, args } => {
+                assert_eq!(path.node.segments.len(), 2);
+                assert_eq!(path.node.segments[0].node, "Pair");
+                assert_eq!(path.node.segments[1].node, "P");
                 assert_eq!(args.len(), 2);
             }
-            _ => panic!("Expected QualifiedTypeCast, got {:?}", body.node),
+            _ => panic!("Expected GenericCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -218,18 +205,15 @@ fn qualified_struct_cast_ast() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::QualifiedStructCast {
-                root,
-                variant,
-                fields,
-            } => {
-                assert_eq!(root.node, "Point");
-                assert_eq!(variant.node, "P");
+            Expr::StructCall { path, fields } => {
+                assert_eq!(path.node.segments.len(), 2);
+                assert_eq!(path.node.segments[0].node, "Point");
+                assert_eq!(path.node.segments[1].node, "P");
                 assert_eq!(fields.len(), 2);
                 assert_eq!(fields[0].0.node, "x");
                 assert_eq!(fields[1].0.node, "y");
             }
-            _ => panic!("Expected QualifiedStructCast, got {:?}", body.node),
+            _ => panic!("Expected StructCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }

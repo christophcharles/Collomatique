@@ -71,7 +71,7 @@ fn parse_list_with_complex_expressions() {
                 assert_eq!(elements.len(), 3);
                 assert!(matches!(elements[0].node, Expr::Add(_, _)));
                 assert!(matches!(elements[1].node, Expr::Mul(_, _)));
-                assert!(matches!(elements[2].node, Expr::FnCall { .. }));
+                assert!(matches!(elements[2].node, Expr::GenericCall { .. }));
             }
             _ => panic!("Expected ListLiteral"),
         },
@@ -108,7 +108,7 @@ fn collection_accepts_lists_range_with_expr() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::ListRange { start, end } => {
-                matches!(start.node, Expr::FnCall { name: _, args: _ });
+                matches!(start.node, Expr::GenericCall { path: _, args: _ });
                 matches!(end.node, Expr::Cardinality(_));
             }
             _ => panic!("Expected List Range"),
@@ -132,7 +132,7 @@ fn parse_simple_list_comprehension() {
                 vars_and_collections,
                 filter,
             } => {
-                assert!(matches!(expr.node, Expr::Ident(_)));
+                assert!(matches!(expr.node, Expr::IdentPath(_)));
                 assert_eq!(vars_and_collections.len(), 1);
                 let (var, collection) = &vars_and_collections[0];
                 assert_eq!(var.node, "x");
@@ -399,7 +399,7 @@ fn parse_difference_operation() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Sub(left, right) => {
                 assert!(matches!(left.node, Expr::GlobalList(_)));
-                assert!(matches!(right.node, Expr::Ident(_)));
+                assert!(matches!(right.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Diff"),
         },
@@ -448,7 +448,7 @@ fn parse_in_operator() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::In { item, collection } => {
-                assert!(matches!(item.node, Expr::Ident(_)));
+                assert!(matches!(item.node, Expr::IdentPath(_)));
                 assert!(matches!(collection.node, Expr::GlobalList(_)));
             }
             _ => panic!("Expected In"),

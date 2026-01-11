@@ -98,7 +98,7 @@ fn parse_fold_with_function_call_init_value() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Fold { init_value, .. } => {
-                assert!(matches!(init_value.node, Expr::FnCall { .. }));
+                assert!(matches!(init_value.node, Expr::GenericCall { .. }));
             }
             _ => panic!("Expected Fold"),
         },
@@ -187,7 +187,7 @@ fn parse_fold_with_path_collection() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Fold { collection, .. } => {
-                assert!(matches!(collection.node, Expr::Ident(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Fold"),
         },
