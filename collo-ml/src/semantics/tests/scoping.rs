@@ -355,7 +355,7 @@ fn nested_different_construct_scopes() {
 #[test]
 fn if_expression_maintains_outer_scope() {
     let input = r#"
-        pub let f(x: Int, flag: Bool) -> Int = 
+        pub let f(x: Int, flag: Bool) -> Int =
             if flag { x + 1 } else { x - 1 };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
@@ -363,6 +363,76 @@ fn if_expression_maintains_outer_scope() {
     assert!(
         errors.is_empty(),
         "If expression should access outer scope: {:?}",
+        errors
+    );
+}
+
+// ========== Function Shadowing Tests ==========
+
+#[test]
+fn local_variable_cannot_shadow_function() {
+    let input = r#"
+        let f() -> Int = 42;
+        let g() -> Int = let f = 43 { f };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::LocalIdentShadowsFunction { .. })),
+        "Should error when local shadows function: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn local_variable_shadowing_local_is_warning() {
+    let input = r#"
+        let f(x: Int) -> Int = let x = 43 { x };
+    "#;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::IdentifierShadowed { .. })),
+        "Should warn when local shadows local: {:?}",
+        warnings
+    );
+    assert!(
+        errors.is_empty(),
+        "Shadowing local with local should not error: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn function_shadowing_causes_usage_error() {
+    let input = r#"
+        let f() -> Int = 42;
+        let g() -> Int = let f = 43 {
+            f + f
+        };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Should have the shadowing error
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::LocalIdentShadowsFunction { .. })),
+        "Should error on function shadowing: {:?}",
+        errors
+    );
+
+    // The identifier `f` resolves to the function (not the shadowed local),
+    // so using it without parens produces UnknownIdentifer from check_ident_path
+    assert!(
+        errors.iter().any(
+            |e| matches!(e, SemError::UnknownIdentifer { identifier, .. } if identifier == "f")
+        ),
+        "Should error when using function without parens: {:?}",
         errors
     );
 }

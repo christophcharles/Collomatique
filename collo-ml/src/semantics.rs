@@ -476,6 +476,8 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
+    #[error("Local variable \"{identifier}\" at {span:?} shadows a function with the same name")]
+    LocalIdentShadowsFunction { identifier: String, span: Span },
     #[error("Branch for match at {span:?} has a too large type ({found:?}). Maximum type is {expected:?}")]
     OverMatching {
         span: Span,
@@ -625,6 +627,7 @@ impl LocalEnv {
 
     fn register_identifier(
         &mut self,
+        global_env: &GlobalEnv,
         ident: &str,
         span: Span,
         typ: ExprType,
@@ -636,6 +639,14 @@ impl LocalEnv {
                 identifier: ident.to_string(),
                 span,
                 here: old_ident_span.clone(),
+            });
+        }
+
+        // Check if identifier shadows a function name
+        if global_env.functions.contains_key(ident) {
+            return Err(SemError::LocalIdentShadowsFunction {
+                identifier: ident.to_string(),
+                span,
             });
         }
 
@@ -774,7 +785,12 @@ fn resolve_single_segment(
         )));
     }
 
-    // 3. Check local variables (if local_env provided)
+    // 3. Check functions (before local variables for safety)
+    if global_env.functions.contains_key(name) {
+        return Ok(ResolvedPathKind::Function(name.to_string()));
+    }
+
+    // 4. Check local variables (if local_env provided)
     if let Some(local) = local_env {
         // Note: we clone the local_env to avoid mutable borrow issues
         // The caller is responsible for marking the variable as used
@@ -787,11 +803,6 @@ fn resolve_single_segment(
         if local.pending_scope.contains_key(name) {
             return Ok(ResolvedPathKind::LocalVariable(name.to_string()));
         }
-    }
-
-    // 4. Check functions
-    if global_env.functions.contains_key(name) {
-        return Ok(ResolvedPathKind::Function(name.to_string()));
     }
 
     Err(PathResolutionError::UnknownIdentifier {
@@ -1939,6 +1950,7 @@ impl LocalEnv {
                             .expect("The list should not be empty at this point");
                         // Register the loop variable with the element type
                         if let Err(e) = self.register_identifier(
+                            global_env,
                             &var.node,
                             var.span.clone(),
                             elem_t,
@@ -2058,6 +2070,7 @@ impl LocalEnv {
                             .expect("List should not be empty at this point");
                         // Register the loop variable with the element type
                         if let Err(e) = self.register_identifier(
+                            global_env,
                             &var.node,
                             var.span.clone(),
                             elem_t,
@@ -2216,6 +2229,7 @@ impl LocalEnv {
                 while has_to_iterate {
                     // Register the loop variable with the element type
                     if let Err(e) = self.register_identifier(
+                        global_env,
                         &var.node,
                         var.span.clone(),
                         elem_t.clone(),
@@ -2227,6 +2241,7 @@ impl LocalEnv {
 
                     // Register the accumulator variable with the current computed type
                     if let Err(e) = self.register_identifier(
+                        global_env,
                         &accumulator.node,
                         accumulator.span.clone(),
                         current_acc_type.clone(),
@@ -2407,6 +2422,7 @@ impl LocalEnv {
 
                     if let Some(actual_branch_typ) = actual_branch_typ_opt {
                         if let Err(e) = self.register_identifier(
+                            global_env,
                             &branch.ident.node,
                             branch.ident.span.clone(),
                             actual_branch_typ.clone(),
@@ -2944,6 +2960,7 @@ impl LocalEnv {
                                 .expect("List should not be empty at this point");
                             // Register the loop variable with the element type
                             if let Err(e) = self.register_identifier(
+                                global_env,
                                 &var.node,
                                 var.span.clone(),
                                 elem_t,
@@ -3067,9 +3084,11 @@ impl LocalEnv {
                 }
 
                 // Extract element type from collection
-                match value_type {
+                // Track if registration succeeded to determine return value
+                let registration_failed = match value_type {
                     Some(typ) => {
                         if let Err(e) = self.register_identifier(
+                            global_env,
                             &var.node,
                             var.span.clone(),
                             typ,
@@ -3077,11 +3096,13 @@ impl LocalEnv {
                             warnings,
                         ) {
                             errors.push(e);
-                            return None;
+                            true
+                        } else {
+                            false
                         }
                     }
-                    None => return None,
-                }
+                    None => true,
+                };
 
                 self.push_scope();
 
@@ -3091,7 +3112,12 @@ impl LocalEnv {
 
                 self.pop_scope(warnings);
 
-                body_type
+                // Return None if registration failed, otherwise return body type
+                if registration_failed {
+                    None
+                } else {
+                    body_type
+                }
             }
         }
     }
