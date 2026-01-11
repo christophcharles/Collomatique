@@ -228,6 +228,7 @@ fn script_var_simple_reify() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(5)],
@@ -260,6 +261,7 @@ fn script_var_in_constraint() {
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(10)],
@@ -296,14 +298,17 @@ fn script_var_with_sum() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(3)],
@@ -364,6 +369,7 @@ fn script_var_multiple_params() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(3), ExprValue::Int(7)],
@@ -395,6 +401,7 @@ fn script_var_no_params() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![],
@@ -424,6 +431,7 @@ fn script_var_with_arithmetic() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(10)],
@@ -458,10 +466,12 @@ fn multiple_script_vars() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar1".into(),
                 None,
                 vec![ExprValue::Int(5)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar2".into(),
                 None,
                 vec![ExprValue::Int(5)],
@@ -491,6 +501,7 @@ fn script_var_and_base_var_mixed() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(10)],
@@ -539,6 +550,7 @@ fn var_list_simple_reify() {
                         assert_eq!(
                             le,
                             &LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                                "main".to_string(),
                                 "MyVars".into(),
                                 Some(idx),
                                 vec![list.clone()],
@@ -576,10 +588,12 @@ fn var_list_in_sum() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![list.clone()]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![list.clone()]
@@ -619,14 +633,17 @@ fn var_list_in_constraint() {
             assert_eq!(
                 constraint,
                 (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![list.clone()]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![list.clone()]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(2),
                     vec![list.clone()]
@@ -662,6 +679,7 @@ fn var_list_with_forall() {
             let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(0),
                 vec![list.clone()],
@@ -670,6 +688,7 @@ fn var_list_with_forall() {
             assert!(constraints.contains(&constraint));
 
             let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(1),
                 vec![list.clone()],
@@ -731,6 +750,7 @@ fn var_list_with_multiple_params() {
             assert_eq!(linexprs.len(), 2);
             let lin_expr1 =
                 ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![list.clone(), ExprValue::Int(10)],
@@ -738,6 +758,7 @@ fn var_list_with_multiple_params() {
             assert!(linexprs.contains(&lin_expr1));
             let lin_expr2 =
                 ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![list.clone(), ExprValue::Int(10)],
@@ -879,6 +900,7 @@ fn var_in_if_expression() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(5)]

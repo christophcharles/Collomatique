@@ -32,6 +32,7 @@ fn forall_with_reified_var_and_filter() {
 
             // Expected: $MyVar(1) === 1 and $MyVar(2) === 1
             let expected1 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1)],
@@ -39,6 +40,7 @@ fn forall_with_reified_var_and_filter() {
             .eq(&LinExpr::constant(1.));
 
             let expected2 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2)],
@@ -75,6 +77,7 @@ fn sum_with_var_list_and_comprehension() {
         ExprValue::LinExpr(lin_expr) => {
             // Concat gives [1, 2, 2, 3], so 4 variables summed
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(0),
                 vec![ExprValue::List(Vec::from([
@@ -84,6 +87,7 @@ fn sum_with_var_list_and_comprehension() {
                     ExprValue::Int(3),
                 ]))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(1),
                 vec![ExprValue::List(Vec::from([
@@ -93,6 +97,7 @@ fn sum_with_var_list_and_comprehension() {
                     ExprValue::Int(3),
                 ]))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(2),
                 vec![ExprValue::List(Vec::from([
@@ -102,6 +107,7 @@ fn sum_with_var_list_and_comprehension() {
                     ExprValue::Int(3),
                 ]))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVars".into(),
                 Some(3),
                 vec![ExprValue::List(Vec::from([
@@ -214,16 +220,19 @@ fn nested_list_comp_with_reified_vars() {
 
             let expected_vars = Vec::from([
                 ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(1), ExprValue::Int(2)],
                 )))),
                 ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(1), ExprValue::Int(3)],
                 )))),
                 ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                    "main".to_string(),
                     "MyVar".into(),
                     None,
                     vec![ExprValue::Int(2), ExprValue::Int(3)],
@@ -364,6 +373,7 @@ fn nested_if_with_variables() {
     match result_scaled {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(5)],
@@ -476,10 +486,12 @@ fn function_composition_with_reified_vars() {
 
             // Expected: MyVar(1,5) + MyVar(2,5) <= 10
             let expected = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(5)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(5)],
@@ -628,6 +640,7 @@ fn conditional_constraint_with_reification() {
                 vec![ExprValue::Int(1), ExprValue::Int(5)],
             )))
             .leq(&LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "IsAvailable".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(5)],
@@ -1019,6 +1032,7 @@ fn all_features_combined() {
 
             // Verify some constraints exist
             let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(3)],
@@ -1028,18 +1042,22 @@ fn all_features_combined() {
 
             // Verify sum constraint exists
             let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(3)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(4)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(3)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(4)],
@@ -1130,6 +1148,7 @@ fn all_features_combined_with_let() {
 
             // Verify some constraints exist
             let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(3)],
@@ -1138,6 +1157,7 @@ fn all_features_combined_with_let() {
             assert!(constraints.contains(&constraint_1_3));
 
             let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(4)],
@@ -1147,18 +1167,22 @@ fn all_features_combined_with_let() {
 
             // Verify sum constraint exists
             let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(3)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(1), ExprValue::Int(4)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(3)],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(2), ExprValue::Int(4)],

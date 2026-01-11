@@ -13,6 +13,7 @@ use derivative::Derivative;
 #[derive(Debug, Clone, Derivative)]
 #[derivative(PartialOrd, Ord, PartialEq, Eq)]
 pub struct ScriptVar<T: EvalObject> {
+    pub module: String,
     pub name: String,
     pub from_list: Option<usize>,
     pub params: Vec<ExprValue<T>>,
@@ -24,6 +25,7 @@ impl<T: EvalObject> ScriptVar<T> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
+        module: String,
         name: String,
         from_list: Option<usize>,
         params: Vec<ExprValue<T>>,
@@ -33,6 +35,7 @@ impl<T: EvalObject> ScriptVar<T> {
             .map(|x| x.convert_to_string(env, cache))
             .collect();
         ScriptVar {
+            module,
             name,
             from_list,
             params,
@@ -40,9 +43,15 @@ impl<T: EvalObject> ScriptVar<T> {
         }
     }
 
-    pub fn new_no_env(name: String, from_list: Option<usize>, params: Vec<ExprValue<T>>) -> Self {
+    pub fn new_no_env(
+        module: String,
+        name: String,
+        from_list: Option<usize>,
+        params: Vec<ExprValue<T>>,
+    ) -> Self {
         let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
         ScriptVar {
+            module,
             name,
             from_list,
             params,
@@ -397,17 +406,20 @@ impl<T: EvalObject> ExprValue<T> {
                 type_name, variant, ..
             } => {
                 // Check for exact match
-                if target
-                    .get_variants()
-                    .contains(&SimpleType::Custom(type_name.clone(), variant.clone()))
-                {
+                if target.get_variants().contains(&SimpleType::Custom(
+                    "main".to_string(),
+                    type_name.clone(),
+                    variant.clone(),
+                )) {
                     return true;
                 }
                 // Check if this variant fits in the root enum type (subtype relationship)
                 if variant.is_some() {
-                    target
-                        .get_variants()
-                        .contains(&SimpleType::Custom(type_name.clone(), None))
+                    target.get_variants().contains(&SimpleType::Custom(
+                        "main".to_string(),
+                        type_name.clone(),
+                        None,
+                    ))
                 } else {
                     false
                 }
@@ -431,7 +443,7 @@ impl<T: EvalObject> ExprValue<T> {
                 Self::Custom {
                     type_name, variant, ..
                 },
-                SimpleType::Custom(target_root, target_variant),
+                SimpleType::Custom(_, target_root, target_variant),
             ) => {
                 type_name == target_root && (variant == target_variant || target_variant.is_none())
             }
@@ -443,7 +455,7 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Value to Custom type - semantic analysis has validated this
             // At runtime, we always allow wrapping if semantic check passed
-            (_, SimpleType::Custom(_, _)) => {
+            (_, SimpleType::Custom(_, _, _)) => {
                 // Semantic analysis has validated this conversion is legal
                 // At runtime, we trust that validation
                 true
@@ -575,7 +587,7 @@ impl<T: EvalObject> ExprValue<T> {
             }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
-            (value, SimpleType::Custom(type_name, variant)) => Self::Custom {
+            (value, SimpleType::Custom(_, type_name, variant)) => Self::Custom {
                 type_name: type_name.clone(),
                 variant: variant.clone(),
                 content: Box::new(value),
@@ -809,7 +821,7 @@ impl<T: EvalObject> CheckedAST<T> {
         let object_types: HashSet<String> = self.global_env.get_types().keys().cloned().collect();
         let custom_types: HashSet<String> =
             self.global_env.get_custom_types().keys().cloned().collect();
-        ExprType::from_ast(typ.clone(), &object_types, &custom_types)
+        ExprType::from_ast(typ.clone(), "main", &object_types, &custom_types)
     }
 
     pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
@@ -886,20 +898,20 @@ impl<T: EvalObject> CheckedAST<T> {
 struct LocalEnv<T: EvalObject> {
     scopes: Vec<HashMap<String, ExprValue<T>>>,
     pending_scope: HashMap<String, ExprValue<T>>,
-}
-
-impl<T: EvalObject> Default for LocalEnv<T> {
-    fn default() -> Self {
-        LocalEnv {
-            scopes: vec![],
-            pending_scope: HashMap::new(),
-        }
-    }
+    current_module: String,
 }
 
 impl<T: EvalObject> LocalEnv<T> {
-    fn new() -> Self {
-        LocalEnv::default()
+    fn new(current_module: &str) -> Self {
+        LocalEnv {
+            scopes: vec![],
+            pending_scope: HashMap::new(),
+            current_module: current_module.to_string(),
+        }
+    }
+
+    fn current_module(&self) -> &str {
+        &self.current_module
     }
 
     fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T>> {
@@ -953,7 +965,7 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
 
                 // Use resolve_path for type-level resolution
-                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
                     .expect("Path should be valid in a checked AST");
 
                 match resolved {
@@ -969,7 +981,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         // Unit enum variant or None type
                         match simple_type {
                             SimpleType::None => ExprValue::None,
-                            SimpleType::Custom(root, Some(variant)) => {
+                            SimpleType::Custom(_, root, Some(variant)) => {
                                 // Qualified unit value: Enum::UnitVariant
                                 ExprValue::Custom {
                                     type_name: root,
@@ -1124,11 +1136,11 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
-                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
                     .expect("Path should be valid in a checked AST");
 
                 let (type_name, variant_name) = match resolved {
-                    ResolvedPathKind::Type(SimpleType::Custom(root, variant)) => (root, variant),
+                    ResolvedPathKind::Type(SimpleType::Custom(_, root, variant)) => (root, variant),
                     _ => panic!("StructCall should resolve to a Custom type"),
                 };
 
@@ -1225,7 +1237,7 @@ impl<T: EvalObject> LocalEnv<T> {
             }
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to
-                let resolved = resolve_path(path, &eval_history.ast.global_env, None)
+                let resolved = resolve_path(path, "main", &eval_history.ast.global_env, None)
                     .expect("Path should be valid in a checked AST");
 
                 match resolved {
@@ -1239,7 +1251,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             .map(|x| self.eval_expr(eval_history, &x))
                             .collect::<Result<_, _>>()?;
                         eval_history
-                            .add_fn_to_call_history(&name, args, true)?
+                            .add_fn_to_call_history(self.current_module(), &name, args, true)?
                             .0
                             .into()
                     }
@@ -1274,6 +1286,7 @@ impl<T: EvalObject> LocalEnv<T> {
                         var_desc.referenced_fn.clone(),
                     );
                     eval_history.add_fn_to_call_history(
+                        self.current_module(),
                         &var_desc.referenced_fn,
                         args.clone(),
                         true,
@@ -1281,6 +1294,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
                         eval_history.env,
                         &mut eval_history.cache,
+                        self.current_module().to_string(),
                         name.node.clone(),
                         None,
                         args,
@@ -1904,7 +1918,9 @@ impl<T: EvalObject> LocalEnv<T> {
                     .map(|x| self.eval_expr(eval_history, &x))
                     .collect::<Result<_, _>>()?;
 
+                let current_module = self.current_module().to_string();
                 let (constraints, _origin) = eval_history.add_fn_to_call_history(
+                    &current_module,
                     var_list_fn,
                     evaluated_args.clone(),
                     true,
@@ -1926,6 +1942,7 @@ impl<T: EvalObject> LocalEnv<T> {
                             ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
                                 eval_history.env,
                                 &mut eval_history.cache,
+                                current_module.clone(),
                                 name.node.clone(),
                                 Some(i),
                                 evaluated_args.clone(),
@@ -2026,7 +2043,7 @@ impl<T: EvalObject> LocalEnv<T> {
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)
-            SimpleType::Custom(root, variant_opt) => {
+            SimpleType::Custom(_, root, variant_opt) => {
                 let qualified_name = match variant_opt {
                     Some(v) => format!("{}::{}", root, v),
                     None => root.clone(),
@@ -2189,6 +2206,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
     fn add_fn_to_call_history(
         &mut self,
+        module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
         allow_private: bool,
@@ -2214,7 +2232,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             });
         }
 
-        let mut local_env = LocalEnv::new();
+        let mut local_env = LocalEnv::new(module);
         for (param, ((arg, arg_typ), arg_name)) in args
             .iter()
             .zip(fn_desc.typ.args.iter())
@@ -2302,6 +2320,9 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
+        // Placeholder module name until proper module support is added
+        let current_module = "main";
+
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -2310,7 +2331,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             checked_args.push(arg.into());
         }
 
-        self.add_fn_to_call_history(fn_name, checked_args.clone(), false)
+        self.add_fn_to_call_history(current_module, fn_name, checked_args.clone(), false)
     }
 
     pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T>, T::Cache) {

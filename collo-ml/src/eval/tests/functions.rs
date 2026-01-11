@@ -613,6 +613,7 @@ fn fn_using_reified_var() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(5)],
@@ -644,6 +645,7 @@ fn fn_calling_fn_with_reified_var() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![ExprValue::Int(10)],
