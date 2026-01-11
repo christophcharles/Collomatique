@@ -239,8 +239,16 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
                 write!(f, "{{{}}}", field_strs.join(", "))
             }
             ExprValue::Custom(custom) => match &custom.variant {
-                None => write!(f, "{}({})", custom.type_name, custom.content),
-                Some(v) => write!(f, "{}::{}({})", custom.type_name, v, custom.content),
+                None => write!(
+                    f,
+                    "{}::{}({})",
+                    custom.module, custom.type_name, custom.content
+                ),
+                Some(v) => write!(
+                    f,
+                    "{}::{}::{}({})",
+                    custom.module, custom.type_name, v, custom.content
+                ),
             },
         }
     }
@@ -2210,7 +2218,7 @@ pub struct EvalHistory<'a, T: EvalObject> {
     ast: &'a CheckedAST<T>,
     env: &'a T::Env,
     cache: T::Cache,
-    funcs: BTreeMap<(String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
+    funcs: BTreeMap<(String, String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
     vars: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
     var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
 }
@@ -2303,7 +2311,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             local_env.register_identifier(arg_name, arg.clone());
         }
 
-        if let Some(r) = self.funcs.get(&(fn_name.to_string(), args.clone())) {
+        if let Some(r) = self
+            .funcs
+            .get(&(module.to_string(), fn_name.to_string(), args.clone()))
+        {
             return Ok(r.clone());
         }
 
@@ -2322,7 +2333,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
         let result = naked_result.with_origin(&origin);
         self.funcs.insert(
-            (fn_name.to_string(), args),
+            (module.to_string(), fn_name.to_string(), args),
             (result.clone(), origin.clone()),
         );
 
@@ -2396,7 +2407,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         for ((v_module, v_name, v_args), fn_name) in self.vars {
             let (fn_call_result, new_origin) = self
                 .funcs
-                .get(&(fn_name.clone(), v_args.clone()))
+                .get(&(v_module.clone(), fn_name.clone(), v_args.clone()))
                 .expect("Fn call should be valid");
             let constraint = match fn_call_result {
                 ExprValue::Constraint(c) => c
@@ -2416,7 +2427,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         for ((vl_module, vl_name, vl_args), fn_name) in self.var_lists {
             let (fn_call_result, new_origin) = self
                 .funcs
-                .get(&(fn_name.clone(), vl_args.clone()))
+                .get(&(vl_module.clone(), fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
             let constraints: Vec<_> = match fn_call_result {
                 ExprValue::List(cs) if cs.iter().all(|x| matches!(x, ExprValue::Constraint(_))) => {
