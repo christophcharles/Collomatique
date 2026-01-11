@@ -23,7 +23,7 @@ fn all_scripts_should_compile() {
         let funcs = stored_script.get_ast().get_functions();
         let to_reify = funcs
             .into_iter()
-            .filter_map(|(name, (_args, output))| {
+            .filter_map(|((_module, name), (_args, output))| {
                 if !output.is_constraint() {
                     return None;
                 }
@@ -68,7 +68,7 @@ fn all_scripts_should_compile_without_warnings() {
         let funcs = stored_script.get_ast().get_functions();
         let to_reify = funcs
             .into_iter()
-            .filter_map(|(name, (_args, output))| {
+            .filter_map(|((_module, name), (_args, output))| {
                 if !output.is_constraint() {
                     return None;
                 }

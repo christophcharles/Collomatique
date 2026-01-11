@@ -439,8 +439,12 @@ impl<T: EvalObject> ExprValue<T> {
             (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
             // Custom type conversions - semantic analysis has validated these
             // Enum variant can convert to root enum type (subtype relationship)
-            (Self::Custom(custom), SimpleType::Custom(_, target_root, target_variant)) => {
-                custom.type_name == *target_root
+            (
+                Self::Custom(custom),
+                SimpleType::Custom(target_module, target_root, target_variant),
+            ) => {
+                custom.module == *target_module
+                    && custom.type_name == *target_root
                     && (custom.variant == *target_variant || target_variant.is_none())
             }
             // Custom to underlying type - semantic analysis has validated this is allowed
@@ -833,35 +837,45 @@ impl<T: EvalObject> CheckedAST<T> {
         ExprType::from_ast(typ.clone(), module, &object_types, &custom_types)
     }
 
-    pub fn get_functions(&self) -> HashMap<String, (ArgsType, ExprType)> {
+    pub fn get_functions(&self) -> HashMap<(String, String), (ArgsType, ExprType)> {
         self.global_env
             .get_functions()
             .iter()
-            .filter_map(|((_, fn_name), fn_desc)| {
+            .filter_map(|((module, fn_name), fn_desc)| {
                 if !fn_desc.public {
                     return None;
                 }
                 Some((
-                    fn_name.clone(),
+                    (module.clone(), fn_name.clone()),
                     (fn_desc.typ.args.clone(), fn_desc.typ.output.clone()),
                 ))
             })
             .collect()
     }
 
-    pub fn get_vars(&self) -> HashMap<String, String> {
+    pub fn get_vars(&self) -> HashMap<(String, String), String> {
         self.global_env
             .get_vars()
             .iter()
-            .map(|((_, var_name), var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
+            .map(|((module, var_name), var_desc)| {
+                (
+                    (module.clone(), var_name.clone()),
+                    var_desc.referenced_fn.clone(),
+                )
+            })
             .collect()
     }
 
-    pub fn get_var_lists(&self) -> HashMap<String, String> {
+    pub fn get_var_lists(&self) -> HashMap<(String, String), String> {
         self.global_env
             .get_var_lists()
             .iter()
-            .map(|((_, var_name), var_desc)| (var_name.clone(), var_desc.referenced_fn.clone()))
+            .map(|((module, var_name), var_desc)| {
+                (
+                    (module.clone(), var_name.clone()),
+                    var_desc.referenced_fn.clone(),
+                )
+            })
             .collect()
     }
 
@@ -1313,7 +1327,11 @@ impl<T: EvalObject> LocalEnv<T> {
                     .get(&(self.current_module().to_string(), name.node.clone()))
                 {
                     eval_history.vars.insert(
-                        (name.node.clone(), args.clone()),
+                        (
+                            self.current_module().to_string(),
+                            name.node.clone(),
+                            args.clone(),
+                        ),
                         var_desc.referenced_fn.clone(),
                     );
                     eval_history.add_fn_to_call_history(
@@ -1940,16 +1958,16 @@ impl<T: EvalObject> LocalEnv<T> {
                 output
             }
             Expr::VarListCall { name, args } => {
+                let current_module = self.current_module().to_string();
                 let var_lists = eval_history.ast.get_var_lists();
                 let var_list_fn = var_lists
-                    .get(&name.node)
+                    .get(&(current_module.clone(), name.node.clone()))
                     .expect("Var list should be declared");
                 let evaluated_args: Vec<_> = args
                     .iter()
                     .map(|x| self.eval_expr(eval_history, &x))
                     .collect::<Result<_, _>>()?;
 
-                let current_module = self.current_module().to_string();
                 let (constraints, _origin) = eval_history.add_fn_to_call_history(
                     &current_module,
                     var_list_fn,
@@ -1957,7 +1975,11 @@ impl<T: EvalObject> LocalEnv<T> {
                     true,
                 )?;
                 eval_history.var_lists.insert(
-                    (name.node.clone(), evaluated_args.clone()),
+                    (
+                        current_module.clone(),
+                        name.node.clone(),
+                        evaluated_args.clone(),
+                    ),
                     var_list_fn.clone(),
                 );
 
@@ -2189,8 +2211,8 @@ pub struct EvalHistory<'a, T: EvalObject> {
     env: &'a T::Env,
     cache: T::Cache,
     funcs: BTreeMap<(String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
-    vars: BTreeMap<(String, Vec<ExprValue<T>>), String>,
-    var_lists: BTreeMap<(String, Vec<ExprValue<T>>), String>,
+    vars: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
+    var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
 }
 
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
@@ -2371,7 +2393,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             var_lists: BTreeMap::new(),
         };
 
-        for ((v_name, v_args), fn_name) in self.vars {
+        for ((v_module, v_name, v_args), fn_name) in self.vars {
             let (fn_call_result, new_origin) = self
                 .funcs
                 .get(&(fn_name.clone(), v_args.clone()))
@@ -2388,10 +2410,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             };
             var_def
                 .vars
-                .insert((v_name, v_args), (constraint, new_origin.clone()));
+                .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
         }
 
-        for ((vl_name, vl_args), fn_name) in self.var_lists {
+        for ((vl_module, vl_name, vl_args), fn_name) in self.var_lists {
             let (fn_call_result, new_origin) = self
                 .funcs
                 .get(&(fn_name.clone(), vl_args.clone()))
@@ -2416,9 +2438,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     fn_call_result
                 ),
             };
-            var_def
-                .var_lists
-                .insert((vl_name, vl_args), (constraints, new_origin.clone()));
+            var_def.var_lists.insert(
+                (vl_module, vl_name, vl_args),
+                (constraints, new_origin.clone()),
+            );
         }
 
         (var_def, self.cache)
@@ -2431,7 +2454,8 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
 #[derive(Clone, Debug)]
 pub struct VariableDefinitions<T: EvalObject> {
-    pub vars: BTreeMap<(String, Vec<ExprValue<T>>), (Vec<Constraint<IlpVar<T>>>, Origin<T>)>,
+    pub vars:
+        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Constraint<IlpVar<T>>>, Origin<T>)>,
     pub var_lists:
-        BTreeMap<(String, Vec<ExprValue<T>>), (Vec<Vec<Constraint<IlpVar<T>>>>, Origin<T>)>,
+        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Vec<Constraint<IlpVar<T>>>>, Origin<T>)>,
 }

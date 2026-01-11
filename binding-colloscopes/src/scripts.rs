@@ -24,7 +24,7 @@ pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String
         let funcs = stored_script.get_ast().get_functions();
         let to_reify = funcs
             .into_iter()
-            .filter_map(|(name, (_args, output))| {
+            .filter_map(|((_module, name), (_args, output))| {
                 if !output.is_constraint() {
                     return None;
                 }
@@ -50,12 +50,12 @@ pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String
             })
             .expect(&format!("Should compile: {}\n\n{}", name, script));
         let pub_funcs = stored_script.get_ast().get_functions();
-        let funcs = if pub_funcs.contains_key("constraint") {
+        let funcs = if pub_funcs.contains_key(&("main".to_string(), "constraint".to_string())) {
             vec![("constraint".to_string(), vec![])]
         } else {
             vec![]
         };
-        let objectives = if pub_funcs.contains_key("objective") {
+        let objectives = if pub_funcs.contains_key(&("main".to_string(), "objective".to_string())) {
             vec![(
                 "objective".to_string(),
                 vec![],

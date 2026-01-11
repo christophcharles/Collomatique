@@ -759,7 +759,7 @@ impl<
             // (this will happen on the first iteration of the loop only)
             while let Some((fn_name, args)) = start_constraints.pop() {
                 let (_params, out_typ) = ast_funcs
-                    .get(&fn_name)
+                    .get(&("main".to_string(), fn_name.clone()))
                     .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
                 if !out_typ.is_constraint() && !out_typ.is_list_of_constraints() {
                     return Err(ProblemError::WrongReturnType {
@@ -788,7 +788,7 @@ impl<
             // (this will happen on the first iteration of the loop only)
             while let Some((fn_name, args, coef, obj_sense)) = start_obj.pop() {
                 let (_params, out_typ) = ast_funcs
-                    .get(&fn_name)
+                    .get(&("main".to_string(), fn_name.clone()))
                     .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
                 if !out_typ.is_lin_expr()
                     && !out_typ.is_constraint()
@@ -825,7 +825,7 @@ impl<
             if let Some(reifications) = reifications_from_current_script {
                 for reification in reifications {
                     let (_params, out_typ) = ast_funcs
-                        .get(&reification.func)
+                        .get(&("main".to_string(), reification.func.clone()))
                         .ok_or(ProblemError::UnknownFunction(reification.func.clone()))?;
                     if !out_typ.is_constraint() {
                         return Err(ProblemError::WrongReturnType {
@@ -863,7 +863,7 @@ impl<
             // We're done evaluating. Let's collect the private reified vars
             let (var_def, new_cache) = eval_history.into_var_def_and_cache();
             self.cache = Some(new_cache);
-            for ((var_name, var_args), (constraints, new_origin)) in var_def.vars {
+            for ((_var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
                     .map(|c| self.clean_constraint(script.get_ref(), &c))
@@ -883,8 +883,10 @@ impl<
                 self.vars_desc.insert(new_var.clone(), Variable::binary());
                 constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
             }
-            for ((var_list_name, var_list_args), (constraints_list, new_origin)) in
-                var_def.var_lists
+            for (
+                (_var_list_module, var_list_name, var_list_args),
+                (constraints_list, new_origin),
+            ) in var_def.var_lists
             {
                 for (i, constraints) in constraints_list.into_iter().enumerate() {
                     let cleaned_constraints: Vec<_> = constraints
@@ -1053,7 +1055,7 @@ impl<
         let func_map = ast.get_functions();
 
         for (func, name) in func_and_names {
-            let Some((args, expr_type)) = func_map.get(&func) else {
+            let Some((args, expr_type)) = func_map.get(&("main".to_string(), func.clone())) else {
                 return Err(ProblemError::UnknownFunction(func));
             };
 
