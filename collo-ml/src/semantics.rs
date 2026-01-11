@@ -47,7 +47,7 @@ pub struct VariableDesc {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
-    defined_types: HashMap<String, ObjectFields>,
+    object_types: HashMap<String, ObjectFields>,
     custom_types: HashMap<String, ExprType>, // Maps custom type name → underlying type
     functions: HashMap<String, FunctionDesc>,
     external_variables: HashMap<String, ArgsType>,
@@ -118,7 +118,7 @@ pub enum GlobalEnvError {
 
 impl GlobalEnv {
     pub fn validate_object_type(&self, obj_name: &str) -> bool {
-        self.defined_types.contains_key(obj_name)
+        self.object_types.contains_key(obj_name)
     }
 
     pub fn validate_simple_type(&self, typ: &SimpleType) -> bool {
@@ -154,7 +154,7 @@ impl GlobalEnv {
     /// Resolve an AST type to an ExprType using the current context (objects + custom types)
     pub fn resolve_type(&self, typ: &Spanned<crate::ast::TypeName>) -> Result<ExprType, SemError> {
         let object_types: std::collections::HashSet<String> =
-            self.defined_types.keys().cloned().collect();
+            self.object_types.keys().cloned().collect();
         let custom_type_names: std::collections::HashSet<String> =
             self.custom_types.keys().cloned().collect();
         ExprType::from_ast(typ.clone(), &object_types, &custom_type_names)
@@ -229,7 +229,7 @@ impl GlobalEnv {
     }
 
     pub fn get_types(&self) -> &HashMap<String, ObjectFields> {
-        &self.defined_types
+        &self.object_types
     }
 
     fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
@@ -339,7 +339,7 @@ impl GlobalEnv {
     }
 
     fn lookup_field(&self, obj_type: &str, field: &str) -> Option<ExprType> {
-        self.defined_types.get(obj_type)?.get(field).cloned()
+        self.object_types.get(obj_type)?.get(field).cloned()
     }
 }
 
@@ -3749,7 +3749,7 @@ impl GlobalEnv {
         GlobalEnvError,
     > {
         let mut temp_env = GlobalEnv {
-            defined_types,
+            object_types: defined_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
             external_variables: variables
@@ -3760,7 +3760,7 @@ impl GlobalEnv {
             variable_lists: HashMap::new(),
         };
 
-        for (object_type, field_desc) in &temp_env.defined_types {
+        for (object_type, field_desc) in &temp_env.object_types {
             for (field, typ) in field_desc {
                 if !temp_env.validate_type(typ) {
                     return Err(GlobalEnvError::UnknownTypeInField {
@@ -4244,7 +4244,7 @@ impl GlobalEnv {
         }
 
         // Check if type name shadows an object type
-        if self.defined_types.contains_key(&name.node) {
+        if self.object_types.contains_key(&name.node) {
             errors.push(SemError::TypeShadowsObject {
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -4280,7 +4280,7 @@ impl GlobalEnv {
 
         // Build the context for type resolution - all type names are now known
         let object_types: std::collections::HashSet<String> =
-            self.defined_types.keys().cloned().collect();
+            self.object_types.keys().cloned().collect();
         let custom_type_names: std::collections::HashSet<String> =
             self.custom_types.keys().cloned().collect();
 
@@ -4324,7 +4324,7 @@ impl GlobalEnv {
         }
 
         // Check for shadowing existing object or custom types
-        if self.defined_types.contains_key(&name.node) {
+        if self.object_types.contains_key(&name.node) {
             errors.push(SemError::TypeShadowsObject {
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -4382,7 +4382,7 @@ impl GlobalEnv {
 
         // Build the context for type resolution
         let object_types: std::collections::HashSet<String> =
-            self.defined_types.keys().cloned().collect();
+            self.object_types.keys().cloned().collect();
         let custom_type_names: std::collections::HashSet<String> =
             self.custom_types.keys().cloned().collect();
 
