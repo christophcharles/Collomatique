@@ -149,7 +149,7 @@ pub fn parse_docstring_line(
                 types: vec![Spanned::new(
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::String,
+                        inner: SimpleTypeName::Other("String".to_string()),
                     },
                     Span {
                         start: expr_span_start,
@@ -308,14 +308,9 @@ pub struct MaybeTypeName {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimpleTypeName {
-    Never,
-    LinExpr,
-    Constraint,
-    None,
-    Int,
-    Bool,
-    String,
-    Other(String), // At parse time, we don't know if it's an object or custom type
+    /// Named type - could be a built-in (Int, Bool, etc.), object, or custom type.
+    /// Resolution happens in the semantics layer.
+    Other(String),
     /// Qualified type name like Result::Ok - (root, variant)
     Qualified(String, String),
     EmptyList,
@@ -1126,18 +1121,10 @@ impl SimpleTypeName {
                     }
                 }
 
-                // Otherwise, it's a simple type name
+                // It's a simple type name (built-in or user-defined)
+                // Resolution to Int, Bool, LinExpr, etc. happens in semantics
                 let type_name = pair.as_str();
-                match type_name {
-                    "None" => Ok(SimpleTypeName::None),
-                    "Int" => Ok(SimpleTypeName::Int),
-                    "Bool" => Ok(SimpleTypeName::Bool),
-                    "LinExpr" => Ok(SimpleTypeName::LinExpr),
-                    "Constraint" => Ok(SimpleTypeName::Constraint),
-                    "String" => Ok(SimpleTypeName::String),
-                    "Never" => Ok(SimpleTypeName::Never),
-                    _ => Ok(SimpleTypeName::Other(type_name.to_string())),
-                }
+                Ok(SimpleTypeName::Other(type_name.to_string()))
             }
             _ => Err(AstError::UnexpectedRule {
                 expected: "primitive_type",
@@ -1653,7 +1640,6 @@ impl Expr {
             Rule::qualified_unit_value => Self::from_qualified_unit_value(inner),
             Rule::complex_type_cast => Self::from_complex_type_cast(inner),
             Rule::struct_type_cast => Self::from_struct_type_cast(inner),
-            Rule::primitive_type_cast => Self::from_primitive_type_cast(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::string_literal => Self::from_string_literal(inner),
             Rule::boolean => Self::from_boolean(inner),
@@ -2446,57 +2432,6 @@ impl Expr {
         }
 
         Ok(Expr::StructTypeCast { type_name, fields })
-    }
-
-    fn from_primitive_type_cast(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // primitive_type_cast = { primitive_type_keyword ~ "(" ~ args? ~ ")" }
-        // primitive_type_keyword = { "LinExpr" | "Constraint" | "String" | "Bool" | "Int" }
-        let span = Span::from_pest(&pair);
-        let mut inner = pair.into_inner();
-
-        // First is the primitive_type_keyword
-        let keyword_pair = inner
-            .next()
-            .ok_or(AstError::MissingTypeName(span.clone()))?;
-        let keyword_span = Span::from_pest(&keyword_pair);
-        let keyword = keyword_pair.as_str();
-
-        // Convert keyword to SimpleTypeName
-        let simple_type = match keyword {
-            "Int" => SimpleTypeName::Int,
-            "Bool" => SimpleTypeName::Bool,
-            "String" => SimpleTypeName::String,
-            "LinExpr" => SimpleTypeName::LinExpr,
-            "Constraint" => SimpleTypeName::Constraint,
-            _ => {
-                return Err(AstError::UnexpectedRule {
-                    expected: "Int, Bool, String, LinExpr, or Constraint",
-                    found: keyword_pair.as_rule(),
-                    span: keyword_span,
-                })
-            }
-        };
-
-        let maybe_type = MaybeTypeName {
-            maybe_count: 0,
-            inner: simple_type,
-        };
-        let typ = Spanned::new(
-            TypeName {
-                types: vec![Spanned::new(maybe_type, keyword_span.clone())],
-            },
-            keyword_span,
-        );
-
-        // Parse args
-        let mut args = Vec::new();
-        for element in inner {
-            if element.as_rule() == Rule::args {
-                args = parse_args(element)?;
-            }
-        }
-
-        Ok(Expr::ComplexTypeCast { typ, args })
     }
 
     fn from_boolean(pair: Pair<Rule>) -> Result<Self, AstError> {

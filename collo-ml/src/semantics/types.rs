@@ -447,14 +447,20 @@ impl TryFrom<crate::ast::SimpleTypeName> for SimpleType {
     fn try_from(value: crate::ast::SimpleTypeName) -> Result<Self, Self::Error> {
         use crate::ast::SimpleTypeName;
         match value {
-            SimpleTypeName::Never => Ok(SimpleType::Never),
-            SimpleTypeName::None => Ok(SimpleType::None),
-            SimpleTypeName::Bool => Ok(SimpleType::Bool),
-            SimpleTypeName::Int => Ok(SimpleType::Int),
-            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
-            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
-            SimpleTypeName::String => Ok(SimpleType::String),
-            SimpleTypeName::Other(name) => Ok(SimpleType::Object(name)),
+            SimpleTypeName::Other(name) => {
+                // Check if this is a built-in type name
+                match name.as_str() {
+                    "Int" => Ok(SimpleType::Int),
+                    "Bool" => Ok(SimpleType::Bool),
+                    "None" => Ok(SimpleType::None),
+                    "Never" => Ok(SimpleType::Never),
+                    "String" => Ok(SimpleType::String),
+                    "LinExpr" => Ok(SimpleType::LinExpr),
+                    "Constraint" => Ok(SimpleType::Constraint),
+                    // Not a built-in type, treat as Object
+                    _ => Ok(SimpleType::Object(name)),
+                }
+            }
             SimpleTypeName::Qualified(root, variant) => Ok(SimpleType::Custom(root, Some(variant))),
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(inner.try_into()?)),
@@ -562,20 +568,26 @@ impl SimpleType {
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
-            SimpleTypeName::Never => Ok(SimpleType::Never),
-            SimpleTypeName::None => Ok(SimpleType::None),
-            SimpleTypeName::Bool => Ok(SimpleType::Bool),
-            SimpleTypeName::Int => Ok(SimpleType::Int),
-            SimpleTypeName::LinExpr => Ok(SimpleType::LinExpr),
-            SimpleTypeName::Constraint => Ok(SimpleType::Constraint),
-            SimpleTypeName::String => Ok(SimpleType::String),
             SimpleTypeName::Other(name) => {
-                if object_types.contains(&name) {
-                    Ok(SimpleType::Object(name))
-                } else if custom_types.contains(&name) {
-                    Ok(SimpleType::Custom(name, None))
-                } else {
-                    Err(TypeResolutionError::UnknownType(name))
+                // Check if this is a built-in type name first
+                match name.as_str() {
+                    "Int" => Ok(SimpleType::Int),
+                    "Bool" => Ok(SimpleType::Bool),
+                    "None" => Ok(SimpleType::None),
+                    "Never" => Ok(SimpleType::Never),
+                    "String" => Ok(SimpleType::String),
+                    "LinExpr" => Ok(SimpleType::LinExpr),
+                    "Constraint" => Ok(SimpleType::Constraint),
+                    // Not a built-in type, resolve as Object or Custom
+                    _ => {
+                        if object_types.contains(&name) {
+                            Ok(SimpleType::Object(name))
+                        } else if custom_types.contains(&name) {
+                            Ok(SimpleType::Custom(name, None))
+                        } else {
+                            Err(TypeResolutionError::UnknownType(name))
+                        }
+                    }
                 }
             }
             SimpleTypeName::Qualified(root, variant) => {

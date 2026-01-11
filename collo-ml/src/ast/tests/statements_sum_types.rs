@@ -19,7 +19,7 @@ fn parse_let_with_option_primitive_types() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 1,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -66,7 +66,7 @@ fn parse_let_with_option_list_type() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                 }
@@ -95,7 +95,7 @@ fn parse_let_with_list_of_option_type() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 1,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                 }
@@ -119,7 +119,7 @@ fn parse_let_with_option_parameter() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 1,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -150,7 +150,7 @@ fn parse_let_with_nested_option_list() {
                                 level2_typename.node.types[0].node,
                                 MaybeTypeName {
                                     maybe_count: 0,
-                                    inner: SimpleTypeName::Int,
+                                    inner: SimpleTypeName::Other("Int".to_string()),
                                 }
                             );
                         }
@@ -181,14 +181,14 @@ fn parse_let_with_simple_sum_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
         }
@@ -209,21 +209,21 @@ fn parse_let_with_multi_variant_sum_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[2].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::LinExpr,
+                    inner: SimpleTypeName::Other("LinExpr".to_string()),
                 }
             );
         }
@@ -244,14 +244,14 @@ fn parse_let_with_sum_type_including_none() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::None,
+                    inner: SimpleTypeName::Other("None".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -300,14 +300,14 @@ fn parse_let_with_sum_type_parameter() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 params[0].typ.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
         }
@@ -333,14 +333,14 @@ fn parse_let_with_list_of_sum_type() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                     assert_eq!(
                         inner_typename.node.types[1].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Bool,
+                            inner: SimpleTypeName::Other("Bool".to_string()),
                         }
                     );
                 }
@@ -371,7 +371,7 @@ fn parse_let_with_sum_of_list_types() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                 }
@@ -388,7 +388,7 @@ fn parse_let_with_sum_of_list_types() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Bool,
+                            inner: SimpleTypeName::Other("Bool".to_string()),
                         }
                     );
                 }
@@ -417,14 +417,14 @@ fn parse_let_with_option_in_sum_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 1, // ?Int
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0, // Bool
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
         }
@@ -450,14 +450,14 @@ fn parse_let_with_option_of_list_of_sum() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                     assert_eq!(
                         inner_typename.node.types[1].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Bool,
+                            inner: SimpleTypeName::Other("Bool".to_string()),
                         }
                     );
                 }
@@ -486,7 +486,7 @@ fn parse_let_with_multiple_question_marks() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 2, // Two question marks!
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -529,14 +529,14 @@ fn parse_let_with_duplicate_types_in_sum() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 output_type.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -575,14 +575,14 @@ fn parse_let_with_complex_nested_sum_and_option() {
                                 first_inner_typename.node.types[0].node,
                                 MaybeTypeName {
                                     maybe_count: 0,
-                                    inner: SimpleTypeName::Int,
+                                    inner: SimpleTypeName::Other("Int".to_string()),
                                 }
                             );
                             assert_eq!(
                                 first_inner_typename.node.types[1].node,
                                 MaybeTypeName {
                                     maybe_count: 0,
-                                    inner: SimpleTypeName::Bool,
+                                    inner: SimpleTypeName::Other("Bool".to_string()),
                                 }
                             );
                         }
@@ -599,7 +599,7 @@ fn parse_let_with_complex_nested_sum_and_option() {
                                 second_inner_typename.node.types[0].node,
                                 MaybeTypeName {
                                     maybe_count: 0,
-                                    inner: SimpleTypeName::LinExpr,
+                                    inner: SimpleTypeName::Other("LinExpr".to_string()),
                                 }
                             );
                         }
@@ -629,7 +629,7 @@ fn parse_let_with_multiple_option_and_sum_params() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 1,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
 
@@ -639,14 +639,14 @@ fn parse_let_with_multiple_option_and_sum_params() {
                 params[1].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(
                 params[1].typ.node.types[1].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
 

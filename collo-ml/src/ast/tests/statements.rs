@@ -41,7 +41,7 @@ fn parse_simple_let_statement() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(output_type.node.types.len(), 1);
@@ -49,7 +49,7 @@ fn parse_simple_let_statement() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::LinExpr,
+                    inner: SimpleTypeName::Other("LinExpr".to_string()),
                 }
             );
             assert!(matches!(body.node, Expr::Number(5)));
@@ -75,7 +75,7 @@ fn parse_let_with_multiple_params() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
             assert_eq!(params[1].name.node, "y");
@@ -84,7 +84,7 @@ fn parse_let_with_multiple_params() {
                 params[1].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
             assert_eq!(params[2].name.node, "z");
@@ -116,7 +116,7 @@ fn parse_let_with_string_param() {
                 params[0].typ.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::String,
+                    inner: SimpleTypeName::Other("String".to_string()),
                 }
             );
         }

@@ -501,7 +501,7 @@ fn parse_explicit_type_annotation() {
                     typ.node.types[0].node,
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::LinExpr,
+                        inner: SimpleTypeName::Other("LinExpr".to_string()),
                     }
                 );
             }
@@ -526,7 +526,7 @@ fn parse_explicit_type_with_number() {
                     typ.node.types[0].node,
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::Int,
+                        inner: SimpleTypeName::Other("Int".to_string()),
                     }
                 );
             }
@@ -554,7 +554,7 @@ fn parse_explicit_type_with_list() {
                             typ_name.node.types[0].node,
                             MaybeTypeName {
                                 maybe_count: 0,
-                                inner: SimpleTypeName::Int,
+                                inner: SimpleTypeName::Other("Int".to_string()),
                             }
                         );
                     }
@@ -585,7 +585,7 @@ fn parse_explicit_type_for_empty_typed_list() {
                             typ_name.node.types[0].node,
                             MaybeTypeName {
                                 maybe_count: 0,
-                                inner: SimpleTypeName::Int,
+                                inner: SimpleTypeName::Other("Int".to_string()),
                             }
                         );
                     }
@@ -599,29 +599,24 @@ fn parse_explicit_type_for_empty_typed_list() {
 }
 
 // ============= Type Conversions (C-like syntax) =============
+// Note: Built-in type casts like LinExpr(x) and Int(5) are now parsed as FnCall
+// and handled as type casts in the semantics layer, not the parser.
 
 #[test]
 fn parse_type_conversion_annotation() {
-    // C-like syntax: LinExpr(x) instead of x into LinExpr
+    // LinExpr(x) is now parsed as FnCall (resolved to type cast in semantics)
     let input = "let f() -> LinExpr = LinExpr(x);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ComplexTypeCast { typ, args } => {
-                assert_eq!(typ.node.types.len(), 1);
-                assert_eq!(
-                    typ.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::LinExpr,
-                    }
-                );
+            Expr::FnCall { name, args } => {
+                assert_eq!(name.node, "LinExpr");
                 assert_eq!(args.len(), 1);
                 assert!(matches!(args[0].node, Expr::Ident(_)));
             }
-            _ => panic!("Expected ComplexTypeCast, got {:?}", body.node),
+            _ => panic!("Expected FnCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -629,26 +624,19 @@ fn parse_type_conversion_annotation() {
 
 #[test]
 fn parse_type_conversion_with_number() {
-    // C-like syntax: Int(5) instead of 5 into Int
+    // Int(5) is now parsed as FnCall (resolved to type cast in semantics)
     let input = "let f() -> Int = Int(5);";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ComplexTypeCast { typ, args } => {
-                assert_eq!(typ.node.types.len(), 1);
-                assert_eq!(
-                    typ.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Int,
-                    }
-                );
+            Expr::FnCall { name, args } => {
+                assert_eq!(name.node, "Int");
                 assert_eq!(args.len(), 1);
                 assert!(matches!(args[0].node, Expr::Number(5)));
             }
-            _ => panic!("Expected ComplexTypeCast, got {:?}", body.node),
+            _ => panic!("Expected FnCall, got {:?}", body.node),
         },
         _ => panic!("Expected Let statement"),
     }
@@ -673,7 +661,7 @@ fn parse_type_conversion_with_list() {
                             typ_name.node.types[0].node,
                             MaybeTypeName {
                                 maybe_count: 0,
-                                inner: SimpleTypeName::Int,
+                                inner: SimpleTypeName::Other("Int".to_string()),
                             }
                         );
                     }

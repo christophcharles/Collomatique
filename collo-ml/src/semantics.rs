@@ -2536,12 +2536,63 @@ impl LocalEnv {
                 Some(SimpleType::List(SimpleType::LinExpr.into()).into())
             }
 
-            // ========== Function Calls / Custom Type Casts ==========
-            // FnCall can be either a function call or a custom type cast
-            // We disambiguate by checking if the name is a custom type
+            // ========== Function Calls / Type Casts ==========
+            // FnCall can be a function call, a built-in type cast, or a custom type cast
+            // We disambiguate by checking if the name is a built-in type or custom type
             Expr::FnCall { name, args } => {
-                // Check if this is a custom type cast
-                if let Some(target_type) = global_env.custom_types.get(&name.node) {
+                // Check if this is a built-in type cast
+                let builtin_type = match name.node.as_str() {
+                    "Int" => Some(SimpleType::Int),
+                    "Bool" => Some(SimpleType::Bool),
+                    "LinExpr" => Some(SimpleType::LinExpr),
+                    "Constraint" => Some(SimpleType::Constraint),
+                    "String" => Some(SimpleType::String),
+                    "None" => Some(SimpleType::None),
+                    "Never" => Some(SimpleType::Never),
+                    _ => None,
+                };
+
+                if let Some(target_simple_type) = builtin_type {
+                    // Built-in type casts require exactly 1 argument
+                    if args.len() != 1 {
+                        errors.push(SemError::ArgumentCountMismatch {
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            expected: 1,
+                            found: args.len(),
+                        });
+                        return Some(target_simple_type.into());
+                    }
+
+                    // Check the argument type and validate conversion
+                    let arg = &args[0];
+                    let arg_type = self.check_expr(
+                        global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings,
+                    );
+
+                    if let Some(inferred) = arg_type {
+                        // Check if the argument can be converted to the target type
+                        // Same logic as ComplexTypeCast: try direct conversion and custom type conversion
+                        if let Some(concrete_target) = target_simple_type.clone().into_concrete() {
+                            let can_convert = inferred.can_convert_to(&concrete_target)
+                                || self.can_convert_with_custom_types(
+                                    global_env,
+                                    &inferred,
+                                    &concrete_target,
+                                );
+
+                            if !can_convert {
+                                errors.push(SemError::ImpossibleConversion {
+                                    span: arg.span.clone(),
+                                    found: inferred,
+                                    target: concrete_target,
+                                });
+                            }
+                        }
+                    }
+
+                    Some(target_simple_type.into())
+                } else if let Some(target_type) = global_env.custom_types.get(&name.node) {
                     // This is a custom type cast: TypeName(value)
                     // Get the underlying type of the custom type
                     let underlying_type = target_type.clone();
@@ -3556,7 +3607,9 @@ impl GlobalEnv {
         // ====================================================================
         for statement in &file.statements {
             match &statement.node {
-                crate::ast::Statement::TypeDecl { name, underlying, .. } => {
+                crate::ast::Statement::TypeDecl {
+                    name, underlying, ..
+                } => {
                     temp_env.expand_with_type_decl_pass2(name, underlying, &mut errors);
                 }
                 crate::ast::Statement::EnumDecl { name, variants, .. } => {

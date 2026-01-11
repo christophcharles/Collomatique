@@ -1180,8 +1180,32 @@ impl<T: EvalObject> LocalEnv<T> {
                 ExprValue::List(collection)
             }
             Expr::FnCall { name, args } => {
-                // Check if this is a custom type cast
-                if eval_history
+                // Check if this is a built-in type cast
+                let builtin_type = match name.node.as_str() {
+                    "Int" => Some(SimpleType::Int),
+                    "Bool" => Some(SimpleType::Bool),
+                    "LinExpr" => Some(SimpleType::LinExpr),
+                    "Constraint" => Some(SimpleType::Constraint),
+                    "String" => Some(SimpleType::String),
+                    "None" => Some(SimpleType::None),
+                    "Never" => Some(SimpleType::Never),
+                    _ => None,
+                };
+
+                if let Some(target_type) = builtin_type {
+                    // Semantics already validated exactly 1 argument
+                    assert!(
+                        args.len() == 1,
+                        "Built-in type cast should have exactly 1 argument"
+                    );
+                    let value = self.eval_expr(eval_history, &args[0])?;
+                    let concrete_target = target_type
+                        .into_concrete()
+                        .expect("Built-in types are always concrete");
+                    value
+                        .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
+                        .expect("Semantic analysis should have validated conversion")
+                } else if eval_history
                     .ast
                     .global_env
                     .get_custom_types()

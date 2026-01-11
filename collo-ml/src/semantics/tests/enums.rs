@@ -138,18 +138,18 @@ fn enum_unknown_variant() {
 }
 
 #[test]
-fn enum_root_shadows_primitive_rejected() {
-    // Note: Primitive type names as enum names fail at parse time, not semantic time
-    // because the grammar uses `ident` which explicitly excludes reserved keywords.
-    // This is the correct behavior - we test that it rejects by checking parse fails.
+fn enum_root_shadows_primitive_allowed() {
+    // Note: Primitive type names (Int, Bool, etc.) are no longer reserved keywords.
+    // They are resolved to built-in types in semantics, but can be shadowed by
+    // user-defined types. This test verifies parsing succeeds.
     use crate::parser::{ColloMLParser, Rule};
     use pest::Parser;
 
     let input = "enum Int = A | B;";
     let result = ColloMLParser::parse(Rule::file, input);
     assert!(
-        result.is_err(),
-        "Should reject enum name that shadows primitive at parse time"
+        result.is_ok(),
+        "Should allow enum name that shadows built-in type"
     );
 }
 

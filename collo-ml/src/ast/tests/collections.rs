@@ -342,7 +342,7 @@ fn parse_global_collection_with_builtin_type() {
                     name.node.types[0].node,
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::Int,
+                        inner: SimpleTypeName::Other("Int".to_string()),
                     }
                 );
             }

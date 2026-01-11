@@ -17,7 +17,7 @@ fn parse_int_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Int,
+                    inner: SimpleTypeName::Other("Int".to_string()),
                 }
             );
         }
@@ -38,7 +38,7 @@ fn parse_bool_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Bool,
+                    inner: SimpleTypeName::Other("Bool".to_string()),
                 }
             );
         }
@@ -59,7 +59,7 @@ fn parse_linexpr_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::LinExpr,
+                    inner: SimpleTypeName::Other("LinExpr".to_string()),
                 }
             );
         }
@@ -80,7 +80,7 @@ fn parse_constraint_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::Constraint,
+                    inner: SimpleTypeName::Other("Constraint".to_string()),
                 }
             );
         }
@@ -101,7 +101,7 @@ fn parse_string_type() {
                 output_type.node.types[0].node,
                 MaybeTypeName {
                     maybe_count: 0,
-                    inner: SimpleTypeName::String,
+                    inner: SimpleTypeName::Other("String".to_string()),
                 }
             );
         }
@@ -149,7 +149,7 @@ fn parse_simple_list_type() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Int,
+                            inner: SimpleTypeName::Other("Int".to_string()),
                         }
                     );
                 }
@@ -177,7 +177,7 @@ fn parse_list_of_bool() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Bool,
+                            inner: SimpleTypeName::Other("Bool".to_string()),
                         }
                     );
                 }
@@ -236,7 +236,7 @@ fn parse_nested_list_type() {
                                 inner_typename.node.types[0].node,
                                 MaybeTypeName {
                                     maybe_count: 0,
-                                    inner: SimpleTypeName::Int,
+                                    inner: SimpleTypeName::Other("Int".to_string()),
                                 }
                             );
                         }
@@ -273,7 +273,7 @@ fn parse_deeply_nested_list_type() {
                                         level3_typename.node.types[0].node,
                                         MaybeTypeName {
                                             maybe_count: 0,
-                                            inner: SimpleTypeName::Bool,
+                                            inner: SimpleTypeName::Other("Bool".to_string()),
                                         }
                                     );
                                 }
@@ -307,7 +307,7 @@ fn parse_list_of_linexpr() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::LinExpr,
+                            inner: SimpleTypeName::Other("LinExpr".to_string()),
                         }
                     );
                 }
@@ -335,7 +335,7 @@ fn parse_list_of_constraint() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::Constraint,
+                            inner: SimpleTypeName::Other("Constraint".to_string()),
                         }
                     );
                 }
@@ -363,7 +363,7 @@ fn parse_list_of_string() {
                         inner_typename.node.types[0].node,
                         MaybeTypeName {
                             maybe_count: 0,
-                            inner: SimpleTypeName::String,
+                            inner: SimpleTypeName::Other("String".to_string()),
                         }
                     );
                 }

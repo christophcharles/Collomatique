@@ -155,10 +155,7 @@ fn qualified_var_call_in_expression() {
 
 #[test]
 fn qualified_var_list_call_in_expression() {
-    let cases = vec![
-        "|mod::$[VarList](x)|",
-        "mod::$[VarList](x)[0]!",
-    ];
+    let cases = vec!["|mod::$[VarList](x)|", "mod::$[VarList](x)[0]!"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);

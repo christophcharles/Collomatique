@@ -545,10 +545,11 @@ fn type_annotation_realistic_sum_type_examples() {
 
 #[test]
 fn type_annotation_rejects_malformed_sum_types() {
+    // Note: "x as Int || Bool" now parses as "(x as Int) || Bool" (logical OR with identifier)
+    // This is syntactically valid but would fail in semantics.
     let cases = vec![
         "x as Int |",        // trailing |
         "x as | Int",        // leading |
-        "x as Int || Bool",  // double ||
         "x as (Int | Bool)", // parentheses in type (not supported)
     ];
     for case in cases {
