@@ -3802,7 +3802,7 @@ impl TypeInfo {
 
 impl GlobalEnv {
     pub fn new(
-        defined_types: HashMap<String, ObjectFields>,
+        object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
         file: &crate::ast::File,
     ) -> Result<
@@ -3816,7 +3816,7 @@ impl GlobalEnv {
         GlobalEnvError,
     > {
         let mut temp_env = GlobalEnv {
-            object_types: defined_types,
+            object_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
             external_variables: variables
