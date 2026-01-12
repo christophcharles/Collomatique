@@ -52,7 +52,6 @@ fn module_b_uses_public_function_from_module_a() {
 }
 
 #[test]
-#[ignore = "TODO: Private function visibility check not implemented in resolve_path"]
 fn module_b_uses_private_function_from_module_a_should_fail() {
     let mod_a = r#"
         let private_add(x: Int, y: Int) -> Int = x + y;
@@ -174,7 +173,6 @@ fn module_b_uses_public_type_in_function_definition() {
 }
 
 #[test]
-#[ignore = "TODO: Private type alias visibility check not implemented"]
 fn module_b_uses_private_type_in_function_definition_should_fail() {
     let mod_a = r#"
         type PrivateInt = Int;

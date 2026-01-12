@@ -45,6 +45,12 @@ pub struct VariableDesc {
     pub referenced_fn: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeDesc {
+    pub underlying: ExprType,
+    pub public: bool,
+}
+
 /// A module with its name and AST
 pub struct Module {
     pub name: String,
@@ -85,7 +91,7 @@ impl Symbol {
 pub struct GlobalEnv {
     pub module_names: Vec<String>,
     object_types: HashMap<String, ObjectFields>, // external, no module
-    custom_types: HashMap<(String, String), ExprType>, // (module, name) → type
+    custom_types: HashMap<(String, String), TypeDesc>, // (module, name) → desc
     functions: HashMap<(String, String), FunctionDesc>, // (module, name) → desc
     external_variables: HashMap<String, ArgsType>, // external, no module
     internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
@@ -202,10 +208,11 @@ impl GlobalEnv {
     pub fn get_custom_type_underlying(&self, module: &str, name: &str) -> Option<&ExprType> {
         self.custom_types
             .get(&(module.to_string(), name.to_string()))
+            .map(|desc| &desc.underlying)
     }
 
     /// Get all custom types
-    pub fn get_custom_types(&self) -> &HashMap<(String, String), ExprType> {
+    pub fn get_custom_types(&self) -> &HashMap<(String, String), TypeDesc> {
         &self.custom_types
     }
 
@@ -4091,12 +4098,22 @@ impl GlobalEnv {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 match &statement.node {
-                    crate::ast::Statement::TypeDecl { name, .. } => {
-                        temp_env.expand_with_type_decl_pass1(current_module, name, &mut errors);
+                    crate::ast::Statement::TypeDecl { public, name, .. } => {
+                        temp_env.expand_with_type_decl_pass1(
+                            current_module,
+                            *public,
+                            name,
+                            &mut errors,
+                        );
                     }
-                    crate::ast::Statement::EnumDecl { name, variants, .. } => {
+                    crate::ast::Statement::EnumDecl {
+                        public,
+                        name,
+                        variants,
+                    } => {
                         temp_env.expand_with_enum_decl_pass1(
                             current_module,
+                            *public,
                             name,
                             variants,
                             &mut errors,
@@ -4430,11 +4447,14 @@ impl GlobalEnv {
         }
 
         // Collect types to add
+        // Skip private types when importing from another module
         let types_to_add: Vec<_> = self
             .custom_types
-            .keys()
-            .filter(|(mod_name, _)| mod_name == source_module)
-            .map(|(mod_name, type_name)| (mod_name.clone(), type_name.clone()))
+            .iter()
+            .filter(|((mod_name, _), type_desc)| {
+                mod_name == source_module && (import_span.is_none() || type_desc.public)
+            })
+            .map(|((mod_name, type_name), _)| (mod_name.clone(), type_name.clone()))
             .collect();
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
@@ -4471,11 +4491,14 @@ impl GlobalEnv {
         let mut conflicts: Vec<(String, String)> = Vec::new();
 
         // Collect functions to add (to avoid borrow conflict)
+        // Skip private functions when importing from another module
         let fns_to_add: Vec<_> = self
             .functions
-            .keys()
-            .filter(|(mod_name, _)| mod_name == source_module)
-            .map(|(mod_name, fn_name)| (mod_name.clone(), fn_name.clone()))
+            .iter()
+            .filter(|((mod_name, _), func_desc)| {
+                mod_name == source_module && (import_span.is_none() || func_desc.public)
+            })
+            .map(|((mod_name, fn_name), _)| (mod_name.clone(), fn_name.clone()))
             .collect();
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
@@ -4512,11 +4535,14 @@ impl GlobalEnv {
         let mut conflicts: Vec<(String, String)> = Vec::new();
 
         // Collect internal variables to add
+        // Skip private variables when importing from another module
         let vars_to_add: Vec<_> = self
             .internal_variables
-            .keys()
-            .filter(|(mod_name, _)| mod_name == source_module)
-            .map(|(mod_name, var_name)| (mod_name.clone(), var_name.clone()))
+            .iter()
+            .filter(|((mod_name, _), var_desc)| {
+                mod_name == source_module && (import_span.is_none() || var_desc.public)
+            })
+            .map(|((mod_name, var_name), _)| (mod_name.clone(), var_name.clone()))
             .collect();
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
@@ -4530,11 +4556,14 @@ impl GlobalEnv {
         }
 
         // Collect variable lists to add
+        // Skip private variable lists when importing from another module
         let var_lists_to_add: Vec<_> = self
             .variable_lists
-            .keys()
-            .filter(|(mod_name, _)| mod_name == source_module)
-            .map(|(mod_name, var_name)| (mod_name.clone(), var_name.clone()))
+            .iter()
+            .filter(|((mod_name, _), var_desc)| {
+                mod_name == source_module && (import_span.is_none() || var_desc.public)
+            })
+            .map(|((mod_name, var_name), _)| (mod_name.clone(), var_name.clone()))
             .collect();
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
@@ -4886,6 +4915,7 @@ impl GlobalEnv {
     fn expand_with_type_decl_pass1(
         &mut self,
         current_module: &str,
+        public: bool,
         name: &Spanned<String>,
         errors: &mut Vec<SemError>,
     ) {
@@ -4921,8 +4951,13 @@ impl GlobalEnv {
         }
 
         // Register with placeholder - will be resolved in pass 2
-        self.custom_types
-            .insert(type_key, ExprType::simple(SimpleType::Never));
+        self.custom_types.insert(
+            type_key,
+            TypeDesc {
+                underlying: ExprType::simple(SimpleType::Never),
+                public,
+            },
+        );
     }
 
     /// Pass 2: Resolve underlying type and check for unguarded recursion
@@ -4935,9 +4970,10 @@ impl GlobalEnv {
     ) {
         // Skip if pass 1 failed (type wasn't registered)
         let type_key = (current_module.to_string(), name.node.clone());
-        if !self.custom_types.contains_key(&type_key) {
-            return;
-        }
+        let public = match self.custom_types.get(&type_key) {
+            Some(desc) => desc.public,
+            None => return,
+        };
 
         // Resolve the underlying type using the symbol table
         let underlying_type = match ExprType::from_ast(underlying.clone(), current_module, self) {
@@ -4959,13 +4995,20 @@ impl GlobalEnv {
         }
 
         // Update the placeholder with the actual type
-        self.custom_types.insert(type_key, underlying_type);
+        self.custom_types.insert(
+            type_key,
+            TypeDesc {
+                underlying: underlying_type,
+                public,
+            },
+        );
     }
 
     /// Pass 1 for enum declarations: Register the enum name and all variant names with placeholders
     fn expand_with_enum_decl_pass1(
         &mut self,
         current_module: &str,
+        public: bool,
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
@@ -5027,16 +5070,26 @@ impl GlobalEnv {
         }
 
         // Register the root enum type with a placeholder
-        self.custom_types
-            .insert(type_key, ExprType::simple(SimpleType::Never));
+        self.custom_types.insert(
+            type_key,
+            TypeDesc {
+                underlying: ExprType::simple(SimpleType::Never),
+                public,
+            },
+        );
 
-        // Register all variant types with placeholders
+        // Register all variant types with placeholders (variants inherit parent visibility)
         for variant in variants {
             let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
             let variant_key = (current_module.to_string(), qualified_name.clone());
 
-            self.custom_types
-                .insert(variant_key, ExprType::simple(SimpleType::Never));
+            self.custom_types.insert(
+                variant_key,
+                TypeDesc {
+                    underlying: ExprType::simple(SimpleType::Never),
+                    public,
+                },
+            );
         }
     }
 
@@ -5053,9 +5106,10 @@ impl GlobalEnv {
 
         // Skip if pass 1 failed
         let type_key = (current_module.to_string(), name.node.clone());
-        if !self.custom_types.contains_key(&type_key) {
-            return;
-        }
+        let public = match self.custom_types.get(&type_key) {
+            Some(desc) => desc.public,
+            None => return,
+        };
 
         // Process each variant and collect their SimpleTypes for the root enum
         let mut variant_simple_types = Vec::new();
@@ -5136,7 +5190,13 @@ impl GlobalEnv {
             }
 
             // Update the variant's underlying type
-            self.custom_types.insert(variant_key, underlying_type);
+            self.custom_types.insert(
+                variant_key,
+                TypeDesc {
+                    underlying: underlying_type,
+                    public,
+                },
+            );
 
             // Add this variant to the list for the root enum type
             variant_simple_types.push(SimpleType::Custom(
@@ -5149,7 +5209,13 @@ impl GlobalEnv {
         // Build the root enum type as a union of all variants
         if !variant_simple_types.is_empty() {
             let enum_type = ExprType::from_variants(variant_simple_types);
-            self.custom_types.insert(type_key, enum_type);
+            self.custom_types.insert(
+                type_key,
+                TypeDesc {
+                    underlying: enum_type,
+                    public,
+                },
+            );
         }
     }
 
@@ -5187,13 +5253,13 @@ impl GlobalEnv {
                 // Check if this custom type transitively has unguarded reference
                 // But only if it's already resolved (not a placeholder)
                 let type_key = (module.clone(), key);
-                if let Some(underlying) = self.custom_types.get(&type_key) {
+                if let Some(type_desc) = self.custom_types.get(&type_key) {
                     // Skip if it's still a placeholder (Never type used during pass 1)
                     let placeholder = ExprType::simple(SimpleType::Never);
-                    if *underlying == placeholder {
+                    if type_desc.underlying == placeholder {
                         false
                     } else {
-                        self.has_unguarded_reference(underlying, type_name)
+                        self.has_unguarded_reference(&type_desc.underlying, type_name)
                     }
                 } else {
                     false
