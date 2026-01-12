@@ -4449,11 +4449,8 @@ impl GlobalEnv {
             return;
         }
 
-        // Register the root enum type with a placeholder
-        self.custom_types
-            .insert(type_key, ExprType::simple(SimpleType::Never));
+        let mut variant_failure = false;
 
-        // Register all variant types with placeholders
         for variant in variants {
             let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
             let variant_key = (current_module.to_string(), qualified_name.clone());
@@ -4467,8 +4464,24 @@ impl GlobalEnv {
                     type_name: qualified_name.clone(),
                     span: variant.node.name.span.clone(),
                 });
+                variant_failure = true;
                 continue;
             }
+        }
+
+        // If any variant has failed, do not register type
+        if variant_failure {
+            return;
+        }
+
+        // Register the root enum type with a placeholder
+        self.custom_types
+            .insert(type_key, ExprType::simple(SimpleType::Never));
+
+        // Register all variant types with placeholders
+        for variant in variants {
+            let qualified_name = format!("{}::{}", name.node, variant.node.name.node);
+            let variant_key = (current_module.to_string(), qualified_name.clone());
 
             self.custom_types
                 .insert(variant_key, ExprType::simple(SimpleType::Never));
