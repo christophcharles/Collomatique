@@ -434,12 +434,21 @@ impl GlobalEnv {
 
 #[derive(Debug, Error, Clone)]
 pub enum SemError {
-    #[error("Unknown identifier \"{identifier}\" at {span:?}")]
-    UnknownIdentifer { identifier: String, span: Span },
-    #[error("Unknown variable \"{var}\" at {span:?}")]
-    UnknownVariable { var: String, span: Span },
-    #[error("Function type mismatch: \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
+    #[error("Unknown identifier \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnknownIdentifer {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
+    #[error("Unknown variable \"{var}\" in module \"{module}\" at {span:?}")]
+    UnknownVariable {
+        module: String,
+        var: String,
+        span: Span,
+    },
+    #[error("Function type mismatch in module \"{module}\": \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
     FunctionTypeMismatch {
+        module: String,
         identifier: String,
         span: Span,
         expected: FunctionType,
@@ -459,8 +468,12 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
-    #[error("Type {typ} at {span:?} is unknown")]
-    UnknownType { typ: String, span: Span },
+    #[error("Type {typ} in module \"{module}\" at {span:?} is unknown")]
+    UnknownType {
+        module: String,
+        typ: String,
+        span: Span,
+    },
     #[error("Multiple option markers '?' on {typ} (at {span:?}) - only one option marker '?' is allowed")]
     MultipleOptionMarkers { typ: SimpleType, span: Span },
     #[error("Type {typ} appears multiple time in the sum (at {span1:?} and {span2:?} in sum at {sum_span:?})")]
@@ -570,8 +583,12 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
-    #[error("Local variable \"{identifier}\" at {span:?} shadows a function with the same name")]
-    LocalIdentShadowsFunction { identifier: String, span: Span },
+    #[error("Local variable \"{identifier}\" in module \"{module}\" at {span:?} shadows a function with the same name")]
+    LocalIdentShadowsFunction {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
     #[error("Branch for match at {span:?} has a too large type ({found:?}). Maximum type is {expected:?}")]
     OverMatching {
         span: Span,
@@ -589,16 +606,32 @@ pub enum SemError {
     ListIndexNotInt { span: Span, found: ExprType },
     #[error("Cannot index into non-list type {typ} at {span:?}")]
     IndexOnNonList { typ: ExprType, span: Span },
-    #[error("Type \"{type_name}\" at {span:?} shadows a primitive type")]
-    TypeShadowsPrimitive { type_name: String, span: Span },
-    #[error("Type \"{type_name}\" at {span:?} shadows an object type")]
-    TypeShadowsObject { type_name: String, span: Span },
-    #[error("Type \"{type_name}\" at {span:?} shadows a previously defined custom type")]
-    TypeShadowsCustomType { type_name: String, span: Span },
+    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows a primitive type")]
+    TypeShadowsPrimitive {
+        module: String,
+        type_name: String,
+        span: Span,
+    },
+    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows an object type")]
+    TypeShadowsObject {
+        module: String,
+        type_name: String,
+        span: Span,
+    },
+    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows a previously defined custom type")]
+    TypeShadowsCustomType {
+        module: String,
+        type_name: String,
+        span: Span,
+    },
     #[error(
-        "Type \"{type_name}\" at {span:?} has unguarded recursion (must be inside a list or tuple)"
+        "Type \"{type_name}\" in module \"{module}\" at {span:?} has unguarded recursion (must be inside a list or tuple)"
     )]
-    UnguardedRecursiveType { type_name: String, span: Span },
+    UnguardedRecursiveType {
+        module: String,
+        type_name: String,
+        span: Span,
+    },
     #[error("Module \"{module}\" at {span:?} is unknown")]
     UnknownModule { module: String, span: Span },
     #[error("Cannot import own module at {span:?}")]
@@ -611,8 +644,12 @@ pub enum SemError {
     },
     #[error("Qualified module access at {span:?} is not yet implemented")]
     QualifiedAccessNotYetSupported { span: Span },
-    #[error("Primitive type \"{type_name}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))")]
-    PrimitiveTypeAsValue { type_name: String, span: Span },
+    #[error("Primitive type \"{type_name}\" in module \"{module}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))")]
+    PrimitiveTypeAsValue {
+        module: String,
+        type_name: String,
+        span: Span,
+    },
     #[error("Enum variant {enum_name}::{variant_name} at {span:?} requires arguments")]
     MissingEnumVariantArguments {
         enum_name: String,
@@ -625,45 +662,61 @@ pub enum SemError {
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SemWarning {
-    #[error("Identifier \"{identifier}\" at {span:?} shadows previous definition at {previous:?}")]
+    #[error("Identifier \"{identifier}\" in module \"{module}\" at {span:?} shadows previous definition at {previous:?}")]
     IdentifierShadowed {
+        module: String,
         identifier: String,
         span: Span,
         previous: Span,
     },
 
     #[error(
-        "Function \"{identifier}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+        "Function \"{identifier}\" in module \"{module}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
     )]
     FunctionNamingConvention {
+        module: String,
         identifier: String,
         span: Span,
         suggestion: String,
     },
 
     #[error(
-        "Variable \"{identifier}\" at {span:?} should use PascalCase (consider \"{suggestion}\")"
+        "Variable \"{identifier}\" in module \"{module}\" at {span:?} should use PascalCase (consider \"{suggestion}\")"
     )]
     VariableNamingConvention {
+        module: String,
         identifier: String,
         span: Span,
         suggestion: String,
     },
 
     #[error(
-        "Parameter \"{identifier}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+        "Parameter \"{identifier}\" in module \"{module}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
     )]
     ParameterNamingConvention {
+        module: String,
         identifier: String,
         span: Span,
         suggestion: String,
     },
-    #[error("Unused identifier \"{identifier}\" at {span:?}")]
-    UnusedIdentifier { identifier: String, span: Span },
-    #[error("Unused function \"{identifier}\" at {span:?}")]
-    UnusedFunction { identifier: String, span: Span },
-    #[error("Unused variable \"{identifier}\" at {span:?}")]
-    UnusedVariable { identifier: String, span: Span },
+    #[error("Unused identifier \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnusedIdentifier {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
+    #[error("Unused function \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnusedFunction {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
+    #[error("Unused variable \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnusedVariable {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -734,6 +787,7 @@ impl LocalEnv {
         for (name, (_typ, span, used)) in &self.pending_scope {
             if !*used {
                 warnings.push(SemWarning::UnusedIdentifier {
+                    module: self.current_module().to_string(),
                     identifier: name.clone(),
                     span: span.clone(),
                 });
@@ -765,6 +819,7 @@ impl LocalEnv {
         let fn_key = (self.current_module().to_string(), ident.to_string());
         if global_env.get_functions().contains_key(&fn_key) {
             return Err(SemError::LocalIdentShadowsFunction {
+                module: self.current_module().to_string(),
                 identifier: ident.to_string(),
                 span,
             });
@@ -773,6 +828,7 @@ impl LocalEnv {
         if let Some((_typ, old_span)) = self.lookup_ident(ident) {
             if !ident_can_be_shadowed(ident) {
                 warnings.push(SemWarning::IdentifierShadowed {
+                    module: self.current_module().to_string(),
                     identifier: ident.to_string(),
                     span: span.clone(),
                     previous: old_span,
@@ -843,9 +899,10 @@ pub enum PathResolutionError {
 }
 
 impl PathResolutionError {
-    pub fn into_sem_error(self) -> SemError {
+    pub fn into_sem_error(self, module: &str) -> SemError {
         match self {
             PathResolutionError::UnknownIdentifier { name, span } => SemError::UnknownIdentifer {
+                module: module.to_string(),
                 identifier: name,
                 span,
             },
@@ -1133,6 +1190,7 @@ impl LocalEnv {
                 // Validate that the target type is actually valid
                 if !global_env.validate_type(&target_type) {
                     errors.push(SemError::UnknownType {
+                        module: self.current_module().to_string(),
                         typ: target_type.to_string(),
                         span: typ.span.clone(),
                     });
@@ -1174,6 +1232,7 @@ impl LocalEnv {
                 // Validate that the target type is actually valid
                 if !global_env.validate_type(&target_type) {
                     errors.push(SemError::UnknownType {
+                        module: self.current_module().to_string(),
                         typ: target_type.to_string(),
                         span: typ.span.clone(),
                     });
@@ -1214,6 +1273,7 @@ impl LocalEnv {
                 // Validate that the target type is actually valid
                 if !global_env.validate_type(&target_type) {
                     errors.push(SemError::UnknownType {
+                        module: self.current_module().to_string(),
                         typ: target_type.to_string(),
                         span: typ.span.clone(),
                     });
@@ -2036,6 +2096,7 @@ impl LocalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
                         suggestion,
@@ -2154,6 +2215,7 @@ impl LocalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
                         suggestion,
@@ -2287,6 +2349,7 @@ impl LocalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
                         suggestion,
@@ -2298,6 +2361,7 @@ impl LocalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: self.current_module().to_string(),
                         identifier: accumulator.node.clone(),
                         span: accumulator.span.clone(),
                         suggestion,
@@ -2489,6 +2553,7 @@ impl LocalEnv {
                             Ok(t) => {
                                 if !global_env.validate_type(&t) {
                                     errors.push(SemError::UnknownType {
+                                        module: self.current_module().to_string(),
                                         typ: t.to_string(),
                                         span: bt.span.clone(),
                                     });
@@ -2612,6 +2677,7 @@ impl LocalEnv {
                 match global_env.lookup_var(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
+                            module: self.current_module().to_string(),
                             var: name.node.clone(),
                             span: name.span.clone(),
                         });
@@ -2666,6 +2732,7 @@ impl LocalEnv {
                 match global_env.lookup_var_list(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
+                            module: self.current_module().to_string(),
                             var: name.node.clone(),
                             span: name.span.clone(),
                         });
@@ -2739,7 +2806,7 @@ impl LocalEnv {
                     match resolve_path(path, self.current_module(), global_env, Some(self)) {
                         Ok(r) => r,
                         Err(e) => {
-                            errors.push(e.into_sem_error());
+                            errors.push(e.into_sem_error(self.current_module()));
                             return None;
                         }
                     };
@@ -2748,6 +2815,7 @@ impl LocalEnv {
                     ResolvedPathKind::LocalVariable(name) => {
                         // Cannot call a local variable
                         errors.push(SemError::UnknownIdentifer {
+                            module: self.current_module().to_string(),
                             identifier: name,
                             span: path.span.clone(),
                         });
@@ -2759,6 +2827,7 @@ impl LocalEnv {
                             None => {
                                 // Shouldn't happen: resolve_path said it's a function
                                 errors.push(SemError::UnknownIdentifer {
+                                    module: self.current_module().to_string(),
                                     identifier: func,
                                     span: path.span.clone(),
                                 });
@@ -2824,6 +2893,7 @@ impl LocalEnv {
                     ResolvedPathKind::Module(name) => {
                         // Modules cannot be called
                         errors.push(SemError::UnknownIdentifer {
+                            module: self.current_module().to_string(),
                             identifier: name,
                             span: path.span.clone(),
                         });
@@ -2834,6 +2904,7 @@ impl LocalEnv {
                     | ResolvedPathKind::VariableList { name, .. } => {
                         // Variables use $name or $$name syntax, not function call syntax
                         errors.push(SemError::UnknownIdentifer {
+                            module: self.current_module().to_string(),
                             identifier: name,
                             span: path.span.clone(),
                         });
@@ -2849,7 +2920,7 @@ impl LocalEnv {
                     match resolve_path(path, self.current_module(), global_env, Some(self)) {
                         Ok(r) => r,
                         Err(e) => {
-                            errors.push(e.into_sem_error());
+                            errors.push(e.into_sem_error(self.current_module()));
                             return None;
                         }
                     };
@@ -2858,6 +2929,7 @@ impl LocalEnv {
                     ResolvedPathKind::LocalVariable(name) => {
                         // Cannot use struct syntax with variables
                         errors.push(SemError::UnknownType {
+                            module: self.current_module().to_string(),
                             typ: name,
                             span: path.span.clone(),
                         });
@@ -2866,6 +2938,7 @@ impl LocalEnv {
                     ResolvedPathKind::Function { func, .. } => {
                         // Cannot use struct syntax with functions
                         errors.push(SemError::UnknownType {
+                            module: self.current_module().to_string(),
                             typ: func,
                             span: path.span.clone(),
                         });
@@ -2884,6 +2957,7 @@ impl LocalEnv {
                     ResolvedPathKind::Module(name) => {
                         // Cannot use struct syntax with modules
                         errors.push(SemError::UnknownType {
+                            module: self.current_module().to_string(),
                             typ: name,
                             span: path.span.clone(),
                         });
@@ -2894,6 +2968,7 @@ impl LocalEnv {
                     | ResolvedPathKind::VariableList { name, .. } => {
                         // Cannot use struct syntax with variables
                         errors.push(SemError::UnknownType {
+                            module: self.current_module().to_string(),
                             typ: name,
                             span: path.span.clone(),
                         });
@@ -2913,6 +2988,7 @@ impl LocalEnv {
                 };
                 if !global_env.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
+                        module: self.current_module().to_string(),
                         typ: typ.to_string(),
                         span: type_name.span.clone(),
                     });
@@ -3102,6 +3178,7 @@ impl LocalEnv {
                         string_case::NamingConvention::SnakeCase,
                     ) {
                         warnings.push(SemWarning::ParameterNamingConvention {
+                            module: self.current_module().to_string(),
                             identifier: var.node.clone(),
                             span: var.span.clone(),
                             suggestion,
@@ -3242,6 +3319,7 @@ impl LocalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
                         suggestion,
@@ -3362,6 +3440,7 @@ impl LocalEnv {
                         None => {
                             // Shouldn't happen: resolve_path said it exists
                             errors.push(SemError::UnknownType {
+                                module: self.current_module().to_string(),
                                 typ: qualified_name,
                                 span: span.clone(),
                             });
@@ -3461,6 +3540,7 @@ impl LocalEnv {
             // Other types (Object, List, Tuple, Struct) can't be used as GenericCall targets
             _ => {
                 errors.push(SemError::UnknownType {
+                    module: self.current_module().to_string(),
                     typ: simple_type.to_string(),
                     span: span.clone(),
                 });
@@ -3494,6 +3574,7 @@ impl LocalEnv {
             _ => {
                 // Only Custom types can use struct syntax
                 errors.push(SemError::UnknownType {
+                    module: self.current_module().to_string(),
                     typ: simple_type.to_string(),
                     span: span.clone(),
                 });
@@ -3506,6 +3587,7 @@ impl LocalEnv {
             Some(t) => t.clone(),
             None => {
                 errors.push(SemError::UnknownType {
+                    module: self.current_module().to_string(),
                     typ: qualified_name.clone(),
                     span: span.clone(),
                 });
@@ -3615,7 +3697,7 @@ impl LocalEnv {
         let resolved = match resolve_path(path, self.current_module(), global_env, Some(self)) {
             Ok(r) => r,
             Err(e) => {
-                errors.push(e.into_sem_error());
+                errors.push(e.into_sem_error(self.current_module()));
                 return None;
             }
         };
@@ -3636,6 +3718,7 @@ impl LocalEnv {
                 // because functions weren't in the lookup path for IdentPath.
                 // To maintain compatibility, we'll error similarly.
                 errors.push(SemError::UnknownIdentifer {
+                    module: self.current_module().to_string(),
                     identifier: func,
                     span: path.span.clone(),
                 });
@@ -3652,6 +3735,7 @@ impl LocalEnv {
                     | SimpleType::Constraint
                     | SimpleType::Never => {
                         errors.push(SemError::PrimitiveTypeAsValue {
+                            module: self.current_module().to_string(),
                             type_name: simple_type.to_string(),
                             span: path.span.clone(),
                         });
@@ -3688,6 +3772,7 @@ impl LocalEnv {
                             } else {
                                 // Shouldn't happen: resolve_path said it exists
                                 errors.push(SemError::UnknownType {
+                                    module: self.current_module().to_string(),
                                     typ: qualified_name,
                                     span: path.span.clone(),
                                 });
@@ -3696,6 +3781,7 @@ impl LocalEnv {
                         } else {
                             // Root custom type without variant - cannot be used as value
                             errors.push(SemError::PrimitiveTypeAsValue {
+                                module: self.current_module().to_string(),
                                 type_name: root.clone(),
                                 span: path.span.clone(),
                             });
@@ -3705,6 +3791,7 @@ impl LocalEnv {
                     // Other types shouldn't appear from resolve_path for identifiers
                     _ => {
                         errors.push(SemError::UnknownIdentifer {
+                            module: self.current_module().to_string(),
                             identifier: simple_type.to_string(),
                             span: path.span.clone(),
                         });
@@ -3715,6 +3802,7 @@ impl LocalEnv {
             ResolvedPathKind::Module(name) => {
                 // Modules cannot be used as values
                 errors.push(SemError::UnknownIdentifer {
+                    module: self.current_module().to_string(),
                     identifier: name,
                     span: path.span.clone(),
                 });
@@ -3725,6 +3813,7 @@ impl LocalEnv {
             | ResolvedPathKind::VariableList { name, .. } => {
                 // Variables use $name or $$name syntax, not identifier syntax
                 errors.push(SemError::UnknownIdentifer {
+                    module: self.current_module().to_string(),
                     identifier: name,
                     span: path.span.clone(),
                 });
@@ -4257,6 +4346,7 @@ impl GlobalEnv {
         for ((module, fn_name), fn_desc) in &self.functions {
             if !fn_desc.public && !fn_desc.used {
                 warnings.push(SemWarning::UnusedFunction {
+                    module: module.clone(),
                     identifier: format!("{}::{}", module, fn_name),
                     span: fn_desc.body.span.clone(),
                 });
@@ -4268,6 +4358,7 @@ impl GlobalEnv {
         for ((module, var_name), var_desc) in &self.internal_variables {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
+                    module: module.clone(),
                     identifier: format!("{}::{}", module, var_name),
                     span: var_desc.span.clone(),
                 });
@@ -4277,6 +4368,7 @@ impl GlobalEnv {
         for ((module, var_name), var_desc) in &self.variable_lists {
             if !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
+                    module: module.clone(),
                     identifier: format!("{}::{}", module, var_name),
                     span: var_desc.span.clone(),
                 });
@@ -4493,6 +4585,7 @@ impl GlobalEnv {
             string_case::NamingConvention::SnakeCase,
         ) {
             warnings.push(SemWarning::FunctionNamingConvention {
+                module: current_module.to_string(),
                 identifier: name.node.clone(),
                 span: name.span.clone(),
                 suggestion,
@@ -4514,6 +4607,7 @@ impl GlobalEnv {
                     params_typ.push(param_typ.clone());
                     if !self.validate_type(&param_typ) {
                         errors.push(SemError::UnknownType {
+                            module: current_module.to_string(),
                             typ: param_typ.to_string(),
                             span: param.typ.span.clone(),
                         });
@@ -4539,6 +4633,7 @@ impl GlobalEnv {
                     string_case::NamingConvention::SnakeCase,
                 ) {
                     warnings.push(SemWarning::ParameterNamingConvention {
+                        module: current_module.to_string(),
                         identifier: param.name.node.clone(),
                         span: param.name.span.clone(),
                         suggestion,
@@ -4556,6 +4651,7 @@ impl GlobalEnv {
             Ok(typ) => {
                 if !self.validate_type(&typ) {
                     errors.push(SemError::UnknownType {
+                        module: current_module.to_string(),
                         typ: typ.to_string(),
                         span: output_type.span.clone(),
                     });
@@ -4680,6 +4776,7 @@ impl GlobalEnv {
     ) {
         match self.lookup_fn(current_module, &constraint_name.node) {
             None => errors.push(SemError::UnknownIdentifer {
+                module: current_module.to_string(),
                 identifier: constraint_name.node.clone(),
                 span: constraint_name.span.clone(),
             }),
@@ -4699,6 +4796,7 @@ impl GlobalEnv {
                         ..fn_type.0.clone()
                     };
                     errors.push(SemError::FunctionTypeMismatch {
+                        module: current_module.to_string(),
                         identifier: constraint_name.node.clone(),
                         span: constraint_name.span.clone(),
                         expected: expected_type,
@@ -4723,6 +4821,7 @@ impl GlobalEnv {
                                 )
                             {
                                 warnings.push(SemWarning::VariableNamingConvention {
+                                    module: current_module.to_string(),
                                     identifier: name.node.clone(),
                                     span: name.span.clone(),
                                     suggestion,
@@ -4755,6 +4854,7 @@ impl GlobalEnv {
                                 )
                             {
                                 warnings.push(SemWarning::VariableNamingConvention {
+                                    module: current_module.to_string(),
                                     identifier: name.node.clone(),
                                     span: name.span.clone(),
                                     suggestion,
@@ -4786,6 +4886,7 @@ impl GlobalEnv {
         // Check if type name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4795,6 +4896,7 @@ impl GlobalEnv {
         // Check if type name shadows an object type
         if self.object_types.contains_key(&name.node) {
             errors.push(SemError::TypeShadowsObject {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4805,6 +4907,7 @@ impl GlobalEnv {
         let type_key = (current_module.to_string(), name.node.clone());
         if self.custom_types.contains_key(&type_key) {
             errors.push(SemError::TypeShadowsCustomType {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4853,6 +4956,7 @@ impl GlobalEnv {
         // Check for unguarded recursive type (type references itself without being inside a container)
         if self.has_unguarded_reference(&underlying_type, &name.node) {
             errors.push(SemError::UnguardedRecursiveType {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4874,6 +4978,7 @@ impl GlobalEnv {
         // Check if enum name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4883,6 +4988,7 @@ impl GlobalEnv {
         // Check for shadowing existing object or custom types
         if self.object_types.contains_key(&name.node) {
             errors.push(SemError::TypeShadowsObject {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4892,6 +4998,7 @@ impl GlobalEnv {
         let type_key = (current_module.to_string(), name.node.clone());
         if self.custom_types.contains_key(&type_key) {
             errors.push(SemError::TypeShadowsCustomType {
+                module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
             });
@@ -4910,6 +5017,7 @@ impl GlobalEnv {
 
             if self.custom_types.contains_key(&variant_key) {
                 errors.push(SemError::TypeShadowsCustomType {
+                    module: current_module.to_string(),
                     type_name: qualified_name.clone(),
                     span: variant.node.name.span.clone(),
                 });
@@ -5048,6 +5156,7 @@ impl GlobalEnv {
             // Check for unguarded recursion (though enums should be guarded by the enum wrapper)
             if self.has_unguarded_reference(&underlying_type, &qualified_name) {
                 errors.push(SemError::UnguardedRecursiveType {
+                    module: current_module.to_string(),
                     type_name: qualified_name.clone(),
                     span: variant.node.name.span.clone(),
                 });

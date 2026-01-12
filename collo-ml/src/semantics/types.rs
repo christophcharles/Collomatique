@@ -565,7 +565,7 @@ impl ExprType {
                 object_types,
                 custom_types,
             )
-            .map_err(|e| e.into_sem_error(typ.span.clone()))?;
+            .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
             let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
             match typ.node.maybe_count {
                 0 => flattened.push(spanned_inner),
@@ -626,9 +626,13 @@ pub enum TypeResolutionError {
 }
 
 impl TypeResolutionError {
-    pub fn into_sem_error(self, span: crate::ast::Span) -> SemError {
+    pub fn into_sem_error(self, module: &str, span: crate::ast::Span) -> SemError {
         match self {
-            TypeResolutionError::UnknownType(typ) => SemError::UnknownType { typ, span },
+            TypeResolutionError::UnknownType(typ) => SemError::UnknownType {
+                module: module.to_string(),
+                typ,
+                span,
+            },
             TypeResolutionError::Nested(e) => *e,
         }
     }
