@@ -1,9 +1,31 @@
-use super::SemError;
+use super::{GlobalEnv, ResolvedPathKind, SemError};
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet},
     ops::Deref,
 };
+
+/// Helper to resolve a type path using the symbol table
+fn resolve_type_path(
+    segments: Vec<String>,
+    current_module: &str,
+    global_env: &GlobalEnv,
+) -> Option<SimpleType> {
+    // Construct a fake Spanned<NamespacePath> for resolve_path
+    let dummy_span = crate::ast::Span { start: 0, end: 0 };
+    let namespace_path = crate::ast::NamespacePath {
+        segments: segments
+            .into_iter()
+            .map(|s| crate::ast::Spanned::new(s, dummy_span.clone()))
+            .collect(),
+    };
+    let spanned_path = crate::ast::Spanned::new(namespace_path, dummy_span);
+
+    match super::resolve_path(&spanned_path, current_module, global_env, None) {
+        Ok(ResolvedPathKind::Type(simple_type)) => Some(simple_type),
+        _ => None,
+    }
+}
 
 #[cfg(test)]
 mod tests;
@@ -463,69 +485,48 @@ impl From<SimpleType> for ExprType {
 /// Context-aware type conversion from AST types
 ///
 /// These methods are used during semantic analysis when we have access to
-/// the object_types and custom_types sets.
+/// the GlobalEnv for type resolution via the symbol table.
 impl SimpleType {
     /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
-    /// to either Object or Custom based on the provided sets.
-    ///
-    /// For custom_types, the set contains (module, name) tuples:
-    /// - ("main", "MyInt") for `type MyInt = Int;`
-    /// - ("main", "Result::Ok") for enum variants
-    /// - ("main", "Result") for `enum Result = Ok(Int) | Error(String);`
+    /// using resolve_path for consistent symbol table lookup.
     pub fn from_ast(
         value: crate::ast::SimpleTypeName,
         current_module: &str,
-        object_types: &HashSet<String>,
-        custom_types: &HashSet<(String, String)>,
+        global_env: &GlobalEnv,
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
             SimpleTypeName::Other(name) => {
-                // Check if this is a built-in type name first
-                match name.as_str() {
-                    "Int" => Ok(SimpleType::Int),
-                    "Bool" => Ok(SimpleType::Bool),
-                    "None" => Ok(SimpleType::None),
-                    "Never" => Ok(SimpleType::Never),
-                    "String" => Ok(SimpleType::String),
-                    "LinExpr" => Ok(SimpleType::LinExpr),
-                    "Constraint" => Ok(SimpleType::Constraint),
-                    // Not a built-in type, resolve as Object or Custom
-                    _ => {
-                        if object_types.contains(&name) {
-                            Ok(SimpleType::Object(name))
-                        } else if custom_types.contains(&(current_module.to_string(), name.clone()))
-                        {
-                            Ok(SimpleType::Custom(current_module.to_string(), name, None))
-                        } else {
-                            Err(TypeResolutionError::UnknownType(name))
-                        }
-                    }
+                // Use resolve_type_path which goes through resolve_path
+                match resolve_type_path(vec![name.clone()], current_module, global_env) {
+                    Some(simple_type) => Ok(simple_type),
+                    None => Err(TypeResolutionError::UnknownType(name)),
                 }
             }
             SimpleTypeName::Qualified(root, variant) => {
-                let qualified_name = format!("{}::{}", root, variant);
-                if custom_types.contains(&(current_module.to_string(), qualified_name.clone())) {
-                    Ok(SimpleType::Custom(
-                        current_module.to_string(),
-                        root,
-                        Some(variant),
-                    ))
-                } else {
-                    Err(TypeResolutionError::UnknownType(qualified_name))
+                // Use resolve_type_path for qualified types (e.g., "a::Point" or "Option::Some")
+                match resolve_type_path(
+                    vec![root.clone(), variant.clone()],
+                    current_module,
+                    global_env,
+                ) {
+                    Some(simple_type) => Ok(simple_type),
+                    None => Err(TypeResolutionError::UnknownType(format!(
+                        "{}::{}",
+                        root, variant
+                    ))),
                 }
             }
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
             SimpleTypeName::List(inner) => Ok(SimpleType::List(ExprType::from_ast(
                 inner,
                 current_module,
-                object_types,
-                custom_types,
+                global_env,
             )?)),
             SimpleTypeName::Tuple(elements) => {
                 let converted: Vec<ExprType> = elements
                     .into_iter()
-                    .map(|e| ExprType::from_ast(e, current_module, object_types, custom_types))
+                    .map(|e| ExprType::from_ast(e, current_module, global_env))
                     .collect::<Result<_, _>>()?;
                 Ok(SimpleType::Tuple(converted))
             }
@@ -535,7 +536,7 @@ impl SimpleType {
                     .map(|(name, typ)| {
                         Ok((
                             name.node,
-                            ExprType::from_ast(typ, current_module, object_types, custom_types)?,
+                            ExprType::from_ast(typ, current_module, global_env)?,
                         ))
                     })
                     .collect::<Result<_, SemError>>()?;
@@ -547,25 +548,20 @@ impl SimpleType {
 
 impl ExprType {
     /// Convert an AST TypeName to an ExprType, resolving named types
-    /// to either Object or Custom based on the provided sets.
+    /// using resolve_path for consistent symbol table lookup.
     pub fn from_ast(
         value: crate::ast::Spanned<crate::ast::TypeName>,
         current_module: &str,
-        object_types: &HashSet<String>,
-        custom_types: &HashSet<(String, String)>,
+        global_env: &GlobalEnv,
     ) -> Result<Self, SemError> {
         if value.node.types.is_empty() {
             panic!("It should not be possible to form 0-length typenames");
         }
         let mut flattened = Vec::with_capacity(value.node.types.len());
         for typ in value.node.types {
-            let inner_typ = SimpleType::from_ast(
-                typ.node.inner.clone(),
-                current_module,
-                object_types,
-                custom_types,
-            )
-            .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
+            let inner_typ =
+                SimpleType::from_ast(typ.node.inner.clone(), current_module, global_env)
+                    .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
             let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
             match typ.node.maybe_count {
                 0 => flattened.push(spanned_inner),

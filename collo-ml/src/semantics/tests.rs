@@ -13,6 +13,7 @@ mod enums;
 mod folds;
 mod let_expr;
 mod match_expr;
+mod modules;
 mod operators;
 mod recursivity;
 mod scoping;
@@ -70,4 +71,29 @@ pub(crate) fn var_with_args(name: &str, args: Vec<SimpleType>) -> HashMap<String
             .collect::<Vec<_>>(),
     );
     vars
+}
+
+/// Helper function to analyze a multi-module CoLLo-ML program
+pub(crate) fn analyze_multi(
+    module_sources: &[(&str, &str)], // (module_name, source_code)
+    types: HashMap<String, ObjectFields>,
+    vars: HashMap<String, ArgsType>,
+) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
+    let modules: Vec<Module> = module_sources
+        .iter()
+        .map(|(name, source)| {
+            let pairs = ColloMLParser::parse(Rule::file, source).expect("Parse failed");
+            let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
+                .expect("AST conversion failed");
+            Module {
+                name: name.to_string(),
+                file,
+            }
+        })
+        .collect();
+
+    let (_global_env, type_info, _expr_types, errors, warnings) =
+        GlobalEnv::new_multi(types, vars, &modules).expect("GlobalEnv creation failed");
+
+    (type_info, errors, warnings)
 }

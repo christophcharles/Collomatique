@@ -827,17 +827,13 @@ impl<T: EvalObject> CheckedAST<T> {
         &self.warnings
     }
 
-    /// Resolve a type name to ExprType with proper handling of object and custom types
+    /// Resolve a type name to ExprType using the symbol table
     pub fn resolve_type(
         &self,
         module: &str,
         typ: &crate::ast::Spanned<crate::ast::TypeName>,
     ) -> Result<ExprType, SemError> {
-        use std::collections::HashSet;
-        let object_types: HashSet<String> = self.global_env.get_types().keys().cloned().collect();
-        let custom_types: HashSet<(String, String)> =
-            self.global_env.get_custom_types().keys().cloned().collect();
-        ExprType::from_ast(typ.clone(), module, &object_types, &custom_types)
+        self.global_env.resolve_type(typ, module)
     }
 
     pub fn get_functions(&self) -> HashMap<(String, String), (ArgsType, ExprType)> {

@@ -189,22 +189,13 @@ impl GlobalEnv {
             .all(|x| self.validate_simple_type(x))
     }
 
-    /// Resolve an AST type to an ExprType using the current context (objects + custom types)
+    /// Resolve an AST type to an ExprType using resolve_path for symbol table lookup
     pub fn resolve_type(
         &self,
         typ: &Spanned<crate::ast::TypeName>,
         current_module: &str,
     ) -> Result<ExprType, SemError> {
-        let object_types: std::collections::HashSet<String> =
-            self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<(String, String)> =
-            self.custom_types.keys().cloned().collect();
-        ExprType::from_ast(
-            typ.clone(),
-            current_module,
-            &object_types,
-            &custom_type_names,
-        )
+        ExprType::from_ast(typ.clone(), current_module, self)
     }
 
     /// Get the underlying type for a custom type
@@ -3676,11 +3667,8 @@ impl LocalEnv {
                     }
                 }
 
-                // Return the custom type
-                Some(
-                    SimpleType::Custom(self.current_module().to_string(), type_name, variant_name)
-                        .into(),
-                )
+                // Return the custom type (using the resolved module, not current_module)
+                Some(SimpleType::Custom(module, type_name, variant_name).into())
             }
         }
     }
@@ -4015,6 +4003,7 @@ impl TypeInfo {
 }
 
 impl GlobalEnv {
+    /// Create a GlobalEnv for a single-file program (backwards compatibility wrapper)
     pub fn new(
         object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
@@ -4029,12 +4018,28 @@ impl GlobalEnv {
         ),
         GlobalEnvError,
     > {
-        // Module list (placeholder until modules become a parameter)
         let modules = [Module {
             name: "main".into(),
             file: file.clone(),
         }];
+        Self::new_multi(object_types, variables, &modules)
+    }
 
+    /// Create a GlobalEnv for a multi-module program
+    pub fn new_multi(
+        object_types: HashMap<String, ObjectFields>,
+        variables: HashMap<String, ArgsType>,
+        modules: &[Module],
+    ) -> Result<
+        (
+            Self,
+            TypeInfo,
+            HashMap<Span, ExprType>,
+            Vec<SemError>,
+            Vec<SemWarning>,
+        ),
+        GlobalEnvError,
+    > {
         let mut temp_env = GlobalEnv {
             module_names: modules.iter().map(|m| m.name.clone()).collect(),
             object_types,
@@ -4082,7 +4087,7 @@ impl GlobalEnv {
         // PASS 1a: Register all type names with placeholders
         // This allows forward references between types
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 match &statement.node {
@@ -4103,40 +4108,10 @@ impl GlobalEnv {
         }
 
         // ====================================================================
-        // PASS 1b: Resolve all type definitions
-        // Now all type names are known, we can resolve underlying types
+        // PASS 1b: Populate type symbols for current module + imports
+        // (Moved before type resolution so resolve_path can be used)
         // ====================================================================
-        for module in &modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
-                match &statement.node {
-                    crate::ast::Statement::TypeDecl {
-                        name, underlying, ..
-                    } => {
-                        temp_env.expand_with_type_decl_pass2(
-                            current_module,
-                            name,
-                            underlying,
-                            &mut errors,
-                        );
-                    }
-                    crate::ast::Statement::EnumDecl { name, variants, .. } => {
-                        temp_env.expand_with_enum_decl_pass2(
-                            current_module,
-                            name,
-                            variants,
-                            &mut errors,
-                        );
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // ====================================================================
-        // PASS 1c: Populate type symbols for current module + imports
-        // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             temp_env.import_type_symbols(current_module, current_module, None, None, &mut errors);
 
@@ -4176,10 +4151,41 @@ impl GlobalEnv {
         }
 
         // ====================================================================
+        // PASS 1c: Resolve all type definitions
+        // Now symbols are populated, we can use resolve_path for types
+        // ====================================================================
+        for module in modules {
+            let current_module = &module.name;
+            for statement in &module.file.statements {
+                match &statement.node {
+                    crate::ast::Statement::TypeDecl {
+                        name, underlying, ..
+                    } => {
+                        temp_env.expand_with_type_decl_pass2(
+                            current_module,
+                            name,
+                            underlying,
+                            &mut errors,
+                        );
+                    }
+                    crate::ast::Statement::EnumDecl { name, variants, .. } => {
+                        temp_env.expand_with_enum_decl_pass2(
+                            current_module,
+                            name,
+                            variants,
+                            &mut errors,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // ====================================================================
         // PASS 2a: Register all function signatures
         // Now all types are resolved, we can build function signatures
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Let {
@@ -4210,7 +4216,7 @@ impl GlobalEnv {
         // ====================================================================
         // PASS 2a+: Populate function symbols for current module + imports
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             temp_env.import_function_symbols(
                 current_module,
@@ -4220,7 +4226,7 @@ impl GlobalEnv {
                 &mut errors,
             );
 
-            // Import function symbols from foreign modules (skip validation, done in PASS 1c)
+            // Import function symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
                     if temp_env.module_exists(&module_path.node)
@@ -4251,7 +4257,7 @@ impl GlobalEnv {
         // Now all function signatures are known, reify can verify them
         // Variables created here can be used in function bodies
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Reify {
@@ -4279,7 +4285,7 @@ impl GlobalEnv {
         // ====================================================================
         // PASS 2b+: Populate variable symbols for current module + imports
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             temp_env.import_variable_symbols(
                 current_module,
@@ -4289,7 +4295,7 @@ impl GlobalEnv {
                 &mut errors,
             );
 
-            // Import variable symbols from foreign modules (skip validation, done in PASS 1c)
+            // Import variable symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
                     if temp_env.module_exists(&module_path.node)
@@ -4319,7 +4325,7 @@ impl GlobalEnv {
         // PASS 2c: Validate all function bodies
         // Now all function signatures AND variables are known
         // ====================================================================
-        for module in &modules {
+        for module in modules {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Let { name, body, .. } = &statement.node {
@@ -4933,19 +4939,8 @@ impl GlobalEnv {
             return;
         }
 
-        // Build the context for type resolution - all type names are now known
-        let object_types: std::collections::HashSet<String> =
-            self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<(String, String)> =
-            self.custom_types.keys().cloned().collect();
-
-        // Resolve the underlying type
-        let underlying_type = match ExprType::from_ast(
-            underlying.clone(),
-            current_module,
-            &object_types,
-            &custom_type_names,
-        ) {
+        // Resolve the underlying type using the symbol table
+        let underlying_type = match ExprType::from_ast(underlying.clone(), current_module, self) {
             Ok(typ) => typ,
             Err(e) => {
                 errors.push(e);
@@ -5062,12 +5057,6 @@ impl GlobalEnv {
             return;
         }
 
-        // Build the context for type resolution
-        let object_types: std::collections::HashSet<String> =
-            self.object_types.keys().cloned().collect();
-        let custom_type_names: std::collections::HashSet<(String, String)> =
-            self.custom_types.keys().cloned().collect();
-
         // Process each variant and collect their SimpleTypes for the root enum
         let mut variant_simple_types = Vec::new();
 
@@ -5093,12 +5082,7 @@ impl GlobalEnv {
                     }
                     EnumVariantType::Tuple(types) if types.len() == 1 => {
                         // Single type like Ok(Int) - underlying is just that type
-                        match ExprType::from_ast(
-                            types[0].clone(),
-                            current_module,
-                            &object_types,
-                            &custom_type_names,
-                        ) {
+                        match ExprType::from_ast(types[0].clone(), current_module, self) {
                             Ok(typ) => typ,
                             Err(e) => {
                                 errors.push(e);
@@ -5110,14 +5094,7 @@ impl GlobalEnv {
                         // Multiple types like TupleCase(Int, Bool) - underlying is a tuple
                         let tuple_types: Result<Vec<ExprType>, _> = types
                             .iter()
-                            .map(|t| {
-                                ExprType::from_ast(
-                                    t.clone(),
-                                    current_module,
-                                    &object_types,
-                                    &custom_type_names,
-                                )
-                            })
+                            .map(|t| ExprType::from_ast(t.clone(), current_module, self))
                             .collect();
                         match tuple_types {
                             Ok(ts) => ExprType::simple(SimpleType::Tuple(ts)),
@@ -5133,13 +5110,8 @@ impl GlobalEnv {
                             fields
                                 .iter()
                                 .map(|(fname, ftype)| {
-                                    ExprType::from_ast(
-                                        ftype.clone(),
-                                        current_module,
-                                        &object_types,
-                                        &custom_type_names,
-                                    )
-                                    .map(|t| (fname.node.clone(), t))
+                                    ExprType::from_ast(ftype.clone(), current_module, self)
+                                        .map(|t| (fname.node.clone(), t))
                                 })
                                 .collect();
                         match struct_fields {
