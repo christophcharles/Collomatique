@@ -834,10 +834,6 @@ pub enum ResolvedPathKind {
 pub enum PathResolutionError {
     /// Identifier not found in any scope
     UnknownIdentifier { name: String, span: Span },
-    /// Qualified path (e.g., `Foo::Bar`) not found
-    UnknownQualifiedPath { path: String, span: Span },
-    /// Path has too many segments (> 2)
-    UnsupportedPathLength { len: usize, span: Span },
 }
 
 impl PathResolutionError {
@@ -847,18 +843,6 @@ impl PathResolutionError {
                 identifier: name,
                 span,
             },
-            PathResolutionError::UnknownQualifiedPath { path, span } => {
-                SemError::UnknownIdentifer {
-                    identifier: path,
-                    span,
-                }
-            }
-            PathResolutionError::UnsupportedPathLength { len, span } => {
-                SemError::UnknownIdentifer {
-                    identifier: format!("<path with {} segments>", len),
-                    span,
-                }
-            }
         }
     }
 }
