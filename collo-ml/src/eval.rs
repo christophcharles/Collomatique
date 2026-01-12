@@ -1024,6 +1024,14 @@ impl<T: EvalObject> LocalEnv<T> {
                             _ => panic!("Unexpected type in IdentPath: {:?}", simple_type),
                         }
                     }
+                    ResolvedPathKind::Module(_)
+                    | ResolvedPathKind::ExternalVariable(_)
+                    | ResolvedPathKind::InternalVariable { .. }
+                    | ResolvedPathKind::VariableList { .. } => {
+                        panic!(
+                            "Module/Variable should not appear in IdentPath after semantic check"
+                        )
+                    }
                 }
             }
             Expr::Path { object, segments } => {
@@ -1303,6 +1311,14 @@ impl<T: EvalObject> LocalEnv<T> {
                     ResolvedPathKind::Type(simple_type) => {
                         // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
                         self.eval_generic_call_type_cast(eval_history, &simple_type, args)?
+                    }
+                    ResolvedPathKind::Module(_)
+                    | ResolvedPathKind::ExternalVariable(_)
+                    | ResolvedPathKind::InternalVariable { .. }
+                    | ResolvedPathKind::VariableList { .. } => {
+                        panic!(
+                            "Module/Variable should not appear in GenericCall after semantic check"
+                        )
                     }
                 }
             }

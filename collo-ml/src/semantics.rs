@@ -274,12 +274,20 @@ impl GlobalEnv {
         &self.object_types
     }
 
-    fn lookup_fn(&mut self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
+    fn lookup_fn(&self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
         let fn_desc = self
             .functions
-            .get_mut(&(module.to_string(), name.to_string()))?;
-        fn_desc.used = true;
+            .get(&(module.to_string(), name.to_string()))?;
         Some((fn_desc.typ.clone(), fn_desc.body.span.clone()))
+    }
+
+    fn mark_fn_used(&mut self, module: &str, name: &str) {
+        if let Some(fn_desc) = self
+            .functions
+            .get_mut(&(module.to_string(), name.to_string()))
+        {
+            fn_desc.used = true;
+        }
     }
 
     fn register_fn(
@@ -313,18 +321,26 @@ impl GlobalEnv {
         type_info.types.insert(body.span, fn_typ.into());
     }
 
-    fn lookup_var(&mut self, module: &str, name: &str) -> Option<(ArgsType, Option<Span>)> {
+    fn lookup_var(&self, module: &str, name: &str) -> Option<(ArgsType, Option<Span>)> {
         if let Some(ext_var) = self.external_variables.get(name) {
             return Some((ext_var.clone(), None));
         };
 
         let var_desc = self
             .internal_variables
-            .get_mut(&(module.to_string(), name.to_string()))?;
-
-        var_desc.used = true;
+            .get(&(module.to_string(), name.to_string()))?;
 
         Some((var_desc.args.clone(), Some(var_desc.span.clone())))
+    }
+
+    fn mark_var_used(&mut self, module: &str, name: &str) {
+        // External variables don't track usage
+        if let Some(var_desc) = self
+            .internal_variables
+            .get_mut(&(module.to_string(), name.to_string()))
+        {
+            var_desc.used = true;
+        }
     }
 
     fn register_var(
@@ -355,14 +371,26 @@ impl GlobalEnv {
         type_info.types.insert(span, args_typ.into());
     }
 
-    fn lookup_var_list(&mut self, module: &str, name: &str) -> Option<(ArgsType, Span)> {
+    fn lookup_var_list(&self, module: &str, name: &str) -> Option<(ArgsType, Span)> {
         let var_desc = self
             .variable_lists
-            .get_mut(&(module.to_string(), name.to_string()))?;
-
-        var_desc.used = true;
+            .get(&(module.to_string(), name.to_string()))?;
 
         Some((var_desc.args.clone(), var_desc.span.clone()))
+    }
+
+    fn mark_var_list_used(&mut self, module: &str, name: &str) {
+        if let Some(var_desc) = self
+            .variable_lists
+            .get_mut(&(module.to_string(), name.to_string()))
+        {
+            var_desc.used = true;
+        }
+    }
+
+    /// Look up a symbol path in the symbol table for a given module
+    pub fn lookup_symbol(&self, module: &str, path: &SymbolPath) -> Option<&Symbol> {
+        self.symbols.get(module)?.get(path)
     }
 
     fn register_var_list(
@@ -660,16 +688,23 @@ impl LocalEnv {
         &self.current_module
     }
 
-    fn lookup_ident(&mut self, ident: &str) -> Option<(ExprType, Span)> {
+    fn lookup_ident(&self, ident: &str) -> Option<(ExprType, Span)> {
         // We don't look in pending scope as these variables are not yet accessible
-        for scope in self.scopes.iter_mut().rev() {
-            let Some((typ, span, used)) = scope.get_mut(ident) else {
-                continue;
-            };
-            *used = true;
-            return Some((typ.clone(), span.clone()));
+        for scope in self.scopes.iter().rev() {
+            if let Some((typ, span, _)) = scope.get(ident) {
+                return Some((typ.clone(), span.clone()));
+            }
         }
         None
+    }
+
+    fn mark_ident_used(&mut self, ident: &str) {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some((_, _, used)) = scope.get_mut(ident) {
+                *used = true;
+                return;
+            }
+        }
     }
 
     fn push_scope(&mut self) {
@@ -773,6 +808,18 @@ pub enum ResolvedPathKind {
     /// - Custom: `MyType` → Type(SimpleType::Custom("main", "MyType", None))
     /// - Enum variant: `Result::Ok` → Type(SimpleType::Custom("main", "Result", Some("Ok")))
     Type(SimpleType),
+
+    /// A module reference (from import with alias)
+    Module(String),
+
+    /// An external variable (defined by runtime, not in source)
+    ExternalVariable(String),
+
+    /// An internal variable (defined in source with $var)
+    InternalVariable { module: String, name: String },
+
+    /// A variable list (defined in source with $$var_list)
+    VariableList { module: String, name: String },
 }
 
 /// Errors that can occur during path resolution
@@ -812,115 +859,90 @@ impl PathResolutionError {
 /// Resolve a namespace path to its absolute meaning.
 ///
 /// This is the single source of truth for what a path refers to.
-/// Resolution priority for single-segment paths:
+/// Resolution priority:
 /// 1. Built-in types: Int, Bool, String, LinExpr, Constraint, None, Never
-/// 2. Custom types (including enum root types)
-/// 3. Local variables (from local_env)
-/// 4. Functions (from global_env)
+/// 2. External entities: object_types, external_variables (treated like primitives)
+/// 3. Symbol table: custom types, functions, internal variables, variable lists
+/// 4. Local variables (from LocalEnv) - checked last for defensive programming
 ///
-/// Two-segment paths are always enum variants (e.g., `Result::Ok`).
+/// Paths can be single-segment (`foo`) or multi-segment (`Result::Ok`, `mod::func`).
 pub fn resolve_path(
     path: &Spanned<crate::ast::NamespacePath>,
     current_module: &str,
     global_env: &GlobalEnv,
     local_env: Option<&LocalEnv>,
 ) -> Result<ResolvedPathKind, PathResolutionError> {
-    let span = path.span.clone();
-    match path.node.segments.len() {
-        1 => resolve_single_segment(
-            &path.node.segments[0].node,
-            &span,
-            current_module,
-            global_env,
-            local_env,
-        ),
-        2 => resolve_two_segments(
-            &path.node.segments[0].node,
-            &path.node.segments[1].node,
-            &span,
-            current_module,
-            global_env,
-        ),
-        len => Err(PathResolutionError::UnsupportedPathLength { len, span }),
-    }
-}
+    let segments: Vec<&str> = path.node.segments.iter().map(|s| s.node.as_str()).collect();
 
-/// Resolve a single-segment path (e.g., `foo`, `Int`, `myVar`)
-fn resolve_single_segment(
-    name: &str,
-    span: &Span,
-    current_module: &str,
-    global_env: &GlobalEnv,
-    local_env: Option<&LocalEnv>,
-) -> Result<ResolvedPathKind, PathResolutionError> {
-    // 1. Check built-in types first
-    if let Some(builtin) = try_resolve_builtin_type(name) {
-        return Ok(ResolvedPathKind::Type(builtin));
-    }
-
-    let key = (current_module.to_string(), name.to_string());
-
-    // 2. Check custom types (including enum root types)
-    if global_env.custom_types.contains_key(&key) {
-        return Ok(ResolvedPathKind::Type(SimpleType::Custom(
-            current_module.to_string(),
-            name.to_string(),
-            None,
-        )));
-    }
-
-    // 3. Check functions (before local variables for safety)
-    if global_env.functions.contains_key(&key) {
-        return Ok(ResolvedPathKind::Function {
-            module: current_module.to_string(),
-            func: name.to_string(),
-        });
-    }
-
-    // 4. Check local variables (if local_env provided)
-    if let Some(local) = local_env {
-        // Note: we clone the local_env to avoid mutable borrow issues
-        // The caller is responsible for marking the variable as used
-        for scope in local.scopes.iter().rev() {
-            if scope.contains_key(name) {
-                return Ok(ResolvedPathKind::LocalVariable(name.to_string()));
-            }
+    // 1. Check built-in types (single segment only)
+    if segments.len() == 1 {
+        if let Some(builtin) = try_resolve_builtin_type(segments[0]) {
+            return Ok(ResolvedPathKind::Type(builtin));
         }
-        // Also check pending scope
-        if local.pending_scope.contains_key(name) {
-            return Ok(ResolvedPathKind::LocalVariable(name.to_string()));
+    }
+
+    // 2. Check external entities (single segment only, treated like primitives)
+    if segments.len() == 1 {
+        let name = segments[0];
+        if global_env.object_types.contains_key(name) {
+            return Ok(ResolvedPathKind::Type(SimpleType::Object(name.to_string())));
+        }
+        if global_env.external_variables.contains_key(name) {
+            return Ok(ResolvedPathKind::ExternalVariable(name.to_string()));
+        }
+    }
+
+    // 3. Check symbol table (any path length)
+    let symbol_path = SymbolPath(segments.iter().map(|s| s.to_string()).collect());
+    if let Some(symbol) = global_env.lookup_symbol(current_module, &symbol_path) {
+        return match symbol {
+            Symbol::Module(m) => Ok(ResolvedPathKind::Module(m.clone())),
+            Symbol::CustomType(m, n) => {
+                // Handle enum variants: path ["Result", "Ok"] → Custom("main", "Result", Some("Ok"))
+                // The type name in the symbol table stores "Result::Ok" for variants
+                if n.contains("::") {
+                    // This is an enum variant, parse it
+                    let parts: Vec<&str> = n.split("::").collect();
+                    Ok(ResolvedPathKind::Type(SimpleType::Custom(
+                        m.clone(),
+                        parts[0].to_string(),
+                        Some(parts[1].to_string()),
+                    )))
+                } else {
+                    Ok(ResolvedPathKind::Type(SimpleType::Custom(
+                        m.clone(),
+                        n.clone(),
+                        None,
+                    )))
+                }
+            }
+            Symbol::Function(m, n) => Ok(ResolvedPathKind::Function {
+                module: m.clone(),
+                func: n.clone(),
+            }),
+            Symbol::Variable(m, n) => Ok(ResolvedPathKind::InternalVariable {
+                module: m.clone(),
+                name: n.clone(),
+            }),
+            Symbol::VariableList(m, n) => Ok(ResolvedPathKind::VariableList {
+                module: m.clone(),
+                name: n.clone(),
+            }),
+        };
+    }
+
+    // 4. Check local variables (single segment only, last for defensive programming)
+    if segments.len() == 1 {
+        if let Some(local) = local_env {
+            if local.lookup_ident(segments[0]).is_some() {
+                return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
+            }
         }
     }
 
     Err(PathResolutionError::UnknownIdentifier {
-        name: name.to_string(),
-        span: span.clone(),
-    })
-}
-
-/// Resolve a two-segment path (e.g., `Result::Ok`, `Option::None`)
-fn resolve_two_segments(
-    root: &str,
-    variant: &str,
-    span: &Span,
-    current_module: &str,
-    global_env: &GlobalEnv,
-) -> Result<ResolvedPathKind, PathResolutionError> {
-    let qualified_name = format!("{}::{}", root, variant);
-    let key = (current_module.to_string(), qualified_name.clone());
-
-    // Check if this is a valid enum variant
-    if global_env.custom_types.contains_key(&key) {
-        return Ok(ResolvedPathKind::Type(SimpleType::Custom(
-            current_module.to_string(),
-            root.to_string(),
-            Some(variant.to_string()),
-        )));
-    }
-
-    Err(PathResolutionError::UnknownQualifiedPath {
-        path: qualified_name,
-        span: span.clone(),
+        name: segments.join("::"),
+        span: path.span.clone(),
     })
 }
 
@@ -2599,6 +2621,9 @@ impl LocalEnv {
                         Some(SimpleType::LinExpr.into()) // Syntax indicates LinExpr intent
                     }
                     Some((var_args, _)) => {
+                        // Mark variable as used
+                        global_env.mark_var_used(self.current_module(), &name.node);
+
                         if args.len() != var_args.len() {
                             errors.push(SemError::ArgumentCountMismatch {
                                 identifier: name.node.clone(),
@@ -2651,6 +2676,9 @@ impl LocalEnv {
                         // Syntax indicates [LinExpr] intent
                     }
                     Some((var_args, _)) => {
+                        // Mark variable list as used
+                        global_env.mark_var_list_used(self.current_module(), &name.node);
+
                         if args.len() != var_args.len() {
                             errors.push(SemError::ArgumentCountMismatch {
                                 identifier: name.node.clone(),
@@ -2740,6 +2768,9 @@ impl LocalEnv {
                                 None
                             }
                             Some((fn_type, _)) => {
+                                // Mark function as used
+                                global_env.mark_fn_used(&module, &func);
+
                                 if args.len() != fn_type.args.len() {
                                     errors.push(SemError::ArgumentCountMismatch {
                                         identifier: func.clone(),
@@ -2793,6 +2824,24 @@ impl LocalEnv {
                             warnings,
                         )
                     }
+                    ResolvedPathKind::Module(name) => {
+                        // Modules cannot be called
+                        errors.push(SemError::UnknownIdentifer {
+                            identifier: name,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
+                    ResolvedPathKind::ExternalVariable(name)
+                    | ResolvedPathKind::InternalVariable { name, .. }
+                    | ResolvedPathKind::VariableList { name, .. } => {
+                        // Variables use $name or $$name syntax, not function call syntax
+                        errors.push(SemError::UnknownIdentifer {
+                            identifier: name,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
                 }
             }
 
@@ -2835,6 +2884,24 @@ impl LocalEnv {
                         errors,
                         warnings,
                     ),
+                    ResolvedPathKind::Module(name) => {
+                        // Cannot use struct syntax with modules
+                        errors.push(SemError::UnknownType {
+                            typ: name,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
+                    ResolvedPathKind::ExternalVariable(name)
+                    | ResolvedPathKind::InternalVariable { name, .. }
+                    | ResolvedPathKind::VariableList { name, .. } => {
+                        // Cannot use struct syntax with variables
+                        errors.push(SemError::UnknownType {
+                            typ: name,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
                 }
             }
 
@@ -3556,10 +3623,12 @@ impl LocalEnv {
 
         match resolved {
             ResolvedPathKind::LocalVariable(name) => {
-                // Look up to get the type and mark as used
+                // Look up to get the type
                 let (typ, _) = self
                     .lookup_ident(&name)
                     .expect("resolve_path said this is a local variable, but lookup_ident failed");
+                // Mark as used
+                self.mark_ident_used(&name);
                 Some(typ)
             }
             ResolvedPathKind::Function { func, .. } => {
@@ -3643,6 +3712,24 @@ impl LocalEnv {
                         None
                     }
                 }
+            }
+            ResolvedPathKind::Module(name) => {
+                // Modules cannot be used as values
+                errors.push(SemError::UnknownIdentifer {
+                    identifier: name,
+                    span: path.span.clone(),
+                });
+                None
+            }
+            ResolvedPathKind::ExternalVariable(name)
+            | ResolvedPathKind::InternalVariable { name, .. }
+            | ResolvedPathKind::VariableList { name, .. } => {
+                // Variables use $name or $$name syntax, not identifier syntax
+                errors.push(SemError::UnknownIdentifer {
+                    identifier: name,
+                    span: path.span.clone(),
+                });
+                None
             }
         }
     }
@@ -4552,6 +4639,9 @@ impl GlobalEnv {
                 span: constraint_name.span.clone(),
             }),
             Some(fn_type) => {
+                // Mark function as used
+                self.mark_fn_used(current_module, &constraint_name.node);
+
                 let needed_output_type = ExprType::simple(if var_list {
                     SimpleType::List(SimpleType::Constraint.into())
                 } else {
