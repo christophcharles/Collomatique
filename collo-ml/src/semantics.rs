@@ -445,14 +445,16 @@ pub enum SemError {
         expected: FunctionType,
         found: FunctionType,
     },
-    #[error("Variable \"{identifier}\" at {span:?} is already defined ({here:?})")]
+    #[error("Variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})")]
     VariableAlreadyDefined {
+        module: String,
         identifier: String,
         span: Span,
         here: Option<Span>,
     },
-    #[error("Function \"{identifier}\" at {span:?} is already defined ({here:?})")]
+    #[error("Function \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})")]
     FunctionAlreadyDefined {
+        module: String,
         identifier: String,
         span: Span,
         here: Span,
@@ -482,8 +484,9 @@ pub enum SemError {
     OptionMarkerOnNone(Span),
     #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
     GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
-    #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
+    #[error("Parameter \"{identifier}\" in module \"{module}\" is already defined ({here:?}).")]
     ParameterAlreadyDefined {
+        module: String,
         identifier: String,
         span: Span,
         here: Span,
@@ -522,9 +525,10 @@ pub enum SemError {
         span: Span,
     },
     #[error(
-        "Duplicate field \"{field}\" in struct literal at {span:?} (first defined at {previous:?})"
+        "Duplicate field \"{field}\" in module \"{module}\" in struct literal at {span:?} (first defined at {previous:?})"
     )]
     DuplicateStructField {
+        module: String,
         field: String,
         span: Span,
         previous: Span,
@@ -559,8 +563,9 @@ pub enum SemError {
         found: ExprType,
         target: ConcreteType,
     },
-    #[error("Local variable \"{identifier}\" at {span:?} is already defined in the same scope ({here:?})")]
+    #[error("Local variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined in the same scope ({here:?})")]
     LocalIdentAlreadyDeclared {
+        module: String,
         identifier: String,
         span: Span,
         here: Span,
@@ -749,6 +754,7 @@ impl LocalEnv {
     ) -> Result<(), SemError> {
         if let Some((_, old_ident_span, _)) = self.pending_scope.get(ident) {
             return Err(SemError::LocalIdentAlreadyDeclared {
+                module: self.current_module().to_string(),
                 identifier: ident.to_string(),
                 span,
                 here: old_ident_span.clone(),
@@ -2998,6 +3004,7 @@ impl LocalEnv {
                     // Check for duplicate field names
                     if let Some(prev_span) = seen_fields.get(&field_name.node) {
                         errors.push(SemError::DuplicateStructField {
+                            module: self.current_module().to_string(),
                             field: field_name.node.clone(),
                             span: field_name.span.clone(),
                             previous: prev_span.clone(),
@@ -3528,6 +3535,7 @@ impl LocalEnv {
                 for (field_name, field_expr) in fields {
                     if let Some(prev_span) = found_fields.get(&field_name.node) {
                         errors.push(SemError::ParameterAlreadyDefined {
+                            module: self.current_module().to_string(),
                             identifier: field_name.node.clone(),
                             span: field_name.span.clone(),
                             here: prev_span.clone(),
@@ -4471,6 +4479,7 @@ impl GlobalEnv {
         // Check for duplicate function name
         if let Some((_fn_type, span)) = self.lookup_fn(current_module, &name.node) {
             errors.push(SemError::FunctionAlreadyDefined {
+                module: current_module.to_string(),
                 identifier: name.node.clone(),
                 span: name.span.clone(),
                 here: span.clone(),
@@ -4516,6 +4525,7 @@ impl GlobalEnv {
             // Check for duplicate parameter names
             if let Some(prev_span) = seen_param_names.get(&param.name.node) {
                 errors.push(SemError::ParameterAlreadyDefined {
+                    module: current_module.to_string(),
                     identifier: param.name.node.clone(),
                     span: param.name.span.clone(),
                     here: prev_span.clone(),
@@ -4700,6 +4710,7 @@ impl GlobalEnv {
                 if var_list {
                     match self.lookup_var_list(current_module, &name.node) {
                         Some((_args, span)) => errors.push(SemError::VariableAlreadyDefined {
+                            module: current_module.to_string(),
                             identifier: name.node.clone(),
                             span: name.span.clone(),
                             here: Some(span),
@@ -4731,6 +4742,7 @@ impl GlobalEnv {
                 } else {
                     match self.lookup_var(current_module, &name.node) {
                         Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                            module: current_module.to_string(),
                             identifier: name.node.clone(),
                             span: name.span.clone(),
                             here: span_opt,
