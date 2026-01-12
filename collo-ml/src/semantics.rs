@@ -45,6 +45,36 @@ pub struct VariableDesc {
     pub referenced_fn: String,
 }
 
+/// Simplified path for symbol table keys (without spans)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SymbolPath(pub Vec<String>);
+
+/// Map from local path to symbol definition
+pub type SymbolMap = HashMap<SymbolPath, Symbol>;
+
+/// A symbol in the symbol table, pointing to its definition location
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Symbol {
+    Module(String),               // module name
+    Function(String, String),     // (module, name)
+    CustomType(String, String),   // (module, name)
+    Variable(String, String),     // (module, name)
+    VariableList(String, String), // (module, name)
+}
+
+impl Symbol {
+    /// Returns the module name this symbol comes from
+    pub fn module_name(&self) -> &str {
+        match self {
+            Symbol::Module(m) => m,
+            Symbol::Function(m, _) => m,
+            Symbol::CustomType(m, _) => m,
+            Symbol::Variable(m, _) => m,
+            Symbol::VariableList(m, _) => m,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
     object_types: HashMap<String, ObjectFields>, // external, no module
@@ -53,6 +83,7 @@ pub struct GlobalEnv {
     external_variables: HashMap<String, ArgsType>, // external, no module
     internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
+    symbols: HashMap<String, SymbolMap>,         // module → symbol table
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -530,6 +561,14 @@ pub enum SemError {
     UnguardedRecursiveType { type_name: String, span: Span },
     #[error("Module \"{module}\" at {span:?} is unknown")]
     UnknownModule { module: String, span: Span },
+    #[error("Cannot import own module at {span:?}")]
+    SelfImport { span: Span },
+    #[error("Symbol \"{path}\" at {span:?} conflicts with existing symbol from module \"{existing_module}\"")]
+    SymbolConflict {
+        path: String,
+        span: Span,
+        existing_module: String,
+    },
     #[error("Qualified module access at {span:?} is not yet implemented")]
     QualifiedAccessNotYetSupported { span: Span },
     #[error("Primitive type \"{type_name}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))")]
@@ -3825,6 +3864,7 @@ impl GlobalEnv {
                 .collect(),
             internal_variables: HashMap::new(),
             variable_lists: HashMap::new(),
+            symbols: HashMap::new(),
         };
 
         for (object_type, field_desc) in &temp_env.object_types {
@@ -3909,6 +3949,45 @@ impl GlobalEnv {
         }
 
         // ====================================================================
+        // PASS 1c: Populate type symbols for current module + imports
+        // ====================================================================
+        temp_env.import_type_symbols(&current_module, &current_module, None, None, &mut errors);
+
+        // Import type symbols from foreign modules
+        for statement in &file.statements {
+            if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
+                if !Self::module_exists(&module_path.node) {
+                    errors.push(SemError::UnknownModule {
+                        module: module_path.node.clone(),
+                        span: module_path.span.clone(),
+                    });
+                    continue;
+                }
+                if module_path.node == current_module {
+                    errors.push(SemError::SelfImport {
+                        span: module_path.span.clone(),
+                    });
+                    continue;
+                }
+                let prefix = match alias {
+                    crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                    crate::ast::ImportAlias::Wildcard(_) => None,
+                };
+                let import_span = match alias {
+                    crate::ast::ImportAlias::Named(name) => &name.span,
+                    crate::ast::ImportAlias::Wildcard(span) => span,
+                };
+                temp_env.import_type_symbols(
+                    &current_module,
+                    &module_path.node,
+                    prefix,
+                    Some(import_span),
+                    &mut errors,
+                );
+            }
+        }
+
+        // ====================================================================
         // PASS 2a: Register all function signatures
         // Now all types are resolved, we can build function signatures
         // ====================================================================
@@ -3938,6 +4017,34 @@ impl GlobalEnv {
         }
 
         // ====================================================================
+        // PASS 2a+: Populate function symbols for current module + imports
+        // ====================================================================
+        temp_env.import_function_symbols(&current_module, &current_module, None, None, &mut errors);
+
+        // Import function symbols from foreign modules (skip validation, done in PASS 1c)
+        for statement in &file.statements {
+            if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
+                if Self::module_exists(&module_path.node) && module_path.node != current_module {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_function_symbols(
+                        &current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
+                }
+            }
+        }
+
+        // ====================================================================
         // PASS 2b: Process reify statements
         // Now all function signatures are known, reify can verify them
         // Variables created here can be used in function bodies
@@ -3961,6 +4068,34 @@ impl GlobalEnv {
                     &mut errors,
                     &mut warnings,
                 );
+            }
+        }
+
+        // ====================================================================
+        // PASS 2b+: Populate variable symbols for current module + imports
+        // ====================================================================
+        temp_env.import_variable_symbols(&current_module, &current_module, None, None, &mut errors);
+
+        // Import variable symbols from foreign modules (skip validation, done in PASS 1c)
+        for statement in &file.statements {
+            if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
+                if Self::module_exists(&module_path.node) && module_path.node != current_module {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_variable_symbols(
+                        &current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
+                }
             }
         }
 
@@ -4014,6 +4149,183 @@ impl GlobalEnv {
                 warnings.push(SemWarning::UnusedVariable {
                     identifier: format!("{}::{}", module, var_name),
                     span: var_desc.span.clone(),
+                });
+            }
+        }
+    }
+
+    // ========================================================================
+    // Symbol Table Helpers
+    // ========================================================================
+
+    /// Check if a module exists (for now, only "main" exists)
+    fn module_exists(module_name: &str) -> bool {
+        module_name == "main"
+    }
+
+    /// Build a SymbolPath from optional prefix and name
+    /// For enum variants like "Result::Ok", splits into ["prefix?", "Result", "Ok"]
+    fn make_symbol_path(prefix: Option<&str>, name: &str) -> SymbolPath {
+        let mut segments: Vec<String> = prefix.map(|p| vec![p.to_string()]).unwrap_or_default();
+        if name.contains("::") {
+            segments.extend(name.split("::").map(|s| s.to_string()));
+        } else {
+            segments.push(name.to_string());
+        }
+        SymbolPath(segments)
+    }
+
+    /// Import type symbols from source_module into target_module's symbol table
+    fn import_type_symbols(
+        &mut self,
+        target_module: &str,
+        source_module: &str,
+        prefix: Option<&str>,
+        import_span: Option<&Span>,
+        errors: &mut Vec<SemError>,
+    ) {
+        // Collect conflicts and types to add (to avoid borrow conflict)
+        let mut conflicts: Vec<(String, String)> = Vec::new(); // (path_str, existing_module)
+
+        {
+            let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
+
+            // If prefix given, register the module symbol first
+            if let Some(p) = prefix {
+                let module_path = SymbolPath(vec![p.to_string()]);
+                if let Some(existing) = symbol_map.get(&module_path) {
+                    conflicts.push((p.to_string(), existing.module_name().to_string()));
+                } else {
+                    symbol_map.insert(module_path, Symbol::Module(source_module.to_string()));
+                }
+            }
+        }
+
+        // Collect types to add
+        let types_to_add: Vec<_> = self
+            .custom_types
+            .keys()
+            .filter(|(mod_name, _)| mod_name == source_module)
+            .map(|(mod_name, type_name)| (mod_name.clone(), type_name.clone()))
+            .collect();
+
+        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
+        for (mod_name, type_name) in types_to_add {
+            let path = Self::make_symbol_path(prefix, &type_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::CustomType(mod_name, type_name));
+            }
+        }
+
+        // Report conflicts
+        if let Some(span) = import_span {
+            for (path_str, existing_module) in conflicts {
+                errors.push(SemError::SymbolConflict {
+                    path: path_str,
+                    span: span.clone(),
+                    existing_module,
+                });
+            }
+        }
+    }
+
+    /// Import function symbols from source_module into target_module's symbol table
+    fn import_function_symbols(
+        &mut self,
+        target_module: &str,
+        source_module: &str,
+        prefix: Option<&str>,
+        import_span: Option<&Span>,
+        errors: &mut Vec<SemError>,
+    ) {
+        let mut conflicts: Vec<(String, String)> = Vec::new();
+
+        // Collect functions to add (to avoid borrow conflict)
+        let fns_to_add: Vec<_> = self
+            .functions
+            .keys()
+            .filter(|(mod_name, _)| mod_name == source_module)
+            .map(|(mod_name, fn_name)| (mod_name.clone(), fn_name.clone()))
+            .collect();
+
+        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
+        for (mod_name, fn_name) in fns_to_add {
+            let path = Self::make_symbol_path(prefix, &fn_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::Function(mod_name, fn_name));
+            }
+        }
+
+        // Report conflicts
+        if let Some(span) = import_span {
+            for (path_str, existing_module) in conflicts {
+                errors.push(SemError::SymbolConflict {
+                    path: path_str,
+                    span: span.clone(),
+                    existing_module,
+                });
+            }
+        }
+    }
+
+    /// Import variable symbols from source_module into target_module's symbol table
+    fn import_variable_symbols(
+        &mut self,
+        target_module: &str,
+        source_module: &str,
+        prefix: Option<&str>,
+        import_span: Option<&Span>,
+        errors: &mut Vec<SemError>,
+    ) {
+        let mut conflicts: Vec<(String, String)> = Vec::new();
+
+        // Collect internal variables to add
+        let vars_to_add: Vec<_> = self
+            .internal_variables
+            .keys()
+            .filter(|(mod_name, _)| mod_name == source_module)
+            .map(|(mod_name, var_name)| (mod_name.clone(), var_name.clone()))
+            .collect();
+
+        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
+        for (mod_name, var_name) in vars_to_add {
+            let path = Self::make_symbol_path(prefix, &var_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::Variable(mod_name, var_name));
+            }
+        }
+
+        // Collect variable lists to add
+        let var_lists_to_add: Vec<_> = self
+            .variable_lists
+            .keys()
+            .filter(|(mod_name, _)| mod_name == source_module)
+            .map(|(mod_name, var_name)| (mod_name.clone(), var_name.clone()))
+            .collect();
+
+        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
+        for (mod_name, var_name) in var_lists_to_add {
+            let path = Self::make_symbol_path(prefix, &var_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::VariableList(mod_name, var_name));
+            }
+        }
+
+        // Report conflicts
+        if let Some(span) = import_span {
+            for (path_str, existing_module) in conflicts {
+                errors.push(SemError::SymbolConflict {
+                    path: path_str,
+                    span: span.clone(),
+                    existing_module,
                 });
             }
         }
