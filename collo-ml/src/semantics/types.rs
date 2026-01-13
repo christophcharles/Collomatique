@@ -496,25 +496,15 @@ impl SimpleType {
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
-            SimpleTypeName::Other(name) => {
+            SimpleTypeName::Path(path) => {
+                // Extract segments from the namespace path
+                let segments: Vec<String> =
+                    path.node.segments.iter().map(|s| s.node.clone()).collect();
+                let path_str = segments.join("::");
                 // Use resolve_type_path which goes through resolve_path
-                match resolve_type_path(vec![name.clone()], current_module, global_env) {
+                match resolve_type_path(segments, current_module, global_env) {
                     Some(simple_type) => Ok(simple_type),
-                    None => Err(TypeResolutionError::UnknownType(name)),
-                }
-            }
-            SimpleTypeName::Qualified(root, variant) => {
-                // Use resolve_type_path for qualified types (e.g., "a::Point" or "Option::Some")
-                match resolve_type_path(
-                    vec![root.clone(), variant.clone()],
-                    current_module,
-                    global_env,
-                ) {
-                    Some(simple_type) => Ok(simple_type),
-                    None => Err(TypeResolutionError::UnknownType(format!(
-                        "{}::{}",
-                        root, variant
-                    ))),
+                    None => Err(TypeResolutionError::UnknownType(path_str)),
                 }
             }
             SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),

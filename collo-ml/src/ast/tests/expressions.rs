@@ -497,13 +497,8 @@ fn parse_explicit_type_annotation() {
             Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::IdentPath(_)));
                 assert_eq!(typ.node.types.len(), 1);
-                assert_eq!(
-                    typ.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Other("LinExpr".to_string()),
-                    }
-                );
+                assert_eq!(typ.node.types[0].node.maybe_count, 0);
+                assert!(typ.node.types[0].node.inner.matches_str("LinExpr"));
             }
             _ => panic!("Expected ExplicitType"),
         },
@@ -522,13 +517,8 @@ fn parse_explicit_type_with_number() {
             Expr::ExplicitType { expr, typ } => {
                 assert!(matches!(expr.node, Expr::Number(5)));
                 assert_eq!(typ.node.types.len(), 1);
-                assert_eq!(
-                    typ.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Other("Int".to_string()),
-                    }
-                );
+                assert_eq!(typ.node.types[0].node.maybe_count, 0);
+                assert!(typ.node.types[0].node.inner.matches_str("Int"));
             }
             _ => panic!("Expected ExplicitType"),
         },
@@ -550,13 +540,8 @@ fn parse_explicit_type_with_list() {
                 match &typ.node.types[0].node.inner {
                     SimpleTypeName::List(typ_name) => {
                         assert_eq!(typ_name.node.types.len(), 1);
-                        assert_eq!(
-                            typ_name.node.types[0].node,
-                            MaybeTypeName {
-                                maybe_count: 0,
-                                inner: SimpleTypeName::Other("Int".to_string()),
-                            }
-                        );
+                        assert_eq!(typ_name.node.types[0].node.maybe_count, 0);
+                        assert!(typ_name.node.types[0].node.inner.matches_str("Int"));
                     }
                     _ => panic!("Expected List type"),
                 }
@@ -581,13 +566,8 @@ fn parse_explicit_type_for_empty_typed_list() {
                 match &typ.node.types[0].node.inner {
                     SimpleTypeName::List(typ_name) => {
                         assert_eq!(typ_name.node.types.len(), 1);
-                        assert_eq!(
-                            typ_name.node.types[0].node,
-                            MaybeTypeName {
-                                maybe_count: 0,
-                                inner: SimpleTypeName::Other("Int".to_string()),
-                            }
-                        );
+                        assert_eq!(typ_name.node.types[0].node.maybe_count, 0);
+                        assert!(typ_name.node.types[0].node.inner.matches_str("Int"));
                     }
                     _ => panic!("Expected List type"),
                 }
@@ -657,13 +637,8 @@ fn parse_type_conversion_with_list() {
                 match &typ.node.types[0].node.inner {
                     SimpleTypeName::List(typ_name) => {
                         assert_eq!(typ_name.node.types.len(), 1);
-                        assert_eq!(
-                            typ_name.node.types[0].node,
-                            MaybeTypeName {
-                                maybe_count: 0,
-                                inner: SimpleTypeName::Other("Int".to_string()),
-                            }
-                        );
+                        assert_eq!(typ_name.node.types[0].node.maybe_count, 0);
+                        assert!(typ_name.node.types[0].node.inner.matches_str("Int"));
                     }
                     _ => panic!("Expected List type"),
                 }

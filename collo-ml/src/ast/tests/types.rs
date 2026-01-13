@@ -13,13 +13,8 @@ fn parse_int_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("Int".to_string()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Int"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -34,13 +29,8 @@ fn parse_bool_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("Bool".to_string()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Bool"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -55,13 +45,8 @@ fn parse_linexpr_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("LinExpr".to_string()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("LinExpr"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -76,13 +61,11 @@ fn parse_constraint_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("Constraint".to_string()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0]
+                .node
+                .inner
+                .matches_str("Constraint"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -97,13 +80,8 @@ fn parse_string_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("String".to_string()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("String"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -118,13 +96,8 @@ fn parse_custom_object_type() {
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
-            assert_eq!(
-                output_type.node.types[0].node,
-                MaybeTypeName {
-                    maybe_count: 0,
-                    inner: SimpleTypeName::Other("Student".into()),
-                }
-            );
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Student"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -145,13 +118,8 @@ fn parse_simple_list_type() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("Int".to_string()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0].node.inner.matches_str("Int"));
                 }
                 _ => panic!("Expected List type"),
             }
@@ -173,13 +141,8 @@ fn parse_list_of_bool() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("Bool".to_string()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0].node.inner.matches_str("Bool"));
                 }
                 _ => panic!("Expected List type"),
             }
@@ -201,13 +164,11 @@ fn parse_list_of_object() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("Student".into()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0]
+                        .node
+                        .inner
+                        .matches_str("Student"));
                 }
                 _ => panic!("Expected List type"),
             }
@@ -232,13 +193,8 @@ fn parse_nested_list_type() {
                     match &middle_typename.node.types[0].node.inner {
                         SimpleTypeName::List(inner_typename) => {
                             assert_eq!(inner_typename.node.types.len(), 1);
-                            assert_eq!(
-                                inner_typename.node.types[0].node,
-                                MaybeTypeName {
-                                    maybe_count: 0,
-                                    inner: SimpleTypeName::Other("Int".to_string()),
-                                }
-                            );
+                            assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                            assert!(inner_typename.node.types[0].node.inner.matches_str("Int"));
                         }
                         _ => panic!("Expected nested List type"),
                     }
@@ -269,13 +225,11 @@ fn parse_deeply_nested_list_type() {
                             match &level2_typename.node.types[0].node.inner {
                                 SimpleTypeName::List(level3_typename) => {
                                     assert_eq!(level3_typename.node.types.len(), 1);
-                                    assert_eq!(
-                                        level3_typename.node.types[0].node,
-                                        MaybeTypeName {
-                                            maybe_count: 0,
-                                            inner: SimpleTypeName::Other("Bool".to_string()),
-                                        }
-                                    );
+                                    assert_eq!(level3_typename.node.types[0].node.maybe_count, 0);
+                                    assert!(level3_typename.node.types[0]
+                                        .node
+                                        .inner
+                                        .matches_str("Bool"));
                                 }
                                 _ => panic!("Expected deeply nested List type"),
                             }
@@ -303,13 +257,11 @@ fn parse_list_of_linexpr() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("LinExpr".to_string()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0]
+                        .node
+                        .inner
+                        .matches_str("LinExpr"));
                 }
                 _ => panic!("Expected List type"),
             }
@@ -331,13 +283,11 @@ fn parse_list_of_constraint() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("Constraint".to_string()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0]
+                        .node
+                        .inner
+                        .matches_str("Constraint"));
                 }
                 _ => panic!("Expected List type"),
             }
@@ -359,13 +309,11 @@ fn parse_list_of_string() {
             match &outer_type.inner {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
-                    assert_eq!(
-                        inner_typename.node.types[0].node,
-                        MaybeTypeName {
-                            maybe_count: 0,
-                            inner: SimpleTypeName::Other("String".to_string()),
-                        }
-                    );
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0]
+                        .node
+                        .inner
+                        .matches_str("String"));
                 }
                 _ => panic!("Expected List type"),
             }

@@ -215,8 +215,8 @@ fn qualified_type_cast_with_expressions() {
 
 #[test]
 fn qualified_type_in_type_annotation() {
-    // Note: In type annotations, qualified names use regular idents, not variant_name
-    // So primitive type names like "None" are not valid here (they're only valid in expressions)
+    // Note: In type annotations, qualified names use namespace_path
+    // which supports arbitrary depth (e.g., mod::Result::Ok)
     let cases = vec![
         "Result::Ok",
         "Result::Error",
@@ -224,7 +224,7 @@ fn qualified_type_in_type_annotation() {
         "MyEnum::Variant",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::qualified_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }

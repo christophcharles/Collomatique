@@ -233,11 +233,12 @@ fn qualified_type_in_return_type() {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
             match &output_type.node.types[0].node.inner {
-                SimpleTypeName::Qualified(root, variant) => {
-                    assert_eq!(root, "Result");
-                    assert_eq!(variant, "Ok");
+                SimpleTypeName::Path(path) => {
+                    assert_eq!(path.node.segments.len(), 2);
+                    assert_eq!(path.node.segments[0].node, "Result");
+                    assert_eq!(path.node.segments[1].node, "Ok");
                 }
-                _ => panic!("Expected Qualified type"),
+                _ => panic!("Expected Path type"),
             }
         }
         _ => panic!("Expected Let statement"),
@@ -254,11 +255,12 @@ fn qualified_type_in_param_type() {
         Statement::Let { params, .. } => {
             assert_eq!(params.len(), 1);
             match &params[0].typ.node.types[0].node.inner {
-                SimpleTypeName::Qualified(root, variant) => {
-                    assert_eq!(root, "Result");
-                    assert_eq!(variant, "Ok");
+                SimpleTypeName::Path(path) => {
+                    assert_eq!(path.node.segments.len(), 2);
+                    assert_eq!(path.node.segments[0].node, "Result");
+                    assert_eq!(path.node.segments[1].node, "Ok");
                 }
-                _ => panic!("Expected Qualified type in param"),
+                _ => panic!("Expected Path type in param"),
             }
         }
         _ => panic!("Expected Let statement"),

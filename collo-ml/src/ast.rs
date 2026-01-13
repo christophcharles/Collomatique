@@ -145,16 +145,25 @@ pub fn parse_docstring_line(
             let inner_expr = Expr::from_pest(expr_pair)?;
 
             // Wrap in String(...) type cast
+            let dummy_span = Span {
+                start: expr_span_start,
+                end: expr_span_start,
+            };
             let string_type = TypeName {
                 types: vec![Spanned::new(
                     MaybeTypeName {
                         maybe_count: 0,
-                        inner: SimpleTypeName::Other("String".to_string()),
+                        inner: SimpleTypeName::Path(Spanned::new(
+                            NamespacePath {
+                                segments: vec![Spanned::new(
+                                    "String".to_string(),
+                                    dummy_span.clone(),
+                                )],
+                            },
+                            dummy_span.clone(),
+                        )),
                     },
-                    Span {
-                        start: expr_span_start,
-                        end: expr_span_start,
-                    },
+                    dummy_span,
                 )],
             };
 
@@ -308,11 +317,9 @@ pub struct MaybeTypeName {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SimpleTypeName {
-    /// Named type - could be a built-in (Int, Bool, etc.), object, or custom type.
+    /// Type path - could be simple (Int, Bool) or qualified (Result::Ok, module::Type)
     /// Resolution happens in the semantics layer.
-    Other(String),
-    /// Qualified type name like Result::Ok - (root, variant)
-    Qualified(String, String),
+    Path(Spanned<NamespacePath>),
     EmptyList,
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
@@ -329,7 +336,7 @@ pub enum PathSegment {
 
 /// A namespace path with one or more segments: ident or ident::ident::...
 /// Used for variable references, function calls, type casts, and enum variants.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NamespacePath {
     pub segments: Vec<Spanned<String>>,
 }
@@ -1048,7 +1055,7 @@ impl SimpleTypeName {
             }
             Some(inner_pair) => {
                 match inner_pair.as_rule() {
-                    Rule::primitive_type => Self::from_primitive_type(inner_pair),
+                    Rule::namespace_path => Self::from_namespace_path_type(inner_pair),
                     Rule::type_name => {
                         // It's a list type: [type_name]
                         let inner_span = Span::from_pest(&inner_pair);
@@ -1060,7 +1067,7 @@ impl SimpleTypeName {
                     Rule::tuple_type => Self::from_tuple_type(inner_pair),
                     Rule::struct_type => Self::from_struct_type(inner_pair),
                     _ => Err(AstError::UnexpectedRule {
-                        expected: "primitive_type, type_name, tuple_type, or struct_type",
+                        expected: "namespace_path, type_name, tuple_type, or struct_type",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     }),
@@ -1107,31 +1114,53 @@ impl SimpleTypeName {
         Ok(SimpleTypeName::Struct(fields))
     }
 
-    fn from_primitive_type(pair: Pair<Rule>) -> Result<Self, AstError> {
-        match pair.as_rule() {
-            Rule::primitive_type => {
-                // Check if there's a nested qualified_type_name
-                let mut inner = pair.clone().into_inner();
-                if let Some(first) = inner.next() {
-                    if first.as_rule() == Rule::qualified_type_name {
-                        // It's a qualified type like Result::Ok
-                        let mut idents = first.into_inner();
-                        let root = idents.next().unwrap().as_str().to_string();
-                        let variant = idents.next().unwrap().as_str().to_string();
-                        return Ok(SimpleTypeName::Qualified(root, variant));
-                    }
-                }
+    fn from_namespace_path_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let path_span = Span::from_pest(&pair);
+        let mut segments = Vec::new();
 
-                // It's a simple type name (built-in or user-defined)
-                // Resolution to Int, Bool, LinExpr, etc. happens in semantics
-                let type_name = pair.as_str();
-                Ok(SimpleTypeName::Other(type_name.to_string()))
+        for ident in pair.into_inner() {
+            if ident.as_rule() == Rule::ident {
+                let ident_span = Span::from_pest(&ident);
+                segments.push(Spanned::new(ident.as_str().to_string(), ident_span));
             }
-            _ => Err(AstError::UnexpectedRule {
-                expected: "primitive_type",
-                found: pair.as_rule(),
-                span: Span::from_pest(&pair),
-            }),
+        }
+
+        Ok(SimpleTypeName::Path(Spanned::new(
+            NamespacePath { segments },
+            path_span,
+        )))
+    }
+
+    /// Helper for tests: create a Path variant from a type name string
+    /// Handles both simple names ("Int") and qualified names ("Result::Ok")
+    #[cfg(test)]
+    pub fn from_test_str(name: &str) -> Self {
+        let dummy_span = Span { start: 0, end: 0 };
+        let segments: Vec<Spanned<String>> = name
+            .split("::")
+            .map(|s| Spanned::new(s.to_string(), dummy_span.clone()))
+            .collect();
+        SimpleTypeName::Path(Spanned::new(NamespacePath { segments }, dummy_span))
+    }
+
+    /// Helper for tests: check if this type matches a string representation
+    /// Ignores span information
+    #[cfg(test)]
+    pub fn matches_str(&self, name: &str) -> bool {
+        match self {
+            SimpleTypeName::Path(path) => {
+                let expected_segments: Vec<&str> = name.split("::").collect();
+                if path.node.segments.len() != expected_segments.len() {
+                    return false;
+                }
+                path.node
+                    .segments
+                    .iter()
+                    .zip(expected_segments.iter())
+                    .all(|(actual, expected)| actual.node == *expected)
+            }
+            SimpleTypeName::EmptyList => name == "[]",
+            _ => false,
         }
     }
 }

@@ -105,9 +105,7 @@ enum_variant_type = { "(" ~ (type_name ~ ("," ~ type_name)* ~ ","?)? ~ ")" | str
 namespace_path = { ident ~ ("::" ~ ident)* }
 
 // ========== Type Names ==========
-// Qualified type: Result::Ok, or simple: Result, Int, etc.
-qualified_type_name = { ident ~ "::" ~ ident }
-primitive_type = { qualified_type_name | ident }
+// Type names use namespace_path for full module path support
 type_name = { maybe_type ~ ( "|" ~ maybe_type )* }
 maybe_type = { maybe_op* ~ list_type }
 maybe_op = @{ "?" }
@@ -115,7 +113,7 @@ list_type = {
     "[" ~ type_name? ~ "]" |
     tuple_type |
     struct_type |
-    primitive_type
+    namespace_path
 }
 
 // Tuple type: (Type1, Type2) or (Type1, Type2, Type3, ...)
@@ -280,7 +278,6 @@ tuple_type_complete = { SOI ~ tuple_type ~ EOI }
 tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }
 struct_type_complete = { SOI ~ struct_type ~ EOI }
 struct_literal_complete = { SOI ~ struct_literal ~ EOI }
-qualified_type_name_complete = { SOI ~ qualified_type_name ~ EOI }
 import_statement_complete = { SOI ~ import_statement ~ EOI }
 qualified_var_call_complete = { SOI ~ qualified_var_call ~ EOI }
 qualified_var_list_call_complete = { SOI ~ qualified_var_list_call ~ EOI }

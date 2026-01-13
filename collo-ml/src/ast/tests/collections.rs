@@ -314,13 +314,8 @@ fn parse_global_collection() {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
                 assert_eq!(name.node.types.len(), 1);
-                assert_eq!(
-                    name.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Other("Student".into()),
-                    }
-                );
+                assert_eq!(name.node.types[0].node.maybe_count, 0);
+                assert!(name.node.types[0].node.inner.matches_str("Student"));
             }
             _ => panic!("Expected GlobalList"),
         },
@@ -338,13 +333,8 @@ fn parse_global_collection_with_builtin_type() {
         Statement::Let { body, .. } => match &body.node {
             Expr::GlobalList(name) => {
                 assert_eq!(name.node.types.len(), 1);
-                assert_eq!(
-                    name.node.types[0].node,
-                    MaybeTypeName {
-                        maybe_count: 0,
-                        inner: SimpleTypeName::Other("Int".to_string()),
-                    }
-                );
+                assert_eq!(name.node.types[0].node.maybe_count, 0);
+                assert!(name.node.types[0].node.inner.matches_str("Int"));
             }
             _ => panic!("Expected GlobalList"),
         },
