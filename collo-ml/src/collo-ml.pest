@@ -171,7 +171,7 @@ primary_expr = {
     fold |
     rfold |
     cardinality |
-    empty_typed_list | // Must come first to parse [Type]() correctly
+    empty_typed_list | // [<Type>] notation
     complex_type_cast |  // Must come before list_literal to parse [Type](expr) correctly
     list_comprehension |  // Must come before list_literal to parse correctly
     list_range | // Must come before list_literal to parse correctly
