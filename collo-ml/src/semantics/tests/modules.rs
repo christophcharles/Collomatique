@@ -126,12 +126,12 @@ fn module_b_uses_private_type_from_module_a_should_fail() {
 #[test]
 fn module_b_uses_private_reified_variable_from_module_a_should_fail() {
     let mod_a = r#"
-        pub let get_value() -> Int = 42;
-        reify get_value as $the_value;
+        let check_value(x: Int) -> Constraint = x === 42;
+        reify check_value as $the_value;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
-        pub let double_value() -> Int = a::the_value + a::the_value;
+        pub let use_private_var(x: Int) -> LinExpr = a::$the_value(x);
     "#;
 
     let (_, errors, _) = analyze_multi(
@@ -266,31 +266,15 @@ fn alias_shadowing_local_shadows_imported() {
     // Note: there might be a warning for unused local function, which is fine
 }
 
-// ========== Ignored Tests (require additional features) ==========
-// The following tests are currently ignored because they depend on features
-// that aren't fully implemented yet:
-//
-// 1. Reify type checking - The type of a reified variable needs to be inferred
-//    from the function's return type, but currently the reify system expects
-//    the type annotation which can be `Constraint`.
-//
-// 2. Struct coercion to custom types - When a function returns a custom type
-//    and the body is a struct literal, the struct should be coerced to the
-//    custom type. This requires struct-to-custom-type coercion.
-//
-// 3. Enum pattern matching with qualified paths - The parser doesn't support
-//    qualified paths in match patterns (e.g., `a::Option::Some { ... }`).
-
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn module_b_uses_public_reified_variable_from_module_a() {
     let mod_a = r#"
-        pub let get_value() -> Int = 42;
-        pub reify get_value as $the_value;
+        pub let is_valid(x: Int) -> Constraint = x >== 0;
+        pub reify is_valid as $validity_check;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
-        pub let double_value() -> Int = a::the_value + a::the_value;
+        pub let check_both(x: Int, y: Int) -> LinExpr = a::$validity_check(x) + a::$validity_check(y);
     "#;
 
     let (_, errors, warnings) = analyze_multi(
@@ -308,21 +292,20 @@ fn module_b_uses_public_reified_variable_from_module_a() {
 }
 
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn two_complex_modules_no_crosstalk() {
     let mod_a = r#"
         pub type Point = { x: Int, y: Int };
-        pub let make_point(x: Int, y: Int) -> Point = { x: x, y: y };
+        pub let make_point(x: Int, y: Int) -> Point = Point { x: x, y: y };
         pub let distance(p: Point) -> Int = p.x + p.y;
-        pub let origin() -> Point = { x: 0, y: 0 };
-        pub reify origin as $default_point;
+        pub let is_origin(p: Point) -> Constraint = p.x === 0 && p.y === 0;
+        pub reify is_origin as $OriginCheck;
     "#;
     let mod_b = r#"
         pub type Color = { r: Int, g: Int, b: Int };
-        pub let make_color(r: Int, g: Int, b: Int) -> Color = { r: r, g: g, b: b };
+        pub let make_color(r: Int, g: Int, b: Int) -> Color = Color { r: r, g: g, b: b };
         pub let brightness(c: Color) -> Int = c.r + c.g + c.b;
-        pub let black() -> Color = { r: 0, g: 0, b: 0 };
-        pub reify black as $default_color;
+        pub let is_black(c: Color) -> Constraint = c.r === 0 && c.g === 0 && c.b === 0;
+        pub reify is_black as $BlackCheck;
     "#;
 
     let (_, errors, warnings) = analyze_multi(
@@ -340,13 +323,12 @@ fn two_complex_modules_no_crosstalk() {
 }
 
 #[test]
-#[ignore = "TODO: Struct coercion to custom types not working in multi-module"]
 fn opaque_type_chaining_with_private_intermediate_type() {
     // Module A: private type MyType + public () -> MyType + public MyType -> Int
     // Module B: chains these functions - should pass even though type is private
     let mod_a = r#"
         type MyType = { value: Int };
-        pub let make_my_type() -> MyType = { value: 42 };
+        pub let make_my_type() -> MyType = MyType { value: 42 };
         pub let extract_value(x: MyType) -> Int = x.value;
     "#;
     let mod_b = r#"
@@ -369,7 +351,6 @@ fn opaque_type_chaining_with_private_intermediate_type() {
 }
 
 #[test]
-#[ignore = "TODO: Parser doesn't support qualified paths in match patterns"]
 fn enum_variants_across_modules() {
     let mod_a = r#"
         pub enum Option = Some { value: Int } | None;
@@ -379,8 +360,8 @@ fn enum_variants_across_modules() {
         pub let make_some(x: Int) -> a::Option = a::Option::Some { value: x };
         pub let make_none() -> a::Option = a::Option::None;
         pub let extract(opt: a::Option) -> Int = match opt {
-            a::Option::Some { value } => value,
-            a::Option::None => 0,
+            x as a::Option::Some { x.value }
+            _x as a::Option::None { 0 }
         };
     "#;
 
@@ -399,11 +380,10 @@ fn enum_variants_across_modules() {
 }
 
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn private_function_publicly_reified_no_unused_warning() {
     let mod_a = r#"
-        let private_fn() -> Int = 42;
-        pub reify private_fn as $public_var;
+        let private_constraint(x: Int) -> Constraint = x === 42;
+        pub reify private_constraint as $PublicVar;
     "#;
 
     let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new(), HashMap::new());
@@ -417,11 +397,10 @@ fn private_function_publicly_reified_no_unused_warning() {
 }
 
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn private_function_privately_reified_unused_warning() {
     let mod_a = r#"
-        let private_fn() -> Int = 42;
-        reify private_fn as $private_var;
+        let private_constraint(x: Int) -> Constraint = x === 42;
+        reify private_constraint as $private_var;
     "#;
 
     let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new(), HashMap::new());
@@ -442,15 +421,14 @@ fn private_function_privately_reified_unused_warning() {
 }
 
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn module_b_wraps_and_reifies_public_function_from_module_a() {
     let mod_a = r#"
-        pub let get_value() -> Int = 42;
+        pub let check_value(x: Int) -> Constraint = x === 42;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
-        let local_get_value() -> Int = a::get_value();
-        pub reify local_get_value as $my_value;
+        let local_check(x: Int) -> Constraint = a::check_value(x);
+        pub reify local_check as $MyCheck;
     "#;
 
     let (_, errors, warnings) = analyze_multi(
@@ -468,23 +446,22 @@ fn module_b_wraps_and_reifies_public_function_from_module_a() {
 }
 
 #[test]
-#[ignore = "TODO: Reify type checking needs function return type inference"]
 fn three_module_chain_function_reify_use() {
-    // Module A: defines public function and reifies it
-    // Module B: imports and re-exports as a variable
+    // Module A: defines constraint and reifies it
+    // Module B: wraps A's constraint, reifies the wrapper
     // Module C: uses the reified variable from B
     let mod_a = r#"
-        pub let get_answer() -> Int = 42;
-        pub reify get_answer as $the_answer;
+        pub let is_answer(x: Int) -> Constraint = x === 42;
+        pub reify is_answer as $the_answer;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
-        let local_answer() -> Int = a::the_answer;
-        pub reify local_answer as $b_answer;
+        let is_double_answer(x: Int) -> Constraint = a::is_answer(x) && a::is_answer(x * 2);
+        pub reify is_double_answer as $double_check;
     "#;
     let mod_c = r#"
         import "mod_b" as b;
-        pub let double_answer() -> Int = b::b_answer + b::b_answer;
+        pub let combined_check(x: Int, y: Int) -> LinExpr = b::$double_check(x) + b::$double_check(y);
     "#;
 
     let (_, errors, warnings) = analyze_multi(
