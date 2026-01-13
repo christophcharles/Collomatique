@@ -852,7 +852,7 @@ impl<T: EvalObject> CheckedAST<T> {
             .collect()
     }
 
-    pub fn get_vars(&self) -> HashMap<(String, String), String> {
+    pub fn get_vars(&self) -> HashMap<(String, String), (String, String)> {
         self.global_env
             .get_vars()
             .iter()
@@ -865,7 +865,7 @@ impl<T: EvalObject> CheckedAST<T> {
             .collect()
     }
 
-    pub fn get_var_lists(&self) -> HashMap<(String, String), String> {
+    pub fn get_var_lists(&self) -> HashMap<(String, String), (String, String)> {
         self.global_env
             .get_var_lists()
             .iter()
@@ -1350,8 +1350,8 @@ impl<T: EvalObject> LocalEnv<T> {
                         var_desc.referenced_fn.clone(),
                     );
                     eval_history.add_fn_to_call_history(
-                        self.current_module(),
-                        &var_desc.referenced_fn,
+                        &var_desc.referenced_fn.0,
+                        &var_desc.referenced_fn.1,
                         args.clone(),
                         true,
                     )?;
@@ -1984,8 +1984,8 @@ impl<T: EvalObject> LocalEnv<T> {
                     .collect::<Result<_, _>>()?;
 
                 let (constraints, _origin) = eval_history.add_fn_to_call_history(
-                    &current_module,
-                    var_list_fn,
+                    &var_list_fn.0,
+                    &var_list_fn.1,
                     evaluated_args.clone(),
                     true,
                 )?;
@@ -2226,8 +2226,8 @@ pub struct EvalHistory<'a, T: EvalObject> {
     env: &'a T::Env,
     cache: T::Cache,
     funcs: BTreeMap<(String, String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
-    vars: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
-    var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), String>,
+    vars: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
+    var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
 }
 
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
@@ -2411,10 +2411,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             var_lists: BTreeMap::new(),
         };
 
-        for ((v_module, v_name, v_args), fn_name) in self.vars {
+        for ((v_module, v_name, v_args), (fn_module, fn_name)) in self.vars {
             let (fn_call_result, new_origin) = self
                 .funcs
-                .get(&(v_module.clone(), fn_name.clone(), v_args.clone()))
+                .get(&(fn_module.clone(), fn_name.clone(), v_args.clone()))
                 .expect("Fn call should be valid");
             let constraint = match fn_call_result {
                 ExprValue::Constraint(c) => c
@@ -2431,10 +2431,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                 .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
         }
 
-        for ((vl_module, vl_name, vl_args), fn_name) in self.var_lists {
+        for ((vl_module, vl_name, vl_args), (fn_module, fn_name)) in self.var_lists {
             let (fn_call_result, new_origin) = self
                 .funcs
-                .get(&(vl_module.clone(), fn_name.clone(), vl_args.clone()))
+                .get(&(fn_module.clone(), fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
             let constraints: Vec<_> = match fn_call_result {
                 ExprValue::List(cs) if cs.iter().all(|x| matches!(x, ExprValue::Constraint(_))) => {

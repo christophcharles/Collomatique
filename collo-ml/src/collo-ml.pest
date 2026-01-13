@@ -74,7 +74,7 @@ reserved_keyword = {
 }
 
 // ========== Reify statements ==========
-reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ ident ~ "as" ~ (var_name | var_list_name) ~ ";" }
+reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ namespace_path ~ "as" ~ (var_name | var_list_name) ~ ";" }
 var_name = ${ "$" ~ ident }
 var_list_name = ${ "$[" ~ ident ~ "]" }
 

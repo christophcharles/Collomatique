@@ -237,7 +237,7 @@ pub enum Statement {
     Reify {
         docstring: Vec<DocstringLine>,
         public: bool,
-        constraint_name: Spanned<String>,
+        constraint_path: Spanned<NamespacePath>,
         var_list: bool,
         name: Spanned<String>,
     },
@@ -669,7 +669,7 @@ impl Statement {
         let span = Span::from_pest(&pair);
         let mut docstring = Vec::new();
         let mut public = false;
-        let mut constraint_name = None;
+        let mut constraint_path = None;
         let mut name = None;
         let mut var_list = false;
 
@@ -688,12 +688,17 @@ impl Statement {
                 Rule::pub_modifier => {
                     public = true;
                 }
-                Rule::ident => {
-                    if constraint_name.is_none() {
-                        constraint_name = Some(Spanned::new(
-                            inner_pair.as_str().to_string(),
-                            Span::from_pest(&inner_pair),
-                        ));
+                Rule::namespace_path => {
+                    let path_span = Span::from_pest(&inner_pair);
+                    let mut segments = Vec::new();
+                    for ident in inner_pair.into_inner() {
+                        if ident.as_rule() == Rule::ident {
+                            let ident_span = Span::from_pest(&ident);
+                            segments.push(Spanned::new(ident.as_str().to_string(), ident_span));
+                        }
+                    }
+                    if !segments.is_empty() {
+                        constraint_path = Some(Spanned::new(NamespacePath { segments }, path_span));
                     }
                 }
                 Rule::var_name => {
@@ -722,7 +727,7 @@ impl Statement {
         Ok(Statement::Reify {
             docstring,
             public,
-            constraint_name: constraint_name.ok_or(AstError::MissingName(span.clone()))?,
+            constraint_path: constraint_path.ok_or(AstError::MissingName(span.clone()))?,
             name: name.ok_or(AstError::MissingName(span))?,
             var_list,
         })

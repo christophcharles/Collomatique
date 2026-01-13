@@ -42,7 +42,7 @@ pub struct VariableDesc {
     pub span: Span,
     pub used: bool,
     pub public: bool,
-    pub referenced_fn: String,
+    pub referenced_fn: (String, String), // (module_name, fn_name)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -355,7 +355,7 @@ impl GlobalEnv {
         args_typ: ArgsType,
         span: Span,
         public: bool,
-        referenced_fn: String,
+        referenced_fn: (String, String),
         type_info: &mut TypeInfo,
     ) {
         let key = (module.to_string(), name.to_string());
@@ -405,7 +405,7 @@ impl GlobalEnv {
         args_typ: ArgsType,
         span: Span,
         public: bool,
-        referenced_fn: String,
+        referenced_fn: (String, String),
         type_info: &mut TypeInfo,
     ) {
         let key = (module.to_string(), name.to_string());
@@ -4278,7 +4278,7 @@ impl GlobalEnv {
             let current_module = &module.name;
             for statement in &module.file.statements {
                 if let crate::ast::Statement::Reify {
-                    constraint_name,
+                    constraint_path,
                     name,
                     var_list,
                     public,
@@ -4287,7 +4287,7 @@ impl GlobalEnv {
                 {
                     temp_env.expand_with_reify_statement(
                         current_module,
-                        constraint_name,
+                        constraint_path,
                         name,
                         *var_list,
                         *public,
@@ -4801,7 +4801,7 @@ impl GlobalEnv {
     fn expand_with_reify_statement(
         &mut self,
         current_module: &str,
-        constraint_name: &Spanned<String>,
+        constraint_path: &Spanned<crate::ast::NamespacePath>,
         name: &Spanned<String>,
         var_list: bool,
         public: bool,
@@ -4809,15 +4809,52 @@ impl GlobalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
-        match self.lookup_fn(current_module, &constraint_name.node) {
-            None => errors.push(SemError::UnknownIdentifer {
-                module: current_module.to_string(),
-                identifier: constraint_name.node.clone(),
-                span: constraint_name.span.clone(),
-            }),
+        // Resolve the constraint path to find the function
+        let resolved = resolve_path(constraint_path, current_module, self, None);
+
+        let (fn_module, fn_name) = match resolved {
+            Ok(ResolvedPathKind::Function { module, func }) => (module, func),
+            Ok(_) => {
+                // Path resolved to something that's not a function
+                let path_str = constraint_path
+                    .node
+                    .segments
+                    .iter()
+                    .map(|s| s.node.as_str())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                errors.push(SemError::UnknownIdentifer {
+                    module: current_module.to_string(),
+                    identifier: path_str,
+                    span: constraint_path.span.clone(),
+                });
+                return;
+            }
+            Err(e) => {
+                errors.push(e.into_sem_error(current_module));
+                return;
+            }
+        };
+
+        match self.lookup_fn(&fn_module, &fn_name) {
+            None => {
+                // This shouldn't happen if resolve_path returned Function, but handle it
+                let path_str = constraint_path
+                    .node
+                    .segments
+                    .iter()
+                    .map(|s| s.node.as_str())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                errors.push(SemError::UnknownIdentifer {
+                    module: current_module.to_string(),
+                    identifier: path_str,
+                    span: constraint_path.span.clone(),
+                });
+            }
             Some(fn_type) => {
                 // Mark function as used
-                self.mark_fn_used(current_module, &constraint_name.node);
+                self.mark_fn_used(&fn_module, &fn_name);
 
                 let needed_output_type = ExprType::simple(if var_list {
                     SimpleType::List(SimpleType::Constraint.into())
@@ -4830,10 +4867,17 @@ impl GlobalEnv {
                         output: needed_output_type,
                         ..fn_type.0.clone()
                     };
+                    let path_str = constraint_path
+                        .node
+                        .segments
+                        .iter()
+                        .map(|s| s.node.as_str())
+                        .collect::<Vec<_>>()
+                        .join("::");
                     errors.push(SemError::FunctionTypeMismatch {
                         module: current_module.to_string(),
-                        identifier: constraint_name.node.clone(),
-                        span: constraint_name.span.clone(),
+                        identifier: path_str,
+                        span: constraint_path.span.clone(),
                         expected: expected_type,
                         found: fn_type.0,
                     });
@@ -4868,7 +4912,7 @@ impl GlobalEnv {
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
                                 public,
-                                constraint_name.node.clone(),
+                                (fn_module.clone(), fn_name.clone()),
                                 type_info,
                             );
                         }
@@ -4901,7 +4945,7 @@ impl GlobalEnv {
                                 fn_type.0.args.clone(),
                                 name.span.clone(),
                                 public,
-                                constraint_name.node.clone(),
+                                (fn_module.clone(), fn_name.clone()),
                                 type_info,
                             );
                         }

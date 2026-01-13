@@ -212,13 +212,14 @@ fn parse_reify_statement() {
     assert_eq!(file.statements.len(), 1);
     match &file.statements[0].node {
         Statement::Reify {
-            constraint_name,
+            constraint_path,
             name,
             docstring,
             var_list,
             ..
         } => {
-            assert_eq!(constraint_name.node, "my_constraint");
+            assert_eq!(constraint_path.node.segments.len(), 1);
+            assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
             assert_eq!(name.node, "MyVar");
             assert!(docstring.is_empty());
             assert!(!*var_list);
@@ -236,13 +237,14 @@ fn parse_reify_statement_with_var_list() {
     assert_eq!(file.statements.len(), 1);
     match &file.statements[0].node {
         Statement::Reify {
-            constraint_name,
+            constraint_path,
             name,
             docstring,
             var_list,
             ..
         } => {
-            assert_eq!(constraint_name.node, "my_constraint");
+            assert_eq!(constraint_path.node.segments.len(), 1);
+            assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
             assert_eq!(name.node, "MyVarList");
             assert!(docstring.is_empty());
             assert!(*var_list);
@@ -280,6 +282,78 @@ fn parse_reify_with_multiple_docstrings() {
             assert_eq!(docstring.len(), 2);
             assert_eq!(docstring_line_to_string(&docstring[0]), " First line");
             assert_eq!(docstring_line_to_string(&docstring[1]), " Second line");
+        }
+        _ => panic!("Expected Reify statement"),
+    }
+}
+
+#[test]
+fn parse_reify_with_qualified_path() {
+    let input = "reify other_module::my_constraint as $MyVar;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Reify {
+            constraint_path,
+            name,
+            var_list,
+            ..
+        } => {
+            assert_eq!(constraint_path.node.segments.len(), 2);
+            assert_eq!(constraint_path.node.segments[0].node, "other_module");
+            assert_eq!(constraint_path.node.segments[1].node, "my_constraint");
+            assert_eq!(name.node, "MyVar");
+            assert!(!*var_list);
+        }
+        _ => panic!("Expected Reify statement"),
+    }
+}
+
+#[test]
+fn parse_reify_with_deeply_qualified_path() {
+    let input = "reify a::b::c::my_constraint as $[VarList];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Reify {
+            constraint_path,
+            name,
+            var_list,
+            ..
+        } => {
+            assert_eq!(constraint_path.node.segments.len(), 4);
+            assert_eq!(constraint_path.node.segments[0].node, "a");
+            assert_eq!(constraint_path.node.segments[1].node, "b");
+            assert_eq!(constraint_path.node.segments[2].node, "c");
+            assert_eq!(constraint_path.node.segments[3].node, "my_constraint");
+            assert_eq!(name.node, "VarList");
+            assert!(*var_list);
+        }
+        _ => panic!("Expected Reify statement"),
+    }
+}
+
+#[test]
+fn parse_pub_reify_with_qualified_path() {
+    let input = "pub reify mod::func as $Var;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Reify {
+            constraint_path,
+            public,
+            ..
+        } => {
+            assert_eq!(constraint_path.node.segments.len(), 2);
+            assert_eq!(constraint_path.node.segments[0].node, "mod");
+            assert_eq!(constraint_path.node.segments[1].node, "func");
+            assert!(*public);
         }
         _ => panic!("Expected Reify statement"),
     }
