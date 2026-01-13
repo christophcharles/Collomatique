@@ -177,8 +177,6 @@ primary_expr = {
     list_range | // Must come before list_literal to parse correctly
     list_literal |
     global_collection |
-    qualified_var_call |   // mod::$Var(args) - must come before var_call
-    qualified_var_list_call | // mod::$[VarList](args) - must come before var_list_call
     var_call |
     var_list_call |
     generic_call |   // path(args) - unifies fn_call + qualified_type_cast
@@ -232,11 +230,8 @@ list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
 list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 global_collection = { "@" ~ "[" ~ type_name ~ "]" }
-var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
-var_list_call = { "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
-// Qualified variable calls: mod::$Var(args), mod::$[VarList](args)
-qualified_var_call = { ident ~ "::" ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
-qualified_var_list_call = { ident ~ "::" ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
+var_call = { (ident ~ "::")? ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
+var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 // Note: fn_call, qualified_type_cast, struct_type_cast, qualified_struct_cast, qualified_unit_value
 // are all unified into generic_call, struct_call, and namespace_path rules.
 // Supports trailing comma: f(1, 2,)
@@ -279,5 +274,3 @@ tuple_literal_complete = { SOI ~ tuple_literal ~ EOI }
 struct_type_complete = { SOI ~ struct_type ~ EOI }
 struct_literal_complete = { SOI ~ struct_literal ~ EOI }
 import_statement_complete = { SOI ~ import_statement ~ EOI }
-qualified_var_call_complete = { SOI ~ qualified_var_call ~ EOI }
-qualified_var_list_call_complete = { SOI ~ qualified_var_list_call ~ EOI }

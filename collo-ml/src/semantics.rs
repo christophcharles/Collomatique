@@ -2671,7 +2671,15 @@ impl LocalEnv {
             }
 
             // ========== ILP Variables ==========
-            Expr::VarCall { name, args } => {
+            Expr::VarCall { module, name, args } => {
+                // If module is specified, return not-yet-supported error
+                if let Some(mod_span) = module {
+                    errors.push(SemError::QualifiedAccessNotYetSupported {
+                        span: mod_span.span.clone(),
+                    });
+                    return Some(SimpleType::LinExpr.into());
+                }
+
                 match global_env.lookup_var(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
@@ -2726,7 +2734,15 @@ impl LocalEnv {
                 }
             }
 
-            Expr::VarListCall { name, args } => {
+            Expr::VarListCall { module, name, args } => {
+                // If module is specified, return not-yet-supported error
+                if let Some(mod_span) = module {
+                    errors.push(SemError::QualifiedAccessNotYetSupported {
+                        span: mod_span.span.clone(),
+                    });
+                    return Some(SimpleType::List(SimpleType::LinExpr.into()).into());
+                }
+
                 match global_env.lookup_var_list(self.current_module(), &name.node) {
                     None => {
                         errors.push(SemError::UnknownVariable {
@@ -2780,21 +2796,6 @@ impl LocalEnv {
                         Some(SimpleType::List(SimpleType::LinExpr.into()).into())
                     }
                 }
-            }
-
-            // ========== Qualified Module Variable Calls (not yet implemented) ==========
-            Expr::QualifiedVarCall { module, .. } => {
-                errors.push(SemError::QualifiedAccessNotYetSupported {
-                    span: module.span.clone(),
-                });
-                Some(SimpleType::LinExpr.into())
-            }
-
-            Expr::QualifiedVarListCall { module, .. } => {
-                errors.push(SemError::QualifiedAccessNotYetSupported {
-                    span: module.span.clone(),
-                });
-                Some(SimpleType::List(SimpleType::LinExpr.into()).into())
             }
 
             // ========== Generic Calls: func(args), Type(x), Enum::Variant(x) ==========

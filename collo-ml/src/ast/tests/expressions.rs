@@ -330,7 +330,7 @@ fn parse_var_call_no_args() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::VarCall { name, args } => {
+            Expr::VarCall { name, args, .. } => {
                 assert_eq!(name.node, "V");
                 assert_eq!(args.len(), 0);
             }
@@ -348,7 +348,7 @@ fn parse_var_call_one_arg() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::VarCall { name, args } => {
+            Expr::VarCall { name, args, .. } => {
                 assert_eq!(name.node, "V");
                 assert_eq!(args.len(), 1);
             }
@@ -366,7 +366,7 @@ fn parse_var_call_multiple_args() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::VarCall { name, args } => {
+            Expr::VarCall { name, args, .. } => {
                 assert_eq!(name.node, "MyVar");
                 assert_eq!(args.len(), 3);
             }

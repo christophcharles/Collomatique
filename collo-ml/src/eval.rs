@@ -1318,7 +1318,14 @@ impl<T: EvalObject> LocalEnv<T> {
                     }
                 }
             }
-            Expr::VarCall { name, args } => {
+            Expr::VarCall { module, name, args } => {
+                if let Some(mod_name) = module {
+                    panic!(
+                        "Qualified module variable access ({}::$...) is not yet implemented",
+                        mod_name.node
+                    );
+                }
+
                 let args: Vec<_> = args
                     .iter()
                     .map(|x| self.eval_expr(eval_history, &x))
@@ -1972,7 +1979,14 @@ impl<T: EvalObject> LocalEnv<T> {
 
                 output
             }
-            Expr::VarListCall { name, args } => {
+            Expr::VarListCall { module, name, args } => {
+                if let Some(mod_name) = module {
+                    panic!(
+                        "Qualified module variable list access ({}::$[...]) is not yet implemented",
+                        mod_name.node
+                    );
+                }
+
                 let current_module = self.current_module().to_string();
                 let var_lists = eval_history.ast.get_var_lists();
                 let var_list_fn = var_lists
@@ -2063,19 +2077,6 @@ impl<T: EvalObject> LocalEnv<T> {
                     .collect::<Result<_, EvalError<T>>>()?;
 
                 ExprValue::Struct(field_values)
-            }
-            // Qualified module variable calls - not yet implemented
-            Expr::QualifiedVarCall { module, .. } => {
-                panic!(
-                    "Qualified module variable access ({}::$...) is not yet implemented",
-                    module.node
-                )
-            }
-            Expr::QualifiedVarListCall { module, .. } => {
-                panic!(
-                    "Qualified module variable list access ({}::$[...]) is not yet implemented",
-                    module.node
-                )
             }
         })
     }

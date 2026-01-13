@@ -88,7 +88,7 @@ fn qualified_var_call_basic() {
         "myModule::$MyVar(arg1, arg2, arg3)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::qualified_var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -101,7 +101,7 @@ fn qualified_var_call_with_expressions() {
         "mod::$Var(x.field)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::qualified_var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -119,7 +119,7 @@ fn qualified_var_list_call_basic() {
         "myModule::$[MyVarList](arg1, arg2)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::qualified_var_list_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -131,7 +131,7 @@ fn qualified_var_list_call_with_expressions() {
         "mod::$[VarList](if true { 1 } else { 2 })",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::qualified_var_list_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
