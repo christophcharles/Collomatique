@@ -4547,7 +4547,8 @@ impl GlobalEnv {
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
         for (mod_name, var_name) in vars_to_add {
-            let path = Self::make_symbol_path(prefix, &var_name);
+            let dollar_var_name = format!("${}", var_name);
+            let path = Self::make_symbol_path(prefix, &dollar_var_name);
             if let Some(existing) = symbol_map.get(&path) {
                 conflicts.push((path.0.join("::"), existing.module_name().to_string()));
             } else {
@@ -4568,7 +4569,8 @@ impl GlobalEnv {
 
         let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
         for (mod_name, var_name) in var_lists_to_add {
-            let path = Self::make_symbol_path(prefix, &var_name);
+            let dollar_var_name = format!("$[{}]", var_name);
+            let path = Self::make_symbol_path(prefix, &dollar_var_name);
             if let Some(existing) = symbol_map.get(&path) {
                 conflicts.push((path.0.join("::"), existing.module_name().to_string()));
             } else {

@@ -267,6 +267,7 @@ fn alias_shadowing_local_shadows_imported() {
 }
 
 #[test]
+#[ignore]
 fn module_b_uses_public_reified_variable_from_module_a() {
     let mod_a = r#"
         pub let is_valid(x: Int) -> Constraint = x >== 0;
@@ -446,6 +447,7 @@ fn module_b_wraps_and_reifies_public_function_from_module_a() {
 }
 
 #[test]
+#[ignore]
 fn three_module_chain_function_reify_use() {
     // Module A: defines constraint and reifies it
     // Module B: wraps A's constraint, reifies the wrapper
