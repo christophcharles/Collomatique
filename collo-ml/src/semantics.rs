@@ -939,8 +939,14 @@ pub fn resolve_path(
         if global_env.object_types.contains_key(name) {
             return Ok(ResolvedPathKind::Type(SimpleType::Object(name.to_string())));
         }
-        if global_env.external_variables.contains_key(name) {
-            return Ok(ResolvedPathKind::ExternalVariable(name.to_string()));
+        if name.len() >= 1 {
+            let first_symbol = name.chars().next().unwrap();
+            if first_symbol == '$' {
+                let no_dollar_name = &name[1..];
+                if global_env.external_variables.contains_key(no_dollar_name) {
+                    return Ok(ResolvedPathKind::ExternalVariable(no_dollar_name.to_string()));
+                }
+            }
         }
     }
 
