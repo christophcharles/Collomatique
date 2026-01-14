@@ -139,6 +139,7 @@ impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Origin<T: EvalObject> {
+    pub module: String,
     pub fn_name: Spanned<String>,
     pub args: Vec<ExprValue<T>>,
     pub pretty_docstring: Vec<String>,
@@ -149,7 +150,13 @@ impl<T: EvalObject> std::fmt::Display for Origin<T> {
         if self.pretty_docstring.is_empty() {
             let args_str: Vec<_> = self.args.iter().map(|x| x.to_string()).collect();
 
-            write!(f, "{}({})", self.fn_name.node, args_str.join(", "))
+            write!(
+                f,
+                "{}::{}({})",
+                self.module,
+                self.fn_name.node,
+                args_str.join(", ")
+            )
         } else {
             write!(f, "{}", self.pretty_docstring.join("\n"))
         }
@@ -2395,6 +2402,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         let naked_result = naked_result?;
 
         let origin = Origin {
+            module: module.to_string(),
             fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
             args: args.clone(),
             pretty_docstring,
