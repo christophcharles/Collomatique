@@ -10,6 +10,12 @@ mod tests;
 
 use derivative::Derivative;
 
+/// Source representation of a module (before parsing)
+pub struct ModuleSrc {
+    pub name: String,
+    pub src: String,
+}
+
 #[derive(Debug, Clone, Derivative)]
 #[derivative(PartialOrd, Ord, PartialEq, Eq)]
 pub struct ScriptVar<T: EvalObject> {
@@ -775,22 +781,45 @@ impl CheckedAST<NoObject> {
 }
 
 impl<T: EvalObject> CheckedAST<T> {
+    /// Create a CheckedAST from a single source file (backwards compatibility wrapper)
     pub fn new(
         input: &str,
+        vars: HashMap<String, ArgsType>,
+    ) -> Result<CheckedAST<T>, CompileError> {
+        Self::new_multi(
+            &[ModuleSrc {
+                name: "main".to_string(),
+                src: input.to_string(),
+            }],
+            vars,
+        )
+    }
+
+    /// Create a CheckedAST from multiple source modules
+    pub fn new_multi(
+        inputs: &[ModuleSrc],
         vars: HashMap<String, ArgsType>,
     ) -> Result<CheckedAST<T>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
-        let pairs = ColloMLParser::parse(Rule::file, input)?;
-        let first_pair_opt = pairs.into_iter().next();
-        let file = match first_pair_opt {
-            Some(first_pair) => crate::ast::File::from_pest(first_pair)?,
-            None => crate::ast::File::new(),
-        };
+        // Parse all modules
+        let mut modules = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            let pairs = ColloMLParser::parse(Rule::file, &input.src)?;
+            let first_pair_opt = pairs.into_iter().next();
+            let file = match first_pair_opt {
+                Some(first_pair) => crate::ast::File::from_pest(first_pair)?,
+                None => crate::ast::File::new(),
+            };
+            modules.push(Module {
+                name: input.name.clone(),
+                file,
+            });
+        }
 
         let (global_env, type_info, expr_types, errors, warnings) =
-            GlobalEnv::new(T::type_schemas(), vars, &file)?;
+            GlobalEnv::new_multi(T::type_schemas(), vars, &modules)?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
