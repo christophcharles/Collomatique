@@ -14,7 +14,7 @@ fn enum_basic_construction() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let ok_result = checked_ast
-        .quick_eval_fn("make_ok", vec![ExprValue::Int(42)])
+        .quick_eval_fn("main", "make_ok", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -28,7 +28,11 @@ fn enum_basic_construction() {
     );
 
     let error_result = checked_ast
-        .quick_eval_fn("make_error", vec![ExprValue::String("oops".to_string())])
+        .quick_eval_fn(
+            "main",
+            "make_error",
+            vec![ExprValue::String("oops".to_string())],
+        )
         .expect("Should evaluate");
 
     assert_eq!(
@@ -52,7 +56,7 @@ fn enum_unit_variant() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let some_result = checked_ast
-        .quick_eval_fn("make_some", vec![ExprValue::Int(42)])
+        .quick_eval_fn("main", "make_some", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -66,7 +70,7 @@ fn enum_unit_variant() {
     );
 
     let none_result = checked_ast
-        .quick_eval_fn("make_none", vec![])
+        .quick_eval_fn("main", "make_none", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -89,7 +93,7 @@ fn enum_unit_variant_with_empty_parens() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let none_result = checked_ast
-        .quick_eval_fn("make_none", vec![])
+        .quick_eval_fn("main", "make_none", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -112,7 +116,7 @@ fn enum_unit_variant_with_explicit_none() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let none_result = checked_ast
-        .quick_eval_fn("make_none", vec![])
+        .quick_eval_fn("main", "make_none", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -140,7 +144,7 @@ fn enum_variant_as_return_type() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_ok", vec![ExprValue::Int(42)])
+        .quick_eval_fn("main", "make_ok", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -165,7 +169,7 @@ fn enum_variant_subtype_of_root() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_and_pass", vec![])
+        .quick_eval_fn("main", "make_and_pass", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -192,7 +196,11 @@ fn enum_tuple_variant() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make", vec![ExprValue::Int(42), ExprValue::Bool(true)])
+        .quick_eval_fn(
+            "main",
+            "make",
+            vec![ExprValue::Int(42), ExprValue::Bool(true)],
+        )
         .expect("Should evaluate");
 
     assert_eq!(
@@ -219,7 +227,11 @@ fn enum_struct_variant() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make", vec![ExprValue::Int(42), ExprValue::Bool(true)])
+        .quick_eval_fn(
+            "main",
+            "make",
+            vec![ExprValue::Int(42), ExprValue::Bool(true)],
+        )
         .expect("Should evaluate");
 
     assert_eq!(
@@ -262,7 +274,7 @@ fn enum_match_expression() {
         content: ExprValue::Int(42),
     }));
     let result1 = checked_ast
-        .quick_eval_fn("extract", vec![ok_value])
+        .quick_eval_fn("main", "extract", vec![ok_value])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(42));
 
@@ -273,7 +285,7 @@ fn enum_match_expression() {
         content: ExprValue::String("oops".to_string()),
     }));
     let result2 = checked_ast
-        .quick_eval_fn("extract", vec![error_value])
+        .quick_eval_fn("main", "extract", vec![error_value])
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(0));
 }
@@ -291,7 +303,7 @@ fn enum_in_if_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
     assert_eq!(
         result_true,
@@ -304,7 +316,7 @@ fn enum_in_if_expression() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
     assert_eq!(
         result_false,
@@ -337,7 +349,7 @@ fn qualified_type_in_function_param() {
     }));
 
     let result = checked_ast
-        .quick_eval_fn("extract_ok", vec![value])
+        .quick_eval_fn("main", "extract_ok", vec![value])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(42));
@@ -352,7 +364,7 @@ fn qualified_type_in_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_list", vec![])
+        .quick_eval_fn("main", "make_list", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -383,7 +395,7 @@ fn qualified_type_maybe() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result_some = checked_ast
-        .quick_eval_fn("maybe_ok", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "maybe_ok", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
     assert_eq!(
         result_some,
@@ -396,7 +408,7 @@ fn qualified_type_maybe() {
     );
 
     let result_none = checked_ast
-        .quick_eval_fn("maybe_ok", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "maybe_ok", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
     assert_eq!(result_none, ExprValue::None);
 }

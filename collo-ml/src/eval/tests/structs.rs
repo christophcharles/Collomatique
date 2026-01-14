@@ -11,7 +11,7 @@ fn struct_construction_basic() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -26,7 +26,7 @@ fn struct_construction_single_field() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -40,7 +40,7 @@ fn struct_construction_three_fields() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -56,7 +56,7 @@ fn struct_construction_with_params() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -71,7 +71,7 @@ fn struct_construction_with_expressions() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -86,7 +86,7 @@ fn struct_empty() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Struct(BTreeMap::new()));
@@ -103,7 +103,7 @@ fn struct_field_order_in_literal() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -126,7 +126,7 @@ fn struct_access_first_field() {
     struct_val.insert("y".to_string(), ExprValue::Bool(true));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(42));
@@ -142,7 +142,7 @@ fn struct_access_second_field() {
     struct_val.insert("y".to_string(), ExprValue::Bool(true));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Bool(true));
@@ -154,7 +154,7 @@ fn struct_access_on_literal() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(10));
@@ -166,7 +166,7 @@ fn struct_access_second_on_literal() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(20));
@@ -182,7 +182,7 @@ fn nested_struct_construction() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut inner = BTreeMap::new();
@@ -203,7 +203,7 @@ fn nested_struct_access() {
     outer.insert("inner".to_string(), ExprValue::Struct(inner));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(outer)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(99));
@@ -215,7 +215,7 @@ fn deeply_nested_struct_access() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(123));
@@ -235,7 +235,7 @@ fn struct_fields_in_arithmetic() {
     struct_val.insert("y".to_string(), ExprValue::Int(32));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(42));
@@ -251,7 +251,7 @@ fn struct_fields_in_multiplication() {
     struct_val.insert("b".to_string(), ExprValue::Int(7));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(42));
@@ -271,7 +271,7 @@ fn struct_fields_in_comparison() {
     struct_val.insert("y".to_string(), ExprValue::Int(10));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Bool(true));
@@ -287,7 +287,7 @@ fn struct_fields_equality() {
     struct_val.insert("y".to_string(), ExprValue::Int(5));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Bool(true));
@@ -303,7 +303,7 @@ fn struct_containing_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -324,7 +324,7 @@ fn list_of_structs() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut s1 = BTreeMap::new();
@@ -352,6 +352,7 @@ fn struct_field_access_in_list_comprehension() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Struct(p1),
@@ -373,6 +374,7 @@ fn struct_creation_in_list_comprehension() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Int(1),
@@ -409,7 +411,7 @@ fn struct_in_if_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -423,7 +425,7 @@ fn struct_in_if_expression_else() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -437,7 +439,7 @@ fn struct_in_let_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(10));
@@ -464,6 +466,7 @@ fn struct_access_in_sum() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Struct(p1),
@@ -491,6 +494,7 @@ fn struct_access_in_forall() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Struct(p1),
@@ -516,6 +520,7 @@ fn struct_access_in_forall_false() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Struct(p1),
@@ -541,7 +546,7 @@ fn struct_to_string() {
     struct_val.insert("y".to_string(), ExprValue::Bool(true));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     // BTreeMap orders keys alphabetically
@@ -559,7 +564,7 @@ fn struct_to_string_three_fields() {
     struct_val.insert("c".to_string(), ExprValue::String("hi".to_string()));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     // Strings are displayed with quotes
@@ -580,7 +585,7 @@ fn nested_struct_to_string() {
     outer.insert("inner".to_string(), ExprValue::Struct(inner));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(outer)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::String("{inner: {x: 42}}".to_string()));
@@ -592,7 +597,7 @@ fn empty_struct_to_string() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(BTreeMap::new())])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(BTreeMap::new())])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::String("{}".to_string()));
@@ -616,6 +621,7 @@ fn struct_in_fold() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Struct(p1),
@@ -634,6 +640,7 @@ fn struct_as_fold_accumulator() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Int(2),
@@ -659,7 +666,7 @@ fn struct_containing_tuple() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
@@ -676,7 +683,7 @@ fn tuple_containing_struct() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     let mut struct_val = BTreeMap::new();
@@ -699,7 +706,7 @@ fn struct_field_then_tuple_access() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Struct(struct_val)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(10));
@@ -715,6 +722,7 @@ fn tuple_then_struct_field_access() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Struct(struct_val),
@@ -748,6 +756,7 @@ fn named_struct_field_access() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Custom(Box::new(CustomValue {
                 module: "main".to_string(),

@@ -11,7 +11,7 @@ fn fold_simple_sum() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 0 + 1 + 2 + 3 = 6
     assert_eq!(result, ExprValue::Int(6));
@@ -26,7 +26,7 @@ fn fold_simple_product() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 1 * 2 * 3 * 4 = 24
     assert_eq!(result, ExprValue::Int(24));
@@ -41,7 +41,7 @@ fn fold_with_range() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 0 + 1 + 2 + 3 + 4 = 10
     assert_eq!(result, ExprValue::Int(10));
@@ -56,7 +56,7 @@ fn fold_empty_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Empty list, should return initial value
     assert_eq!(result, ExprValue::Int(42));
@@ -71,7 +71,7 @@ fn fold_ignoring_elements() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Body just returns acc without using x
     assert_eq!(result, ExprValue::Int(100));
@@ -86,7 +86,7 @@ fn fold_counting_elements() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Count elements: 4
     assert_eq!(result, ExprValue::Int(4));
@@ -101,7 +101,7 @@ fn fold_with_arithmetic_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 0 + (1*2) + (2*2) + (3*2) = 0 + 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -118,7 +118,7 @@ fn fold_with_simple_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Only even numbers: 2 + 4 = 6
     assert_eq!(result, ExprValue::Int(6));
@@ -133,7 +133,7 @@ fn fold_with_filter_no_matches() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // No elements pass the filter, returns init value
     assert_eq!(result, ExprValue::Int(100));
@@ -149,7 +149,7 @@ fn fold_with_complex_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Elements 4, 5, 6: 0 + 4 + 5 + 6 = 15
     assert_eq!(result, ExprValue::Int(15));
@@ -164,7 +164,7 @@ fn fold_filter_using_accumulator() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // acc=0, x=1: 0<5   -> acc=1
     // acc=1, x=2: 1<5   -> acc=3
@@ -191,7 +191,7 @@ fn fold_with_param_list() {
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(60));
 }
@@ -205,7 +205,7 @@ fn fold_with_param_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     // (1*5) + (2*5) + (3*5) = 5 + 10 + 15 = 30
     assert_eq!(result, ExprValue::Int(30));
@@ -220,7 +220,7 @@ fn fold_with_param_in_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     // Elements > 5: 6 + 7 + 8 + 9 = 30
     assert_eq!(result, ExprValue::Int(30));
@@ -235,7 +235,7 @@ fn fold_with_param_as_init() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(10)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
         .expect("Should evaluate");
     // 10 + 1 + 2 + 3 = 16
     assert_eq!(result, ExprValue::Int(16));
@@ -252,7 +252,7 @@ fn fold_building_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -276,7 +276,7 @@ fn fold_reverse_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -300,7 +300,7 @@ fn fold_filter_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -327,7 +327,7 @@ fn fold_conditional_list_building() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -356,7 +356,7 @@ fn fold_nested_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Sum of all elements: 1+2+3+4+5 = 15
     assert_eq!(result, ExprValue::Int(15));
@@ -376,7 +376,7 @@ fn fold_with_sum_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // acc + (1+2) + (3+4) = 0 + 3 + 7 = 10
     assert_eq!(result, ExprValue::Int(10));
@@ -396,7 +396,7 @@ fn fold_with_if_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Only add x when x > 3: 4 + 5 = 9
     assert_eq!(result, ExprValue::Int(9));
@@ -416,7 +416,7 @@ fn fold_with_let_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // (1*2) + (2*2) + (3*2) = 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -433,7 +433,7 @@ fn fold_linexpr_simple() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -465,7 +465,7 @@ fn fold_linexpr_with_coefficients() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -488,7 +488,7 @@ fn fold_linexpr_empty_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -511,7 +511,7 @@ fn rfold_simple() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Same as fold for addition: 0 + 3 + 2 + 1 = 6
     assert_eq!(result, ExprValue::Int(6));
@@ -526,7 +526,7 @@ fn rfold_order_matters() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     // rfold processes [2, 48] right-to-left: acc=2, x=2 -> 2//2=1, then acc=1, x=48 -> 48//1=48
@@ -544,10 +544,10 @@ fn rfold_vs_fold_division() {
     let rfold_ast = CheckedAST::new(rfold_input, vars).expect("Should compile");
 
     let fold_result = fold_ast
-        .quick_eval_fn("fold_f", vec![])
+        .quick_eval_fn("main", "fold_f", vec![])
         .expect("Should evaluate");
     let rfold_result = rfold_ast
-        .quick_eval_fn("rfold_f", vec![])
+        .quick_eval_fn("main", "rfold_f", vec![])
         .expect("Should evaluate");
 
     // fold processes [48, 2] left-to-right: acc=2, x=48 -> 48//2=24, then acc=24, x=2 -> 2//24=0
@@ -566,7 +566,7 @@ fn rfold_list_building() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -591,7 +591,7 @@ fn rfold_with_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Only even numbers, right to left: 4 + 2 = 6
     assert_eq!(result, ExprValue::Int(6));
@@ -611,7 +611,7 @@ fn rfold_nested() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Processes right to left at both levels: 1+2+3+4 = 10
     assert_eq!(result, ExprValue::Int(10));
@@ -633,7 +633,7 @@ fn fold_max_value() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Maximum value is 9
     assert_eq!(result, ExprValue::Int(9));
@@ -653,7 +653,7 @@ fn fold_count_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Count elements > 5: 6, 7, 8, 9 = 4
     assert_eq!(result, ExprValue::Int(4));
@@ -673,7 +673,7 @@ fn fold_alternating_operation() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 0 - 1 + 2 - 3 + 4 - 5 = -3
     assert_eq!(result, ExprValue::Int(-3));
@@ -691,7 +691,7 @@ fn fold_with_function_call() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 0 + 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -711,7 +711,7 @@ fn fold_flatten_nested_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -740,7 +740,7 @@ fn fold_all_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // All are even
     assert_eq!(result, ExprValue::Bool(true));
@@ -760,7 +760,7 @@ fn fold_any_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // At least one is even (6)
     assert_eq!(result, ExprValue::Bool(true));
@@ -784,12 +784,12 @@ fn fold_inside_if() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(6));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
 }
@@ -808,7 +808,7 @@ fn sum_with_fold_in_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // sum of (1+2), (3+4), (5) = 3 + 7 + 5 = 15
     assert_eq!(result, ExprValue::Int(15));
@@ -828,7 +828,7 @@ fn fold_with_forall_in_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Only [2,4] and [6,8] have all even elements, so count = 2 + 2 = 4
     assert_eq!(result, ExprValue::Int(4));
@@ -847,7 +847,7 @@ fn mixing_fold_and_rfold() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Both sum to 6, so 6 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));

@@ -11,7 +11,7 @@ fn if_simple_true_branch() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
@@ -25,7 +25,7 @@ fn if_simple_false_branch() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(0));
 }
@@ -39,12 +39,12 @@ fn if_with_comparison() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(15)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(15)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(100));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
 }
@@ -59,6 +59,7 @@ fn if_with_param() {
 
     let result_true = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![
                 ExprValue::Bool(true),
@@ -71,6 +72,7 @@ fn if_with_param() {
 
     let result_false = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![
                 ExprValue::Bool(false),
@@ -91,12 +93,12 @@ fn if_returning_bool() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(0)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(0)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -110,7 +112,7 @@ fn if_returning_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(
         result_true,
@@ -122,7 +124,7 @@ fn if_returning_list() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
     assert_eq!(
         result_false,
@@ -139,17 +141,17 @@ fn if_nested() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_0 = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_0, ExprValue::Int(0));
 
     let result_1 = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(15)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(15)])
         .expect("Should evaluate");
     assert_eq!(result_1, ExprValue::Int(1));
 
     let result_2 = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(25)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(25)])
         .expect("Should evaluate");
     assert_eq!(result_2, ExprValue::Int(2));
 }
@@ -163,12 +165,12 @@ fn if_with_complex_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5), ExprValue::Int(3)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), ExprValue::Int(3)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(1));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5), ExprValue::Int(-3)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), ExprValue::Int(-3)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
 }
@@ -182,12 +184,12 @@ fn if_with_arithmetic_in_branches() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(10));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(5));
 }
@@ -201,7 +203,7 @@ fn if_with_linexpr() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result_true {
@@ -215,7 +217,7 @@ fn if_with_linexpr() {
     }
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
 
     match result_false {
@@ -238,7 +240,7 @@ fn if_with_constraint() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result_true {
@@ -263,7 +265,7 @@ fn if_with_empty_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(
         result_true,
@@ -271,7 +273,7 @@ fn if_with_empty_list() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::List(Vec::new()));
 }

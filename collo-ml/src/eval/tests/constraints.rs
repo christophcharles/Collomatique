@@ -11,7 +11,7 @@ fn constraint_eq_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -36,7 +36,7 @@ fn constraint_eq_var_with_int() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -61,7 +61,7 @@ fn constraint_eq_two_vars() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -87,7 +87,7 @@ fn constraint_eq_with_arithmetic() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -114,7 +114,7 @@ fn constraint_eq_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -144,7 +144,7 @@ fn constraint_le_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -168,7 +168,7 @@ fn constraint_le_var_with_int() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -193,7 +193,7 @@ fn constraint_le_with_arithmetic() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -220,7 +220,7 @@ fn constraint_le_two_vars() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -249,7 +249,7 @@ fn constraint_ge_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -273,7 +273,7 @@ fn constraint_ge_var_with_int() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -298,7 +298,7 @@ fn constraint_ge_with_arithmetic() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -325,7 +325,7 @@ fn constraint_ge_two_vars() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -354,7 +354,7 @@ fn and_two_constraints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -379,7 +379,7 @@ fn and_constraint_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -403,7 +403,7 @@ fn and_mixed_constraint_types() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {

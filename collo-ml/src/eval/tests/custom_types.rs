@@ -15,7 +15,7 @@ fn custom_type_wrap_and_unwrap() {
 
     // Test wrapping
     let wrapped = checked_ast
-        .quick_eval_fn("wrap", vec![ExprValue::Int(42)])
+        .quick_eval_fn("main", "wrap", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -30,7 +30,7 @@ fn custom_type_wrap_and_unwrap() {
 
     // Test unwrapping
     let unwrapped = checked_ast
-        .quick_eval_fn("unwrap", vec![wrapped])
+        .quick_eval_fn("main", "unwrap", vec![wrapped])
         .expect("Should evaluate");
 
     assert_eq!(unwrapped, ExprValue::Int(42));
@@ -45,7 +45,7 @@ fn custom_type_roundtrip() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("roundtrip", vec![ExprValue::Int(123)])
+        .quick_eval_fn("main", "roundtrip", vec![ExprValue::Int(123)])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(123));
@@ -60,7 +60,11 @@ fn custom_type_with_tuple() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_point", vec![ExprValue::Int(3), ExprValue::Int(4)])
+        .quick_eval_fn(
+            "main",
+            "make_point",
+            vec![ExprValue::Int(3), ExprValue::Int(4)],
+        )
         .expect("Should evaluate");
 
     assert_eq!(
@@ -83,7 +87,7 @@ fn custom_type_with_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_list", vec![])
+        .quick_eval_fn("main", "make_list", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -122,12 +126,12 @@ fn custom_type_tuple_field_access() {
     }));
 
     let x = checked_ast
-        .quick_eval_fn("get_x", vec![point.clone()])
+        .quick_eval_fn("main", "get_x", vec![point.clone()])
         .expect("Should evaluate");
     assert_eq!(x, ExprValue::Int(10));
 
     let y = checked_ast
-        .quick_eval_fn("get_y", vec![point])
+        .quick_eval_fn("main", "get_y", vec![point])
         .expect("Should evaluate");
     assert_eq!(y, ExprValue::Int(20));
 }
@@ -157,7 +161,7 @@ fn custom_type_nested_tuple_field_access() {
     }));
 
     let x = checked_ast
-        .quick_eval_fn("get_x", vec![named_point])
+        .quick_eval_fn("main", "get_x", vec![named_point])
         .expect("Should evaluate");
     assert_eq!(x, ExprValue::Int(0));
 }
@@ -175,7 +179,7 @@ fn custom_type_in_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_list", vec![])
+        .quick_eval_fn("main", "make_list", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -233,7 +237,7 @@ fn sum_over_custom_type_list() {
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("total", vec![list])
+        .quick_eval_fn("main", "total", vec![list])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(6));
@@ -252,7 +256,7 @@ fn custom_type_in_if_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
     assert_eq!(
         result_true,
@@ -265,7 +269,7 @@ fn custom_type_in_if_expression() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
     assert_eq!(
         result_false,
@@ -287,7 +291,7 @@ fn custom_type_in_let_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(42));
@@ -313,7 +317,7 @@ fn custom_type_to_string() {
     }));
 
     let result = checked_ast
-        .quick_eval_fn("to_str", vec![value])
+        .quick_eval_fn("main", "to_str", vec![value])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::String("MyInt(42)".to_string()));
@@ -335,7 +339,7 @@ fn custom_type_tuple_to_string() {
     }));
 
     let result = checked_ast
-        .quick_eval_fn("to_str", vec![value])
+        .quick_eval_fn("main", "to_str", vec![value])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::String("Point((3, 4))".to_string()));
@@ -356,10 +360,10 @@ fn multiple_custom_types() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let a = checked_ast
-        .quick_eval_fn("make_a", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "make_a", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     let b = checked_ast
-        .quick_eval_fn("make_b", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "make_b", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
 
     // Even though both are Int underneath, they should be different custom types
@@ -394,7 +398,7 @@ fn custom_type_referencing_another() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make", vec![])
+        .quick_eval_fn("main", "make", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -455,7 +459,7 @@ fn custom_type_in_fold() {
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("sum_custom", vec![list])
+        .quick_eval_fn("main", "sum_custom", vec![list])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(6));
@@ -489,7 +493,7 @@ fn custom_type_in_list_comprehension() {
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("double_all", vec![list])
+        .quick_eval_fn("main", "double_all", vec![list])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -532,7 +536,7 @@ fn custom_type_wrapping_union_tuple_index() {
         content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
     }));
     let result1 = checked_ast
-        .quick_eval_fn("get_second", vec![value1])
+        .quick_eval_fn("main", "get_second", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Bool(true));
 
@@ -547,7 +551,7 @@ fn custom_type_wrapping_union_tuple_index() {
         ]),
     }));
     let result2 = checked_ast
-        .quick_eval_fn("get_second", vec![value2])
+        .quick_eval_fn("main", "get_second", vec![value2])
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Bool(false));
 }
@@ -569,7 +573,7 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
         content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
     }));
     let result1 = checked_ast
-        .quick_eval_fn("get_first", vec![value1])
+        .quick_eval_fn("main", "get_first", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(42));
 
@@ -584,7 +588,7 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
         ]),
     }));
     let result2 = checked_ast
-        .quick_eval_fn("get_first", vec![value2])
+        .quick_eval_fn("main", "get_first", vec![value2])
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::String("hello".to_string()));
 }
@@ -612,7 +616,7 @@ fn custom_type_wrapping_nested_custom_type_union() {
         })),
     }));
     let result1 = checked_ast
-        .quick_eval_fn("get_second", vec![value1])
+        .quick_eval_fn("main", "get_second", vec![value1])
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(2));
 
@@ -627,7 +631,7 @@ fn custom_type_wrapping_nested_custom_type_union() {
         ]),
     }));
     let result2 = checked_ast
-        .quick_eval_fn("get_second", vec![value2])
+        .quick_eval_fn("main", "get_second", vec![value2])
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(99));
 }

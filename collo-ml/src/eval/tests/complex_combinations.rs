@@ -21,7 +21,7 @@ fn forall_with_reified_var_and_filter() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
 
     match result {
@@ -70,7 +70,7 @@ fn sum_with_var_list_and_comprehension() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -146,7 +146,7 @@ fn nested_quantifiers_with_filters() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(15)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     // xs filtered: [2, 3], ys filtered: [5]
@@ -176,7 +176,7 @@ fn list_comp_with_function_calls_and_filters() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
 
     // Valid: 2, 5 → squared: 4, 25
@@ -209,7 +209,7 @@ fn nested_list_comp_with_reified_vars() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -265,7 +265,7 @@ fn list_comp_with_collection_ops_in_body() {
     let lists = ExprValue::List(Vec::from([list1, list2]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![lists])
+        .quick_eval_fn("main", "f", vec![lists])
         .expect("Should evaluate");
 
     // list1 - [1..10]: [15] → |1|
@@ -299,13 +299,13 @@ fn if_with_quantifier_in_condition() {
         ExprValue::Int(3),
     ]));
     let result_positive = checked_ast
-        .quick_eval_fn("f", vec![all_positive])
+        .quick_eval_fn("main", "f", vec![all_positive])
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Int(6));
 
     let has_negative = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(-2)]));
     let result_negative = checked_ast
-        .quick_eval_fn("f", vec![has_negative])
+        .quick_eval_fn("main", "f", vec![has_negative])
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Int(0));
 }
@@ -328,12 +328,12 @@ fn if_with_collection_check() {
     let valid_set = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
 
     let result_in_and_positive = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5), valid_set.clone()])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), valid_set.clone()])
         .expect("Should evaluate");
     assert_eq!(result_in_and_positive, ExprValue::Bool(true));
 
     let result_not_in = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(3), valid_set])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(3), valid_set])
         .expect("Should evaluate");
     assert_eq!(result_not_in, ExprValue::Bool(false));
 }
@@ -361,6 +361,7 @@ fn nested_if_with_variables() {
 
     let result_scaled = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![
                 ExprValue::Int(5),
@@ -408,7 +409,7 @@ fn function_returning_constraint_system() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list, ExprValue::Int(2)])
+        .quick_eval_fn("main", "f", vec![list, ExprValue::Int(2)])
         .expect("Should evaluate");
 
     match result {
@@ -476,7 +477,7 @@ fn function_composition_with_reified_vars() {
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list, ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![list, ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -536,7 +537,7 @@ fn assignment_constraint_pattern() {
     let slots = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![students, slots, ExprValue::Int(1)])
+        .quick_eval_fn("main", "f", vec![students, slots, ExprValue::Int(1)])
         .expect("Should evaluate");
 
     match result {
@@ -626,7 +627,7 @@ fn conditional_constraint_with_reification() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1), ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(1), ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -732,6 +733,7 @@ fn aggregation_with_filtering() {
     let result = checked_ast
         .eval_fn(
             &env,
+            "main",
             "f",
             vec![students, times, ExprValue::Int(50), ExprValue::Int(1)],
         )
@@ -773,7 +775,7 @@ fn dynamic_set_construction() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     // valid_pairs: (1,2)→3, (1,4)→5, (3,2)→5, (3,4)→7, (5,2)→7, (5,4)→9
@@ -808,7 +810,7 @@ fn set_operations_with_comprehensions() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
 
     // positive_squares: [1, 9, 25, 100]
@@ -842,7 +844,7 @@ fn union_of_var_lists() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -874,13 +876,13 @@ fn empty_list_propagation() {
 
     let empty = ExprValue::List(Vec::new());
     let result_empty = checked_ast
-        .quick_eval_fn("f", vec![empty])
+        .quick_eval_fn("main", "f", vec![empty])
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
 
     let non_empty = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let result_non_empty = checked_ast
-        .quick_eval_fn("f", vec![non_empty])
+        .quick_eval_fn("main", "f", vec![non_empty])
         .expect("Should evaluate");
     assert_eq!(result_non_empty, ExprValue::Int(3));
 }
@@ -899,7 +901,7 @@ fn deeply_nested_structure() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     // [[1,2], [3]]
@@ -924,7 +926,7 @@ fn mixed_coercion_in_complex_expression() {
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
 
     match result {
@@ -965,7 +967,7 @@ fn let_expr_in_deeply_nested_structure() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     // [[1,2], [3,4]]
@@ -1019,7 +1021,7 @@ fn all_features_combined() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {
@@ -1135,7 +1137,7 @@ fn all_features_combined_with_let() {
     let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![xs, ys])
+        .quick_eval_fn("main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     match result {

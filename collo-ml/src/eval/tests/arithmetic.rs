@@ -11,7 +11,7 @@ fn add_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(8));
 }
@@ -25,7 +25,7 @@ fn add_negative_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-3));
 }
@@ -39,7 +39,7 @@ fn add_int_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(15), ExprValue::Int(27)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(15), ExprValue::Int(27)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
@@ -53,7 +53,7 @@ fn negate_int_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(15)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(15)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-15));
 }
@@ -67,7 +67,7 @@ fn add_linexpr_with_int_coercion() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -91,7 +91,7 @@ fn add_int_to_linexpr_coercion() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -115,7 +115,7 @@ fn add_two_linexprs() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -140,7 +140,7 @@ fn negate_linexpr_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::LinExpr(LinExpr::constant(5.))])
+        .quick_eval_fn("main", "f", vec![ExprValue::LinExpr(LinExpr::constant(5.))])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::LinExpr(LinExpr::constant(-5.)));
 }
@@ -154,7 +154,7 @@ fn add_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(10));
 }
@@ -170,7 +170,7 @@ fn sub_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(7));
 }
@@ -184,7 +184,7 @@ fn sub_negative_result() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-7));
 }
@@ -198,7 +198,7 @@ fn sub_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(50), ExprValue::Int(8)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(50), ExprValue::Int(8)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
@@ -212,7 +212,7 @@ fn sub_linexpr_with_int() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -235,7 +235,7 @@ fn sub_two_linexprs() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -261,7 +261,7 @@ fn mul_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
@@ -275,7 +275,7 @@ fn mul_with_zero() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(0));
 }
@@ -289,7 +289,7 @@ fn mul_with_negative() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-15));
 }
@@ -303,7 +303,7 @@ fn mul_int_with_linexpr() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -326,7 +326,7 @@ fn mul_linexpr_with_int() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -349,7 +349,7 @@ fn mul_with_param() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(10)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
         .expect("Should evaluate");
 
     match result {
@@ -372,7 +372,7 @@ fn mul_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
@@ -388,7 +388,7 @@ fn div_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(5));
 }
@@ -402,7 +402,7 @@ fn div_integer_division() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(3));
 }
@@ -416,7 +416,7 @@ fn div_exact() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(7));
 }
@@ -430,7 +430,7 @@ fn div_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(100), ExprValue::Int(4)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(100), ExprValue::Int(4)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(25));
 }
@@ -444,7 +444,7 @@ fn div_negative_numerator() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-3));
 }
@@ -460,7 +460,7 @@ fn mod_two_ints() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(1));
 }
@@ -474,7 +474,7 @@ fn mod_exact_division() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(0));
 }
@@ -488,7 +488,7 @@ fn mod_larger_than_divisor() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(5));
 }
@@ -502,7 +502,7 @@ fn mod_with_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(17), ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(17), ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(2));
 }
@@ -516,12 +516,12 @@ fn mod_check_even() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_even = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(4)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(4)])
         .expect("Should evaluate");
     assert_eq!(result_even, ExprValue::Bool(true));
 
     let result_odd = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_odd, ExprValue::Bool(false));
 }
@@ -537,7 +537,7 @@ fn mixed_add_mul_precedence() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Should be 2 + 12 = 14, not (2 + 3) * 4 = 20
     assert_eq!(result, ExprValue::Int(14));
@@ -552,7 +552,7 @@ fn mixed_sub_div_precedence() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Should be 20 - 5 = 15, not (20 - 10) // 2 = 5
     assert_eq!(result, ExprValue::Int(15));
@@ -567,7 +567,7 @@ fn mixed_operations_with_parentheses() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(16));
 }
@@ -581,7 +581,7 @@ fn complex_arithmetic_expression() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // (15) * 2 - 2 + 1 = 30 - 2 + 1 = 29
     assert_eq!(result, ExprValue::Int(29));
@@ -596,7 +596,7 @@ fn linexpr_arithmetic_combination() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {

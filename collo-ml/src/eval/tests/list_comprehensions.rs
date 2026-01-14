@@ -11,7 +11,7 @@ fn list_comp_simple_identity() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -32,7 +32,7 @@ fn list_comp_with_arithmetic() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -53,7 +53,7 @@ fn list_comp_with_addition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -74,7 +74,7 @@ fn list_comp_with_range() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Squares: 1, 4, 9, 16
     assert_eq!(
@@ -99,7 +99,7 @@ fn list_comp_with_param() {
     let list = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list])
+        .quick_eval_fn("main", "f", vec![list])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -116,7 +116,7 @@ fn list_comp_boolean_expression() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -138,7 +138,7 @@ fn list_comp_constant_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // All elements are 42
     assert_eq!(
@@ -162,7 +162,7 @@ fn list_comp_with_simple_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -179,7 +179,7 @@ fn list_comp_filter_even_numbers() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -201,7 +201,7 @@ fn list_comp_filter_with_transformation() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Odd numbers: 1, 3, 5, 7, 9 -> doubled: 2, 6, 10, 14, 18
     assert_eq!(
@@ -225,7 +225,7 @@ fn list_comp_filter_no_matches() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::List(Vec::new()));
 }
@@ -239,7 +239,7 @@ fn list_comp_filter_all_match() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -260,7 +260,7 @@ fn list_comp_filter_complex_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -281,7 +281,7 @@ fn list_comp_filter_with_param() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -305,7 +305,7 @@ fn list_comp_two_vars_simple() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // (1+10), (1+20), (2+10), (2+20) = 11, 21, 12, 22
     assert_eq!(
@@ -328,7 +328,7 @@ fn list_comp_two_vars_multiplication() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 2*4=8, 2*5=10, 3*4=12, 3*5=15
     assert_eq!(
@@ -351,7 +351,7 @@ fn list_comp_two_vars_with_ranges() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // (1+10), (1+11), (2+10), (2+11) = 11, 12, 12, 13
     assert_eq!(
@@ -374,7 +374,7 @@ fn list_comp_two_vars_with_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Pairs where x+y < 6: many combinations, results are 2, 3, 4, 5
     // But order matters now! It gives:
@@ -405,7 +405,7 @@ fn list_comp_two_vars_filter_on_first() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // x > 2: x=3,4
     // 3*1=3, 3*2=6, 4*1=4, 4*2=8
@@ -429,7 +429,7 @@ fn list_comp_two_vars_filter_on_second() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // y even: y=2,4
     // 1+2=3, 1+4=5, 2+2=4, 2+4=6
@@ -454,7 +454,7 @@ fn list_comp_two_vars_filter_on_both() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // x > 2: x=3,4 and y < 3: y=1,2
     // 3*1=3, 3*2=6, 4*1=4, 4*2=8
@@ -478,7 +478,7 @@ fn list_comp_cartesian_product() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Body only uses x, but iterates over y too
     // Results: 1 (twice), 2 (twice)
@@ -502,7 +502,7 @@ fn list_comp_with_dependent_limit() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -526,7 +526,7 @@ fn list_comp_over_union() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -548,7 +548,7 @@ fn list_comp_over_difference() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [1, 3] * 2 = [2, 6]
     assert_eq!(
@@ -568,7 +568,7 @@ fn list_comp_linexpr_simple() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -589,7 +589,7 @@ fn list_comp_linexpr_with_coefficient() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -611,7 +611,7 @@ fn list_comp_linexpr_with_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -635,7 +635,7 @@ fn list_comp_nested_in_sum() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [2, 4, 6], sum = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -650,12 +650,12 @@ fn list_comp_in_if_condition() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(4)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(4)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -669,7 +669,7 @@ fn list_comp_with_if_expression_body() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // 1->1, 2->2, 3->6, 4->8
     assert_eq!(
@@ -692,7 +692,7 @@ fn list_comp_cardinality() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [2, 4, 6, 8], cardinality = 4
     assert_eq!(result, ExprValue::Int(4));
@@ -707,7 +707,7 @@ fn list_comp_two_vars_one_used() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // Creates 6 copies (2*3)
     assert_eq!(
@@ -733,7 +733,7 @@ fn list_comp_with_multiple_operations() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // x=1,y=3: (1+3)*2=8, x=1,y=4: (1+4)*2=10, x=2,y=3: (2+3)*2=10
     // x=2,y=4 filtered out (2+4=6, not < 6)

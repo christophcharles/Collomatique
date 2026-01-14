@@ -10,7 +10,7 @@ fn panic_returns_error_with_int() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -29,7 +29,7 @@ fn panic_returns_error_with_string() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -48,7 +48,7 @@ fn panic_returns_error_with_bool() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -67,7 +67,7 @@ fn panic_evaluates_expression_first() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -86,7 +86,7 @@ fn panic_with_param() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::Int(99)]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![ExprValue::Int(99)]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -106,7 +106,7 @@ fn panic_in_else_branch_triggers() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     // x = -1, so else branch is taken
-    let result = checked_ast.quick_eval_fn("f", vec![ExprValue::Int(-1)]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![ExprValue::Int(-1)]);
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -127,7 +127,7 @@ fn panic_in_else_branch_not_triggered() {
 
     // x = 5, so then branch is taken (panic not triggered)
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate without panic");
 
     assert_eq!(result, ExprValue::Int(5));
@@ -141,7 +141,7 @@ fn panic_with_list() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
 
     match result {
         Err(EvalError::Panic(value)) => {

@@ -11,7 +11,7 @@ fn concat_two_strings() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("helloworld".to_string()));
 }
@@ -25,7 +25,7 @@ fn concat_with_space() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello world".to_string()));
 }
@@ -39,7 +39,7 @@ fn concat_with_empty_string_left() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello".to_string()));
 }
@@ -53,7 +53,7 @@ fn concat_with_empty_string_right() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello".to_string()));
 }
@@ -67,7 +67,7 @@ fn concat_two_empty_strings() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("".to_string()));
 }
@@ -84,7 +84,7 @@ fn concat_with_params() {
     let str2 = ExprValue::String("World!".to_string());
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![str1, str2])
+        .quick_eval_fn("main", "f", vec![str1, str2])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
 }
@@ -98,7 +98,7 @@ fn concat_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
 }
@@ -112,7 +112,7 @@ fn concat_longer_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, how are you?".to_string()));
 }
@@ -126,7 +126,7 @@ fn concat_with_unicode() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello 世界".to_string()));
 }
@@ -140,7 +140,7 @@ fn concat_with_newlines() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("line1\nline2".to_string()));
 }
@@ -154,7 +154,7 @@ fn concat_with_special_characters() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("tab:\tquote:\"".to_string()));
 }
@@ -168,7 +168,7 @@ fn concat_with_parentheses() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abcd".to_string()));
 }
@@ -184,7 +184,7 @@ fn sum_strings_in_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
 }
@@ -198,7 +198,7 @@ fn sum_strings_with_separator() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello world test ".to_string()));
 }
@@ -212,7 +212,7 @@ fn sum_empty_string_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("".to_string()));
 }
@@ -226,7 +226,7 @@ fn sum_strings_with_filter() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
 }
@@ -240,7 +240,7 @@ fn sum_strings_with_transformation() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("aabbcc".to_string()));
 }
@@ -256,12 +256,12 @@ fn concat_in_if_expression() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::String("yes!".to_string()));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::String("no.".to_string()));
 }
@@ -279,7 +279,7 @@ fn concat_with_function_calls() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("greeting", vec![])
+        .quick_eval_fn("main", "greeting", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
 }
@@ -298,7 +298,7 @@ fn concat_in_let_expression() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
 }
@@ -312,7 +312,7 @@ fn concat_strings_with_tildes() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,

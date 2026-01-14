@@ -13,7 +13,7 @@ fn simple_constraint_gets_origin() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_constraint", vec![ExprValue::Int(42)])
+        .quick_eval_fn("main", "make_constraint", vec![ExprValue::Int(42)])
         .expect("Should evaluate");
 
     match result {
@@ -51,7 +51,7 @@ fn nested_function_origin_is_inner() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("outer", vec![ExprValue::Int(10)])
+        .quick_eval_fn("main", "outer", vec![ExprValue::Int(10)])
         .expect("Should evaluate");
 
     match result {
@@ -87,7 +87,7 @@ fn multiple_constraints_same_origin() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("make_two", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "make_two", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -121,6 +121,7 @@ fn origin_with_multiple_params() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "complex",
             vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)],
         )
@@ -157,7 +158,7 @@ fn reified_constraint_origin() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("use_reified", vec![ExprValue::Int(7)])
+        .quick_eval_fn("main", "use_reified", vec![ExprValue::Int(7)])
         .expect("Should evaluate");
 
     match result {
@@ -196,7 +197,7 @@ fn forall_constraint_origin() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("forall_constraints", vec![ExprValue::Int(3)])
+        .quick_eval_fn("main", "forall_constraints", vec![ExprValue::Int(3)])
         .expect("Should evaluate");
 
     match result {
@@ -231,7 +232,7 @@ fn combined_constraints_preserve_separate_origins() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("combined", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "combined", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     match result {
@@ -287,7 +288,7 @@ fn origin_with_list_param() {
     let list_arg = ExprValue::List(list_items.clone());
 
     let result = checked_ast
-        .quick_eval_fn("list_constraint", vec![list_arg.clone()])
+        .quick_eval_fn("main", "list_constraint", vec![list_arg.clone()])
         .expect("Should evaluate");
 
     match result {
@@ -319,7 +320,7 @@ fn inner_function_origin_preserved() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("wrapper", vec![ExprValue::Int(3)])
+        .quick_eval_fn("main", "wrapper", vec![ExprValue::Int(3)])
         .expect("Should evaluate");
 
     match result {
@@ -357,7 +358,7 @@ fn deeply_nested_function_origin() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("outer", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "outer", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
 
     match result {
@@ -393,7 +394,7 @@ fn docstring_substitution_with_args() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -444,7 +445,7 @@ fn multiline_docstring_multiple_params() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("test", vec![])
+        .quick_eval_fn("main", "test", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -482,7 +483,7 @@ fn repeated_parameter_substitution() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("test", vec![])
+        .quick_eval_fn("main", "test", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -514,7 +515,7 @@ fn docstring_expression_evaluation() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("test", vec![])
+        .quick_eval_fn("main", "test", vec![])
         .expect("Should evaluate");
 
     match result {
@@ -546,7 +547,7 @@ fn docstring_double_backticks() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("test", vec![])
+        .quick_eval_fn("main", "test", vec![])
         .expect("Should evaluate");
 
     match result {

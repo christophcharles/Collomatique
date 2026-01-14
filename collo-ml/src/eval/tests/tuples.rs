@@ -10,7 +10,7 @@ fn tuple_construction_basic() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -25,7 +25,7 @@ fn tuple_construction_three_elements() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -44,7 +44,7 @@ fn tuple_construction_with_params() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -59,7 +59,7 @@ fn tuple_construction_with_expressions() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -79,6 +79,7 @@ fn tuple_access_first_element() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(42),
@@ -97,6 +98,7 @@ fn tuple_access_second_element() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(42),
@@ -115,6 +117,7 @@ fn tuple_access_third_element() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(1),
@@ -133,7 +136,7 @@ fn tuple_access_on_literal() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(10));
@@ -145,7 +148,7 @@ fn tuple_access_second_on_literal() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(20));
@@ -161,7 +164,7 @@ fn nested_tuple_construction() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -180,6 +183,7 @@ fn nested_tuple_access() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)]),
@@ -197,7 +201,7 @@ fn deeply_nested_tuple_access() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(1));
@@ -214,6 +218,7 @@ fn tuple_elements_in_arithmetic() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(10),
@@ -232,6 +237,7 @@ fn tuple_elements_in_multiplication() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![ExprValue::Int(6), ExprValue::Int(7)])],
         )
@@ -251,6 +257,7 @@ fn tuple_elements_in_comparison() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(5),
@@ -269,6 +276,7 @@ fn tuple_elements_equality() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![ExprValue::Int(5), ExprValue::Int(5)])],
         )
@@ -287,7 +295,7 @@ fn tuple_containing_list() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -309,7 +317,7 @@ fn list_of_tuples() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -328,6 +336,7 @@ fn tuple_access_in_list_comprehension() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
@@ -349,6 +358,7 @@ fn tuple_creation_in_list_comprehension() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Int(1),
@@ -378,7 +388,7 @@ fn tuple_in_if_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(true)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -393,7 +403,7 @@ fn tuple_in_if_expression_else() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Bool(false)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .expect("Should evaluate");
 
     assert_eq!(
@@ -408,7 +418,7 @@ fn tuple_in_let_expression() {
     let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(10));
@@ -425,6 +435,7 @@ fn tuple_access_in_sum() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
@@ -444,6 +455,7 @@ fn tuple_access_in_forall() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
@@ -462,6 +474,7 @@ fn tuple_access_in_forall_false() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
@@ -484,6 +497,7 @@ fn tuple_to_string() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(42),
@@ -502,6 +516,7 @@ fn tuple_to_string_three_elements() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Int(1),
@@ -522,6 +537,7 @@ fn nested_tuple_to_string() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::Tuple(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
@@ -545,6 +561,7 @@ fn tuple_in_fold() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
@@ -563,6 +580,7 @@ fn tuple_as_fold_accumulator() {
 
     let result = checked_ast
         .quick_eval_fn(
+            "main",
             "f",
             vec![ExprValue::List(vec![
                 ExprValue::Int(2),

@@ -14,7 +14,7 @@ fn eval_with_variables_simple_reified_var() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
         .expect("Should evaluate");
 
     // Check result is a constraint
@@ -65,7 +65,7 @@ fn eval_with_variables_multiple_calls_same_var() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![])
+        .eval_fn_with_variables(&env, "main", "f", vec![])
         .expect("Should evaluate");
 
     // Check result
@@ -133,7 +133,7 @@ fn eval_with_variables_in_forall() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![ExprValue::<NoObject>::Int(3)])
+        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(3)])
         .expect("Should evaluate");
 
     // Check result has 3 constraints (for i=0,1,2)
@@ -201,6 +201,7 @@ fn eval_with_variables_multiple_vars() {
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
             &env,
+            "main",
             "f",
             vec![ExprValue::<NoObject>::Int(5), ExprValue::Int(10)],
         )
@@ -275,6 +276,7 @@ fn eval_with_variables_var_with_multiple_params() {
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
             &env,
+            "main",
             "f",
             vec![ExprValue::<NoObject>::Int(3), ExprValue::Int(7)],
         )
@@ -329,6 +331,7 @@ fn eval_with_variables_simple_var_list() {
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
             &env,
+            "main",
             "f",
             vec![ExprValue::<NoObject>::Int(3), ExprValue::Int(7)],
         )
@@ -415,7 +418,7 @@ fn eval_with_variables_var_list_in_nested_forall() {
     ]));
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![xs, ys])
+        .eval_fn_with_variables(&env, "main", "f", vec![xs, ys])
         .expect("Should evaluate");
 
     // Check result: 2 xs * 2 ys * 2 constraints per var list = 8 constraints
@@ -485,7 +488,7 @@ fn eval_with_variables_with_let_expr() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
         .expect("Should evaluate");
 
     // Check result
@@ -530,7 +533,7 @@ fn eval_with_variables_no_reified_vars() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
         .expect("Should evaluate");
 
     // Check result

@@ -11,7 +11,7 @@ fn in_element_present() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
@@ -25,7 +25,7 @@ fn in_element_absent() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(false));
 }
@@ -39,7 +39,7 @@ fn in_empty_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(false));
 }
@@ -53,12 +53,12 @@ fn in_with_param_element() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(2)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(2)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -73,13 +73,13 @@ fn in_with_param_list() {
 
     let list_with = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![list_with])
+        .quick_eval_fn("main", "f", vec![list_with])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let list_without = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(10)]));
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![list_without])
+        .quick_eval_fn("main", "f", vec![list_without])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -99,12 +99,12 @@ fn in_with_both_params() {
     ]));
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(2), list.clone()])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(2), list.clone()])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5), list])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), list])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -118,12 +118,12 @@ fn in_with_range() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(10)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -137,7 +137,7 @@ fn in_bool_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
@@ -151,12 +151,12 @@ fn in_nested_usage() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(2)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(2)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -172,7 +172,7 @@ fn union_two_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -196,7 +196,7 @@ fn union_overlapping_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -220,7 +220,7 @@ fn union_with_empty_list_left() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -241,7 +241,7 @@ fn union_with_empty_list_right() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -262,7 +262,7 @@ fn union_two_empty_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::List(Vec::new()));
 }
@@ -279,7 +279,7 @@ fn union_with_params() {
     let list2 = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list1, list2])
+        .quick_eval_fn("main", "f", vec![list1, list2])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -301,7 +301,7 @@ fn union_chain() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -322,7 +322,7 @@ fn union_with_ranges() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -344,7 +344,7 @@ fn union_bool_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -363,7 +363,7 @@ fn diff_disjoint_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -384,7 +384,7 @@ fn diff_overlapping_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -401,7 +401,7 @@ fn diff_identical_lists() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::List(Vec::new()));
 }
@@ -423,7 +423,7 @@ fn diff_with_params() {
     let list2 = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list1, list2])
+        .quick_eval_fn("main", "f", vec![list1, list2])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -440,7 +440,7 @@ fn diff_partial_overlap() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -457,7 +457,7 @@ fn diff_with_ranges() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -478,7 +478,7 @@ fn diff_removing_single_element() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(
         result,
@@ -497,7 +497,7 @@ fn union_then_diff() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [1, 2, 3, 4] - [2, 3, 5] = [1, 4]
     assert_eq!(
@@ -515,7 +515,7 @@ fn union_diff_combination() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [1, 2, 3, 4, 5] - [2, 4] = [1, 3, 5]
     // [1, 3, 5] + [1, 3, 5] = [1, 3, 5, 1, 3, 5]
@@ -541,12 +541,12 @@ fn in_with_union_result() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(3)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -560,12 +560,12 @@ fn in_with_diff_result() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(2)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(2)])
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
@@ -579,7 +579,7 @@ fn cardinality_of_union() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(4));
 }
@@ -593,7 +593,7 @@ fn cardinality_of_diff() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // difference gives [1, 3, 5], cardinality is 3
     assert_eq!(result, ExprValue::Int(3));
@@ -608,7 +608,7 @@ fn collection_operations_with_if() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(
         result_true,
@@ -620,7 +620,7 @@ fn collection_operations_with_if() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(-5)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
         .expect("Should evaluate");
     assert_eq!(
         result_false,
@@ -639,7 +639,7 @@ fn list_index_fallible_valid() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(2));
 }
@@ -653,7 +653,7 @@ fn list_index_fallible_first_element() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(10));
 }
@@ -667,7 +667,7 @@ fn list_index_fallible_out_of_bounds() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::None);
 }
@@ -681,7 +681,7 @@ fn list_index_fallible_negative() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::None);
 }
@@ -695,7 +695,7 @@ fn list_index_fallible_empty_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::List(vec![])])
+        .quick_eval_fn("main", "f", vec![ExprValue::List(vec![])])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::None);
 }
@@ -709,7 +709,7 @@ fn list_index_panic_valid() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(2));
 }
@@ -722,7 +722,7 @@ fn list_index_panic_out_of_bounds() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
     assert!(result.is_err(), "Should panic on out of bounds index");
 }
 
@@ -734,7 +734,7 @@ fn list_index_panic_negative() {
 
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("f", vec![]);
+    let result = checked_ast.quick_eval_fn("main", "f", vec![]);
     assert!(result.is_err(), "Should panic on negative index");
 }
 
@@ -747,7 +747,7 @@ fn list_index_with_expression() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![ExprValue::Int(1)])
+        .quick_eval_fn("main", "f", vec![ExprValue::Int(1)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(30));
 }
@@ -761,7 +761,7 @@ fn list_index_chained() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(2));
 }
@@ -776,7 +776,7 @@ fn list_index_chained_fallible_then_panic() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(2));
 }
@@ -796,12 +796,12 @@ fn list_index_with_param() {
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![list.clone(), ExprValue::Int(2)])
+        .quick_eval_fn("main", "f", vec![list.clone(), ExprValue::Int(2)])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(300));
 
     let result_out = checked_ast
-        .quick_eval_fn("f", vec![list, ExprValue::Int(5)])
+        .quick_eval_fn("main", "f", vec![list, ExprValue::Int(5)])
         .expect("Should evaluate");
     assert_eq!(result_out, ExprValue::None);
 }
@@ -815,7 +815,7 @@ fn list_index_with_comprehension() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     // [1..5] = [1, 2, 3, 4], x*2 = [2, 4, 6, 8], [2] = 6
     assert_eq!(result, ExprValue::Int(6));
@@ -830,7 +830,7 @@ fn list_index_bool_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(false));
 }
@@ -844,7 +844,7 @@ fn list_index_string_list() {
     let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .quick_eval_fn("main", "f", vec![])
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("a".to_string()));
 }

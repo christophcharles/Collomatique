@@ -548,26 +548,25 @@ impl<
         ),
         ProblemError<T>,
     > {
-        let (constraints_expr, origin) =
-            eval_history
-                .eval_fn(fn_name, args.clone())
-                .map_err(|e| match e {
-                    EvalError::ArgumentCountMismatch {
-                        identifier,
-                        expected,
-                        found,
-                    } => ProblemError::ArgumentCountMismatch {
-                        func: identifier,
-                        expected,
-                        found,
-                    },
-                    EvalError::InvalidExprValue { param } => {
-                        ProblemError::InvalidExprValue(format!("{:?}", args[param]))
-                    }
-                    EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
-                    EvalError::Panic(value) => ProblemError::Panic(value),
-                    _ => panic!("Unexpected error: {:?}", e),
-                })?;
+        let (constraints_expr, origin) = eval_history
+            .eval_fn("main", fn_name, args.clone())
+            .map_err(|e| match e {
+                EvalError::ArgumentCountMismatch {
+                    identifier,
+                    expected,
+                    found,
+                } => ProblemError::ArgumentCountMismatch {
+                    func: identifier,
+                    expected,
+                    found,
+                },
+                EvalError::InvalidExprValue { param } => {
+                    ProblemError::InvalidExprValue(format!("{:?}", args[param]))
+                }
+                EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
+                EvalError::Panic(value) => ProblemError::Panic(value),
+                _ => panic!("Unexpected error: {:?}", e),
+            })?;
 
         let constraints = match constraints_expr {
             ExprValue::Constraint(constraints) => constraints,
@@ -620,26 +619,25 @@ impl<
         ),
         ProblemError<T>,
     > {
-        let (fn_result, origin) =
-            eval_history
-                .eval_fn(fn_name, args.clone())
-                .map_err(|e| match e {
-                    EvalError::ArgumentCountMismatch {
-                        identifier,
-                        expected,
-                        found,
-                    } => ProblemError::ArgumentCountMismatch {
-                        func: identifier,
-                        expected,
-                        found,
-                    },
-                    EvalError::InvalidExprValue { param } => {
-                        ProblemError::InvalidExprValue(format!("{:?}", args[param]))
-                    }
-                    EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
-                    EvalError::Panic(value) => ProblemError::Panic(value),
-                    _ => panic!("Unexpected error: {:?}", e),
-                })?;
+        let (fn_result, origin) = eval_history
+            .eval_fn("main", fn_name, args.clone())
+            .map_err(|e| match e {
+                EvalError::ArgumentCountMismatch {
+                    identifier,
+                    expected,
+                    found,
+                } => ProblemError::ArgumentCountMismatch {
+                    func: identifier,
+                    expected,
+                    found,
+                },
+                EvalError::InvalidExprValue { param } => {
+                    ProblemError::InvalidExprValue(format!("{:?}", args[param]))
+                }
+                EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
+                EvalError::Panic(value) => ProblemError::Panic(value),
+                _ => panic!("Unexpected error: {:?}", e),
+            })?;
 
         let mut values_list = vec![];
         match fn_result {

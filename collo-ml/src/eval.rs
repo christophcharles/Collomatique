@@ -772,11 +772,12 @@ pub enum EvalError<T: EvalObject> {
 impl CheckedAST<NoObject> {
     pub fn quick_eval_fn(
         &self,
+        module: &str,
         fn_name: &str,
         args: Vec<ExprValue<NoObject>>,
     ) -> Result<ExprValue<NoObject>, EvalError<NoObject>> {
         let env = NoObjectEnv {};
-        self.eval_fn(&env, fn_name, args)
+        self.eval_fn(&env, module, fn_name, args)
     }
 }
 
@@ -926,21 +927,23 @@ impl<T: EvalObject> CheckedAST<T> {
     pub fn eval_fn(
         &self,
         env: &T::Env,
+        module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<ExprValue<T>, EvalError<T>> {
         let mut eval_history = self.start_eval_history(env)?;
-        Ok(eval_history.eval_fn(fn_name, args)?.0)
+        Ok(eval_history.eval_fn(module, fn_name, args)?.0)
     }
 
     pub fn eval_fn_with_variables(
         &self,
         env: &T::Env,
+        module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<(ExprValue<T>, VariableDefinitions<T>), EvalError<T>> {
         let mut eval_history = self.start_eval_history(env)?;
-        let (r, _o) = eval_history.eval_fn(fn_name, args)?;
+        let (r, _o) = eval_history.eval_fn(module, fn_name, args)?;
         Ok((r, eval_history.into_var_def()))
     }
 }
@@ -2418,12 +2421,10 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
 
     pub fn eval_fn(
         &mut self,
+        module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T>>,
     ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
-        // Placeholder module name until proper module support is added
-        let current_module = "main";
-
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -2432,7 +2433,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             checked_args.push(arg.into());
         }
 
-        self.add_fn_to_call_history(current_module, fn_name, checked_args.clone(), false)
+        self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)
     }
 
     pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T>, T::Cache) {

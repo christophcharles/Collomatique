@@ -108,7 +108,7 @@ fn eval_with_simple_objects(
     let env = SimpleEnv {};
 
     checked_ast
-        .eval_fn(&env, fn_name, args)
+        .eval_fn(&env, "main", fn_name, args)
         .expect("Should evaluate")
 }
 
