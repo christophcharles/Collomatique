@@ -2680,27 +2680,45 @@ impl LocalEnv {
 
             // ========== ILP Variables ==========
             Expr::VarCall { module, name, args } => {
-                // If module is specified, return not-yet-supported error
-                if let Some(mod_span) = module {
-                    errors.push(SemError::QualifiedAccessNotYetSupported {
-                        span: mod_span.span.clone(),
-                    });
-                    return Some(SimpleType::LinExpr.into());
-                }
+                // Build NamespacePath with $ prefix on the variable name
+                let var_name_with_dollar = format!("${}", name.node);
 
-                match global_env.lookup_var(self.current_module(), &name.node) {
-                    None => {
-                        errors.push(SemError::UnknownVariable {
-                            module: self.current_module().to_string(),
-                            var: name.node.clone(),
-                            span: name.span.clone(),
-                        });
-                        Some(SimpleType::LinExpr.into()) // Syntax indicates LinExpr intent
-                    }
-                    Some((var_args, _)) => {
+                let segments = match module {
+                    Some(mod_span) => vec![
+                        mod_span.clone(),
+                        Spanned::new(var_name_with_dollar, name.span.clone()),
+                    ],
+                    None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
+                };
+
+                // Build the full span (from module start if present, to name end)
+                let full_span = match module {
+                    Some(mod_span) => Span {
+                        start: mod_span.span.start,
+                        end: name.span.end,
+                    },
+                    None => name.span.clone(),
+                };
+
+                let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
+
+                // Use resolve_path instead of lookup_var
+                match resolve_path(&path, self.current_module(), global_env, None) {
+                    Ok(ResolvedPathKind::InternalVariable {
+                        module: var_module,
+                        name: var_name,
+                    }) => {
                         // Mark variable as used
-                        global_env.mark_var_used(self.current_module(), &name.node);
+                        global_env.mark_var_used(&var_module, &var_name);
 
+                        // Get variable args from internal_variables
+                        let var_desc = global_env
+                            .internal_variables
+                            .get(&(var_module.clone(), var_name.clone()))
+                            .expect("Internal variable should exist after resolution");
+                        let var_args = var_desc.args.clone();
+
+                        // Check argument count
                         if args.len() != var_args.len() {
                             errors.push(SemError::ArgumentCountMismatch {
                                 identifier: name.node.clone(),
@@ -2713,6 +2731,7 @@ impl LocalEnv {
                             });
                         }
 
+                        // Type-check each argument
                         for (i, (arg, expected_type)) in
                             args.iter().zip(var_args.iter()).enumerate()
                         {
@@ -2739,32 +2758,15 @@ impl LocalEnv {
 
                         Some(SimpleType::LinExpr.into())
                     }
-                }
-            }
+                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
+                        // Get variable args from external_variables
+                        let var_args = global_env
+                            .external_variables
+                            .get(&ext_var_name)
+                            .expect("External variable should exist after resolution")
+                            .clone();
 
-            Expr::VarListCall { module, name, args } => {
-                // If module is specified, return not-yet-supported error
-                if let Some(mod_span) = module {
-                    errors.push(SemError::QualifiedAccessNotYetSupported {
-                        span: mod_span.span.clone(),
-                    });
-                    return Some(SimpleType::List(SimpleType::LinExpr.into()).into());
-                }
-
-                match global_env.lookup_var_list(self.current_module(), &name.node) {
-                    None => {
-                        errors.push(SemError::UnknownVariable {
-                            module: self.current_module().to_string(),
-                            var: name.node.clone(),
-                            span: name.span.clone(),
-                        });
-                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
-                        // Syntax indicates [LinExpr] intent
-                    }
-                    Some((var_args, _)) => {
-                        // Mark variable list as used
-                        global_env.mark_var_list_used(self.current_module(), &name.node);
-
+                        // Check argument count
                         if args.len() != var_args.len() {
                             errors.push(SemError::ArgumentCountMismatch {
                                 identifier: name.node.clone(),
@@ -2777,6 +2779,7 @@ impl LocalEnv {
                             });
                         }
 
+                        // Type-check each argument
                         for (i, (arg, expected_type)) in
                             args.iter().zip(var_args.iter()).enumerate()
                         {
@@ -2801,6 +2804,106 @@ impl LocalEnv {
                             }
                         }
 
+                        Some(SimpleType::LinExpr.into())
+                    }
+                    Err(_) | Ok(_) => {
+                        // Path not found or resolved to something that's not a variable
+                        errors.push(SemError::UnknownVariable {
+                            module: self.current_module().to_string(),
+                            var: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                        Some(SimpleType::LinExpr.into())
+                    }
+                }
+            }
+
+            Expr::VarListCall { module, name, args } => {
+                // Build NamespacePath with $[name] format for the variable list name
+                let var_name_with_dollar = format!("$[{}]", name.node);
+
+                let segments = match module {
+                    Some(mod_span) => vec![
+                        mod_span.clone(),
+                        Spanned::new(var_name_with_dollar, name.span.clone()),
+                    ],
+                    None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
+                };
+
+                // Build the full span (from module start if present, to name end)
+                let full_span = match module {
+                    Some(mod_span) => Span {
+                        start: mod_span.span.start,
+                        end: name.span.end,
+                    },
+                    None => name.span.clone(),
+                };
+
+                let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
+
+                // Use resolve_path instead of lookup_var_list
+                match resolve_path(&path, self.current_module(), global_env, None) {
+                    Ok(ResolvedPathKind::VariableList {
+                        module: var_module,
+                        name: var_name,
+                    }) => {
+                        // Mark variable list as used
+                        global_env.mark_var_list_used(&var_module, &var_name);
+
+                        // Get variable args from variable_lists
+                        let var_desc = global_env
+                            .variable_lists
+                            .get(&(var_module.clone(), var_name.clone()))
+                            .expect("Variable list should exist after resolution");
+                        let var_args = var_desc.args.clone();
+
+                        // Check argument count
+                        if args.len() != var_args.len() {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: name.node.clone(),
+                                span: args
+                                    .last()
+                                    .map(|a| a.span.clone())
+                                    .unwrap_or_else(|| name.span.clone()),
+                                expected: var_args.len(),
+                                found: args.len(),
+                            });
+                        }
+
+                        // Type-check each argument
+                        for (i, (arg, expected_type)) in
+                            args.iter().zip(var_args.iter()).enumerate()
+                        {
+                            let arg_type = self.check_expr(
+                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                warnings,
+                            );
+
+                            if let Some(found_type) = arg_type {
+                                if !found_type.is_subtype_of(expected_type) {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: arg.span.clone(),
+                                        expected: expected_type.clone(),
+                                        found: found_type,
+                                        context: format!(
+                                            "argument {} to variable list $[{}]",
+                                            i + 1,
+                                            name.node
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+
+                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
+                    }
+                    Err(_) | Ok(_) => {
+                        // Path not found or resolved to something that's not a variable list
+                        errors.push(SemError::UnknownVariable {
+                            module: self.current_module().to_string(),
+                            var: name.node.clone(),
+                            span: name.span.clone(),
+                        });
                         Some(SimpleType::List(SimpleType::LinExpr.into()).into())
                     }
                 }
