@@ -948,6 +948,12 @@ struct LocalEnv<T: EvalObject> {
     current_module: String,
 }
 
+impl<T: EvalObject> LocalEnvCheck for LocalEnv<T> {
+    fn has_ident(&self, ident: &str) -> bool {
+        self.lookup_ident(ident).is_some()
+    }
+}
+
 impl<T: EvalObject> LocalEnv<T> {
     fn new(current_module: &str) -> Self {
         LocalEnv {
@@ -1003,29 +1009,19 @@ impl<T: EvalObject> LocalEnv<T> {
             Expr::Number(val) => ExprValue::Int(*val),
             Expr::StringLiteral(val) => ExprValue::String(val.clone()),
             Expr::IdentPath(path) => {
-                // Check if it's a local variable first (eval's local env)
-                if path.node.segments.len() == 1 {
-                    let name = &path.node.segments[0].node;
-                    if let Some(value) = self.lookup_ident(name) {
-                        return Ok(value);
-                    }
-                }
-
-                // Use resolve_path for type-level resolution
+                // Use resolve_path for unified resolution
                 let resolved = resolve_path(
                     path,
                     self.current_module(),
                     &eval_history.ast.global_env,
-                    None,
+                    Some(self),
                 )
                 .expect("Path should be valid in a checked AST");
 
                 match resolved {
-                    ResolvedPathKind::LocalVariable(name) => {
-                        // Shouldn't reach here since we checked locals above
-                        self.lookup_ident(&name)
-                            .expect("Local variable should exist")
-                    }
+                    ResolvedPathKind::LocalVariable(name) => self
+                        .lookup_ident(&name)
+                        .expect("Local variable should exist"),
                     ResolvedPathKind::Function { .. } => {
                         panic!("Function reference without call should not appear in IdentPath")
                     }
@@ -1201,7 +1197,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     path,
                     self.current_module(),
                     &eval_history.ast.global_env,
-                    None,
+                    Some(self),
                 )
                 .expect("Path should be valid in a checked AST");
 
@@ -1310,7 +1306,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     path,
                     self.current_module(),
                     &eval_history.ast.global_env,
-                    None,
+                    Some(self),
                 )
                 .expect("Path should be valid in a checked AST");
 
@@ -1374,7 +1370,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     &path,
                     self.current_module(),
                     &eval_history.ast.global_env,
-                    None,
+                    Some(self),
                 ) {
                     Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
                         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
@@ -2052,7 +2048,7 @@ impl<T: EvalObject> LocalEnv<T> {
                     &path,
                     self.current_module(),
                     &eval_history.ast.global_env,
-                    None,
+                    Some(self),
                 ) {
                     Ok(ResolvedPathKind::VariableList {
                         module: var_module,

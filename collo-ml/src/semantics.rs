@@ -717,11 +717,23 @@ pub enum SemWarning {
     },
 }
 
+/// Trait for checking if an identifier exists in a local environment.
+/// This allows resolve_path to work with different LocalEnv implementations.
+pub trait LocalEnvCheck {
+    fn has_ident(&self, ident: &str) -> bool;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct LocalEnv {
     scopes: Vec<HashMap<String, (ExprType, Span, bool)>>,
     pending_scope: HashMap<String, (ExprType, Span, bool)>,
     current_module: String,
+}
+
+impl LocalEnvCheck for LocalEnv {
+    fn has_ident(&self, ident: &str) -> bool {
+        self.lookup_ident(ident).is_some()
+    }
 }
 
 fn ident_can_be_unused(ident: &str) -> bool {
@@ -922,7 +934,7 @@ pub fn resolve_path(
     path: &Spanned<crate::ast::NamespacePath>,
     current_module: &str,
     global_env: &GlobalEnv,
-    local_env: Option<&LocalEnv>,
+    local_env: Option<&dyn LocalEnvCheck>,
 ) -> Result<ResolvedPathKind, PathResolutionError> {
     let segments: Vec<&str> = path.node.segments.iter().map(|s| s.node.as_str()).collect();
 
@@ -994,7 +1006,7 @@ pub fn resolve_path(
     // 4. Check local variables (single segment only, last for defensive programming)
     if segments.len() == 1 {
         if let Some(local) = local_env {
-            if local.lookup_ident(segments[0]).is_some() {
+            if local.has_ident(segments[0]) {
                 return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
             }
         }
