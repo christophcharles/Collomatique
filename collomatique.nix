@@ -17,18 +17,25 @@ rustPlatform.buildRustPackage rec {
     pname = "collomatique";
     version = "0.1.0";
 
-    src = [ ./. ];
-
-    cargoLock = {
-        lockFile = ./Cargo.lock;
+    src = lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+            let
+                baseName = baseNameOf path;
+            in
+            # Exclude .git directory and target directory
+            !(baseName == ".git" && type == "directory") &&
+            !(baseName == "target" && type == "directory");
     };
+
+    cargoHash = "sha256-LbAt66gVeIUZJAk4X9mt44JUDd9VR5uldCCs1m8a0FQ=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
         gettext
         pkg-config
         wrapGAppsHook4
-        cbc # We need it for tests
+        cbc # We need it for tests
         python3
     ];
 
