@@ -114,7 +114,6 @@ fn eval_cross_module_enum_variant() {
 }
 
 #[test]
-#[ignore = "cross-module variable access (a::$...) not yet implemented in eval.rs"]
 fn eval_cross_module_reified_variable() {
     let mod_a = r#"
         pub let check(x: Int) -> Constraint = x >== 0;
@@ -138,7 +137,6 @@ fn eval_cross_module_reified_variable() {
 }
 
 #[test]
-#[ignore = "cross-module variable access (a::$...) not yet implemented in eval.rs"]
 fn eval_cross_module_reified_variable_list() {
     let mod_a = r#"
         pub let checks(x: Int) -> [Constraint] = [x >== 0, x <== 10];

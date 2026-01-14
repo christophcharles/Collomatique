@@ -1,4 +1,4 @@
-use crate::ast::Spanned;
+use crate::ast::{Span, Spanned};
 use crate::parser::Rule;
 use crate::semantics::*;
 use crate::traits::{EvalObject, FieldConversionError};
@@ -1351,60 +1351,77 @@ impl<T: EvalObject> LocalEnv<T> {
                 }
             }
             Expr::VarCall { module, name, args } => {
-                if let Some(mod_name) = module {
-                    panic!(
-                        "Qualified module variable access ({}::$...) is not yet implemented",
-                        mod_name.node
-                    );
-                }
+                // Build NamespacePath with $ prefix on the variable name
+                let var_name_with_dollar = format!("${}", name.node);
+
+                let segments = match module {
+                    Some(mod_span) => vec![
+                        mod_span.clone(),
+                        Spanned::new(var_name_with_dollar, name.span.clone()),
+                    ],
+                    None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
+                };
+
+                let full_span = match module {
+                    Some(mod_span) => Span {
+                        start: mod_span.span.start,
+                        end: name.span.end,
+                    },
+                    None => name.span.clone(),
+                };
+
+                let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
                 let args: Vec<_> = args
                     .iter()
                     .map(|x| self.eval_expr(eval_history, &x))
                     .collect::<Result<_, _>>()?;
-                if let Some(_args_typ) = eval_history
-                    .ast
-                    .global_env
-                    .get_predefined_vars()
-                    .get(&name.node)
-                {
-                    ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        name.node.clone(),
-                        args,
-                    ))))
-                } else if let Some(var_desc) = eval_history
-                    .ast
-                    .global_env
-                    .get_vars()
-                    .get(&(self.current_module().to_string(), name.node.clone()))
-                {
-                    eval_history.vars.insert(
-                        (
-                            self.current_module().to_string(),
-                            name.node.clone(),
+
+                match resolve_path(
+                    &path,
+                    self.current_module(),
+                    &eval_history.ast.global_env,
+                    None,
+                ) {
+                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
+                        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+                            eval_history.env,
+                            &mut eval_history.cache,
+                            ext_var_name,
+                            args,
+                        ))))
+                    }
+                    Ok(ResolvedPathKind::InternalVariable {
+                        module: var_module,
+                        name: var_name,
+                    }) => {
+                        let var_desc = eval_history
+                            .ast
+                            .global_env
+                            .get_vars()
+                            .get(&(var_module.clone(), var_name.clone()))
+                            .expect("Internal variable should exist after resolution");
+
+                        eval_history.vars.insert(
+                            (var_module.clone(), var_name.clone(), args.clone()),
+                            var_desc.referenced_fn.clone(),
+                        );
+                        eval_history.add_fn_to_call_history(
+                            &var_desc.referenced_fn.0,
+                            &var_desc.referenced_fn.1,
                             args.clone(),
-                        ),
-                        var_desc.referenced_fn.clone(),
-                    );
-                    eval_history.add_fn_to_call_history(
-                        &var_desc.referenced_fn.0,
-                        &var_desc.referenced_fn.1,
-                        args.clone(),
-                        true,
-                    )?;
-                    ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        self.current_module().to_string(),
-                        name.node.clone(),
-                        None,
-                        args,
-                    ))))
-                    .into()
-                } else {
-                    panic!("Valid var expected")
+                            true,
+                        )?;
+                        ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
+                            eval_history.env,
+                            &mut eval_history.cache,
+                            var_module,
+                            var_name,
+                            None,
+                            args,
+                        ))))
+                    }
+                    _ => panic!("Valid var expected (should have been caught by type checker)"),
                 }
             }
             Expr::In { item, collection } => {
@@ -2012,58 +2029,84 @@ impl<T: EvalObject> LocalEnv<T> {
                 output
             }
             Expr::VarListCall { module, name, args } => {
-                if let Some(mod_name) = module {
-                    panic!(
-                        "Qualified module variable list access ({}::$[...]) is not yet implemented",
-                        mod_name.node
-                    );
-                }
+                // Build NamespacePath with $[name] format
+                let var_name_with_dollar = format!("$[{}]", name.node);
 
-                let current_module = self.current_module().to_string();
-                let var_lists = eval_history.ast.get_var_lists();
-                let var_list_fn = var_lists
-                    .get(&(current_module.clone(), name.node.clone()))
-                    .expect("Var list should be declared");
+                let segments = match module {
+                    Some(mod_span) => vec![
+                        mod_span.clone(),
+                        Spanned::new(var_name_with_dollar, name.span.clone()),
+                    ],
+                    None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
+                };
+
+                let full_span = match module {
+                    Some(mod_span) => Span {
+                        start: mod_span.span.start,
+                        end: name.span.end,
+                    },
+                    None => name.span.clone(),
+                };
+
+                let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
+
                 let evaluated_args: Vec<_> = args
                     .iter()
                     .map(|x| self.eval_expr(eval_history, &x))
                     .collect::<Result<_, _>>()?;
 
-                let (constraints, _origin) = eval_history.add_fn_to_call_history(
-                    &var_list_fn.0,
-                    &var_list_fn.1,
-                    evaluated_args.clone(),
-                    true,
-                )?;
-                eval_history.var_lists.insert(
-                    (
-                        current_module.clone(),
-                        name.node.clone(),
-                        evaluated_args.clone(),
-                    ),
-                    var_list_fn.clone(),
-                );
+                match resolve_path(
+                    &path,
+                    self.current_module(),
+                    &eval_history.ast.global_env,
+                    None,
+                ) {
+                    Ok(ResolvedPathKind::VariableList {
+                        module: var_module,
+                        name: var_name,
+                    }) => {
+                        let var_lists = eval_history.ast.get_var_lists();
+                        let var_list_fn = var_lists
+                            .get(&(var_module.clone(), var_name.clone()))
+                            .expect("Var list should be declared");
 
-                let constraint_count = match constraints {
-                    ExprValue::List(list) => list.len(),
-                    _ => panic!("Expected [Constraint]"),
-                };
+                        let (constraints, _origin) = eval_history.add_fn_to_call_history(
+                            &var_list_fn.0,
+                            &var_list_fn.1,
+                            evaluated_args.clone(),
+                            true,
+                        )?;
+                        eval_history.var_lists.insert(
+                            (var_module.clone(), var_name.clone(), evaluated_args.clone()),
+                            var_list_fn.clone(),
+                        );
 
-                ExprValue::List(
-                    (0..constraint_count)
-                        .into_iter()
-                        .map(|i| {
-                            ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
-                                eval_history.env,
-                                &mut eval_history.cache,
-                                current_module.clone(),
-                                name.node.clone(),
-                                Some(i),
-                                evaluated_args.clone(),
-                            ))))
-                        })
-                        .collect(),
-                )
+                        let constraint_count = match constraints {
+                            ExprValue::List(list) => list.len(),
+                            _ => panic!("Expected [Constraint]"),
+                        };
+
+                        ExprValue::List(
+                            (0..constraint_count)
+                                .map(|i| {
+                                    ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                                        ScriptVar::new(
+                                            eval_history.env,
+                                            &mut eval_history.cache,
+                                            var_module.clone(),
+                                            var_name.clone(),
+                                            Some(i),
+                                            evaluated_args.clone(),
+                                        ),
+                                    )))
+                                })
+                                .collect(),
+                        )
+                    }
+                    _ => {
+                        panic!("Valid var list expected (should have been caught by type checker)")
+                    }
+                }
             }
             Expr::ListComprehension {
                 body,
