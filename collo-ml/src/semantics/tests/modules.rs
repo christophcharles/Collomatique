@@ -271,11 +271,11 @@ fn alias_shadowing_local_shadows_imported() {
 fn module_b_uses_public_reified_variable_from_module_a() {
     let mod_a = r#"
         pub let is_valid(x: Int) -> Constraint = x >== 0;
-        pub reify is_valid as $validity_check;
+        pub reify is_valid as $ValidityCheck;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
-        pub let check_both(x: Int, y: Int) -> LinExpr = a::$validity_check(x) + a::$validity_check(y);
+        pub let check_both(x: Int, y: Int) -> Constraint = a::$ValidityCheck(x) + a::$ValidityCheck(y) === 2;
     "#;
 
     let (_, errors, warnings) = analyze_multi(
@@ -454,16 +454,16 @@ fn three_module_chain_function_reify_use() {
     // Module C: uses the reified variable from B
     let mod_a = r#"
         pub let is_answer(x: Int) -> Constraint = x === 42;
-        pub reify is_answer as $the_answer;
+        pub reify is_answer as $TheAnswer;
     "#;
     let mod_b = r#"
         import "mod_a" as a;
         let is_double_answer(x: Int) -> Constraint = a::is_answer(x) && a::is_answer(x * 2);
-        pub reify is_double_answer as $double_check;
+        pub reify is_double_answer as $DoubleCheck;
     "#;
     let mod_c = r#"
         import "mod_b" as b;
-        pub let combined_check(x: Int, y: Int) -> LinExpr = b::$double_check(x) + b::$double_check(y);
+        pub let combined_check(x: Int, y: Int) -> LinExpr = b::$DoubleCheck(x) + b::$DoubleCheck(y);
     "#;
 
     let (_, errors, warnings) = analyze_multi(

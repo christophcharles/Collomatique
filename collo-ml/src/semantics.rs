@@ -944,7 +944,9 @@ pub fn resolve_path(
             if first_symbol == '$' {
                 let no_dollar_name = &name[1..];
                 if global_env.external_variables.contains_key(no_dollar_name) {
-                    return Ok(ResolvedPathKind::ExternalVariable(no_dollar_name.to_string()));
+                    return Ok(ResolvedPathKind::ExternalVariable(
+                        no_dollar_name.to_string(),
+                    ));
                 }
             }
         }
