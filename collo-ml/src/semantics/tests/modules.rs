@@ -477,3 +477,53 @@ fn three_module_chain_function_reify_use() {
         warnings
     );
 }
+
+#[test]
+fn module_b_reifies_public_function_from_module_a_into_var_list() {
+    let mod_a = r#"
+        pub let all_positive(vals: [Int]) -> [Constraint] = [v >== 0 for v in vals];
+    "#;
+    let mod_b = r#"
+        import "mod_a" as a;
+        pub reify a::all_positive as $[PositivityChecks];
+        pub let check_list(xs: [Int]) -> [LinExpr] = $[PositivityChecks](xs);
+    "#;
+
+    let (_, errors, warnings) = analyze_multi(
+        &[("mod_a", mod_a), ("mod_b", mod_b)],
+        HashMap::new(),
+        HashMap::new(),
+    );
+
+    assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
+    assert!(
+        warnings.is_empty(),
+        "Should have no warnings: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn module_b_uses_public_var_list_from_module_a() {
+    let mod_a = r#"
+        pub let bounds_check(vals: [Int]) -> [Constraint] = [v >== 0 && v <== 100 for v in vals];
+        pub reify bounds_check as $[BoundsChecks];
+    "#;
+    let mod_b = r#"
+        import "mod_a" as a;
+        pub let validate_list(xs: [Int]) -> [LinExpr] = a::$[BoundsChecks](xs);
+    "#;
+
+    let (_, errors, warnings) = analyze_multi(
+        &[("mod_a", mod_a), ("mod_b", mod_b)],
+        HashMap::new(),
+        HashMap::new(),
+    );
+
+    assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
+    assert!(
+        warnings.is_empty(),
+        "Should have no warnings: {:?}",
+        warnings
+    );
+}
