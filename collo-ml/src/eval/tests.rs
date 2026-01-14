@@ -19,6 +19,7 @@ mod let_expr;
 mod list_comprehensions;
 mod literals;
 mod match_branches;
+mod modules;
 mod objects;
 mod origins;
 mod panic;
