@@ -12,7 +12,14 @@ fn forall_with_reified_var_and_filter() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(-1),
@@ -64,7 +71,14 @@ fn sum_with_var_list_and_comprehension() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
@@ -136,7 +150,14 @@ fn nested_quantifiers_with_filters() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
         ExprValue::Int(-1),
@@ -166,7 +187,14 @@ fn list_comp_with_function_calls_and_filters() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(-1),
@@ -203,7 +231,14 @@ fn nested_list_comp_with_reified_vars() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
@@ -254,7 +289,14 @@ fn list_comp_with_collection_ops_in_body() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -291,7 +333,14 @@ fn if_with_quantifier_in_condition() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let all_positive = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -323,7 +372,14 @@ fn if_with_collection_check() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let valid_set = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
 
@@ -357,7 +413,14 @@ fn nested_if_with_variables() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result_scaled = checked_ast
         .quick_eval_fn(
@@ -400,7 +463,14 @@ fn function_returning_constraint_system() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -472,7 +542,14 @@ fn function_composition_with_reified_vars() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -531,7 +608,14 @@ fn assignment_constraint_pattern() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let students = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let slots = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
@@ -624,7 +708,14 @@ fn conditional_constraint_with_reification() {
         ),
     ]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(1), ExprValue::Int(5)])
@@ -721,7 +812,14 @@ fn aggregation_with_filtering() {
         }
     }
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let students = ExprValue::List(Vec::from([
         ExprValue::Object(Student::Student1),
@@ -765,7 +863,14 @@ fn dynamic_set_construction() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -799,7 +904,14 @@ fn set_operations_with_comprehensions() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(-2),
@@ -838,7 +950,14 @@ fn union_of_var_lists() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
@@ -872,7 +991,14 @@ fn empty_list_propagation() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let empty = ExprValue::List(Vec::new());
     let result_empty = checked_ast
@@ -898,7 +1024,14 @@ fn deeply_nested_structure() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -921,7 +1054,14 @@ fn mixed_coercion_in_complex_expression() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -964,7 +1104,14 @@ fn let_expr_in_deeply_nested_structure() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1015,7 +1162,14 @@ fn all_features_combined() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
@@ -1131,7 +1285,14 @@ fn all_features_combined_with_let() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
     let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));

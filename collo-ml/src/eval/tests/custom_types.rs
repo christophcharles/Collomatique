@@ -11,7 +11,14 @@ fn custom_type_wrap_and_unwrap() {
         pub let wrap(x: Int) -> MyInt = MyInt(x);
         pub let unwrap(x: MyInt) -> Int = Int(x);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     // Test wrapping
     let wrapped = checked_ast
@@ -42,7 +49,14 @@ fn custom_type_roundtrip() {
         type MyInt = Int;
         pub let roundtrip(x: Int) -> Int = Int(MyInt(x));
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "roundtrip", vec![ExprValue::Int(123)])
@@ -57,7 +71,14 @@ fn custom_type_with_tuple() {
         type Point = (Int, Int);
         pub let make_point(x: Int, y: Int) -> Point = Point(x, y);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -84,7 +105,14 @@ fn custom_type_with_list() {
         type IntList = [Int];
         pub let make_list() -> IntList = IntList([1, 2, 3]);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "make_list", vec![])
@@ -116,7 +144,14 @@ fn custom_type_tuple_field_access() {
         pub let get_x(p: Point) -> Int = p.0;
         pub let get_y(p: Point) -> Int = p.1;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let point = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
@@ -143,7 +178,14 @@ fn custom_type_nested_tuple_field_access() {
         type NamedPoint = (String, Point);
         pub let get_x(np: NamedPoint) -> Int = np.1.0;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let named_point = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
@@ -176,7 +218,14 @@ fn custom_type_in_list() {
         type MyInt = Int;
         pub let make_list() -> [MyInt] = [MyInt(1), MyInt(2), MyInt(3)];
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "make_list", vec![])
@@ -213,7 +262,14 @@ fn sum_over_custom_type_list() {
         type MyInt = Int;
         pub let total(xs: [MyInt]) -> Int = sum x in xs { Int(x) };
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(vec![
         ExprValue::Custom(Box::new(CustomValue {
@@ -253,7 +309,14 @@ fn custom_type_in_if_expression() {
         type MyInt = Int;
         pub let f(b: Bool) -> MyInt = if b { MyInt(1) } else { MyInt(0) };
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -288,7 +351,14 @@ fn custom_type_in_let_expression() {
         type MyInt = Int;
         pub let f() -> Int = let x = MyInt(42) { Int(x) };
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -307,7 +377,14 @@ fn custom_type_to_string() {
         type MyInt = Int;
         pub let to_str(x: MyInt) -> String = String(x);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let value = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
@@ -329,7 +406,14 @@ fn custom_type_tuple_to_string() {
         type Point = (Int, Int);
         pub let to_str(p: Point) -> String = String(p);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let value = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
@@ -357,7 +441,14 @@ fn multiple_custom_types() {
         pub let make_a(x: Int) -> TypeA = TypeA(x);
         pub let make_b(x: Int) -> TypeB = TypeB(x);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let a = checked_ast
         .quick_eval_fn("main", "make_a", vec![ExprValue::Int(1)])
@@ -395,7 +486,14 @@ fn custom_type_referencing_another() {
         type Outer = [Inner];
         pub let make() -> Outer = Outer([Inner(1), Inner(2)]);
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "make", vec![])
@@ -435,7 +533,14 @@ fn custom_type_in_fold() {
         type MyInt = Int;
         pub let sum_custom(xs: [MyInt]) -> Int = fold x in xs with acc = 0 { acc + (Int(x)) };
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(vec![
         ExprValue::Custom(Box::new(CustomValue {
@@ -475,7 +580,14 @@ fn custom_type_in_list_comprehension() {
         type MyInt = Int;
         pub let double_all(xs: [MyInt]) -> [MyInt] = [MyInt(Int(x) * 2) for x in xs];
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(vec![
         ExprValue::Custom(Box::new(CustomValue {
@@ -526,7 +638,14 @@ fn custom_type_wrapping_union_tuple_index() {
         type MyType = (Int, Bool) | (String, Bool);
         pub let get_second(x: MyType) -> Bool = x.1;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     // Test with first variant (Int, Bool)
     let value1 = ExprValue::Custom(Box::new(CustomValue {
@@ -563,7 +682,14 @@ fn custom_type_wrapping_union_tuple_index_returns_union() {
         type MyType = (Int, Bool) | (String, Bool);
         pub let get_first(x: MyType) -> Int | String = x.0;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     // Test with first variant (Int, Bool)
     let value1 = ExprValue::Custom(Box::new(CustomValue {
@@ -601,7 +727,14 @@ fn custom_type_wrapping_nested_custom_type_union() {
         type B = A | (String, Int);
         pub let get_second(x: B) -> Int = x.1;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     // Test with A variant (wrapped in B)
     let value1 = ExprValue::Custom(Box::new(CustomValue {

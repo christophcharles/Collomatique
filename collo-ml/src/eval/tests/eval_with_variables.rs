@@ -10,7 +10,14 @@ fn eval_with_variables_simple_reified_var() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -61,7 +68,14 @@ fn eval_with_variables_multiple_calls_same_var() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::<NoObject>::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject>::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -129,7 +143,14 @@ fn eval_with_variables_in_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -195,7 +216,14 @@ fn eval_with_variables_multiple_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -270,7 +298,14 @@ fn eval_with_variables_var_with_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -325,7 +360,14 @@ fn eval_with_variables_simple_var_list() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -405,7 +447,14 @@ fn eval_with_variables_var_list_in_nested_forall() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(Vec::from([
@@ -484,7 +533,14 @@ fn eval_with_variables_with_let_expr() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -529,7 +585,14 @@ fn eval_with_variables_no_reified_vars() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast

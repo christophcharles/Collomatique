@@ -34,8 +34,15 @@ pub(crate) fn analyze(
     let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
         .expect("AST conversion failed");
 
-    let (_global_env, type_info, _expr_types, errors, warnings) =
-        GlobalEnv::new(types, vars, &file).expect("GlobalEnv creation failed");
+    let (_global_env, type_info, _expr_types, errors, warnings) = GlobalEnv::new(
+        types,
+        vars,
+        &[Module {
+            name: "main".into(),
+            file,
+        }],
+    )
+    .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
 }
@@ -93,7 +100,7 @@ pub(crate) fn analyze_multi(
         .collect();
 
     let (_global_env, type_info, _expr_types, errors, warnings) =
-        GlobalEnv::new_multi(types, vars, &modules).expect("GlobalEnv creation failed");
+        GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
 }

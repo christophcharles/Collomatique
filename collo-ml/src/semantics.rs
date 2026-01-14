@@ -4122,30 +4122,8 @@ impl TypeInfo {
 }
 
 impl GlobalEnv {
-    /// Create a GlobalEnv for a single-file program (backwards compatibility wrapper)
+    /// Create a GlobalEnv from modules
     pub fn new(
-        object_types: HashMap<String, ObjectFields>,
-        variables: HashMap<String, ArgsType>,
-        file: &crate::ast::File,
-    ) -> Result<
-        (
-            Self,
-            TypeInfo,
-            HashMap<Span, ExprType>,
-            Vec<SemError>,
-            Vec<SemWarning>,
-        ),
-        GlobalEnvError,
-    > {
-        let modules = [Module {
-            name: "main".into(),
-            file: file.clone(),
-        }];
-        Self::new_multi(object_types, variables, &modules)
-    }
-
-    /// Create a GlobalEnv for a multi-module program
-    pub fn new_multi(
         object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
         modules: &[Module],

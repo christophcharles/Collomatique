@@ -8,7 +8,14 @@ fn base_var_simple() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -29,7 +36,14 @@ fn base_var_with_int_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -50,7 +64,14 @@ fn base_var_with_bool_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Bool)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -78,7 +99,14 @@ fn base_var_with_multiple_params() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -99,7 +127,14 @@ fn base_var_with_function_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -120,7 +155,14 @@ fn base_var_with_expression_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
@@ -141,7 +183,14 @@ fn base_var_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -166,7 +215,14 @@ fn base_var_in_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -189,7 +245,14 @@ fn multiple_base_vars() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -217,7 +280,14 @@ fn script_var_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
@@ -249,7 +319,14 @@ fn script_var_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
@@ -283,7 +360,14 @@ fn script_var_with_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -329,7 +413,14 @@ fn script_var_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -358,7 +449,14 @@ fn script_var_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(3), ExprValue::Int(7)])
@@ -390,7 +488,14 @@ fn script_var_no_params() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![])
@@ -422,7 +527,14 @@ fn script_var_with_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
@@ -457,7 +569,14 @@ fn multiple_script_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
@@ -492,7 +611,14 @@ fn script_var_and_base_var_mixed() {
 
     let vars = HashMap::from([("BaseV".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
@@ -527,7 +653,14 @@ fn var_list_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -575,7 +708,14 @@ fn var_list_in_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -614,7 +754,14 @@ fn var_list_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -665,7 +812,14 @@ fn var_list_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -710,7 +864,14 @@ fn var_list_cardinality() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -737,7 +898,14 @@ fn var_list_with_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -779,7 +947,14 @@ fn var_list_empty_input() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let empty_list = ExprValue::List(Vec::new());
 
@@ -805,7 +980,14 @@ fn var_list_in_list_comprehension() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
@@ -832,7 +1014,14 @@ fn var_list_with_collection_ops() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([ExprValue::Int(1)]));
     let list2 = ExprValue::List(Vec::from([ExprValue::Int(2)]));
@@ -865,7 +1054,14 @@ fn nested_reification_usage() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1)]));
 
@@ -889,7 +1085,14 @@ fn var_in_if_expression() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(true)])

@@ -8,7 +8,14 @@ use super::*;
 fn option_type_with_value() {
     let input = "pub let f() -> ?Int = 42;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -21,7 +28,14 @@ fn option_type_with_value() {
 fn option_type_with_none() {
     let input = "pub let f() -> ?Int = none;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -34,7 +48,14 @@ fn option_type_with_none() {
 fn option_bool_with_value() {
     let input = "pub let f() -> ?Bool = true;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -47,7 +68,14 @@ fn option_bool_with_value() {
 fn option_list_with_value() {
     let input = "pub let f() -> ?[Int] = [1, 2, 3];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -68,7 +96,14 @@ fn option_list_with_value() {
 fn option_list_with_none() {
     let input = "pub let f() -> ?[Int] = none;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -82,7 +117,14 @@ fn list_of_option_values() {
     // Must explicitly cast since Int and None don't unify
     let input = "pub let f() -> [?Int] = [1 as ?Int, none, 3 as ?Int];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -107,7 +149,14 @@ fn list_of_option_values() {
 fn sum_type_returns_first_variant() {
     let input = "pub let f() -> Int | Bool = 42;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -120,7 +169,14 @@ fn sum_type_returns_first_variant() {
 fn sum_type_returns_second_variant() {
     let input = "pub let f() -> Int | Bool = true;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -133,7 +189,14 @@ fn sum_type_returns_second_variant() {
 fn sum_type_with_none_returns_none() {
     let input = "pub let f() -> None | Int | Bool = none;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -146,7 +209,14 @@ fn sum_type_with_none_returns_none() {
 fn sum_type_with_none_returns_int() {
     let input = "pub let f() -> None | Int | Bool = 42;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -159,7 +229,14 @@ fn sum_type_with_none_returns_int() {
 fn sum_type_three_variants_returns_middle() {
     let input = "pub let f() -> Int | Bool | LinExpr = true;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -173,7 +250,14 @@ fn list_of_sum_type_homogeneous() {
     // All elements cast to same type in sum
     let input = "pub let f() -> [Int | Bool] = [1 as Int | Bool, 2 as Int | Bool];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -195,7 +279,14 @@ fn list_of_sum_type_mixed() {
     let input =
         "pub let f() -> [Int | Bool] = [1 as Int | Bool, true as Int | Bool, 2 as Int | Bool];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -216,7 +307,14 @@ fn list_of_sum_type_mixed() {
 fn sum_of_list_types_returns_first() {
     let input = "pub let f() -> [Int] | [Bool] = [1, 2];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -236,7 +334,14 @@ fn sum_of_list_types_returns_first() {
 fn sum_of_list_types_returns_second() {
     let input = "pub let f() -> [Int] | [Bool] = [true, false];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -260,7 +365,14 @@ fn sum_of_list_types_returns_second() {
 fn explicit_cast_to_option_type() {
     let input = "pub let f() -> ?Int = 42 as ?Int;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -273,7 +385,14 @@ fn explicit_cast_to_option_type() {
 fn explicit_cast_to_sum_type() {
     let input = "pub let f() -> Int | Bool = 42 as Int | Bool;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -286,7 +405,14 @@ fn explicit_cast_to_sum_type() {
 fn conversion_int_to_linexpr_in_sum() {
     let input = "pub let f() -> LinExpr | Bool = LinExpr(5);";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -304,7 +430,14 @@ fn conversion_int_to_linexpr_in_sum() {
 fn explicit_cast_none_to_option() {
     let input = "pub let f() -> ?Int = none as ?Int;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -317,7 +450,14 @@ fn explicit_cast_none_to_option() {
 fn explicit_cast_in_list_of_sum() {
     let input = "pub let f() -> [Int | Bool] = [1 as Int | Bool, true as Int | Bool];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -342,7 +482,14 @@ fn implicit_coercion_to_sum_type() {
     // Int coerces to Int | Bool since Int appears in the sum
     let input = "pub let f() -> Int | Bool = 42;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -356,7 +503,14 @@ fn implicit_coercion_to_option_type() {
     // Int coerces to ?Int (None | Int) since Int appears
     let input = "pub let f() -> ?Int = 42;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -370,7 +524,14 @@ fn implicit_coercion_none_to_option() {
     // None coerces to ?Int (None | Int) since None appears
     let input = "pub let f() -> ?Int = none;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -384,7 +545,14 @@ fn implicit_coercion_empty_list_to_option_list() {
     // [] coerces to ?[Int] when only one list type
     let input = "pub let f() -> ?[Int] = [];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -403,7 +571,14 @@ fn implicit_coercion_empty_list_to_sum_with_one_list() {
     // [] coerces to [Int] | Bool when only one list type in sum
     let input = "pub let f() -> [Int] | Bool = [];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -425,7 +600,14 @@ fn implicit_coercion_empty_list_to_sum_with_one_list() {
 fn option_linexpr_from_variable() {
     let input = "pub let f() -> ?LinExpr = $V();";
     let vars = HashMap::from([("V".to_string(), vec![])]);
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -441,7 +623,14 @@ fn option_linexpr_from_variable() {
 fn sum_type_with_linexpr_from_variable() {
     let input = "pub let f() -> LinExpr | Int = $V();";
     let vars = HashMap::from([("V".to_string(), vec![])]);
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -457,7 +646,14 @@ fn sum_type_with_linexpr_from_variable() {
 fn option_constraint_from_comparison() {
     let input = "pub let f() -> ?Constraint = 5 === 10;";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -477,7 +673,14 @@ fn option_constraint_from_comparison() {
 fn option_of_list_of_sum_evaluation() {
     let input = "pub let f() -> ?[Int | Bool] = [1 as Int | Bool, true as Int | Bool];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -497,7 +700,14 @@ fn option_of_list_of_sum_evaluation() {
 fn nested_list_with_sum_types() {
     let input = "pub let f() -> [[Int | Bool]] = [[1 as Int | Bool, true as Int | Bool]];";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -527,7 +737,14 @@ fn nested_list_with_sum_types() {
 fn if_expr_returns_different_sum_variants() {
     let input = "pub let f(flag: Bool) -> Int | Bool = if flag { 42 as Int | Bool } else { true };";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -544,7 +761,14 @@ fn if_expr_returns_different_sum_variants() {
 fn if_expr_returns_value_or_none() {
     let input = "pub let f(flag: Bool) -> ?Int = if flag { 42 as ?Int } else { none };";
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -568,7 +792,14 @@ fn realistic_optional_lookup() {
         pub let f() -> ?Int = lookup(1);
     "#;
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -584,7 +815,14 @@ fn realistic_optional_lookup_returns_none() {
         pub let f() -> ?Int = lookup(2);
     "#;
     let vars = HashMap::new();
-    let checked_ast = CheckedAST::new(input, vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        vars,
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])

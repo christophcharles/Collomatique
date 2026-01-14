@@ -782,22 +782,8 @@ impl CheckedAST<NoObject> {
 }
 
 impl<T: EvalObject> CheckedAST<T> {
-    /// Create a CheckedAST from a single source file (backwards compatibility wrapper)
+    /// Create a CheckedAST from source modules
     pub fn new(
-        input: &str,
-        vars: HashMap<String, ArgsType>,
-    ) -> Result<CheckedAST<T>, CompileError> {
-        Self::new_multi(
-            &[ModuleSrc {
-                name: "main".to_string(),
-                src: input.to_string(),
-            }],
-            vars,
-        )
-    }
-
-    /// Create a CheckedAST from multiple source modules
-    pub fn new_multi(
         inputs: &[ModuleSrc],
         vars: HashMap<String, ArgsType>,
     ) -> Result<CheckedAST<T>, CompileError> {
@@ -820,7 +806,7 @@ impl<T: EvalObject> CheckedAST<T> {
         }
 
         let (global_env, type_info, expr_types, errors, warnings) =
-            GlobalEnv::new_multi(T::type_schemas(), vars, &modules)?;
+            GlobalEnv::new(T::type_schemas(), vars, &modules)?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });

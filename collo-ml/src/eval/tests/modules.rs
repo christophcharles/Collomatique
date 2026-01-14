@@ -9,7 +9,7 @@ fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject> {
             src: src.to_string(),
         })
         .collect();
-    CheckedAST::new_multi(&inputs, HashMap::new()).expect("Should compile")
+    CheckedAST::new(&inputs, HashMap::new()).expect("Should compile")
 }
 
 #[test]

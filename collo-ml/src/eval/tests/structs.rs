@@ -8,7 +8,14 @@ use std::collections::BTreeMap;
 #[test]
 fn struct_construction_basic() {
     let input = "pub let f() -> {x: Int, y: Bool} = {x: 42, y: true};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -23,7 +30,14 @@ fn struct_construction_basic() {
 #[test]
 fn struct_construction_single_field() {
     let input = "pub let f() -> {value: Int} = {value: 100};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -37,7 +51,14 @@ fn struct_construction_single_field() {
 #[test]
 fn struct_construction_three_fields() {
     let input = "pub let f() -> {a: Int, b: Bool, c: String} = {a: 1, b: false, c: \"hello\"};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -53,7 +74,14 @@ fn struct_construction_three_fields() {
 #[test]
 fn struct_construction_with_params() {
     let input = "pub let f(x: Int, y: Bool) -> {x: Int, y: Bool} = {x: x, y: y};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
@@ -68,7 +96,14 @@ fn struct_construction_with_params() {
 #[test]
 fn struct_construction_with_expressions() {
     let input = "pub let f(x: Int) -> {total: Int, doubled: Int} = {total: x + 1, doubled: x * 2};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
@@ -83,7 +118,14 @@ fn struct_construction_with_expressions() {
 #[test]
 fn struct_empty() {
     let input = "pub let f() -> {} = {};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -100,7 +142,14 @@ fn struct_empty() {
 fn struct_field_order_in_literal() {
     // Fields written in different order than type declaration
     let input = "pub let f() -> {x: Int, y: Bool} = {y: true, x: 42};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -119,7 +168,14 @@ fn struct_field_order_in_literal() {
 #[test]
 fn struct_access_first_field() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> Int = s.x;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(42));
@@ -135,7 +191,14 @@ fn struct_access_first_field() {
 #[test]
 fn struct_access_second_field() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> Bool = s.y;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(42));
@@ -151,7 +214,14 @@ fn struct_access_second_field() {
 #[test]
 fn struct_access_on_literal() {
     let input = "pub let f() -> Int = {x: 10, y: 20}.x;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -163,7 +233,14 @@ fn struct_access_on_literal() {
 #[test]
 fn struct_access_second_on_literal() {
     let input = "pub let f() -> Int = {x: 10, y: 20}.y;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -179,7 +256,14 @@ fn struct_access_second_on_literal() {
 #[test]
 fn nested_struct_construction() {
     let input = "pub let f() -> {inner: {x: Int}} = {inner: {x: 42}};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -195,7 +279,14 @@ fn nested_struct_construction() {
 #[test]
 fn nested_struct_access() {
     let input = "pub let f(s: {inner: {x: Int}}) -> Int = s.inner.x;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut inner = BTreeMap::new();
     inner.insert("x".to_string(), ExprValue::Int(99));
@@ -212,7 +303,14 @@ fn nested_struct_access() {
 #[test]
 fn deeply_nested_struct_access() {
     let input = "pub let f() -> Int = {a: {b: {c: 123}}}.a.b.c;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -228,7 +326,14 @@ fn deeply_nested_struct_access() {
 #[test]
 fn struct_fields_in_arithmetic() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Int = s.x + s.y;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(10));
@@ -244,7 +349,14 @@ fn struct_fields_in_arithmetic() {
 #[test]
 fn struct_fields_in_multiplication() {
     let input = "pub let f(s: {a: Int, b: Int}) -> Int = s.a * s.b;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("a".to_string(), ExprValue::Int(6));
@@ -264,7 +376,14 @@ fn struct_fields_in_multiplication() {
 #[test]
 fn struct_fields_in_comparison() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Bool = s.x < s.y;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(5));
@@ -280,7 +399,14 @@ fn struct_fields_in_comparison() {
 #[test]
 fn struct_fields_equality() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Bool = s.x == s.y;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(5));
@@ -300,7 +426,14 @@ fn struct_fields_equality() {
 #[test]
 fn struct_containing_list() {
     let input = "pub let f() -> {items: [Int]} = {items: [1, 2, 3]};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -321,7 +454,14 @@ fn struct_containing_list() {
 #[test]
 fn list_of_structs() {
     let input = "pub let f() -> [{x: Int}] = [{x: 1}, {x: 2}];";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -341,7 +481,14 @@ fn list_of_structs() {
 #[test]
 fn struct_field_access_in_list_comprehension() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> [Int] = [p.x + p.y for p in points];";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), ExprValue::Int(1));
@@ -370,7 +517,14 @@ fn struct_field_access_in_list_comprehension() {
 #[test]
 fn struct_creation_in_list_comprehension() {
     let input = "pub let f(xs: [Int]) -> [{val: Int}] = [{val: x} for x in xs];";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -408,7 +562,14 @@ fn struct_creation_in_list_comprehension() {
 #[test]
 fn struct_in_if_expression() {
     let input = "pub let f(b: Bool) -> {x: Int} = if b { {x: 1} } else { {x: 2} };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -422,7 +583,14 @@ fn struct_in_if_expression() {
 #[test]
 fn struct_in_if_expression_else() {
     let input = "pub let f(b: Bool) -> {x: Int} = if b { {x: 1} } else { {x: 2} };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
@@ -436,7 +604,14 @@ fn struct_in_if_expression_else() {
 #[test]
 fn struct_in_let_expression() {
     let input = "pub let f() -> Int = let s = {x: 3, y: 7} { s.x + s.y };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -452,7 +627,14 @@ fn struct_in_let_expression() {
 #[test]
 fn struct_access_in_sum() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Int = sum p in points { p.x };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), ExprValue::Int(1));
@@ -483,7 +665,14 @@ fn struct_access_in_sum() {
 fn struct_access_in_forall() {
     let input =
         "pub let f(points: [{x: Int, y: Int}]) -> Bool = forall p in points { p.x <= p.y };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), ExprValue::Int(1));
@@ -509,7 +698,14 @@ fn struct_access_in_forall() {
 #[test]
 fn struct_access_in_forall_false() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Bool = forall p in points { p.x < p.y };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), ExprValue::Int(1));
@@ -539,7 +735,14 @@ fn struct_access_in_forall_false() {
 #[test]
 fn struct_to_string() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(42));
@@ -556,7 +759,14 @@ fn struct_to_string() {
 #[test]
 fn struct_to_string_three_fields() {
     let input = "pub let f(s: {a: Int, b: Bool, c: String}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("a".to_string(), ExprValue::Int(1));
@@ -577,7 +787,14 @@ fn struct_to_string_three_fields() {
 #[test]
 fn nested_struct_to_string() {
     let input = "pub let f(s: {inner: {x: Int}}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut inner = BTreeMap::new();
     inner.insert("x".to_string(), ExprValue::Int(42));
@@ -594,7 +811,14 @@ fn nested_struct_to_string() {
 #[test]
 fn empty_struct_to_string() {
     let input = "pub let f(s: {}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(BTreeMap::new())])
@@ -610,7 +834,14 @@ fn empty_struct_to_string() {
 #[test]
 fn struct_in_fold() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Int = fold p in points with acc = 0 { acc + p.x + p.y };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), ExprValue::Int(1));
@@ -636,7 +867,14 @@ fn struct_in_fold() {
 #[test]
 fn struct_as_fold_accumulator() {
     let input = "pub let f(xs: [Int]) -> {total: Int, prod: Int} = fold x in xs with acc = {total: 0, prod: 1} { {total: acc.total + x, prod: acc.prod * x} };";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -663,7 +901,14 @@ fn struct_as_fold_accumulator() {
 #[test]
 fn struct_containing_tuple() {
     let input = "pub let f() -> {point: (Int, Int)} = {point: (1, 2)};";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -680,7 +925,14 @@ fn struct_containing_tuple() {
 #[test]
 fn tuple_containing_struct() {
     let input = "pub let f() -> ({x: Int}, Bool) = ({x: 42}, true);";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -697,7 +949,14 @@ fn tuple_containing_struct() {
 #[test]
 fn struct_field_then_tuple_access() {
     let input = "pub let f(s: {point: (Int, Int)}) -> Int = s.point.0;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert(
@@ -715,7 +974,14 @@ fn struct_field_then_tuple_access() {
 #[test]
 fn tuple_then_struct_field_access() {
     let input = "pub let f(t: ({x: Int}, Bool)) -> Int = t.0.x;";
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), ExprValue::Int(99));
@@ -748,7 +1014,14 @@ fn named_struct_field_access() {
         type Point = {x: Int, y: Int};
         pub let f(p: Point) -> Int = p.x + p.y;
     "#;
-    let checked_ast = CheckedAST::new(input, HashMap::new()).expect("Should compile");
+    let checked_ast = CheckedAST::new(
+        &[ModuleSrc {
+            name: "main".to_string(),
+            src: input.to_string(),
+        }],
+        HashMap::new(),
+    )
+    .expect("Should compile");
 
     let mut point = BTreeMap::new();
     point.insert("x".to_string(), ExprValue::Int(3));
