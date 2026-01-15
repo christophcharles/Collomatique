@@ -4,6 +4,8 @@ use crate::traits::FieldConversionError;
 
 use super::*;
 
+use std::collections::BTreeSet;
+
 // Simple EvalObject with 9 students
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum SimpleObject {

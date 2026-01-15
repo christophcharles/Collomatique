@@ -7,7 +7,7 @@ use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, Variable};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 mod scripts;
 pub use scripts::{Script, ScriptRef, StoredScript};
@@ -16,13 +16,7 @@ pub use scripts::{Script, ScriptRef, StoredScript};
 mod tests;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ReifiedPublicVar<T: EvalObject> {
-    name: String,
-    params: Vec<ExprValue<T>>,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ReifiedPrivateVar<T: EvalObject> {
+pub struct ReifiedVar<T: EvalObject> {
     script_ref: ScriptRef,
     name: String,
     from_list: Option<usize>,
@@ -32,15 +26,8 @@ pub struct ReifiedPrivateVar<T: EvalObject> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ProblemVar<T: EvalObject, V: EvalVar<T>> {
     Base(V),
-    ReifiedPublic(ReifiedPublicVar<T>),
-    ReifiedPrivate(ReifiedPrivateVar<T>),
+    Reified(ReifiedVar<T>),
     Helper(u64),
-}
-
-struct ReifiedVarDesc {
-    func: String,
-    args: ArgsType,
-    script_ref: ScriptRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -76,24 +63,8 @@ pub struct ProblemBuilder<
     /// the set of solutions to our problem
     base_vars: HashMap<String, ArgsType>,
 
-    /// Public reified variables defined from scripts
-    reified_vars: HashMap<String, ReifiedVarDesc>,
-
-    /// Scripts stored for future evaluation
-    /// These scripts contain the definition of the public reified variables
-    /// They must be stored as the precise value of the constraints
-    /// depend on the call arguments of the reified variable.
-    stored_scripts: Vec<StoredScript<T>>,
-
     /// List of constraints incrementally built
     constraints: Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
-
-    /// List of public reified variable that we have already
-    /// evaluated and are already defined in the constraints set.
-    ///
-    /// If such a variable is needed a second time, we don't need to
-    /// reevaluate
-    called_public_reified_variables: BTreeSet<ReifiedPublicVar<T>>,
 
     /// Objective function
     objective: Objective<ProblemVar<T, V>>,
@@ -108,7 +79,7 @@ pub struct ProblemBuilder<
     /// Definition of all the variables used.
     ///
     /// This starts with the variables from V.
-    /// Then reified variables (public and private) as well as
+    /// Then reified variables as well as
     /// helpers variables are added as needed.
     vars_desc: BTreeMap<ProblemVar<T, V>, Variable>,
 
@@ -181,18 +152,6 @@ impl<
             .collect::<Result<_, _>>()
     }
 
-    fn generate_current_vars(&self) -> HashMap<String, ArgsType> {
-        self.base_vars
-            .iter()
-            .map(|(n, a)| (n.clone(), a.clone()))
-            .chain(
-                self.reified_vars
-                    .iter()
-                    .map(|(name, desc)| (name.clone(), desc.args.clone())),
-            )
-            .collect()
-    }
-
     fn generate_helper_var(&mut self) -> ProblemVar<T, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
@@ -212,8 +171,7 @@ impl<
     fn get_variable_type(&self, v: &ProblemVar<T, V>) -> Variable {
         match v {
             ProblemVar::Helper(_)
-            | ProblemVar::ReifiedPrivate(_)
-            | ProblemVar::ReifiedPublic(_) => Variable::binary(),
+            | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
                 None => match b.fix(&self.env) {
@@ -489,14 +447,7 @@ impl<
                         },
                     })
                 } else {
-                    if !self.reified_vars.contains_key(&extern_var.name) {
-                        panic!("Undeclared variable {}: this should have been caught in the semantic analysis", extern_var.name);
-                    }
-
-                    ProblemVar::ReifiedPublic(ReifiedPublicVar {
-                        name: extern_var.name.clone(),
-                        params: extern_var.params.clone(),
-                    })
+                    panic!("Undeclared variable {}: this should have been caught in the semantic analysis", extern_var.name);
                 }
             }
             IlpVar::Script(ScriptVar {
@@ -504,7 +455,7 @@ impl<
                 from_list,
                 params,
                 ..
-            }) => ProblemVar::ReifiedPrivate(ReifiedPrivateVar {
+            }) => ProblemVar::Reified(ReifiedVar {
                 script_ref: script_ref.clone(),
                 name: name.clone(),
                 from_list: from_list.clone(),
@@ -691,291 +642,149 @@ impl<
         Ok((obj, constraints))
     }
 
-    fn look_for_uncalled_public_reified_var<'b>(
-        &self,
-        constraints: impl Iterator<Item = &'b Constraint<ProblemVar<T, V>>>,
-    ) -> Vec<ReifiedPublicVar<T>>
-    where
-        T: 'b,
-        V: 'b,
-    {
-        let mut output = vec![];
-        for constraint in constraints {
-            output.extend(
-                self.look_for_uncalled_public_reified_var_in_lin_expr(constraint.get_lhs()),
-            );
-        }
-        output
-    }
-
-    fn look_for_uncalled_public_reified_var_in_lin_expr(
-        &self,
-        lin_expr: &LinExpr<ProblemVar<T, V>>,
-    ) -> Vec<ReifiedPublicVar<T>> {
-        let mut output = vec![];
-        for var in lin_expr.variables() {
-            let ProblemVar::ReifiedPublic(reified_pub_var) = var else {
-                continue;
-            };
-            if !self
-                .called_public_reified_variables
-                .contains(&reified_pub_var)
-            {
-                output.push(reified_pub_var);
-            }
-        }
-        output
-    }
-
-    fn evaluate_recursively(
+    fn evaluate_internal(
         &mut self,
         script: StoredScript<T>,
-        mut start_constraints: Vec<(String, Vec<ExprValue<T>>)>,
-        mut start_obj: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+        mut constraints: Vec<(String, Vec<ExprValue<T>>)>,
+        mut objective: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError<T>> {
-        let mut current_script_opt = Some(script);
-        let mut pending_reification = HashMap::<ScriptRef, Vec<PendingReification<T>>>::new();
         let mut warnings = HashMap::new();
 
         let list_of_lin_expr_and_constraints = ExprType::simple(SimpleType::List(
             ExprType::sum([SimpleType::LinExpr, SimpleType::Constraint]).unwrap(),
         ));
 
-        while let Some(script) = current_script_opt {
-            let ast = script.get_ast();
-            let ast_funcs = ast.get_functions();
-            warnings.insert(script.get_ref().clone(), ast.get_warnings().clone());
+        let ast = script.get_ast();
+        let ast_funcs = ast.get_functions();
+        warnings.insert(script.get_ref().clone(), ast.get_warnings().clone());
 
-            let mut uncalled_vars = vec![];
-            let mut constraints_to_reify =
-                BTreeMap::<ProblemVar<T, V>, (Vec<Constraint<ProblemVar<T, V>>>, Origin<T>)>::new();
+        let mut constraints_to_reify =
+            BTreeMap::<ProblemVar<T, V>, (Vec<Constraint<ProblemVar<T, V>>>, Origin<T>)>::new();
 
-            let mut eval_history = ast
-                .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
-                .expect("Environment should be compatible with AST");
-            // We start by evaluating the proper constraints if any
-            // (this will happen on the first iteration of the loop only)
-            while let Some((fn_name, args)) = start_constraints.pop() {
-                let (_params, out_typ) = ast_funcs
-                    .get(&("main".to_string(), fn_name.clone()))
-                    .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-                if !out_typ.is_constraint() && !out_typ.is_list_of_constraints() {
-                    return Err(ProblemError::WrongReturnType {
-                        func: fn_name.clone(),
-                        returned: out_typ.clone(),
-                        expected: ExprType::simple(SimpleType::Constraint),
-                    });
-                }
-
-                let (new_constraints, _origin) = self.eval_constraint_in_history(
-                    script.get_ref(),
-                    &mut eval_history,
-                    &fn_name,
-                    &args,
-                    true,
-                )?;
-                uncalled_vars.extend(
-                    self.look_for_uncalled_public_reified_var(
-                        new_constraints.iter().map(|(c, _o)| c),
-                    ),
-                );
-                self.constraints.extend(new_constraints);
+        let mut eval_history = ast
+            .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
+            .expect("Environment should be compatible with AST");
+        // We start by evaluating the proper constraints if any
+        while let Some((fn_name, args)) = constraints.pop() {
+            let (_params, out_typ) = ast_funcs
+                .get(&("main".to_string(), fn_name.clone()))
+                .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
+            if !out_typ.is_constraint() && !out_typ.is_list_of_constraints() {
+                return Err(ProblemError::WrongReturnType {
+                    func: fn_name.clone(),
+                    returned: out_typ.clone(),
+                    expected: ExprType::simple(SimpleType::Constraint),
+                });
             }
 
-            // We then evaluate the objective if any
-            // (this will happen on the first iteration of the loop only)
-            while let Some((fn_name, args, coef, obj_sense)) = start_obj.pop() {
-                let (_params, out_typ) = ast_funcs
-                    .get(&("main".to_string(), fn_name.clone()))
-                    .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-                if !out_typ.is_lin_expr()
-                    && !out_typ.is_constraint()
-                    && !out_typ.is_subtype_of(&list_of_lin_expr_and_constraints)
-                {
-                    return Err(ProblemError::WrongReturnType {
-                        func: fn_name.clone(),
-                        returned: out_typ.clone(),
-                        expected: ExprType::simple(SimpleType::LinExpr),
-                    });
-                }
+            let (new_constraints, _origin) = self.eval_constraint_in_history(
+                script.get_ref(),
+                &mut eval_history,
+                &fn_name,
+                &args,
+                true,
+            )?;
+            self.constraints.extend(new_constraints);
+        }
 
-                let (new_obj, new_constraints) = self.eval_obj_in_history(
-                    script.get_ref(),
-                    &mut eval_history,
-                    &fn_name,
-                    &args,
-                    &obj_sense,
-                )?;
-                uncalled_vars.extend(
-                    self.look_for_uncalled_public_reified_var_in_lin_expr(new_obj.get_function()),
-                );
-                uncalled_vars.extend(
-                    self.look_for_uncalled_public_reified_var(
-                        new_constraints.iter().map(|(c, _o)| c),
-                    ),
-                );
-                self.constraints.extend(new_constraints);
-                self.objective = &self.objective + coef * new_obj;
+        // We then evaluate the objective if any
+        while let Some((fn_name, args, coef, obj_sense)) = objective.pop() {
+            let (_params, out_typ) = ast_funcs
+                .get(&("main".to_string(), fn_name.clone()))
+                .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
+            if !out_typ.is_lin_expr()
+                && !out_typ.is_constraint()
+                && !out_typ.is_subtype_of(&list_of_lin_expr_and_constraints)
+            {
+                return Err(ProblemError::WrongReturnType {
+                    func: fn_name.clone(),
+                    returned: out_typ.clone(),
+                    expected: ExprType::simple(SimpleType::LinExpr),
+                });
             }
 
-            // Then we evaluate the missing public reified vars from this scripts
-            let reifications_from_current_script = pending_reification.remove(script.get_ref());
-            if let Some(reifications) = reifications_from_current_script {
-                for reification in reifications {
-                    let (_params, out_typ) = ast_funcs
-                        .get(&("main".to_string(), reification.func.clone()))
-                        .ok_or(ProblemError::UnknownFunction(reification.func.clone()))?;
-                    if !out_typ.is_constraint() {
-                        return Err(ProblemError::WrongReturnType {
-                            func: reification.func.clone(),
-                            returned: out_typ.clone(),
-                            expected: ExprType::simple(SimpleType::Constraint),
-                        });
-                    }
-                    let (reification_constraints, new_origin) = self.eval_constraint_in_history(
-                        script.get_ref(),
-                        &mut eval_history,
-                        &reification.func,
-                        &reification.args,
-                        false,
-                    )?;
-                    let dropped_origin: Vec<_> = reification_constraints
-                        .into_iter()
-                        .map(|(c, _o)| c)
-                        .collect();
-                    uncalled_vars
-                        .extend(self.look_for_uncalled_public_reified_var(dropped_origin.iter()));
+            let (new_obj, new_constraints) = self.eval_obj_in_history(
+                script.get_ref(),
+                &mut eval_history,
+                &fn_name,
+                &args,
+                &obj_sense,
+            )?;
+            self.constraints.extend(new_constraints);
+            self.objective = &self.objective + coef * new_obj;
+        }
 
-                    let reified_pub_var = ReifiedPublicVar {
-                        name: reification.name.clone(),
-                        params: reification.args.clone(),
-                    };
-                    let new_var = ProblemVar::ReifiedPublic(reified_pub_var.clone());
+        // We're done evaluating. Let's collect the private reified vars
+        let (var_def, new_cache) = eval_history.into_var_def_and_cache();
+        self.cache = Some(new_cache);
+        for ((_var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
+            let cleaned_constraints: Vec<_> = constraints
+                .into_iter()
+                .map(|c| self.clean_constraint(script.get_ref(), &c))
+                .collect();
 
-                    self.vars_desc.insert(new_var.clone(), Variable::binary());
-                    self.called_public_reified_variables.insert(reified_pub_var);
-                    constraints_to_reify.insert(new_var, (dropped_origin, new_origin));
-                }
-            }
+            let reified_priv_var = ReifiedVar {
+                script_ref: script.get_ref().clone(),
+                name: var_name,
+                from_list: None,
+                params: var_args,
+            };
+            let new_var = ProblemVar::Reified(reified_priv_var);
 
-            // We're done evaluating. Let's collect the private reified vars
-            let (var_def, new_cache) = eval_history.into_var_def_and_cache();
-            self.cache = Some(new_cache);
-            for ((_var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
+            self.vars_desc.insert(new_var.clone(), Variable::binary());
+            constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
+        }
+        for (
+            (_var_list_module, var_list_name, var_list_args),
+            (constraints_list, new_origin),
+        ) in var_def.var_lists
+        {
+            for (i, constraints) in constraints_list.into_iter().enumerate() {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
                     .map(|c| self.clean_constraint(script.get_ref(), &c))
                     .collect();
 
-                uncalled_vars
-                    .extend(self.look_for_uncalled_public_reified_var(cleaned_constraints.iter()));
-
-                let reified_priv_var = ReifiedPrivateVar {
+                let reified_priv_var = ReifiedVar {
                     script_ref: script.get_ref().clone(),
-                    name: var_name,
-                    from_list: None,
-                    params: var_args,
+                    name: var_list_name.clone(),
+                    from_list: Some(i),
+                    params: var_list_args.clone(),
                 };
-                let new_var = ProblemVar::ReifiedPrivate(reified_priv_var);
+                let new_var = ProblemVar::Reified(reified_priv_var);
 
                 self.vars_desc.insert(new_var.clone(), Variable::binary());
-                constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
+                constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
             }
-            for (
-                (_var_list_module, var_list_name, var_list_args),
-                (constraints_list, new_origin),
-            ) in var_def.var_lists
-            {
-                for (i, constraints) in constraints_list.into_iter().enumerate() {
-                    let cleaned_constraints: Vec<_> = constraints
-                        .into_iter()
-                        .map(|c| self.clean_constraint(script.get_ref(), &c))
-                        .collect();
+        }
 
-                    uncalled_vars.extend(
-                        self.look_for_uncalled_public_reified_var(cleaned_constraints.iter()),
-                    );
+        // Ok, we finally reify the constraints
+        // Originally this is done as a last path to have variables defined before.
+        for (var, (constraints, origin)) in constraints_to_reify {
+            let var_name = match &var {
+                ProblemVar::Reified(ReifiedVar {
+                    script_ref: _,
+                    name,
+                    from_list: _,
+                    params: _,
+                }) => name.clone(),
+                _ => panic!("Unexpected variable type to reify: {:?}", var),
+            };
 
-                    let reified_priv_var = ReifiedPrivateVar {
-                        script_ref: script.get_ref().clone(),
-                        name: var_list_name.clone(),
-                        from_list: Some(i),
-                        params: var_list_args.clone(),
-                    };
-                    let new_var = ProblemVar::ReifiedPrivate(reified_priv_var);
+            let new_origin = ConstraintDesc::Reified {
+                script_ref: script.get_ref().clone(),
+                var_name,
+                origin,
+            };
 
-                    self.vars_desc.insert(new_var.clone(), Variable::binary());
-                    constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
-                }
-            }
+            let reified_constraints =
+                self.reify_constraint(constraints.iter(), new_origin, var);
 
-            // Ok, we finally reify the constraints
-            // Originally this was done as a last path to have variables defined before.
-            // This could work for private reification. It does not work for chained public reification.
-            // So this is just a final pass, wiht the reason for being last being historic.
-            for (var, (constraints, origin)) in constraints_to_reify {
-                let var_name = match &var {
-                    ProblemVar::ReifiedPrivate(ReifiedPrivateVar {
-                        script_ref: _,
-                        name,
-                        from_list: _,
-                        params: _,
-                    }) => name.clone(),
-                    ProblemVar::ReifiedPublic(ReifiedPublicVar { name, params: _ }) => name.clone(),
-                    _ => panic!("Unexpected variable type to reify: {:?}", var),
-                };
-
-                let new_origin = ConstraintDesc::Reified {
-                    script_ref: script.get_ref().clone(),
-                    var_name,
-                    origin,
-                };
-
-                let reified_constraints =
-                    self.reify_constraint(constraints.iter(), new_origin, var);
-
-                self.constraints.extend(reified_constraints);
-            }
-
-            // At this point, we've build all the constraints for the current script
-            // uncalled_vars contains all the public reified vars that are not yet defined
-            // and need to be defined. So let's add them to the pending_reifications
-            for var in uncalled_vars {
-                let desc = self.reified_vars.get(&var.name).expect("Variable should be defined. This should have been caught in the semantic analysis otherwise");
-
-                let new_pending = PendingReification {
-                    name: var.name,
-                    func: desc.func.clone(),
-                    args: var.params,
-                };
-                match pending_reification.get_mut(&desc.script_ref) {
-                    Some(list) => list.push(new_pending),
-                    None => {
-                        pending_reification.insert(desc.script_ref.clone(), vec![new_pending]);
-                    }
-                }
-            }
-
-            // pending_reification contains all pending operations at this point
-            // Let's walk the scripts backward in the dependancy tree and find the first
-            // script with pending operations
-            current_script_opt = None;
-            for stored_script in self.stored_scripts.iter().rev() {
-                if pending_reification.contains_key(stored_script.get_ref()) {
-                    current_script_opt = Some(stored_script.clone());
-                    break;
-                }
-            }
+            self.constraints.extend(reified_constraints);
         }
 
         Ok(warnings)
     }
-}
-
-struct PendingReification<T: EvalObject> {
-    name: String,
-    func: String,
-    args: Vec<ExprValue<T>>,
 }
 
 impl<
@@ -1001,10 +810,7 @@ impl<
             env,
             cache: None,
             base_vars,
-            reified_vars: HashMap::new(),
-            stored_scripts: vec![],
             constraints: vec![],
-            called_public_reified_variables: BTreeSet::new(),
             objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
             current_helper_id: 0,
             vars_desc,
@@ -1013,7 +819,7 @@ impl<
     }
 
     pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError<T>> {
-        let vars = self.generate_current_vars();
+        let vars = Self::build_vars()?;
         StoredScript::new(script, vars)
     }
 
@@ -1025,7 +831,7 @@ impl<
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
         let start_funcs = funcs;
-        let mut warnings = self.evaluate_recursively(script, start_funcs, vec![])?;
+        let mut warnings = self.evaluate_internal(script, start_funcs, vec![])?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
@@ -1038,7 +844,7 @@ impl<
     ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
-        let mut warnings = self.evaluate_recursively(script, vec![], objectives)?;
+        let mut warnings = self.evaluate_internal(script, vec![], objectives)?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
@@ -1052,7 +858,7 @@ impl<
     ) -> Result<Vec<SemWarning>, ProblemError<T>> {
         let script = self.compile_script(script)?;
         let script_ref = script.get_ref().clone();
-        let mut warnings = self.evaluate_recursively(script, funcs, objectives)?;
+        let mut warnings = self.evaluate_internal(script, funcs, objectives)?;
         Ok(warnings
             .remove(&script_ref)
             .expect("There should be warnings (maybe empty) for the initial script"))
@@ -1064,7 +870,7 @@ impl<
         funcs: Vec<(String, Vec<ExprValue<T>>)>,
         objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
     ) -> Result<(), ProblemError<T>> {
-        let _warnings = self.evaluate_recursively(stored_script, funcs, objectives)?;
+        let _warnings = self.evaluate_internal(stored_script, funcs, objectives)?;
         Ok(())
     }
 
