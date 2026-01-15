@@ -1012,71 +1012,9 @@ impl<
         })
     }
 
-    pub fn add_reified_variables(
-        &mut self,
-        script: Script,
-        func_and_names: Vec<(String, String)>,
-    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
-        let stored_script = self.compile_script(script)?;
-        let warnings = stored_script.get_ast().get_warnings().clone();
-        self.add_reified_variables_with_compiled_script(stored_script, func_and_names)?;
-        Ok(warnings)
-    }
-
     pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError<T>> {
         let vars = self.generate_current_vars();
         StoredScript::new(script, vars)
-    }
-
-    pub fn add_reified_variables_with_compiled_script(
-        &mut self,
-        stored_script: StoredScript<T>,
-        func_and_names: Vec<(String, String)>,
-    ) -> Result<(), ProblemError<T>> {
-        for (_func, name) in &func_and_names {
-            if self.base_vars.contains_key(name) {
-                return Err(ProblemError::VariableAlreadyDefined(name.clone()));
-            }
-            if self.reified_vars.contains_key(name) {
-                return Err(ProblemError::VariableAlreadyDefined(name.clone()));
-            }
-        }
-
-        for s in &self.stored_scripts {
-            if stored_script == *s {
-                return Err(ProblemError::ScriptAlreadyUsed(stored_script.script()));
-            }
-        }
-        let script_ref = stored_script.get_ref().clone();
-        let ast = stored_script.get_ast();
-
-        let func_map = ast.get_functions();
-
-        for (func, name) in func_and_names {
-            let Some((args, expr_type)) = func_map.get(&("main".to_string(), func.clone())) else {
-                return Err(ProblemError::UnknownFunction(func));
-            };
-
-            if !expr_type.is_constraint() {
-                return Err(ProblemError::WrongReturnType {
-                    func,
-                    returned: expr_type.clone(),
-                    expected: SimpleType::Constraint.into(),
-                });
-            }
-
-            self.reified_vars.insert(
-                name.clone(),
-                ReifiedVarDesc {
-                    func,
-                    args: args.clone(),
-                    script_ref: script_ref.clone(),
-                },
-            );
-        }
-        self.stored_scripts.push(stored_script);
-
-        Ok(())
     }
 
     pub fn add_constraints(
