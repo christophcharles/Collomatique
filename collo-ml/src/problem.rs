@@ -170,8 +170,7 @@ impl<
 
     fn get_variable_type(&self, v: &ProblemVar<T, V>) -> Variable {
         match v {
-            ProblemVar::Helper(_)
-            | ProblemVar::Reified(_) => Variable::binary(),
+            ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
                 None => match b.fix(&self.env) {
@@ -734,10 +733,8 @@ impl<
             self.vars_desc.insert(new_var.clone(), Variable::binary());
             constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
         }
-        for (
-            (_var_list_module, var_list_name, var_list_args),
-            (constraints_list, new_origin),
-        ) in var_def.var_lists
+        for ((_var_list_module, var_list_name, var_list_args), (constraints_list, new_origin)) in
+            var_def.var_lists
         {
             for (i, constraints) in constraints_list.into_iter().enumerate() {
                 let cleaned_constraints: Vec<_> = constraints
@@ -777,8 +774,7 @@ impl<
                 origin,
             };
 
-            let reified_constraints =
-                self.reify_constraint(constraints.iter(), new_origin, var);
+            let reified_constraints = self.reify_constraint(constraints.iter(), new_origin, var);
 
             self.constraints.extend(reified_constraints);
         }
