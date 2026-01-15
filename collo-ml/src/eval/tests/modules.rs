@@ -2,13 +2,7 @@ use super::*;
 
 /// Helper to compile multiple modules
 fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject> {
-    let inputs: Vec<ModuleSrc> = modules
-        .iter()
-        .map(|(name, src)| ModuleSrc {
-            name: name.to_string(),
-            src: src.to_string(),
-        })
-        .collect();
+    let inputs: BTreeMap<&str, &str> = modules.iter().copied().collect();
     CheckedAST::new(&inputs, HashMap::new()).expect("Should compile")
 }
 

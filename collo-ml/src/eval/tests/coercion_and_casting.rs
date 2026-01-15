@@ -8,14 +8,8 @@ fn cast_fallible_success_int_to_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -30,14 +24,8 @@ fn cast_fallible_failure_bool_to_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -53,14 +41,8 @@ fn cast_fallible_none_value_fails() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
@@ -75,14 +57,8 @@ fn cast_fallible_from_union_with_none() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Test with Bool value - should succeed
     let result1 = checked_ast
@@ -109,14 +85,8 @@ fn cast_fallible_list_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Test with [Int] list - should succeed
     let result1 = checked_ast
@@ -151,14 +121,8 @@ fn cast_fallible_in_if_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result1 = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -179,14 +143,8 @@ fn cast_panic_success_int_to_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -201,14 +159,8 @@ fn cast_panic_failure_bool_to_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast.quick_eval_fn("main", "f", vec![ExprValue::Bool(true)]);
 
@@ -227,14 +179,8 @@ fn cast_panic_success_bool_to_bool() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
@@ -249,14 +195,8 @@ fn cast_panic_failure_int_to_bool() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast.quick_eval_fn("main", "f", vec![ExprValue::Int(100)]);
 
@@ -275,14 +215,8 @@ fn cast_panic_with_none() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Test with Int value - should succeed
     let result1 = checked_ast
@@ -308,14 +242,8 @@ fn cast_panic_in_else_branch_triggers() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Bool value triggers else branch, which panics
     let result = checked_ast.quick_eval_fn("main", "f", vec![ExprValue::Bool(true)]);
@@ -336,14 +264,8 @@ fn cast_panic_in_else_branch_not_triggered() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Int value takes the then branch, no panic
     let result = checked_ast
@@ -359,14 +281,8 @@ fn cast_panic_list_type_success() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -385,14 +301,8 @@ fn cast_panic_list_type_failure() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result =
         checked_ast.quick_eval_fn("main", "f", vec![ExprValue::List(vec![ExprValue::Int(1)])]);
@@ -422,14 +332,8 @@ fn cast_fallible_then_panic() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result1 = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -453,14 +357,8 @@ fn cast_with_tuple() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Test with (Int, Bool) - should succeed
     let result1 = checked_ast
@@ -499,14 +397,8 @@ fn cast_fallible_to_optional_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Int fits in ?Int
     let result1 = checked_ast
@@ -533,14 +425,8 @@ fn cast_panic_to_optional_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // Int fits in ?Int
     let result1 = checked_ast
@@ -571,14 +457,8 @@ fn null_coalesce_returns_value_when_not_none() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -593,14 +473,8 @@ fn null_coalesce_returns_default_when_none() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
@@ -615,14 +489,8 @@ fn null_coalesce_with_different_types() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // With Int value
     let result1 = checked_ast
@@ -643,14 +511,8 @@ fn null_coalesce_with_none_default() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // With Int value
     let result1 = checked_ast
@@ -671,14 +533,8 @@ fn null_coalesce_chained() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // First has value
     let result1 = checked_ast
@@ -705,14 +561,8 @@ fn null_coalesce_with_expression_default() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None, ExprValue::Int(5)])
@@ -727,14 +577,8 @@ fn null_coalesce_in_larger_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result1 = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
@@ -753,14 +597,8 @@ fn null_coalesce_with_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result1 = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::String("hello".to_string())])
@@ -779,14 +617,8 @@ fn null_coalesce_with_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
@@ -808,14 +640,8 @@ fn null_coalesce_with_tuple() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     // With value
     let result1 = checked_ast
@@ -851,14 +677,8 @@ fn coercion_int_to_linexpr_in_addition() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -880,14 +700,8 @@ fn coercion_int_to_linexpr_in_subtraction() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -909,14 +723,8 @@ fn coercion_int_to_linexpr_both_sides() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -934,14 +742,8 @@ fn coercion_int_to_linexpr_in_constraint() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -965,14 +767,8 @@ fn coercion_int_to_linexpr_constraint_le() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -996,14 +792,8 @@ fn coercion_int_to_linexpr_constraint_ge() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1027,14 +817,8 @@ fn coercion_int_to_linexpr_with_var() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1058,14 +842,8 @@ fn coercion_int_param_to_linexpr() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -1089,14 +867,8 @@ fn coercion_in_list_unification() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1119,14 +891,8 @@ fn coercion_in_list_comprehension() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1147,14 +913,8 @@ fn conversion_in_sum_body() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1174,14 +934,8 @@ fn explicit_cast_int_to_linexpr() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1201,14 +955,8 @@ fn explicit_cast_in_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1228,14 +976,8 @@ fn explicit_cast_param() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(100)])
@@ -1255,14 +997,8 @@ fn explicit_cast_list_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1277,14 +1013,8 @@ fn explicit_cast_list_of_linexpr() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1305,14 +1035,8 @@ fn explicit_cast_in_sum() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1334,14 +1058,8 @@ fn explicit_cast_in_forall() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1361,14 +1079,8 @@ fn explicit_cast_complex_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
@@ -1389,14 +1101,8 @@ fn explicit_cast_in_if_branches() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
@@ -1432,14 +1138,8 @@ fn conversion_return_type_int_to_linexpr() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1462,14 +1162,8 @@ fn conversion_return_type_with_arithmetic() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1489,14 +1183,8 @@ fn conversion_param_to_return_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(123)])
@@ -1518,14 +1206,8 @@ fn mixed_implicit_and_explicit_conversion() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1548,14 +1230,8 @@ fn conversion_with_collection_operations() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1576,14 +1252,8 @@ fn nested_casts() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1603,14 +1273,8 @@ fn conversion_in_comparison() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1631,14 +1295,8 @@ fn implicit_conversion_in_forall_body() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1658,14 +1316,8 @@ fn conversion_in_sum_to_linexpr() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1688,14 +1340,8 @@ fn cast_identity() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -1710,14 +1356,8 @@ fn cast_linexpr_identity() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1740,14 +1380,8 @@ fn conversion_identity() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
@@ -1762,14 +1396,8 @@ fn conversion_linexpr_identity() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1792,14 +1420,8 @@ fn cast_empty_list_typed() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1814,14 +1436,8 @@ fn cast_empty_list_with_special_syntax() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1836,14 +1452,8 @@ fn cast_in_nested_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1873,14 +1483,8 @@ fn convert_int_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1895,14 +1499,8 @@ fn convert_bool_true_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1917,14 +1515,8 @@ fn convert_bool_false_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1939,14 +1531,8 @@ fn convert_string_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1961,14 +1547,8 @@ fn convert_none_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -1983,14 +1563,8 @@ fn convert_int_list_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2005,14 +1579,8 @@ fn convert_bool_list_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2027,14 +1595,8 @@ fn convert_string_list_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2049,14 +1611,8 @@ fn convert_empty_list_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2071,14 +1627,8 @@ fn convert_nested_list_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2093,14 +1643,8 @@ fn convert_linexpr_to_string() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2115,14 +1659,8 @@ fn convert_to_string_in_concatenation() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -2137,14 +1675,8 @@ fn convert_to_string_with_param() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(100)])
@@ -2159,14 +1691,8 @@ fn convert_to_string_in_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
@@ -2181,14 +1707,8 @@ fn convert_to_string_in_if_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -2207,14 +1727,8 @@ fn convert_multiple_types_to_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])

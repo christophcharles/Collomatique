@@ -1,5 +1,5 @@
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 pub mod string_case;
 #[cfg(test)]
@@ -49,12 +49,6 @@ pub struct VariableDesc {
 pub struct TypeDesc {
     pub underlying: ExprType,
     pub public: bool,
-}
-
-/// A module with its name and AST
-pub struct Module {
-    pub name: String,
-    pub file: crate::ast::File,
 }
 
 /// Simplified path for symbol table keys (without spans)
@@ -4138,7 +4132,7 @@ impl GlobalEnv {
     pub fn new(
         object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
-        modules: &[Module],
+        modules: &BTreeMap<&str, crate::ast::File>,
     ) -> Result<
         (
             Self,
@@ -4150,7 +4144,7 @@ impl GlobalEnv {
         GlobalEnvError,
     > {
         let mut temp_env = GlobalEnv {
-            module_names: modules.iter().map(|m| m.name.clone()).collect(),
+            module_names: modules.keys().map(|name| name.to_string()).collect(),
             object_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
@@ -4196,9 +4190,9 @@ impl GlobalEnv {
         // PASS 1a: Register all type names with placeholders
         // This allows forward references between types
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
+            for statement in &module_file.statements {
                 match &statement.node {
                     crate::ast::Statement::TypeDecl { public, name, .. } => {
                         temp_env.expand_with_type_decl_pass1(
@@ -4230,12 +4224,12 @@ impl GlobalEnv {
         // PASS 1b: Populate type symbols for current module + imports
         // (Moved before type resolution so resolve_path can be used)
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
             temp_env.import_type_symbols(current_module, current_module, None, None, &mut errors);
 
             // Import type symbols from foreign modules
-            for statement in &module.file.statements {
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
                     if !temp_env.module_exists(&module_path.node) {
                         errors.push(SemError::UnknownModule {
@@ -4244,7 +4238,7 @@ impl GlobalEnv {
                         });
                         continue;
                     }
-                    if module_path.node == *current_module {
+                    if module_path.node == current_module {
                         errors.push(SemError::SelfImport {
                             span: module_path.span.clone(),
                         });
@@ -4273,9 +4267,9 @@ impl GlobalEnv {
         // PASS 1c: Resolve all type definitions
         // Now symbols are populated, we can use resolve_path for types
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
+            for statement in &module_file.statements {
                 match &statement.node {
                     crate::ast::Statement::TypeDecl {
                         name, underlying, ..
@@ -4304,9 +4298,9 @@ impl GlobalEnv {
         // PASS 2a: Register all function signatures
         // Now all types are resolved, we can build function signatures
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Let {
                     public,
                     name,
@@ -4335,8 +4329,8 @@ impl GlobalEnv {
         // ====================================================================
         // PASS 2a+: Populate function symbols for current module + imports
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
             temp_env.import_function_symbols(
                 current_module,
                 current_module,
@@ -4346,10 +4340,10 @@ impl GlobalEnv {
             );
 
             // Import function symbols from foreign modules (skip validation, done in PASS 1b)
-            for statement in &module.file.statements {
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
                     if temp_env.module_exists(&module_path.node)
-                        && module_path.node != *current_module
+                        && module_path.node != current_module
                     {
                         let prefix = match alias {
                             crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
@@ -4376,9 +4370,9 @@ impl GlobalEnv {
         // Now all function signatures are known, reify can verify them
         // Variables created here can be used in function bodies
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Reify {
                     constraint_path,
                     name,
@@ -4404,8 +4398,8 @@ impl GlobalEnv {
         // ====================================================================
         // PASS 2b+: Populate variable symbols for current module + imports
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
             temp_env.import_variable_symbols(
                 current_module,
                 current_module,
@@ -4415,10 +4409,10 @@ impl GlobalEnv {
             );
 
             // Import variable symbols from foreign modules (skip validation, done in PASS 1b)
-            for statement in &module.file.statements {
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
                     if temp_env.module_exists(&module_path.node)
-                        && module_path.node != *current_module
+                        && module_path.node != current_module
                     {
                         let prefix = match alias {
                             crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
@@ -4444,9 +4438,9 @@ impl GlobalEnv {
         // PASS 2c: Validate all function bodies
         // Now all function signatures AND variables are known
         // ====================================================================
-        for module in modules {
-            let current_module = &module.name;
-            for statement in &module.file.statements {
+        for (module_name, module_file) in modules {
+            let current_module = *module_name;
+            for statement in &module_file.statements {
                 if let crate::ast::Statement::Let { name, body, .. } = &statement.node {
                     temp_env.expand_with_let_statement_pass2(
                         current_module,

@@ -10,12 +10,6 @@ mod tests;
 
 use derivative::Derivative;
 
-/// Source representation of a module (before parsing)
-pub struct ModuleSrc {
-    pub name: String,
-    pub src: String,
-}
-
 #[derive(Debug, Clone, Derivative)]
 #[derivative(PartialOrd, Ord, PartialEq, Eq)]
 pub struct ScriptVar<T: EvalObject> {
@@ -791,25 +785,22 @@ impl CheckedAST<NoObject> {
 impl<T: EvalObject> CheckedAST<T> {
     /// Create a CheckedAST from source modules
     pub fn new(
-        inputs: &[ModuleSrc],
+        inputs: &BTreeMap<&str, &str>,
         vars: HashMap<String, ArgsType>,
     ) -> Result<CheckedAST<T>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
         // Parse all modules
-        let mut modules = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            let pairs = ColloMLParser::parse(Rule::file, &input.src)?;
+        let mut modules: BTreeMap<&str, crate::ast::File> = BTreeMap::new();
+        for (name, src) in inputs {
+            let pairs = ColloMLParser::parse(Rule::file, src)?;
             let first_pair_opt = pairs.into_iter().next();
             let file = match first_pair_opt {
                 Some(first_pair) => crate::ast::File::from_pest(first_pair)?,
                 None => crate::ast::File::new(),
             };
-            modules.push(Module {
-                name: input.name.clone(),
-                file,
-            });
+            modules.insert(*name, file);
         }
 
         let (global_env, type_info, expr_types, errors, warnings) =

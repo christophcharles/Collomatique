@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{semantics::ArgsType, CheckedAST, EvalObject};
 
@@ -41,15 +41,8 @@ impl ScriptRef {
 
 impl<T: EvalObject> StoredScript<T> {
     pub fn new(script: Script, vars: HashMap<String, ArgsType>) -> Result<Self, ProblemError<T>> {
-        use crate::ModuleSrc;
         let script_ref = ScriptRef::new(script.name, &script.content);
-        let ast = CheckedAST::new(
-            &[ModuleSrc {
-                name: "main".to_string(),
-                src: script.content.clone(),
-            }],
-            vars,
-        )?;
+        let ast = CheckedAST::new(&BTreeMap::from([("main", script.content.as_str())]), vars)?;
         Ok(StoredScript {
             script_ref,
             ast,

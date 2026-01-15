@@ -6,14 +6,8 @@ fn simple_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -27,14 +21,8 @@ fn string_with_quotes() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -48,14 +36,8 @@ fn pass_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::String("Hello world!".into())])
@@ -69,14 +51,8 @@ fn simple_number() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -90,14 +66,8 @@ fn negative_number() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -111,14 +81,8 @@ fn boolean_true() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -132,14 +96,8 @@ fn boolean_false() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -153,14 +111,8 @@ fn boolean_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -181,14 +133,8 @@ fn number_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -209,14 +155,8 @@ fn cardinality_of_fixed_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -230,14 +170,8 @@ fn cardinality_of_list_in_param() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -259,14 +193,8 @@ fn range() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -289,14 +217,8 @@ fn empty_range() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -310,14 +232,8 @@ fn empty_range_with_end_below_start() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
@@ -331,14 +247,8 @@ fn range_with_one_element() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])

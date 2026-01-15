@@ -1,8 +1,8 @@
-use crate::eval::{CheckedAST, EvalObject, ExprValue, ModuleSrc};
+use crate::eval::{CheckedAST, EvalObject, ExprValue};
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
 use crate::ExprType;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum SimpleObject {
@@ -104,14 +104,8 @@ fn eval_with_simple_objects(
 ) -> ExprValue<SimpleObject> {
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(
-        &[ModuleSrc {
-            name: "main".to_string(),
-            src: input.to_string(),
-        }],
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
     let env = SimpleEnv {};
 
     checked_ast

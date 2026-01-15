@@ -1,7 +1,7 @@
 use super::*;
 use crate::parser::{ColloMLParser, Rule};
 use pest::Parser;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 // Test modules organized by functionality
 mod basic_functions;
@@ -34,15 +34,9 @@ pub(crate) fn analyze(
     let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
         .expect("AST conversion failed");
 
-    let (_global_env, type_info, _expr_types, errors, warnings) = GlobalEnv::new(
-        types,
-        vars,
-        &[Module {
-            name: "main".into(),
-            file,
-        }],
-    )
-    .expect("GlobalEnv creation failed");
+    let modules = BTreeMap::from([("main", file)]);
+    let (_global_env, type_info, _expr_types, errors, warnings) =
+        GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
 }
@@ -86,16 +80,13 @@ pub(crate) fn analyze_multi(
     types: HashMap<String, ObjectFields>,
     vars: HashMap<String, ArgsType>,
 ) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
-    let modules: Vec<Module> = module_sources
+    let modules: BTreeMap<&str, crate::ast::File> = module_sources
         .iter()
         .map(|(name, source)| {
             let pairs = ColloMLParser::parse(Rule::file, source).expect("Parse failed");
             let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
                 .expect("AST conversion failed");
-            Module {
-                name: name.to_string(),
-                file,
-            }
+            (*name, file)
         })
         .collect();
 
