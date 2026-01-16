@@ -1,8 +1,5 @@
-use super::{
-    vars::Var,
-    views::{Env, ObjectId},
-};
-use collo_ml::problem::{Problem, ProblemBuilder};
+use super::{vars::Var, views::ObjectId};
+use collo_ml::problem::ProblemBuilder;
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
 
@@ -70,10 +67,7 @@ pub fn get_default_main_module() -> &'static str {
 #[cfg(test)]
 mod tests;
 
-pub fn build_default_problem(
-    env: &Env,
-    main_module: &str,
-) -> Result<Problem<ObjectId, Var>, String> {
+pub fn default_problem_builder(main_module: &str) -> Result<ProblemBuilder<ObjectId, Var>, String> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
@@ -88,5 +82,5 @@ pub fn build_default_problem(
         .add_objective("main", "objective", vec![], 1.0, ObjectiveSense::Minimize)
         .map_err(|e| format!("{}", e))?;
 
-    builder.build(env).map_err(|e| format!("{}", e))
+    Ok(builder)
 }

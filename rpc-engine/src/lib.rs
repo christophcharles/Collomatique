@@ -25,10 +25,12 @@ fn try_solve() -> Result<(), anyhow::Error> {
     eprintln!("Building ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::{
-        build_default_problem, get_default_main_module,
+        default_problem_builder, get_default_main_module,
     };
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
-    let problem = match build_default_problem(&env, get_default_main_module()) {
+    let problem = match default_problem_builder(get_default_main_module())
+        .and_then(|b| b.build(&env).map_err(|e| format!("{}", e)))
+    {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("Script panic: {}", msg);
