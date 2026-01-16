@@ -56,6 +56,17 @@ pub struct ProblemBuilder<
     /// Format: (module, fn_name, args, coefficient, sense)
     pending_objectives: Vec<(String, String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
 
+    /// base variables list
+    original_var_list: BTreeMap<V, Variable>,
+}
+
+struct EvalData<
+    'a,
+    T: EvalObject,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
+> {
+    builder: ProblemBuilder<'a, T, V>,
+
     /// List of constraints incrementally built (populated during build())
     constraints: Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
 
@@ -75,9 +86,6 @@ pub struct ProblemBuilder<
     /// Then reified variables as well as
     /// helpers variables are added as needed.
     vars_desc: BTreeMap<ProblemVar<T, V>, Variable>,
-
-    /// base variables list
-    original_var_list: BTreeMap<V, Variable>,
 }
 
 use thiserror::Error;
@@ -143,6 +151,51 @@ impl<
             .collect::<Result<_, _>>()
     }
 
+    /// Validate that a function exists with the correct signature
+    fn validate_function(
+        &self,
+        module: &str,
+        fn_name: &str,
+        args: &[ExprValue<T>],
+        expected_return: &ExprType,
+    ) -> Result<(), ProblemError<T>> {
+        let functions = self.ast.get_functions();
+        let key = (module.to_string(), fn_name.to_string());
+
+        let (args_type, output_type) = functions
+            .get(&key)
+            .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
+
+        // Check argument count
+        if args_type.len() != args.len() {
+            return Err(ProblemError::ArgumentCountMismatch {
+                func: format!("{}::{}", module, fn_name),
+                expected: args_type.len(),
+                found: args.len(),
+            });
+        }
+
+        // Check return type
+        if !output_type.is_subtype_of(expected_return)
+            && !expected_return.is_subtype_of(output_type)
+        {
+            return Err(ProblemError::WrongReturnType {
+                func: format!("{}::{}", module, fn_name),
+                returned: output_type.clone(),
+                expected: expected_return.clone(),
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl<
+        'a,
+        T: EvalObject,
+        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
+    > EvalData<'a, T, V>
+{
     fn generate_helper_var(&mut self) -> ProblemVar<T, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
@@ -164,7 +217,7 @@ impl<
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
-                None => match b.fix(&self.env) {
+                None => match b.fix(&self.builder.env) {
                     Some(val) => {
                         let new_var = Variable::integer().min(val).max(val);
                         if !new_var.checks_value(val) {
@@ -179,7 +232,6 @@ impl<
     }
 
     fn objectify_single_constraint(
-        &mut self,
         constraint: &Constraint<ProblemVar<T, V>>,
         origin: ConstraintDesc<T>,
         var: ProblemVar<T, V>,
@@ -232,7 +284,7 @@ impl<
         // With a single constraint, we can just defer to objectify_single_constraint
         if constraints.len() == 1 {
             let var = self.generate_helper_continuous_var();
-            return self.objectify_single_constraint(constraints.next().unwrap(), origin, var);
+            return Self::objectify_single_constraint(constraints.next().unwrap(), origin, var);
         }
 
         let c_count = constraints.len() as f64;
@@ -246,7 +298,7 @@ impl<
             let lin_expr = LinExpr::var(var.clone());
             output.push((lin_expr.leq(&global_var), origin.clone()));
             let (c_obj, c_constraints) =
-                self.objectify_single_constraint(constraint, origin.clone(), var);
+                Self::objectify_single_constraint(constraint, origin.clone(), var);
             obj = obj + c_obj;
             output.extend(c_constraints);
         }
@@ -413,7 +465,7 @@ impl<
     fn clean_var(&self, var: &IlpVar<T>) -> ProblemVar<T, V> {
         match var {
             IlpVar::Base(extern_var) => {
-                if self.base_vars.contains_key(&extern_var.name) {
+                if self.builder.base_vars.contains_key(&extern_var.name) {
                     ProblemVar::Base(match extern_var.try_into() {
                         Ok(v) => v,
                         Err(e) => match e {
@@ -468,17 +520,17 @@ impl<
         ConstraintDesc::InScript { origin }
     }
 
-    fn evaluate_internal(&mut self) {
+    fn new(builder: ProblemBuilder<'a, T, V>) -> EvalData<'a, T, V> {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
         let (constraint_results, objective_results, var_def) = {
-            let mut eval_history = self
+            let mut eval_history = builder
                 .ast
-                .start_eval_history_with_cache(&self.env, T::Cache::default())
+                .start_eval_history_with_cache(&builder.env, T::Cache::default())
                 .expect("Environment should be compatible with AST");
 
             // Evaluate constraints
-            let constraint_results: Vec<_> = self
+            let constraint_results: Vec<_> = builder
                 .pending_constraints
                 .iter()
                 .map(|(module, fn_name, args)| {
@@ -490,7 +542,7 @@ impl<
                 .collect();
 
             // Evaluate objectives
-            let objective_results: Vec<_> = self
+            let objective_results: Vec<_> = builder
                 .pending_objectives
                 .iter()
                 .map(|(module, fn_name, args, coef, obj_sense)| {
@@ -504,7 +556,20 @@ impl<
             let var_def = eval_history.into_var_def();
             (constraint_results, objective_results, var_def)
         };
-        // eval_history is now dropped, we can mutate self freely
+
+        let vars_desc = builder
+            .original_var_list
+            .iter()
+            .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
+            .collect();
+
+        let mut eval_data = EvalData {
+            builder,
+            constraints: vec![],
+            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
+            current_helper_id: 0,
+            vars_desc,
+        };
 
         // Phase 2: Process constraint results
         for (fn_name, (constraints_expr, _origin)) in constraint_results {
@@ -530,12 +595,12 @@ impl<
                 .into_iter()
                 .map(|c_with_o| {
                     (
-                        self.clean_constraint(&c_with_o.constraint),
+                        eval_data.clean_constraint(&c_with_o.constraint),
                         Self::update_origin(c_with_o.origin),
                     )
                 })
                 .collect();
-            self.constraints.extend(new_constraints);
+            eval_data.constraints.extend(new_constraints);
         }
 
         // Phase 3: Process objective results
@@ -557,21 +622,21 @@ impl<
             for value in values_list {
                 match value {
                     ExprValue::LinExpr(lin_expr) => {
-                        let cleaned_lin_expr = self.clean_lin_expr(&lin_expr);
+                        let cleaned_lin_expr = eval_data.clean_lin_expr(&lin_expr);
                         obj = obj + Objective::new(cleaned_lin_expr, obj_sense.clone());
                     }
                     ExprValue::Constraint(c) => {
                         let cleaned_constraints: Vec<_> = c
                             .into_iter()
-                            .map(|c_with_o| self.clean_constraint(&c_with_o.constraint))
+                            .map(|c_with_o| eval_data.clean_constraint(&c_with_o.constraint))
                             .collect();
                         let new_origin = ConstraintDesc::Objectify {
                             origin: origin.clone(),
                         };
                         let (new_obj, new_constraints) =
-                            self.objectify_constraints(cleaned_constraints.iter(), new_origin);
+                            eval_data.objectify_constraints(cleaned_constraints.iter(), new_origin);
                         obj = obj + new_obj;
-                        self.constraints.extend(new_constraints);
+                        eval_data.constraints.extend(new_constraints);
                     }
                     _ => panic!(
                         "Function {} returned {:?} instead of LinExpr",
@@ -579,7 +644,7 @@ impl<
                     ),
                 }
             }
-            self.objective = &self.objective + coef * obj;
+            eval_data.objective = &eval_data.objective + coef * obj;
         }
 
         // Phase 4: Process reified variables
@@ -589,7 +654,7 @@ impl<
         for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c| self.clean_constraint(&c))
+                .map(|c: Constraint<IlpVar<T>>| eval_data.clean_constraint(&c))
                 .collect();
 
             let reified_var = ReifiedVar {
@@ -600,7 +665,9 @@ impl<
             };
             let new_var = ProblemVar::Reified(reified_var);
 
-            self.vars_desc.insert(new_var.clone(), Variable::binary());
+            eval_data
+                .vars_desc
+                .insert(new_var.clone(), Variable::binary());
             constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
         }
         for ((var_list_module, var_list_name, var_list_args), (constraints_list, new_origin)) in
@@ -609,7 +676,7 @@ impl<
             for (i, constraints) in constraints_list.into_iter().enumerate() {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
-                    .map(|c| self.clean_constraint(&c))
+                    .map(|c| eval_data.clean_constraint(&c))
                     .collect();
 
                 let reified_var = ReifiedVar {
@@ -620,7 +687,9 @@ impl<
                 };
                 let new_var = ProblemVar::Reified(reified_var);
 
-                self.vars_desc.insert(new_var.clone(), Variable::binary());
+                eval_data
+                    .vars_desc
+                    .insert(new_var.clone(), Variable::binary());
                 constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
             }
         }
@@ -639,48 +708,13 @@ impl<
 
             let new_origin = ConstraintDesc::Reified { var_name, origin };
 
-            let reified_constraints = self.reify_constraint(constraints.iter(), new_origin, var);
+            let reified_constraints =
+                eval_data.reify_constraint(constraints.iter(), new_origin, var);
 
-            self.constraints.extend(reified_constraints);
-        }
-    }
-
-    /// Validate that a function exists with the correct signature
-    fn validate_function(
-        &self,
-        module: &str,
-        fn_name: &str,
-        args: &[ExprValue<T>],
-        expected_return: &ExprType,
-    ) -> Result<(), ProblemError<T>> {
-        let functions = self.ast.get_functions();
-        let key = (module.to_string(), fn_name.to_string());
-
-        let (args_type, output_type) = functions
-            .get(&key)
-            .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
-
-        // Check argument count
-        if args_type.len() != args.len() {
-            return Err(ProblemError::ArgumentCountMismatch {
-                func: format!("{}::{}", module, fn_name),
-                expected: args_type.len(),
-                found: args.len(),
-            });
+            eval_data.constraints.extend(reified_constraints);
         }
 
-        // Check return type
-        if !output_type.is_subtype_of(expected_return)
-            && !expected_return.is_subtype_of(output_type)
-        {
-            return Err(ProblemError::WrongReturnType {
-                func: format!("{}::{}", module, fn_name),
-                returned: output_type.clone(),
-                expected: expected_return.clone(),
-            });
-        }
-
-        Ok(())
+        eval_data
     }
 }
 
@@ -699,10 +733,6 @@ impl<
                 return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
             }
         }
-        let vars_desc = original_var_list
-            .iter()
-            .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
-            .collect();
 
         // Compile all modules upfront
         let ast = CheckedAST::new(modules, base_vars.clone())?;
@@ -713,10 +743,6 @@ impl<
             base_vars,
             pending_constraints: vec![],
             pending_objectives: vec![],
-            constraints: vec![],
-            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
-            current_helper_id: 0,
-            vars_desc,
             original_var_list,
         })
     }
@@ -787,11 +813,11 @@ impl<
         Ok(())
     }
 
-    pub fn build(mut self) -> Problem<T, V> {
+    pub fn build(self) -> Problem<T, V> {
         // Evaluate all pending constraints and objectives
-        self.evaluate_internal();
+        let mut eval_data = EvalData::new(self);
 
-        for (constraint, _desc) in self.constraints.iter_mut() {
+        for (constraint, _desc) in eval_data.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
             for var in constraint.variables() {
                 if fixed_variables.contains_key(&var) {
@@ -800,7 +826,7 @@ impl<
                 let ProblemVar::Base(v) = var else {
                     continue;
                 };
-                let Some(value) = v.fix(&self.env) else {
+                let Some(value) = v.fix(&eval_data.builder.env) else {
                     continue;
                 };
                 fixed_variables.insert(ProblemVar::Base(v), value);
@@ -811,28 +837,28 @@ impl<
             *constraint = constraint.reduce(&fixed_variables);
         }
         let mut fixed_variables = BTreeMap::new();
-        for var in self.objective.get_function().variables() {
+        for var in eval_data.objective.get_function().variables() {
             if fixed_variables.contains_key(&var) {
                 continue;
             }
             let ProblemVar::Base(v) = var else {
                 continue;
             };
-            let Some(value) = v.fix(&self.env) else {
+            let Some(value) = v.fix(&eval_data.builder.env) else {
                 continue;
             };
             fixed_variables.insert(ProblemVar::Base(v), value);
         }
         if !fixed_variables.is_empty() {
-            self.objective = self.objective.reduce(&fixed_variables);
+            eval_data.objective = eval_data.objective.reduce(&fixed_variables);
         }
-        self.constraints = self
+        eval_data.constraints = eval_data
             .constraints
             .into_iter()
             .filter(|(c, _d)| !c.is_trivially_true())
             .collect();
 
-        let reification_constraints: Vec<_> = self
+        let reification_constraints: Vec<_> = eval_data
             .constraints
             .iter()
             .filter_map(|(c, d)| match d {
@@ -848,18 +874,18 @@ impl<
             .collect();
 
         let mut problem_builder = collomatique_ilp::ProblemBuilder::new()
-            .set_variables(self.vars_desc.clone())
-            .add_constraints(self.constraints);
-        problem_builder = problem_builder.set_objective(self.objective);
+            .set_variables(eval_data.vars_desc.clone())
+            .add_constraints(eval_data.constraints);
+        problem_builder = problem_builder.set_objective(eval_data.objective);
 
         let reification_problem_builder = collomatique_ilp::ProblemBuilder::new()
-            .set_variables(self.vars_desc)
+            .set_variables(eval_data.vars_desc)
             .add_constraints(reification_constraints);
 
         Problem {
             problem: problem_builder.build().expect("Problem should be valid"),
             reification_problem_builder,
-            original_var_list: self.original_var_list,
+            original_var_list: eval_data.builder.original_var_list,
         }
     }
 }
