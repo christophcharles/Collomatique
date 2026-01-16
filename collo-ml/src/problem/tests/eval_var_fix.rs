@@ -78,7 +78,7 @@ fn test_fix_forces_variable_values() {
             pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -93,7 +93,7 @@ fn test_fix_forces_variable_values() {
         .add_constraint("test_fix", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

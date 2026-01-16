@@ -1,4 +1,6 @@
-use crate::eval::{CheckedAST, CompileError, ExprValue, ExternVar, IlpVar, Origin, ScriptVar};
+use crate::eval::{
+    CheckedAST, CompileError, EvalError, ExprValue, ExternVar, IlpVar, Origin, ScriptVar,
+};
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
 use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
@@ -33,13 +35,9 @@ pub enum ConstraintDesc<T: EvalObject> {
 }
 
 pub struct ProblemBuilder<
-    'a,
     T: EvalObject,
     V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
 > {
-    /// Reference to the evaluation environment
-    env: &'a T::Env,
-
     /// Compiled AST (all modules compiled together)
     ast: CheckedAST<T>,
 
@@ -56,8 +54,7 @@ pub struct ProblemBuilder<
     /// Format: (module, fn_name, args, coefficient, sense)
     pending_objectives: Vec<(String, String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
 
-    /// base variables list
-    original_var_list: BTreeMap<V, Variable>,
+    phantom: std::marker::PhantomData<V>,
 }
 
 struct EvalData<
@@ -65,7 +62,10 @@ struct EvalData<
     T: EvalObject,
     V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
 > {
-    builder: ProblemBuilder<'a, T, V>,
+    builder: ProblemBuilder<T, V>,
+
+    /// Reference to the evaluation environment
+    env: &'a T::Env,
 
     /// List of constraints incrementally built (populated during build())
     constraints: Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
@@ -86,6 +86,9 @@ struct EvalData<
     /// Then reified variables as well as
     /// helpers variables are added as needed.
     vars_desc: BTreeMap<ProblemVar<T, V>, Variable>,
+
+    /// base variables list
+    original_var_list: BTreeMap<V, Variable>,
 }
 
 use thiserror::Error;
@@ -127,10 +130,9 @@ pub enum ProblemError<T: EvalObject> {
 }
 
 impl<
-        'a,
         T: EvalObject,
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
-    > ProblemBuilder<'a, T, V>
+    > ProblemBuilder<T, V>
 {
     fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T>> {
         V::field_schema()
@@ -217,7 +219,7 @@ impl<
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
-                None => match b.fix(&self.builder.env) {
+                None => match b.fix(&self.env) {
                     Some(val) => {
                         let new_var = Variable::integer().min(val).max(val);
                         if !new_var.checks_value(val) {
@@ -520,61 +522,79 @@ impl<
         ConstraintDesc::InScript { origin }
     }
 
-    fn new(builder: ProblemBuilder<'a, T, V>) -> EvalData<'a, T, V> {
+    fn new(
+        builder: ProblemBuilder<T, V>,
+        env: &'a T::Env,
+    ) -> Result<EvalData<'a, T, V>, ProblemError<T>> {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
         let (constraint_results, objective_results, var_def) = {
             let mut eval_history = builder
                 .ast
-                .start_eval_history_with_cache(&builder.env, T::Cache::default())
+                .start_eval_history_with_cache(env, T::Cache::default())
                 .expect("Environment should be compatible with AST");
 
             // Evaluate constraints
-            let constraint_results: Vec<_> = builder
+            let constraint_results = builder
                 .pending_constraints
                 .iter()
                 .map(|(module, fn_name, args)| {
                     let result = eval_history
                         .eval_fn(module, fn_name, args.clone())
-                        .expect("Evaluation should succeed (function was validated)");
-                    (module.clone(), fn_name.clone(), result)
+                        .map_err(|e| match e {
+                            EvalError::Panic(v) => ProblemError::Panic(v),
+                            _ => panic!("Evaluation should succeed (function was validated)"),
+                        })?;
+                    Ok((module.clone(), fn_name.clone(), result))
                 })
-                .collect();
+                .collect::<Result<Vec<_>, ProblemError<T>>>()?;
 
             // Evaluate objectives
-            let objective_results: Vec<_> = builder
+            let objective_results = builder
                 .pending_objectives
                 .iter()
                 .map(|(module, fn_name, args, coef, obj_sense)| {
                     let result = eval_history
                         .eval_fn(module, fn_name, args.clone())
-                        .expect("Evaluation should succeed (function was validated)");
-                    (
+                        .map_err(|e| match e {
+                            EvalError::Panic(v) => ProblemError::Panic(v),
+                            _ => panic!("Evaluation should succeed (function was validated)"),
+                        })?;
+                    Ok((
                         module.clone(),
                         fn_name.clone(),
                         result,
                         *coef,
                         obj_sense.clone(),
-                    )
+                    ))
                 })
-                .collect();
+                .collect::<Result<Vec<_>, ProblemError<T>>>()?;
 
             let var_def = eval_history.into_var_def();
             (constraint_results, objective_results, var_def)
         };
 
-        let vars_desc = builder
-            .original_var_list
+        let original_var_list =
+            V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
+        for (name, desc) in &original_var_list {
+            if !desc.is_integer() {
+                return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
+            }
+        }
+
+        let vars_desc = original_var_list
             .iter()
             .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
             .collect();
 
         let mut eval_data = EvalData {
             builder,
+            env,
             constraints: vec![],
             objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
             current_helper_id: 0,
             vars_desc,
+            original_var_list,
         };
 
         // Phase 2: Process constraint results
@@ -720,36 +740,27 @@ impl<
             eval_data.constraints.extend(reified_constraints);
         }
 
-        eval_data
+        Ok(eval_data)
     }
 }
 
 impl<
-        'a,
         T: EvalObject,
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
-    > ProblemBuilder<'a, T, V>
+    > ProblemBuilder<T, V>
 {
-    pub fn new(env: &'a T::Env, modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T>> {
+    pub fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T>> {
         let base_vars = Self::build_vars()?;
-        let original_var_list =
-            V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
-        for (name, desc) in &original_var_list {
-            if !desc.is_integer() {
-                return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
-            }
-        }
 
         // Compile all modules upfront
         let ast = CheckedAST::new(modules, base_vars.clone())?;
 
         Ok(ProblemBuilder {
-            env,
             ast,
             base_vars,
             pending_constraints: vec![],
             pending_objectives: vec![],
-            original_var_list,
+            phantom: std::marker::PhantomData,
         })
     }
 
@@ -819,9 +830,9 @@ impl<
         Ok(())
     }
 
-    pub fn build(self) -> Problem<T, V> {
+    pub fn build(self, env: &T::Env) -> Result<Problem<T, V>, ProblemError<T>> {
         // Evaluate all pending constraints and objectives
-        let mut eval_data = EvalData::new(self);
+        let mut eval_data = EvalData::new(self, env)?;
 
         for (constraint, _desc) in eval_data.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
@@ -832,7 +843,7 @@ impl<
                 let ProblemVar::Base(v) = var else {
                     continue;
                 };
-                let Some(value) = v.fix(&eval_data.builder.env) else {
+                let Some(value) = v.fix(&eval_data.env) else {
                     continue;
                 };
                 fixed_variables.insert(ProblemVar::Base(v), value);
@@ -850,7 +861,7 @@ impl<
             let ProblemVar::Base(v) = var else {
                 continue;
             };
-            let Some(value) = v.fix(&eval_data.builder.env) else {
+            let Some(value) = v.fix(&eval_data.env) else {
                 continue;
             };
             fixed_variables.insert(ProblemVar::Base(v), value);
@@ -888,11 +899,11 @@ impl<
             .set_variables(eval_data.vars_desc)
             .add_constraints(reification_constraints);
 
-        Problem {
+        Ok(Problem {
             problem: problem_builder.build().expect("Problem should be valid"),
             reification_problem_builder,
-            original_var_list: eval_data.builder.original_var_list,
-        }
+            original_var_list: eval_data.original_var_list,
+        })
     }
 }
 

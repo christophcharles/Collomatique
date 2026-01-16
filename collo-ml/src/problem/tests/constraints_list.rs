@@ -62,7 +62,7 @@ fn constraint_list_return_type() {
         "list_constraints",
         r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -75,7 +75,7 @@ fn constraint_list_return_type() {
         .add_constraint("list_constraints", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

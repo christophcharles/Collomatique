@@ -83,7 +83,7 @@ fn list_constraint_reification() {
             pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -96,7 +96,7 @@ fn list_constraint_reification() {
         .add_constraint("list_reify", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -200,7 +200,7 @@ fn list_constraint_reification_exact_count_with_param() {
             pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -213,7 +213,7 @@ fn list_constraint_reification_exact_count_with_param() {
         .add_constraint("exact_count", "exactly_five", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

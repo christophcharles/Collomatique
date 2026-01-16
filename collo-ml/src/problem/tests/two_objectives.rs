@@ -97,7 +97,7 @@ fn two_objectives_same_script() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -126,7 +126,7 @@ fn two_objectives_same_script() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -266,7 +266,7 @@ fn two_objectives_different_scripts() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -295,7 +295,7 @@ fn two_objectives_different_scripts() {
         .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add second objective");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -422,7 +422,7 @@ fn objectives_with_different_senses() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -458,7 +458,7 @@ fn objectives_with_different_senses() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

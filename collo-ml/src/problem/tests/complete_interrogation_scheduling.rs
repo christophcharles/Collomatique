@@ -163,7 +163,7 @@ fn complete_interrogations_scheduling() {
                 };
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -182,7 +182,7 @@ fn complete_interrogations_scheduling() {
         .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build();
+    let problem = pb_builder.build(&env).expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

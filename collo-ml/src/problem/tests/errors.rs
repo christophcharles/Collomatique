@@ -1,4 +1,4 @@
-use crate::eval::{NoObject, NoObjectEnv};
+use crate::eval::NoObject;
 
 use super::*;
 
@@ -46,9 +46,8 @@ fn error_unknown_function() {
         }
     }
 
-    let env = NoObjectEnv {};
     let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -113,9 +112,8 @@ fn error_wrong_return_type_for_constraint() {
         }
     }
 
-    let env = NoObjectEnv {};
     let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

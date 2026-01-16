@@ -71,7 +71,7 @@ pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String
     modules.insert(MAIN_MODULE.0, MAIN_MODULE.1);
 
     let mut builder =
-        ProblemBuilder::<ObjectId, Var>::new(env, &modules).map_err(|e| format!("{}", e))?;
+        ProblemBuilder::<ObjectId, Var>::new(&modules).map_err(|e| format!("{}", e))?;
 
     builder
         .add_constraint("main", "constraint", vec![])
@@ -81,5 +81,5 @@ pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String
         .add_objective("main", "objective", vec![], 1.0, ObjectiveSense::Minimize)
         .map_err(|e| format!("{}", e))?;
 
-    Ok(builder.build())
+    builder.build(env).map_err(|e| format!("{}", e))
 }
