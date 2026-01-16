@@ -43,9 +43,6 @@ pub struct ProblemBuilder<
     /// Compiled AST (all modules compiled together)
     ast: CheckedAST<T>,
 
-    /// Shared cache for evaluation
-    cache: Option<T::Cache>,
-
     /// Variables that define the problem
     /// The set of possible values of these variables is one-to-one with
     /// the set of solutions to our problem
@@ -474,10 +471,10 @@ impl<
     fn evaluate_internal(&mut self) {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
-        let (constraint_results, objective_results, var_def, new_cache) = {
+        let (constraint_results, objective_results, var_def) = {
             let mut eval_history = self
                 .ast
-                .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
+                .start_eval_history_with_cache(&self.env, T::Cache::default())
                 .expect("Environment should be compatible with AST");
 
             // Evaluate constraints
@@ -504,12 +501,10 @@ impl<
                 })
                 .collect();
 
-            let (var_def, new_cache) = eval_history.into_var_def_and_cache();
-            (constraint_results, objective_results, var_def, new_cache)
+            let var_def = eval_history.into_var_def();
+            (constraint_results, objective_results, var_def)
         };
         // eval_history is now dropped, we can mutate self freely
-
-        self.cache = Some(new_cache);
 
         // Phase 2: Process constraint results
         for (fn_name, (constraints_expr, _origin)) in constraint_results {
@@ -715,7 +710,6 @@ impl<
         Ok(ProblemBuilder {
             env,
             ast,
-            cache: None,
             base_vars,
             pending_constraints: vec![],
             pending_objectives: vec![],
