@@ -535,9 +535,11 @@ impl Colloscope {
         self.update_ilp_repr(None);
         let params = self.params.clone();
         sender.spawn_oneshot_command(move || {
-            use collomatique_binding_colloscopes::scripts::build_default_problem;
+            use collomatique_binding_colloscopes::scripts::{
+                build_default_problem, get_default_main_module,
+            };
             let env = collomatique_binding_colloscopes::views::Env::from(params);
-            match build_default_problem(&env) {
+            match build_default_problem(&env, get_default_main_module()) {
                 Ok(problem) => {
                     ColloscopeCommandOutput::IlpProblemComputed(Ok(IlpProblem { env, problem }))
                 }

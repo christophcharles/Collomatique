@@ -24,9 +24,11 @@ fn try_solve() -> Result<(), anyhow::Error> {
     };
     eprintln!("Building ILP problem...");
 
-    use collomatique_binding_colloscopes::scripts::build_default_problem;
+    use collomatique_binding_colloscopes::scripts::{
+        build_default_problem, get_default_main_module,
+    };
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
-    let problem = match build_default_problem(&env) {
+    let problem = match build_default_problem(&env, get_default_main_module()) {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("Script panic: {}", msg);

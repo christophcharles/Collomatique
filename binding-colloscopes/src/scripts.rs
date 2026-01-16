@@ -61,14 +61,21 @@ pub const MODULES: &[(&str, &str)] = &[
     ),
 ];
 
-pub const MAIN_MODULE: (&str, &str) = ("main", include_str!("scripts/main.collo-ml"));
+pub const MAIN_MODULE: &str = include_str!("scripts/main.collo-ml");
+
+pub fn get_default_main_module() -> &'static str {
+    MAIN_MODULE
+}
 
 #[cfg(test)]
 mod tests;
 
-pub fn build_default_problem(env: &Env) -> Result<Problem<ObjectId, Var>, String> {
+pub fn build_default_problem(
+    env: &Env,
+    main_module: &str,
+) -> Result<Problem<ObjectId, Var>, String> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
-    modules.insert(MAIN_MODULE.0, MAIN_MODULE.1);
+    modules.insert("main", main_module);
 
     let mut builder =
         ProblemBuilder::<ObjectId, Var>::new(&modules).map_err(|e| format!("{}", e))?;
