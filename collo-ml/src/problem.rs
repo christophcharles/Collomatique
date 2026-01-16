@@ -537,7 +537,7 @@ impl<
                     let result = eval_history
                         .eval_fn(module, fn_name, args.clone())
                         .expect("Evaluation should succeed (function was validated)");
-                    (fn_name.clone(), result)
+                    (module.clone(), fn_name.clone(), result)
                 })
                 .collect();
 
@@ -549,7 +549,13 @@ impl<
                     let result = eval_history
                         .eval_fn(module, fn_name, args.clone())
                         .expect("Evaluation should succeed (function was validated)");
-                    (fn_name.clone(), result, *coef, obj_sense.clone())
+                    (
+                        module.clone(),
+                        fn_name.clone(),
+                        result,
+                        *coef,
+                        obj_sense.clone(),
+                    )
                 })
                 .collect();
 
@@ -572,7 +578,7 @@ impl<
         };
 
         // Phase 2: Process constraint results
-        for (fn_name, (constraints_expr, _origin)) in constraint_results {
+        for (module, fn_name, (constraints_expr, _origin)) in constraint_results {
             let constraints = match constraints_expr {
                 ExprValue::Constraint(constraints) => constraints,
                 ExprValue::List(list)
@@ -586,8 +592,8 @@ impl<
                         .collect()
                 }
                 _ => panic!(
-                    "Function {} returned {:?} instead of Constraint",
-                    fn_name, constraints_expr
+                    "Function {}::{} returned {:?} instead of Constraint",
+                    module, fn_name, constraints_expr
                 ),
             };
 
@@ -604,7 +610,7 @@ impl<
         }
 
         // Phase 3: Process objective results
-        for (fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
+        for (module, fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
             let mut values_list = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
@@ -613,8 +619,8 @@ impl<
                 }
                 ExprValue::List(list) => values_list.extend(list),
                 _ => panic!(
-                    "Function {} returned {:?} instead of LinExpr",
-                    fn_name, fn_result
+                    "Function {}::{} returned {:?} instead of LinExpr",
+                    module, fn_name, fn_result
                 ),
             }
 
@@ -639,8 +645,8 @@ impl<
                         eval_data.constraints.extend(new_constraints);
                     }
                     _ => panic!(
-                        "Function {} returned {:?} instead of LinExpr",
-                        fn_name, value
+                        "Function {}::{} returned {:?} instead of LinExpr",
+                        module, fn_name, value
                     ),
                 }
             }
