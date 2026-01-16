@@ -74,31 +74,32 @@ fn internal_reification() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "reify_test",
+        r#"
+            let c1() -> Constraint = $V() === 1;
+            let c2() -> Constraint = $W() === 1;
+            let c3() -> Constraint = $X() === 1;
+            reify c1 as $R1;
+            reify c2 as $R2;
+            reify c3 as $R3;
+            pub let exactly_one_and_force_w() -> Constraint =
+                $R1() + $R2() + $R3() === 1 and $R2() === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Test internal reification: exactly one of V, W, or X must be 1, and we force it to be W
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "reify_test".into(),
-                content: r#"
-                    let c1() -> Constraint = $V() === 1;
-                    let c2() -> Constraint = $W() === 1;
-                    let c3() -> Constraint = $X() === 1;
-                    reify c1 as $R1;
-                    reify c2 as $R2;
-                    reify c3 as $R3;
-                    pub let exactly_one_and_force_w() -> Constraint = 
-                        $R1() + $R2() + $R3() === 1 and $R2() === 1;
-                "#
-                .into(),
-            },
-            vec![("exactly_one_and_force_w".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("reify_test", "exactly_one_and_force_w", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 
@@ -188,44 +189,45 @@ fn private_reification_does_not_leak() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    // Define both modules upfront
+    // First module: private reification R means V === 1
+    // Second module: private reification R means W === 1 (opposite constraint)
+    let modules = BTreeMap::from([
+        (
+            "first_module",
+            r#"
+                let v_constraint() -> Constraint = $V() === 1;
+                reify v_constraint as $R;
+                pub let use_r() -> Constraint = $R() === 1;
+            "#,
+        ),
+        (
+            "second_module",
+            r#"
+                let w_constraint() -> Constraint = $W() === 1;
+                reify w_constraint as $R;
+                pub let use_r_again() -> Constraint = $R() === 0;
+            "#,
+        ),
+    ]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // First script: private reification R means V === 1
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "first_script".into(),
-                content: r#"
-                    let v_constraint() -> Constraint = $V() === 1;
-                    reify v_constraint as $R;
-                    pub let use_r() -> Constraint = $R() === 1;
-                "#
-                .into(),
-            },
-            vec![("use_r".to_string(), vec![])],
-        )
-        .expect("Should compile first script");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    // Add constraint from first module
+    pb_builder
+        .add_constraint("first_module", "use_r", vec![])
+        .expect("Should add constraint from first_module");
 
-    // Second script: private reification R means W === 1 (opposite constraint)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "second_script".into(),
-                content: r#"
-                    let w_constraint() -> Constraint = $W() === 1;
-                    reify w_constraint as $R;
-                    pub let use_r_again() -> Constraint = $R() === 0;
-                "#
-                .into(),
-            },
-            vec![("use_r_again".to_string(), vec![])],
-        )
-        .expect("Should compile second script");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    // Add constraint from second module
+    pb_builder
+        .add_constraint("second_module", "use_r_again", vec![])
+        .expect("Should add constraint from second_module");
 
     let problem = pb_builder.build();
 
@@ -235,17 +237,17 @@ fn private_reification_does_not_leak() {
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // First script: R === 1 means V === 1 must hold
-    // Second script: R === 0 means W === 1 must NOT hold, so W === 0
+    // First module: R === 1 means V === 1 must hold
+    // Second module: R === 0 means W === 1 must NOT hold, so W === 0
     // If private reifications leaked, these would conflict
     assert_eq!(
         sol.get(ProblemVar::Base(Var::V)),
         Some(1.0),
-        "V should be 1 (from first script's private R)"
+        "V should be 1 (from first module's private R)"
     );
     assert_eq!(
         sol.get(ProblemVar::Base(Var::W)),
         Some(0.0),
-        "W should be 0 (from second script's private R)"
+        "W should be 0 (from second module's private R)"
     );
 }

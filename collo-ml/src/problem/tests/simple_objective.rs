@@ -59,47 +59,33 @@ fn simple_objective_selects_solution() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let exactly_one() -> Constraint = $V() + $W() === 1;
+            pub let maximize_v() -> LinExpr = $V();
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Constraint: V + W === 1 (exactly one must be 1)
     // This has two valid solutions: (V=1, W=0) or (V=0, W=1)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "constraints".into(),
-                content: r#"
-                    pub let exactly_one() -> Constraint = $V() + $W() === 1;
-                "#
-                .into(),
-            },
-            vec![("exactly_one".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "exactly_one", vec![])
+        .expect("Should add constraint");
 
     // Objective: maximize V
     // This should select the solution V=1, W=0
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objective".into(),
-                content: r#"
-                    pub let maximize_v() -> LinExpr = $V();
-                "#
-                .into(),
-            },
-            vec![(
-                "maximize_v".to_string(),
-                vec![],
-                1.0,
-                ObjectiveSense::Maximize,
-            )],
-        )
-        .expect("Should compile objective");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("main", "maximize_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add objective");
 
     let problem = pb_builder.build();
 
@@ -178,47 +164,33 @@ fn objective_direction_changes_solution() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let exactly_one() -> Constraint = $V() + $W() === 1;
+            pub let minimize_v() -> LinExpr = $V();
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Same constraint as before: V + W === 1 (exactly one must be 1)
     // This has two valid solutions: (V=1, W=0) or (V=0, W=1)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "constraints".into(),
-                content: r#"
-                    pub let exactly_one() -> Constraint = $V() + $W() === 1;
-                "#
-                .into(),
-            },
-            vec![("exactly_one".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "exactly_one", vec![])
+        .expect("Should add constraint");
 
     // Objective: MINIMIZE V (opposite of the previous test)
     // This should select the solution V=0, W=1
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objective".into(),
-                content: r#"
-                    pub let minimize_v() -> LinExpr = $V();
-                "#
-                .into(),
-            },
-            vec![(
-                "minimize_v".to_string(),
-                vec![],
-                1.0,
-                ObjectiveSense::Minimize,
-            )],
-        )
-        .expect("Should compile objective");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("main", "minimize_v", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add objective");
 
     let problem = pb_builder.build();
 

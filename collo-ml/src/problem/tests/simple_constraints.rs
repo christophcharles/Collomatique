@@ -47,20 +47,19 @@ fn single_constraint_problem() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([("main", "pub let f() -> Constraint = $V() === 1;")]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "base_constraints".into(),
-                content: "pub let f() -> Constraint = $V() === 1;".into(),
-            },
-            vec![("f".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "f", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 
@@ -149,24 +148,25 @@ fn multiple_constraints_in_script() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let constraints() -> Constraint =
+                $V() === 1 and $W() === 0 and $X() === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "multi_constraints".into(),
-                content: r#"
-                    pub let constraints() -> Constraint = 
-                        $V() === 1 and $W() === 0 and $X() === 1;
-                "#
-                .into(),
-            },
-            vec![("constraints".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "constraints", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 
@@ -249,25 +249,29 @@ fn multiple_function_calls() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let c1() -> Constraint = $V() === 1;
+            pub let c2() -> Constraint = $W() === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // Add two different constraints from the same script
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "multi_funcs".into(),
-                content: r#"
-                    pub let c1() -> Constraint = $V() === 1;
-                    pub let c2() -> Constraint = $W() === 1;
-                "#
-                .into(),
-            },
-            vec![("c1".to_string(), vec![]), ("c2".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    // Add two different constraints from the same module
+    pb_builder
+        .add_constraint("main", "c1", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("main", "c2", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 
@@ -290,7 +294,7 @@ fn multiple_function_calls() {
 }
 
 #[test]
-fn constraints_from_different_scripts() {
+fn constraints_from_different_modules() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -345,40 +349,39 @@ fn constraints_from_different_scripts() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    // Define both modules upfront
+    let modules = BTreeMap::from([
+        (
+            "module1",
+            r#"
+                pub let c1() -> Constraint = $V() === 1;
+            "#,
+        ),
+        (
+            "module2",
+            r#"
+                pub let c2() -> Constraint = $W() === 1;
+            "#,
+        ),
+    ]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // Add constraint from first script
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "script1".into(),
-                content: r#"
-                    pub let c1() -> Constraint = $V() === 1;
-                "#
-                .into(),
-            },
-            vec![("c1".to_string(), vec![])],
-        )
-        .expect("Should compile first script");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    // Add constraint from first module
+    pb_builder
+        .add_constraint("module1", "c1", vec![])
+        .expect("Should add constraint from module1");
 
-    // Add constraint from second script
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "script2".into(),
-                content: r#"
-                    pub let c2() -> Constraint = $W() === 1;
-                "#
-                .into(),
-            },
-            vec![("c2".to_string(), vec![])],
-        )
-        .expect("Should compile second script");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    // Add constraint from second module
+    pb_builder
+        .add_constraint("module2", "c2", vec![])
+        .expect("Should add constraint from module2");
 
     let problem = pb_builder.build();
 

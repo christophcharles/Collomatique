@@ -1,6 +1,4 @@
-use crate::eval::{
-    CompileError, EvalError, EvalHistory, ExprValue, ExternVar, IlpVar, Origin, ScriptVar,
-};
+use crate::eval::{CheckedAST, CompileError, ExprValue, ExternVar, IlpVar, Origin, ScriptVar};
 use crate::semantics::ArgsType;
 use crate::traits::{FieldConversionError, VarConversionError};
 use crate::{EvalObject, EvalVar, ExprType, SemWarning, SimpleType};
@@ -9,15 +7,12 @@ use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use std::collections::{BTreeMap, HashMap};
 
-mod scripts;
-pub use scripts::{Script, ScriptRef, StoredScript};
-
 #[cfg(test)]
 mod tests;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct ReifiedVar<T: EvalObject> {
-    script_ref: ScriptRef,
+    module: String,
     name: String,
     from_list: Option<usize>,
     params: Vec<ExprValue<T>>,
@@ -32,19 +27,9 @@ pub enum ProblemVar<T: EvalObject, V: EvalVar<T>> {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConstraintDesc<T: EvalObject> {
-    Reified {
-        script_ref: ScriptRef,
-        var_name: String,
-        origin: Origin<T>,
-    },
-    InScript {
-        script_ref: ScriptRef,
-        origin: Origin<T>,
-    },
-    Objectify {
-        script_ref: ScriptRef,
-        origin: Origin<T>,
-    },
+    Reified { var_name: String, origin: Origin<T> },
+    InScript { origin: Origin<T> },
+    Objectify { origin: Origin<T> },
 }
 
 pub struct ProblemBuilder<
@@ -55,6 +40,9 @@ pub struct ProblemBuilder<
     /// Reference to the evaluation environment
     env: &'a T::Env,
 
+    /// Compiled AST (all modules compiled together)
+    ast: CheckedAST<T>,
+
     /// Shared cache for evaluation
     cache: Option<T::Cache>,
 
@@ -63,10 +51,18 @@ pub struct ProblemBuilder<
     /// the set of solutions to our problem
     base_vars: HashMap<String, ArgsType>,
 
-    /// List of constraints incrementally built
+    /// Pending constraint function calls (validated but not yet evaluated)
+    /// Format: (module, fn_name, args)
+    pending_constraints: Vec<(String, String, Vec<ExprValue<T>>)>,
+
+    /// Pending objective function calls (validated but not yet evaluated)
+    /// Format: (module, fn_name, args, coefficient, sense)
+    pending_objectives: Vec<(String, String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+
+    /// List of constraints incrementally built (populated during build())
     constraints: Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
 
-    /// Objective function
+    /// Objective function (populated during build())
     objective: Objective<ProblemVar<T, V>>,
 
     /// Internal ID.
@@ -107,8 +103,6 @@ pub enum ProblemError<T: EvalObject> {
     InvalidExprValue(String),
     #[error("Variable \"{0}\" is already defined")]
     VariableAlreadyDefined(String),
-    #[error("Script already used for reified variables")]
-    ScriptAlreadyUsed(Script),
     #[error(transparent)]
     CompileError(#[from] CompileError),
     #[error("Function {func} returns {returned} instead of {expected}")]
@@ -419,7 +413,7 @@ impl<
         output
     }
 
-    fn clean_var(&self, script_ref: &ScriptRef, var: &IlpVar<T>) -> ProblemVar<T, V> {
+    fn clean_var(&self, var: &IlpVar<T>) -> ProblemVar<T, V> {
         match var {
             IlpVar::Base(extern_var) => {
                 if self.base_vars.contains_key(&extern_var.name) {
@@ -450,12 +444,13 @@ impl<
                 }
             }
             IlpVar::Script(ScriptVar {
+                module,
                 name,
                 from_list,
                 params,
                 ..
             }) => ProblemVar::Reified(ReifiedVar {
-                script_ref: script_ref.clone(),
+                module: module.clone(),
                 name: name.clone(),
                 from_list: from_list.clone(),
                 params: params.clone(),
@@ -463,304 +458,183 @@ impl<
         }
     }
 
-    fn clean_constraint(
-        &self,
-        script_ref: &ScriptRef,
-        constraint: &Constraint<IlpVar<T>>,
-    ) -> Constraint<ProblemVar<T, V>> {
-        constraint.transmute(|v| self.clean_var(script_ref, v))
+    fn clean_constraint(&self, constraint: &Constraint<IlpVar<T>>) -> Constraint<ProblemVar<T, V>> {
+        constraint.transmute(|v| self.clean_var(v))
     }
 
-    fn clean_lin_expr(
-        &self,
-        script_ref: &ScriptRef,
-        lin_expr: &LinExpr<IlpVar<T>>,
-    ) -> LinExpr<ProblemVar<T, V>> {
-        lin_expr.transmute(|v| self.clean_var(script_ref, v))
+    fn clean_lin_expr(&self, lin_expr: &LinExpr<IlpVar<T>>) -> LinExpr<ProblemVar<T, V>> {
+        lin_expr.transmute(|v| self.clean_var(v))
     }
 
-    fn update_origin(origin: Option<Origin<T>>, script_ref: ScriptRef) -> ConstraintDesc<T> {
+    fn update_origin(origin: Option<Origin<T>>) -> ConstraintDesc<T> {
         let origin = origin.expect("All constraints should have an origin");
-        ConstraintDesc::InScript { script_ref, origin }
+        ConstraintDesc::InScript { origin }
     }
 
-    fn eval_constraint_in_history<'b>(
-        &self,
-        script_ref: &ScriptRef,
-        eval_history: &mut EvalHistory<'b, T>,
-        fn_name: &str,
-        args: &Vec<ExprValue<T>>,
-        allow_list: bool,
-    ) -> Result<
-        (
-            Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
-            Origin<T>,
-        ),
-        ProblemError<T>,
-    > {
-        let (constraints_expr, origin) = eval_history
-            .eval_fn("main", fn_name, args.clone())
-            .map_err(|e| match e {
-                EvalError::ArgumentCountMismatch {
-                    identifier,
-                    expected,
-                    found,
-                } => ProblemError::ArgumentCountMismatch {
-                    func: identifier,
-                    expected,
-                    found,
-                },
-                EvalError::InvalidExprValue { param } => {
-                    ProblemError::InvalidExprValue(format!("{:?}", args[param]))
-                }
-                EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
-                EvalError::Panic(value) => ProblemError::Panic(value),
-                _ => panic!("Unexpected error: {:?}", e),
-            })?;
+    fn evaluate_internal(&mut self) {
+        // Phase 1: Evaluate all functions and collect results
+        // We need to do this first because eval_history borrows self.ast
+        let (constraint_results, objective_results, var_def, new_cache) = {
+            let mut eval_history = self
+                .ast
+                .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
+                .expect("Environment should be compatible with AST");
 
-        let constraints = match constraints_expr {
-            ExprValue::Constraint(constraints) => constraints,
-            ExprValue::List(list)
-                if list.iter().all(|x| matches!(x, ExprValue::Constraint(_))) && allow_list =>
-            {
-                list.into_iter()
-                    .flat_map(|x| match x {
-                        ExprValue::Constraint(constraints) => constraints.into_iter(),
-                        _ => panic!(
-                            "This should be unreachable, we only have constraints at this point"
-                        ),
-                    })
-                    .collect()
-            }
-            _ => {
-                return Err(ProblemError::UnexpectedReturnValue {
-                    func: fn_name.to_string(),
-                    returned: constraints_expr,
-                    expected: SimpleType::Constraint.into(),
+            // Evaluate constraints
+            let constraint_results: Vec<_> = self
+                .pending_constraints
+                .iter()
+                .map(|(module, fn_name, args)| {
+                    let result = eval_history
+                        .eval_fn(module, fn_name, args.clone())
+                        .expect("Evaluation should succeed (function was validated)");
+                    (fn_name.clone(), result)
                 })
-            }
-        };
+                .collect();
 
-        Ok((
-            constraints
+            // Evaluate objectives
+            let objective_results: Vec<_> = self
+                .pending_objectives
+                .iter()
+                .map(|(module, fn_name, args, coef, obj_sense)| {
+                    let result = eval_history
+                        .eval_fn(module, fn_name, args.clone())
+                        .expect("Evaluation should succeed (function was validated)");
+                    (fn_name.clone(), result, *coef, obj_sense.clone())
+                })
+                .collect();
+
+            let (var_def, new_cache) = eval_history.into_var_def_and_cache();
+            (constraint_results, objective_results, var_def, new_cache)
+        };
+        // eval_history is now dropped, we can mutate self freely
+
+        self.cache = Some(new_cache);
+
+        // Phase 2: Process constraint results
+        for (fn_name, (constraints_expr, _origin)) in constraint_results {
+            let constraints = match constraints_expr {
+                ExprValue::Constraint(constraints) => constraints,
+                ExprValue::List(list)
+                    if list.iter().all(|x| matches!(x, ExprValue::Constraint(_))) =>
+                {
+                    list.into_iter()
+                        .flat_map(|x| match x {
+                            ExprValue::Constraint(constraints) => constraints.into_iter(),
+                            _ => unreachable!(),
+                        })
+                        .collect()
+                }
+                _ => panic!(
+                    "Function {} returned {:?} instead of Constraint",
+                    fn_name, constraints_expr
+                ),
+            };
+
+            let new_constraints: Vec<_> = constraints
                 .into_iter()
                 .map(|c_with_o| {
                     (
-                        self.clean_constraint(script_ref, &c_with_o.constraint),
-                        Self::update_origin(c_with_o.origin, script_ref.clone()),
+                        self.clean_constraint(&c_with_o.constraint),
+                        Self::update_origin(c_with_o.origin),
                     )
                 })
-                .collect(),
-            origin,
-        ))
-    }
-
-    fn eval_obj_in_history<'b>(
-        &mut self,
-        script_ref: &ScriptRef,
-        eval_history: &mut EvalHistory<'b, T>,
-        fn_name: &str,
-        args: &Vec<ExprValue<T>>,
-        obj_sense: &ObjectiveSense,
-    ) -> Result<
-        (
-            Objective<ProblemVar<T, V>>,
-            Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)>,
-        ),
-        ProblemError<T>,
-    > {
-        let (fn_result, origin) = eval_history
-            .eval_fn("main", fn_name, args.clone())
-            .map_err(|e| match e {
-                EvalError::ArgumentCountMismatch {
-                    identifier,
-                    expected,
-                    found,
-                } => ProblemError::ArgumentCountMismatch {
-                    func: identifier,
-                    expected,
-                    found,
-                },
-                EvalError::InvalidExprValue { param } => {
-                    ProblemError::InvalidExprValue(format!("{:?}", args[param]))
-                }
-                EvalError::UnknownFunction(func) => ProblemError::UnknownFunction(func),
-                EvalError::Panic(value) => ProblemError::Panic(value),
-                _ => panic!("Unexpected error: {:?}", e),
-            })?;
-
-        let mut values_list = vec![];
-        match fn_result {
-            ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
-            ExprValue::Constraint(constraint) => {
-                values_list.push(ExprValue::Constraint(constraint))
-            }
-            ExprValue::List(list) => values_list.extend(list),
-            _ => {
-                return Err(ProblemError::UnexpectedReturnValue {
-                    func: fn_name.to_string(),
-                    returned: fn_result,
-                    expected: SimpleType::LinExpr.into(),
-                })
-            }
-        };
-
-        let mut obj = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
-        let mut constraints = vec![];
-
-        for value in values_list {
-            match value {
-                ExprValue::LinExpr(lin_expr) => {
-                    let cleaned_lin_expr = self.clean_lin_expr(script_ref, &lin_expr);
-                    obj = obj + Objective::new(cleaned_lin_expr, obj_sense.clone());
-                }
-                ExprValue::Constraint(c) => {
-                    let cleaned_constraints: Vec<_> = c
-                        .into_iter()
-                        .map(|c_with_o| self.clean_constraint(script_ref, &c_with_o.constraint))
-                        .collect();
-                    let new_origin = ConstraintDesc::Objectify {
-                        script_ref: script_ref.clone(),
-                        origin: origin.clone(),
-                    };
-                    let (new_obj, new_constraints) =
-                        self.objectify_constraints(cleaned_constraints.iter(), new_origin);
-                    obj = obj + new_obj;
-                    constraints.extend(new_constraints);
-                }
-                _ => {
-                    return Err(ProblemError::UnexpectedReturnValue {
-                        func: fn_name.to_string(),
-                        returned: value,
-                        expected: SimpleType::LinExpr.into(),
-                    })
-                }
-            }
+                .collect();
+            self.constraints.extend(new_constraints);
         }
 
-        Ok((obj, constraints))
-    }
+        // Phase 3: Process objective results
+        for (fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
+            let mut values_list = vec![];
+            match fn_result {
+                ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
+                ExprValue::Constraint(constraint) => {
+                    values_list.push(ExprValue::Constraint(constraint))
+                }
+                ExprValue::List(list) => values_list.extend(list),
+                _ => panic!(
+                    "Function {} returned {:?} instead of LinExpr",
+                    fn_name, fn_result
+                ),
+            }
 
-    fn evaluate_internal(
-        &mut self,
-        script: StoredScript<T>,
-        mut constraints: Vec<(String, Vec<ExprValue<T>>)>,
-        mut objective: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<HashMap<ScriptRef, Vec<SemWarning>>, ProblemError<T>> {
-        let mut warnings = HashMap::new();
+            let mut obj = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
+            for value in values_list {
+                match value {
+                    ExprValue::LinExpr(lin_expr) => {
+                        let cleaned_lin_expr = self.clean_lin_expr(&lin_expr);
+                        obj = obj + Objective::new(cleaned_lin_expr, obj_sense.clone());
+                    }
+                    ExprValue::Constraint(c) => {
+                        let cleaned_constraints: Vec<_> = c
+                            .into_iter()
+                            .map(|c_with_o| self.clean_constraint(&c_with_o.constraint))
+                            .collect();
+                        let new_origin = ConstraintDesc::Objectify {
+                            origin: origin.clone(),
+                        };
+                        let (new_obj, new_constraints) =
+                            self.objectify_constraints(cleaned_constraints.iter(), new_origin);
+                        obj = obj + new_obj;
+                        self.constraints.extend(new_constraints);
+                    }
+                    _ => panic!(
+                        "Function {} returned {:?} instead of LinExpr",
+                        fn_name, value
+                    ),
+                }
+            }
+            self.objective = &self.objective + coef * obj;
+        }
 
-        let list_of_lin_expr_and_constraints = ExprType::simple(SimpleType::List(
-            ExprType::sum([SimpleType::LinExpr, SimpleType::Constraint]).unwrap(),
-        ));
-
-        let ast = script.get_ast();
-        let ast_funcs = ast.get_functions();
-        warnings.insert(script.get_ref().clone(), ast.get_warnings().clone());
-
+        // Phase 4: Process reified variables
         let mut constraints_to_reify =
             BTreeMap::<ProblemVar<T, V>, (Vec<Constraint<ProblemVar<T, V>>>, Origin<T>)>::new();
 
-        let mut eval_history = ast
-            .start_eval_history_with_cache(&self.env, self.cache.take().unwrap_or_default())
-            .expect("Environment should be compatible with AST");
-        // We start by evaluating the proper constraints if any
-        while let Some((fn_name, args)) = constraints.pop() {
-            let (_params, out_typ) = ast_funcs
-                .get(&("main".to_string(), fn_name.clone()))
-                .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-            if !out_typ.is_constraint() && !out_typ.is_list_of_constraints() {
-                return Err(ProblemError::WrongReturnType {
-                    func: fn_name.clone(),
-                    returned: out_typ.clone(),
-                    expected: ExprType::simple(SimpleType::Constraint),
-                });
-            }
-
-            let (new_constraints, _origin) = self.eval_constraint_in_history(
-                script.get_ref(),
-                &mut eval_history,
-                &fn_name,
-                &args,
-                true,
-            )?;
-            self.constraints.extend(new_constraints);
-        }
-
-        // We then evaluate the objective if any
-        while let Some((fn_name, args, coef, obj_sense)) = objective.pop() {
-            let (_params, out_typ) = ast_funcs
-                .get(&("main".to_string(), fn_name.clone()))
-                .ok_or(ProblemError::UnknownFunction(fn_name.clone()))?;
-            if !out_typ.is_lin_expr()
-                && !out_typ.is_constraint()
-                && !out_typ.is_subtype_of(&list_of_lin_expr_and_constraints)
-            {
-                return Err(ProblemError::WrongReturnType {
-                    func: fn_name.clone(),
-                    returned: out_typ.clone(),
-                    expected: ExprType::simple(SimpleType::LinExpr),
-                });
-            }
-
-            let (new_obj, new_constraints) = self.eval_obj_in_history(
-                script.get_ref(),
-                &mut eval_history,
-                &fn_name,
-                &args,
-                &obj_sense,
-            )?;
-            self.constraints.extend(new_constraints);
-            self.objective = &self.objective + coef * new_obj;
-        }
-
-        // We're done evaluating. Let's collect the private reified vars
-        let (var_def, new_cache) = eval_history.into_var_def_and_cache();
-        self.cache = Some(new_cache);
-        for ((_var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
+        for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c| self.clean_constraint(script.get_ref(), &c))
+                .map(|c| self.clean_constraint(&c))
                 .collect();
 
-            let reified_priv_var = ReifiedVar {
-                script_ref: script.get_ref().clone(),
+            let reified_var = ReifiedVar {
+                module: var_module,
                 name: var_name,
                 from_list: None,
                 params: var_args,
             };
-            let new_var = ProblemVar::Reified(reified_priv_var);
+            let new_var = ProblemVar::Reified(reified_var);
 
             self.vars_desc.insert(new_var.clone(), Variable::binary());
             constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
         }
-        for ((_var_list_module, var_list_name, var_list_args), (constraints_list, new_origin)) in
+        for ((var_list_module, var_list_name, var_list_args), (constraints_list, new_origin)) in
             var_def.var_lists
         {
             for (i, constraints) in constraints_list.into_iter().enumerate() {
                 let cleaned_constraints: Vec<_> = constraints
                     .into_iter()
-                    .map(|c| self.clean_constraint(script.get_ref(), &c))
+                    .map(|c| self.clean_constraint(&c))
                     .collect();
 
-                let reified_priv_var = ReifiedVar {
-                    script_ref: script.get_ref().clone(),
+                let reified_var = ReifiedVar {
+                    module: var_list_module.clone(),
                     name: var_list_name.clone(),
                     from_list: Some(i),
                     params: var_list_args.clone(),
                 };
-                let new_var = ProblemVar::Reified(reified_priv_var);
+                let new_var = ProblemVar::Reified(reified_var);
 
                 self.vars_desc.insert(new_var.clone(), Variable::binary());
                 constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
             }
         }
 
-        // Ok, we finally reify the constraints
-        // Originally this is done as a last path to have variables defined before.
+        // Phase 5: Reify constraints
         for (var, (constraints, origin)) in constraints_to_reify {
             let var_name = match &var {
                 ProblemVar::Reified(ReifiedVar {
-                    script_ref: _,
+                    module: _,
                     name,
                     from_list: _,
                     params: _,
@@ -768,18 +642,50 @@ impl<
                 _ => panic!("Unexpected variable type to reify: {:?}", var),
             };
 
-            let new_origin = ConstraintDesc::Reified {
-                script_ref: script.get_ref().clone(),
-                var_name,
-                origin,
-            };
+            let new_origin = ConstraintDesc::Reified { var_name, origin };
 
             let reified_constraints = self.reify_constraint(constraints.iter(), new_origin, var);
 
             self.constraints.extend(reified_constraints);
         }
+    }
 
-        Ok(warnings)
+    /// Validate that a function exists with the correct signature
+    fn validate_function(
+        &self,
+        module: &str,
+        fn_name: &str,
+        args: &[ExprValue<T>],
+        expected_return: &ExprType,
+    ) -> Result<(), ProblemError<T>> {
+        let functions = self.ast.get_functions();
+        let key = (module.to_string(), fn_name.to_string());
+
+        let (args_type, output_type) = functions
+            .get(&key)
+            .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
+
+        // Check argument count
+        if args_type.len() != args.len() {
+            return Err(ProblemError::ArgumentCountMismatch {
+                func: format!("{}::{}", module, fn_name),
+                expected: args_type.len(),
+                found: args.len(),
+            });
+        }
+
+        // Check return type
+        if !output_type.is_subtype_of(expected_return)
+            && !expected_return.is_subtype_of(output_type)
+        {
+            return Err(ProblemError::WrongReturnType {
+                func: format!("{}::{}", module, fn_name),
+                returned: output_type.clone(),
+                expected: expected_return.clone(),
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -789,7 +695,7 @@ impl<
         V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
     > ProblemBuilder<'a, T, V>
 {
-    pub fn new(env: &'a T::Env) -> Result<Self, ProblemError<T>> {
+    pub fn new(env: &'a T::Env, modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T>> {
         let base_vars = Self::build_vars()?;
         let original_var_list =
             V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
@@ -802,10 +708,17 @@ impl<
             .iter()
             .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
             .collect();
+
+        // Compile all modules upfront
+        let ast = CheckedAST::new(modules, base_vars.clone())?;
+
         Ok(ProblemBuilder {
             env,
+            ast,
             cache: None,
             base_vars,
+            pending_constraints: vec![],
+            pending_objectives: vec![],
             constraints: vec![],
             objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
             current_helper_id: 0,
@@ -814,63 +727,76 @@ impl<
         })
     }
 
-    pub fn compile_script(&self, script: Script) -> Result<StoredScript<T>, ProblemError<T>> {
-        let vars = Self::build_vars()?;
-        StoredScript::new(script, vars)
+    /// Get compilation warnings from the AST
+    pub fn get_warnings(&self) -> &[SemWarning] {
+        self.ast.get_warnings()
     }
 
-    pub fn add_constraints(
+    /// Add a constraint function to be evaluated at build time.
+    ///
+    /// Validates that the function exists and has the correct signature,
+    /// but does not evaluate it yet.
+    pub fn add_constraint(
         &mut self,
-        script: Script,
-        funcs: Vec<(String, Vec<ExprValue<T>>)>,
-    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
-        let script = self.compile_script(script)?;
-        let script_ref = script.get_ref().clone();
-        let start_funcs = funcs;
-        let mut warnings = self.evaluate_internal(script, start_funcs, vec![])?;
-        Ok(warnings
-            .remove(&script_ref)
-            .expect("There should be warnings (maybe empty) for the initial script"))
-    }
-
-    pub fn add_to_objective(
-        &mut self,
-        script: Script,
-        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
-        let script = self.compile_script(script)?;
-        let script_ref = script.get_ref().clone();
-        let mut warnings = self.evaluate_internal(script, vec![], objectives)?;
-        Ok(warnings
-            .remove(&script_ref)
-            .expect("There should be warnings (maybe empty) for the initial script"))
-    }
-
-    pub fn add_constraints_and_objectives(
-        &mut self,
-        script: Script,
-        funcs: Vec<(String, Vec<ExprValue<T>>)>,
-        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
-    ) -> Result<Vec<SemWarning>, ProblemError<T>> {
-        let script = self.compile_script(script)?;
-        let script_ref = script.get_ref().clone();
-        let mut warnings = self.evaluate_internal(script, funcs, objectives)?;
-        Ok(warnings
-            .remove(&script_ref)
-            .expect("There should be warnings (maybe empty) for the initial script"))
-    }
-
-    pub fn add_constraints_and_objectives_with_compiled_script(
-        &mut self,
-        stored_script: StoredScript<T>,
-        funcs: Vec<(String, Vec<ExprValue<T>>)>,
-        objectives: Vec<(String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+        module: &str,
+        fn_name: &str,
+        args: Vec<ExprValue<T>>,
     ) -> Result<(), ProblemError<T>> {
-        let _warnings = self.evaluate_internal(stored_script, funcs, objectives)?;
+        // Validate function exists and has correct signature
+        // Constraints can return Constraint or [Constraint]
+        let constraint_type = ExprType::from_variants([
+            SimpleType::Constraint,
+            SimpleType::List(SimpleType::Constraint.into()),
+        ]);
+
+        self.validate_function(module, fn_name, &args, &constraint_type)?;
+
+        // Store for later evaluation
+        self.pending_constraints
+            .push((module.to_string(), fn_name.to_string(), args));
+        Ok(())
+    }
+
+    /// Add an objective function to be evaluated at build time.
+    ///
+    /// Validates that the function exists and has the correct signature,
+    /// but does not evaluate it yet.
+    pub fn add_objective(
+        &mut self,
+        module: &str,
+        fn_name: &str,
+        args: Vec<ExprValue<T>>,
+        coefficient: f64,
+        sense: ObjectiveSense,
+    ) -> Result<(), ProblemError<T>> {
+        // Validate function exists and has correct signature
+        // Objectives can return LinExpr or Constraint or a list of those
+        let obj_types = ExprType::from_variants([
+            SimpleType::LinExpr,
+            SimpleType::Constraint,
+            SimpleType::List(ExprType::from_variants([
+                SimpleType::LinExpr,
+                SimpleType::Constraint,
+            ])),
+        ]);
+
+        self.validate_function(module, fn_name, &args, &obj_types)?;
+
+        // Store for later evaluation
+        self.pending_objectives.push((
+            module.to_string(),
+            fn_name.to_string(),
+            args,
+            coefficient,
+            sense,
+        ));
         Ok(())
     }
 
     pub fn build(mut self) -> Problem<T, V> {
+        // Evaluate all pending constraints and objectives
+        self.evaluate_internal();
+
         for (constraint, _desc) in self.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
             for var in constraint.variables() {
@@ -916,16 +842,11 @@ impl<
             .constraints
             .iter()
             .filter_map(|(c, d)| match d {
-                ConstraintDesc::InScript {
-                    script_ref: _,
-                    origin: _,
-                } => None,
-                ConstraintDesc::Objectify {
-                    script_ref: _,
-                    origin: _,
-                } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
+                ConstraintDesc::InScript { origin: _ } => None,
+                ConstraintDesc::Objectify { origin: _ } => {
+                    Some((c.clone(), ExtraDesc::Orig(d.clone())))
+                }
                 ConstraintDesc::Reified {
-                    script_ref: _,
                     var_name: _,
                     origin: _,
                 } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),

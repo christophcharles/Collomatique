@@ -58,23 +58,22 @@ fn constraint_list_return_type() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "list_constraints",
+        r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "list_constraints".into(),
-                content: r#"
-                    pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];
-                "#
-                .into(),
-            },
-            vec![("constraints".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("list_constraints", "constraints", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 

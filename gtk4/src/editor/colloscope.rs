@@ -517,11 +517,7 @@ impl Colloscope {
                 warnings: to_blame_list
                     .into_iter()
                     .map(|(_constraint, desc)| {
-                        let ConstraintDesc::InScript {
-                            script_ref: _,
-                            origin,
-                        } = desc
-                        else {
+                        let ConstraintDesc::InScript { origin } = desc else {
                             panic!(
                                 "Reification constraints should all be satisfied! {:?}",
                                 desc

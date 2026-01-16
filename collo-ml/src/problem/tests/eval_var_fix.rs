@@ -72,25 +72,26 @@ fn test_fix_forces_variable_values() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "test_fix",
+        r#"
+            pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Enforce exactly one V(i) must be 1
     // Since all are fixed to 0 except V(7), only V(7) can be 1
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "test_fix".into(),
-                content: r#"
-                    pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
-                "#
-                .into(),
-            },
-            vec![("exactly_one".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("test_fix", "exactly_one", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 

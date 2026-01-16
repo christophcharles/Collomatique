@@ -134,52 +134,53 @@ fn complete_interrogations_scheduling() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
-
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "colles_constraints".into(),
-                content: r#"
-                    /// Each student has exactly one teacher per week
-                    pub let one_teacher_per_week() -> [Constraint] = [
+    let modules = BTreeMap::from([(
+        "colles_constraints",
+        r#"
+            /// Each student has exactly one teacher per week
+            pub let one_teacher_per_week() -> Constraint =
+                forall s in [0..11] {
+                    forall w in [0..3] {
                         sum t in [0..12] { $StudentWithTeacher(s, t, w) } === 1
-                        for s in [0..11]
-                        for w in [0..3]
-                    ];
+                    }
+                };
 
-                    /// Each student has each subject exactly once over the 3 weeks
-                    /// Subject 0: teachers 0-3, Subject 1: teachers 4-7, Subject 2: teachers 8-11
-                    pub let each_subject_once() -> [Constraint] = [
-                        sum t in [0..4] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
-                        for s in [0..11]
-                    ] + [
-                        sum t in [4..8] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
-                        for s in [0..11]
-                    ] + [
-                        sum t in [8..12] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
-                        for s in [0..11]
-                    ];
+            /// Each student has each subject exactly once over the 3 weeks
+            /// Subject 0: teachers 0-3, Subject 1: teachers 4-7, Subject 2: teachers 8-11
+            pub let each_subject_once() -> Constraint =
+                forall s in [0..11] {
+                    sum t in [0..4] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
+                    and sum t in [4..8] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
+                    and sum t in [8..12] { sum w in [0..3] { $StudentWithTeacher(s, t, w) } } === 1
+                };
 
-                    /// Each teacher interrogates at most 1 students per week
-                    pub let max_students_per_teacher() -> [Constraint] = [
+            /// Each teacher interrogates at most 1 students per week
+            pub let max_students_per_teacher() -> Constraint =
+                forall t in [0..12] {
+                    forall w in [0..3] {
                         sum s in [0..11] { $StudentWithTeacher(s, t, w) } <== 1
-                        for t in [0..12]
-                        for w in [0..3]
-                    ];
-                "#
-                .into(),
-            },
-            vec![
-                ("one_teacher_per_week".to_string(), vec![]),
-                ("each_subject_once".to_string(), vec![]),
-                ("max_students_per_teacher".to_string(), vec![]),
-            ],
-        )
-        .expect("Should compile");
+                    }
+                };
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
+
+    pb_builder
+        .add_constraint("colles_constraints", "one_teacher_per_week", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("colles_constraints", "each_subject_once", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 

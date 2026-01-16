@@ -74,27 +74,27 @@ fn list_constraint_reification() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    // Define modules upfront with reification logic
+    let modules = BTreeMap::from([(
+        "list_reify",
+        r#"
+            let constraints() -> [Constraint] = [$V() === 1, $W() === 1, $X() === 1];
+            reify constraints as $[R];
+            pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // Reify a list of constraints: V===1, W===1, X===1
-    // Then enforce at least one must be true
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "list_reify".into(),
-                content: r#"
-                    let constraints() -> [Constraint] = [$V() === 1, $W() === 1, $X() === 1];
-                    reify constraints as $[R];
-                    pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
-                "#
-                .into(),
-            },
-            vec![("exactly_one".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("list_reify", "exactly_one", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 
@@ -191,27 +191,27 @@ fn list_constraint_reification_exact_count_with_param() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    // Define modules upfront with reification logic
+    let modules = BTreeMap::from([(
+        "exact_count",
+        r#"
+            let constraints() -> [Constraint] = [$X(i) === 1 for i in [0..100]];
+            reify constraints as $[R];
+            pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // Reify a list of constraints: X(i) === 1 for i in 0..100
-    // Then enforce exactly 5 must be true
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "exact_count".into(),
-                content: r#"
-                    let constraints() -> [Constraint] = [$X(i) === 1 for i in [0..100]];
-                    reify constraints as $[R];
-                    pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
-                "#
-                .into(),
-            },
-            vec![("exactly_five".to_string(), vec![])],
-        )
-        .expect("Should compile");
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("exact_count", "exactly_five", vec![])
+        .expect("Should add constraint");
 
     let problem = pb_builder.build();
 

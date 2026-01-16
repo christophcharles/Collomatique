@@ -88,49 +88,43 @@ fn two_objectives_same_script() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let c1() -> Constraint = $V() + $W() === 1;
+            pub let c2() -> Constraint = $X() + $Y() === 1;
+            pub let obj_v() -> LinExpr = $V();
+            pub let obj_x() -> LinExpr = $X();
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Two independent constraints:
     // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
     // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "constraints".into(),
-                content: r#"
-                    pub let c1() -> Constraint = $V() + $W() === 1;
-                    pub let c2() -> Constraint = $X() + $Y() === 1;
-                "#
-                .into(),
-            },
-            vec![("c1".to_string(), vec![]), ("c2".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "c1", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("main", "c2", vec![])
+        .expect("Should add constraint");
 
     // Two objectives from the same script:
     // - Maximize V (coefficient 1.0) -> should select V=1, W=0
     // - Minimize X (coefficient 1.0) -> should select X=0, Y=1
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objectives".into(),
-                content: r#"
-                    pub let obj_v() -> LinExpr = $V();
-                    pub let obj_x() -> LinExpr = $X();
-                "#
-                .into(),
-            },
-            vec![
-                ("obj_v".to_string(), vec![], 1.0, ObjectiveSense::Maximize),
-                ("obj_x".to_string(), vec![], 1.0, ObjectiveSense::Minimize),
-            ],
-        )
-        .expect("Should compile objectives");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add objective");
+    pb_builder
+        .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add objective");
 
     let problem = pb_builder.build();
 
@@ -250,59 +244,56 @@ fn two_objectives_different_scripts() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    // Define all modules upfront
+    let modules = BTreeMap::from([
+        (
+            "constraints",
+            r#"
+                pub let c1() -> Constraint = $V() + $W() === 1;
+                pub let c2() -> Constraint = $X() + $Y() === 1;
+            "#,
+        ),
+        (
+            "objective1",
+            r#"
+                pub let obj_v() -> LinExpr = $V();
+            "#,
+        ),
+        (
+            "objective2",
+            r#"
+                pub let obj_x() -> LinExpr = $X();
+            "#,
+        ),
+    ]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Two independent constraints:
     // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
     // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "constraints".into(),
-                content: r#"
-                    pub let c1() -> Constraint = $V() + $W() === 1;
-                    pub let c2() -> Constraint = $X() + $Y() === 1;
-                "#
-                .into(),
-            },
-            vec![("c1".to_string(), vec![]), ("c2".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("constraints", "c1", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("constraints", "c2", vec![])
+        .expect("Should add constraint");
 
     // First objective from first script: Maximize V -> should select V=1, W=0
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objective1".into(),
-                content: r#"
-                    pub let obj_v() -> LinExpr = $V();
-                "#
-                .into(),
-            },
-            vec![("obj_v".to_string(), vec![], 1.0, ObjectiveSense::Maximize)],
-        )
-        .expect("Should compile first objective");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("objective1", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add first objective");
 
     // Second objective from different script: Minimize X -> should select X=0, Y=1
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objective2".into(),
-                content: r#"
-                    pub let obj_x() -> LinExpr = $X();
-                "#
-                .into(),
-            },
-            vec![("obj_x".to_string(), vec![], 1.0, ObjectiveSense::Minimize)],
-        )
-        .expect("Should compile second objective");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add second objective");
 
     let problem = pb_builder.build();
 
@@ -422,27 +413,33 @@ fn objectives_with_different_senses() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let c1() -> Constraint = $V() + $W() === 1;
+            pub let c2() -> Constraint = $X() + $Y() === 1;
+            pub let obj_v() -> LinExpr = $V();
+            pub let obj_x() -> LinExpr = $X();
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
 
     // Two independent constraints:
     // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
     // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    let warnings = pb_builder
-        .add_constraints(
-            Script {
-                name: "constraints".into(),
-                content: r#"
-                    pub let c1() -> Constraint = $V() + $W() === 1;
-                    pub let c2() -> Constraint = $X() + $Y() === 1;
-                "#
-                .into(),
-            },
-            vec![("c1".to_string(), vec![]), ("c2".to_string(), vec![])],
-        )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_constraint("main", "c1", vec![])
+        .expect("Should add constraint");
+    pb_builder
+        .add_constraint("main", "c2", vec![])
+        .expect("Should add constraint");
 
     // Two objectives with different senses:
     // - Maximize V (coefficient 1.0)
@@ -454,24 +451,12 @@ fn objectives_with_different_senses() {
     // (V=1,W=0,X=0,Y=1): objective = 1 - 0 = 1  <- best
     // (V=0,W=1,X=1,Y=0): objective = 0 - 1 = -1
     // (V=0,W=1,X=0,Y=1): objective = 0 - 0 = 0
-    let warnings = pb_builder
-        .add_to_objective(
-            Script {
-                name: "objectives".into(),
-                content: r#"
-                    pub let obj_v() -> LinExpr = $V();
-                    pub let obj_x() -> LinExpr = $X();
-                "#
-                .into(),
-            },
-            vec![
-                ("obj_v".to_string(), vec![], 1.0, ObjectiveSense::Maximize),
-                ("obj_x".to_string(), vec![], 1.0, ObjectiveSense::Minimize),
-            ],
-        )
-        .expect("Should compile objectives");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    pb_builder
+        .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add objective");
+    pb_builder
+        .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add objective");
 
     let problem = pb_builder.build();
 

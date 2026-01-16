@@ -47,21 +47,23 @@ fn error_unknown_function() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    let result = pb_builder.add_constraints(
-        Script {
-            name: "test".into(),
-            content: r#"pub let f() -> Constraint = $V() === 1;"#.into(),
-        },
-        vec![("nonexistent".to_string(), vec![])],
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
     );
+
+    // Try to call a function that doesn't exist in the module
+    let result = pb_builder.add_constraint("test", "nonexistent", vec![]);
 
     assert!(result.is_err());
     match result {
         Err(ProblemError::UnknownFunction(name)) => {
-            assert_eq!(name, "nonexistent");
+            assert_eq!(name, "test::nonexistent");
         }
         _ => panic!("Expected UnknownFunction error, got: {:?}", result),
     }
@@ -112,16 +114,18 @@ fn error_wrong_return_type_for_constraint() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    let result = pb_builder.add_constraints(
-        Script {
-            name: "bad_type".into(),
-            content: r#"pub let f() -> Bool = true;"#.into(),
-        },
-        vec![("f".to_string(), vec![])],
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
     );
+
+    // Try to use a function that returns Bool instead of Constraint
+    let result = pb_builder.add_constraint("bad_type", "f", vec![]);
 
     assert!(result.is_err());
     match result {
@@ -130,9 +134,15 @@ fn error_wrong_return_type_for_constraint() {
             returned,
             expected,
         }) => {
-            assert_eq!(func, "f");
+            assert_eq!(func, "bad_type::f");
             assert_eq!(returned, SimpleType::Bool.into());
-            assert_eq!(expected, SimpleType::Constraint.into());
+            assert_eq!(
+                expected,
+                ExprType::from_variants([
+                    SimpleType::Constraint,
+                    SimpleType::List(SimpleType::Constraint.into())
+                ])
+            );
         }
         _ => panic!("Expected WrongReturnType error, got: {:?}", result),
     }

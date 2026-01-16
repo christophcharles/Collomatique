@@ -59,31 +59,37 @@ fn constraints_and_objectives_same_call() {
     }
 
     let env = NoObjectEnv {};
-    let mut pb_builder =
-        ProblemBuilder::<NoObject, Var>::new(&env).expect("NoObject and Var should be compatible");
+    let modules = BTreeMap::from([(
+        "combined",
+        r#"
+            pub let constraint() -> Constraint = $V() + $W() === 1;
+            pub let objective() -> LinExpr = $V();
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
 
-    // Add both constraints and objectives from the same script in one call
-    let warnings = pb_builder
-        .add_constraints_and_objectives(
-            Script {
-                name: "combined".into(),
-                content: r#"
-                    pub let constraint() -> Constraint = $V() + $W() === 1;
-                    pub let objective() -> LinExpr = $V();
-                "#
-                .into(),
-            },
-            vec![("constraint".to_string(), vec![])],
-            vec![(
-                "objective".to_string(),
-                vec![],
-                1.0,
-                ObjectiveSense::Maximize,
-            )],
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
+
+    // Add constraint from the combined module
+    pb_builder
+        .add_constraint("combined", "constraint", vec![])
+        .expect("Should add constraint");
+
+    // Add objective from the combined module
+    pb_builder
+        .add_objective(
+            "combined",
+            "objective",
+            vec![],
+            1.0,
+            ObjectiveSense::Maximize,
         )
-        .expect("Should compile");
-
-    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+        .expect("Should add objective");
 
     let problem = pb_builder.build();
 
