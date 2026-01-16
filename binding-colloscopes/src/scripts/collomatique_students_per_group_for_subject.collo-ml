@@ -1,3 +1,5 @@
+import "collomatique_vars" as *;
+
 let count_students_in_group(group: Group, subject_period: SubjectPeriod) -> LinExpr =
     sum student in group.group_list.students where student in subject_period.students {
         $StudentInGroup(student, group)

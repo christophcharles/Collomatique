@@ -1,8 +1,27 @@
+let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
+    sum group in interrogation.group_list.groups {
+        $GroupInInterrogation(interrogation, group.num)
+    } >== 1;
+
+pub reify interrogation_has_groups as $InterrogationHasGroups;
+
+let student_in_group(student: Student, group: Group) -> Constraint =
+    $StudentGroup(student, group.group_list) === group.num;
+
+pub reify student_in_group as $StudentInGroup;
+
+let group_has_students(group: Group) -> Constraint =
+    sum student in group.group_list.students {
+        $StudentInGroup(student, group)
+    } + |group.prefilled_students| >== 1;
+
+pub reify group_has_students as $GroupHasStudents;
+
 let student_at_interrogation_in_group(student: Student, interrogation: Interrogation, group: Group) -> Constraint =
     // Use inequalities to reduce the amount of helper variables
     $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation, group.num) >== 1;
 
-reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
+pub reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
 
 let student_in_prefilled_group(student: Student, group_list: GroupList) -> Bool =
     fold group in group_list.groups with result = false {
@@ -21,7 +40,7 @@ let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
         }
     };
 
-pub let student_at_interrogation(student: Student, interrogation: Interrogation) -> Constraint =
+let student_at_interrogation(student: Student, interrogation: Interrogation) -> Constraint =
     if student_in_prefilled_group(student, interrogation.group_list) {
         $GroupInInterrogation(
             interrogation,
@@ -32,3 +51,6 @@ pub let student_at_interrogation(student: Student, interrogation: Interrogation)
             $StudentAtInterrogationInGroup(student, interrogation, group)
         }
     } >== 1; // Test for bigger than one: we can't actually exceed it but this will save some reification constraints
+
+pub reify student_at_interrogation as $StudentAtInterrogation;
+

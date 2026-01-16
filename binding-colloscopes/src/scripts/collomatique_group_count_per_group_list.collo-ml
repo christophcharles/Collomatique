@@ -1,3 +1,5 @@
+import "collomatique_vars" as *;
+
 let count_groups_in_list(group_list: GroupList) -> LinExpr =
     sum group in group_list.groups {
         $GroupHasStudents(group)

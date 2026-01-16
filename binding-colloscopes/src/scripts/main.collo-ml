@@ -1,0 +1,4 @@
+import "collomatique" as collomatique;
+
+pub let constraint() -> Constraint = collomatique::default_constraint();
+pub let objective() -> [LinExpr | Constraint] = collomatique::default_objective();

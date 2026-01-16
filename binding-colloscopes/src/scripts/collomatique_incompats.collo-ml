@@ -1,3 +1,5 @@
+import "collomatique_vars" as *;
+
 let student_list_for_incompat_week(incompat_week: IncompatWeek) -> [Student] =
     sum period_data in incompat_week.incompat.subject.periods_data where period_data.period == incompat_week.week.period {
         period_data.students
