@@ -251,3 +251,135 @@ fn private_reification_does_not_leak() {
         "W should be 0 (from second module's private R)"
     );
 }
+
+#[test]
+fn three_module_chain_define_reify_use() {
+    // Tests cross-module reification:
+    // - Module 1 (definitions): defines a constraint function
+    // - Module 2 (reifications): imports module 1 and reifies its function
+    // - Module 3 (main): imports module 2 and uses the reified variable
+
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum Var {
+        V,
+        W,
+    }
+
+    impl<T: EvalObject> EvalVar<T> for Var {
+        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
+        }
+        fn fix(&self, _env: &T::Env) -> Option<f64> {
+            None
+        }
+        fn vars(
+            _env: &T::Env,
+        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
+        {
+            Ok(BTreeMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+            ]))
+        }
+    }
+
+    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                "W" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "W".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::W)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+
+    // Module 1: Define constraint functions
+    // Module 2: Import module 1 and reify its functions
+    // Module 3: Import module 2 and use the reified variables
+    let modules = BTreeMap::from([
+        (
+            "definitions",
+            r#"
+                pub let v_is_one() -> Constraint = $V() === 1;
+                pub let w_is_one() -> Constraint = $W() === 1;
+            "#,
+        ),
+        (
+            "reifications",
+            r#"
+                import "definitions" as defs;
+                pub reify defs::v_is_one as $VIsOne;
+                pub reify defs::w_is_one as $WIsOne;
+            "#,
+        ),
+        (
+            "main",
+            r#"
+                import "reifications" as reifs;
+                pub let exactly_one_true() -> Constraint =
+                    reifs::$VIsOne() + reifs::$WIsOne() === 1;
+                pub let force_v() -> Constraint = reifs::$VIsOne() === 1;
+            "#,
+        ),
+    ]);
+
+    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&env, &modules)
+        .expect("NoObject and Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
+
+    // Add constraints from the main module
+    pb_builder
+        .add_constraint("main", "exactly_one_true", vec![])
+        .expect("Should add exactly_one_true constraint");
+    pb_builder
+        .add_constraint("main", "force_v", vec![])
+        .expect("Should add force_v constraint");
+
+    let problem = pb_builder.build();
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(problem.get_inner_problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    // force_v forces $VIsOne === 1, which means V === 1
+    // exactly_one_true forces $VIsOne + $WIsOne === 1
+    // Since $VIsOne === 1, we need $WIsOne === 0, so W === 0
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::V)),
+        Some(1.0),
+        "V should be 1 (from reified variable chain)"
+    );
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0 (from exactly_one_true constraint)"
+    );
+}
