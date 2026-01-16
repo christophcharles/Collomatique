@@ -38,8 +38,14 @@ pub enum ColloscopeInput {
     ShowBlamedConstraints,
 }
 
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collomatique_binding_colloscopes::views::ObjectId,
+    collomatique_binding_colloscopes::vars::Var,
+>;
+
 #[derive(Debug)]
 pub enum ColloscopeCommandOutput {
+    IlpProblemBuilderReady(Result<ProblemBuilder, String>),
     IlpProblemComputed(Result<IlpProblem, String>),
     IlpReprComputed(IlpRepr),
 }
@@ -66,6 +72,12 @@ pub struct IlpRepr {
     warnings: Vec<Origin<ObjectId>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct IlpProblemBuilder {
+    builder: ProblemBuilder,
+    ilp_repr: Option<Result<IlpRepr, String>>,
+}
+
 pub struct Colloscope {
     params: collomatique_state_colloscopes::colloscope_params::Parameters,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
@@ -83,27 +95,49 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_repr: Option<Result<IlpRepr, String>>,
+    ilp_problem_builder: Option<Result<IlpProblemBuilder, String>>,
 }
 
 impl Colloscope {
+    fn get_ilp_repr(&self) -> Option<&Result<IlpRepr, String>> {
+        self.ilp_problem_builder
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .and_then(|b| b.ilp_repr.as_ref())
+    }
+
+    fn is_computing(&self) -> bool {
+        match &self.ilp_problem_builder {
+            None => true,
+            Some(Ok(builder)) => builder.ilp_repr.is_none(),
+            Some(Err(_)) => false,
+        }
+    }
+
     fn has_warnings(&self) -> bool {
-        match &self.ilp_repr {
+        match self.get_ilp_repr() {
             Some(Ok(ilp_repr)) => !ilp_repr.warnings.is_empty(),
             _ => false,
         }
     }
 
     fn has_error(&self) -> bool {
-        matches!(&self.ilp_repr, Some(Err(_)))
+        match &self.ilp_problem_builder {
+            Some(Err(_)) => true,
+            Some(Ok(builder)) => matches!(&builder.ilp_repr, Some(Err(_))),
+            None => false,
+        }
     }
 
     fn has_success(&self) -> bool {
-        matches!(&self.ilp_repr, Some(Ok(ilp_repr)) if ilp_repr.warnings.is_empty())
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => ilp_repr.warnings.is_empty(),
+            _ => false,
+        }
     }
 
     fn generate_warning_text(&self) -> String {
-        match &self.ilp_repr {
+        match self.get_ilp_repr() {
             Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
             _ => String::new(),
         }
@@ -147,7 +181,7 @@ impl Component for Colloscope {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
                                 #[watch]
-                                set_visible: model.ilp_repr.is_none(),
+                                set_visible: model.is_computing(),
                                 adw::Spinner {
                                     set_halign: gtk::Align::Start,
                                 },
@@ -314,7 +348,7 @@ impl Component for Colloscope {
             colloscope_display,
             interrogation_dialog,
             edited_interrogation: None,
-            ilp_repr: None,
+            ilp_problem_builder: None,
             blame_dialog,
         };
 
@@ -331,19 +365,29 @@ impl Component for Colloscope {
                 self.params = params;
                 self.colloscope = colloscope;
 
-                match &self.ilp_repr {
-                    Some(Ok(ilp_repr)) => {
-                        if *ilp_repr.ilp_problem.env.get_params() != self.params {
-                            self.compute_ilp_repr(sender.clone());
-                        } else if ilp_repr.colloscope != self.colloscope {
-                            let ilp_problem = ilp_repr.ilp_problem.clone();
-                            self.recompute_warnings(sender.clone(), ilp_problem);
-                        } else {
-                            // Everything is up to date
-                        }
+                match &self.ilp_problem_builder {
+                    None | Some(Err(_)) => {
+                        self.compute_ilp_problem_builder(sender.clone());
                     }
-                    Some(Err(_)) | None => {
-                        self.compute_ilp_repr(sender.clone());
+                    Some(Ok(builder)) => {
+                        if self.should_recompute_problem_builder() {
+                            self.compute_ilp_problem_builder(sender.clone());
+                        } else {
+                            match &builder.ilp_repr {
+                                None | Some(Err(_)) => {
+                                    self.compute_ilp_repr(sender.clone());
+                                }
+                                Some(Ok(ilp_repr)) => {
+                                    if *ilp_repr.ilp_problem.env.get_params() != self.params {
+                                        self.compute_ilp_repr(sender.clone());
+                                    } else if ilp_repr.colloscope != self.colloscope {
+                                        let ilp_problem = ilp_repr.ilp_problem.clone();
+                                        self.recompute_warnings(sender.clone(), ilp_problem);
+                                    }
+                                    // else: nothing changed, do nothing
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -471,6 +515,15 @@ impl Component for Colloscope {
         _root: &Self::Root,
     ) {
         match message {
+            ColloscopeCommandOutput::IlpProblemBuilderReady(result) => match result {
+                Ok(builder) => {
+                    self.update_ilp_problem_builder(Some(Ok(builder)));
+                    self.compute_ilp_repr(sender);
+                }
+                Err(msg) => {
+                    self.update_ilp_problem_builder(Some(Err(msg)));
+                }
+            },
             ColloscopeCommandOutput::IlpProblemComputed(result) => {
                 match result {
                     Ok(ilp_problem) => {
@@ -531,17 +584,39 @@ impl Colloscope {
         });
     }
 
-    fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
-        self.update_ilp_repr(None);
-        let params = self.params.clone();
+    fn compute_ilp_problem_builder(&mut self, sender: ComponentSender<Self>) {
+        self.update_ilp_problem_builder(None);
         sender.spawn_oneshot_command(move || {
             use collomatique_binding_colloscopes::scripts::{
                 default_problem_builder, get_default_main_module,
             };
+            match default_problem_builder(get_default_main_module()) {
+                Ok(builder) => ColloscopeCommandOutput::IlpProblemBuilderReady(Ok(builder)),
+                Err(msg) => ColloscopeCommandOutput::IlpProblemBuilderReady(Err(msg)),
+            }
+        });
+    }
+
+    fn should_recompute_problem_builder(&self) -> bool {
+        false // Placeholder - always false since source code is constant
+    }
+
+    fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
+        self.update_ilp_repr(None);
+
+        let builder = self
+            .ilp_problem_builder
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .builder
+            .clone();
+        let params = self.params.clone();
+
+        sender.spawn_oneshot_command(move || {
             let env = collomatique_binding_colloscopes::views::Env::from(params);
-            match default_problem_builder(get_default_main_module())
-                .and_then(|b| b.build(&env).map_err(|e| format!("{}", e)))
-            {
+            match builder.build(&env).map_err(|e| format!("{}", e)) {
                 Ok(problem) => {
                     ColloscopeCommandOutput::IlpProblemComputed(Ok(IlpProblem { env, problem }))
                 }
@@ -550,18 +625,39 @@ impl Colloscope {
         });
     }
 
-    fn update_ilp_repr(&mut self, ilp_repr: Option<Result<IlpRepr, String>>) {
-        self.ilp_repr = ilp_repr;
+    fn update_blame_dialog(&self) {
+        let ilp_repr_opt = self
+            .ilp_problem_builder
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .and_then(|b| b.ilp_repr.as_ref());
+
         self.blame_dialog
             .sender()
-            .send(blame_dialog::DialogInput::Update(
-                self.ilp_repr.as_ref().map(|r| {
-                    r.as_ref()
-                        .map(|x| x.warnings.clone())
-                        .map_err(|e| e.clone())
-                }),
-            ))
+            .send(blame_dialog::DialogInput::Update(ilp_repr_opt.map(|r| {
+                r.as_ref()
+                    .map(|x| x.warnings.clone())
+                    .map_err(|e| e.clone())
+            })))
             .unwrap();
+    }
+
+    fn update_ilp_problem_builder(&mut self, result: Option<Result<ProblemBuilder, String>>) {
+        self.ilp_problem_builder = result.map(|r| {
+            r.map(|builder| IlpProblemBuilder {
+                builder,
+                ilp_repr: None,
+            })
+        });
+        self.update_blame_dialog();
+    }
+
+    fn update_ilp_repr(&mut self, ilp_repr: Option<Result<IlpRepr, String>>) {
+        let Some(Ok(ref mut builder)) = self.ilp_problem_builder else {
+            return;
+        };
+        builder.ilp_repr = ilp_repr;
+        self.update_blame_dialog();
     }
 
     fn update_group_list_entries(&mut self) {

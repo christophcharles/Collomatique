@@ -34,6 +34,7 @@ pub enum ConstraintDesc<T: EvalObject> {
     Objectify { origin: Origin<T> },
 }
 
+#[derive(Clone, Debug)]
 pub struct ProblemBuilder<
     T: EvalObject,
     V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
