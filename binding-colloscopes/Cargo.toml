@@ -9,4 +9,5 @@ collo-ml = { path = "../collo-ml" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ilp = { path = "../ilp" }
 collomatique-time = { path = "../time" }
+pest.workspace = true
 chrono.workspace = true

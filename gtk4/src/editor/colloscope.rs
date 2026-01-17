@@ -592,7 +592,7 @@ impl Colloscope {
             };
             match default_problem_builder(get_default_main_module()) {
                 Ok(builder) => ColloscopeCommandOutput::IlpProblemBuilderReady(Ok(builder)),
-                Err(msg) => ColloscopeCommandOutput::IlpProblemBuilderReady(Err(msg)),
+                Err(e) => ColloscopeCommandOutput::IlpProblemBuilderReady(Err(format!("{}", e))),
             }
         });
     }

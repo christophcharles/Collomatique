@@ -9,9 +9,15 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
+use collomatique_binding_colloscopes::scripts::SimpleProblemError;
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
+
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collomatique_binding_colloscopes::views::ObjectId,
+    collomatique_binding_colloscopes::vars::Var,
+>;
 
 use crate::editor::colloscope::ColloscopeOutput;
 use crate::tools;
@@ -79,6 +85,10 @@ pub enum EditorCommandOutput {
     ScriptNotChosen,
     ScriptLoaded(PathBuf, String),
     ScriptLoadingFailed(PathBuf, String),
+    MainScriptCompiled {
+        source: Option<String>,
+        result: Result<ProblemBuilder, SimpleProblemError>,
+    },
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -165,6 +175,7 @@ impl PanelNumbers {
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data, Desc>,
+    main_script_ast: Option<Result<ProblemBuilder, SimpleProblemError>>,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
@@ -732,6 +743,7 @@ impl Component for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
+            main_script_ast: None,
             dirty: false,
             toast_info: None,
             pages_names,
@@ -790,9 +802,12 @@ impl Component for EditorPanel {
                 dirty,
             } => {
                 self.file_name = file_name;
-                self.data = AppState::new(data);
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(AppState::new(data)),
+                    sender.clone(),
+                );
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
@@ -840,7 +855,7 @@ impl Component for EditorPanel {
                 if self.data.can_undo() {
                     let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
                     self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
-                    self.data.undo().expect("Should be able to undo");
+                    self.update_data_and_recompile_main_script(DataUpdate::Undo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -849,7 +864,7 @@ impl Component for EditorPanel {
                 if self.data.can_redo() {
                     let (cat, _) = self.data.get_redo_name().expect("Should be able to redo");
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
-                    self.data.redo().expect("Should be able to redo");
+                    self.update_data_and_recompile_main_script(DataUpdate::Redo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -887,7 +902,10 @@ impl Component for EditorPanel {
             }
             EditorInput::CommitUpdateOp(new_state) => {
                 self.dirty = true;
-                self.data = new_state;
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(new_state),
+                    sender.clone(),
+                );
                 // Update interface anyway, this is useful if we need to restore
                 // some GUI element to the correct state in case of error
                 self.send_msg_for_interface_update(sender);
@@ -923,7 +941,10 @@ impl Component for EditorPanel {
                     .unwrap();
             }
             EditorInput::NewStateFromSecondInstance(new_data) => {
-                self.data = new_data;
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(new_data),
+                    sender.clone(),
+                );
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
@@ -994,6 +1015,26 @@ impl Component for EditorPanel {
                     .output(EditorOutput::PythonLoadingError(path, error))
                     .unwrap();
             }
+            EditorCommandOutput::MainScriptCompiled { source, result } => {
+                // Check if source code still matches current data
+                let current_source = self
+                    .data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .main_script
+                    .clone();
+                if source != current_source {
+                    // Script changed since compilation started - ignore stale result
+                    return;
+                }
+
+                // Update the AST field
+                self.main_script_ast = Some(result);
+
+                // Trigger interface update
+                self.send_msg_for_interface_update(sender);
+            }
         }
     }
 
@@ -1027,6 +1068,71 @@ impl Component for EditorPanel {
                 .main_stack
                 .set_visible_child_name(self.pages_names[*panel_number as usize])
         }
+    }
+}
+
+enum DataUpdate {
+    Undo,
+    Redo,
+    Replace(AppState<Data, Desc>),
+}
+
+impl EditorPanel {
+    fn update_data_and_recompile_main_script(
+        &mut self,
+        update: DataUpdate,
+        sender: ComponentSender<Self>,
+    ) {
+        let previous_script = self
+            .data
+            .get_data()
+            .get_inner_data()
+            .params
+            .main_script
+            .clone();
+
+        // Update self.data based on the update type
+        match update {
+            DataUpdate::Undo => {
+                self.data.undo().expect("Should be able to undo");
+            }
+            DataUpdate::Redo => {
+                self.data.redo().expect("Should be able to redo");
+            }
+            DataUpdate::Replace(new_state) => {
+                self.data = new_state;
+            }
+        }
+
+        if self.data.get_data().get_inner_data().params.main_script == previous_script {
+            return;
+        }
+
+        // Set to None to indicate compilation in progress
+        self.main_script_ast = None;
+
+        // Get the current main script source
+        let source = self
+            .data
+            .get_data()
+            .get_inner_data()
+            .params
+            .main_script
+            .clone();
+
+        sender.spawn_oneshot_command(move || {
+            use collomatique_binding_colloscopes::scripts::{
+                default_problem_builder, get_default_main_module,
+            };
+
+            let main_module = source
+                .as_deref()
+                .unwrap_or_else(|| get_default_main_module());
+
+            let result = default_problem_builder(main_module);
+
+            EditorCommandOutput::MainScriptCompiled { source, result }
+        });
     }
 }
 

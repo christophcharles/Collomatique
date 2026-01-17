@@ -1,6 +1,6 @@
 mod ast;
 pub mod eval;
-mod parser;
+pub mod parser;
 pub mod problem;
 mod semantics;
 pub mod traits;

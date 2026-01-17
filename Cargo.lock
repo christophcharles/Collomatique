@@ -373,6 +373,7 @@ dependencies = [
  "collomatique-ilp",
  "collomatique-state-colloscopes",
  "collomatique-time",
+ "pest",
 ]
 
 [[package]]
