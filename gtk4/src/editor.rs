@@ -433,6 +433,7 @@ impl EditorPanel {
             .send(colloscope::ColloscopeInput::Update(
                 self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
+                self.main_script_ast.clone(),
             ))
             .unwrap();
     }

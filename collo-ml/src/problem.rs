@@ -34,7 +34,7 @@ pub enum ConstraintDesc<T: EvalObject> {
     Objectify { origin: Origin<T> },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProblemBuilder<
     T: EvalObject,
     V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T>, Error = VarConversionError>,
@@ -53,7 +53,13 @@ pub struct ProblemBuilder<
 
     /// Pending objective function calls (validated but not yet evaluated)
     /// Format: (module, fn_name, args, coefficient, sense)
-    pending_objectives: Vec<(String, String, Vec<ExprValue<T>>, f64, ObjectiveSense)>,
+    pending_objectives: Vec<(
+        String,
+        String,
+        Vec<ExprValue<T>>,
+        ordered_float::OrderedFloat<f64>,
+        ObjectiveSense,
+    )>,
 
     phantom: std::marker::PhantomData<V>,
 }
@@ -661,7 +667,7 @@ impl<
                     ),
                 }
             }
-            eval_data.objective = &eval_data.objective + coef * obj;
+            eval_data.objective = &eval_data.objective + coef.0 * obj;
         }
 
         // Phase 4: Process reified variables
@@ -815,7 +821,7 @@ impl<
             module.to_string(),
             fn_name.to_string(),
             args,
-            coefficient,
+            ordered_float::OrderedFloat(coefficient),
             sense,
         ));
         Ok(())
@@ -904,7 +910,7 @@ pub enum ExtraDesc<T: EvalObject, V: EvalVar<T>> {
     InitCond(V),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem<T: EvalObject, V: EvalVar<T>> {
     problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
     reification_problem_builder:

@@ -348,6 +348,7 @@ dependencies = [
  "collomatique-ilp",
  "derivative",
  "lazy_static",
+ "ordered-float",
  "pest",
  "pest_derive",
  "regex",

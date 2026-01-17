@@ -640,7 +640,7 @@ impl Variable {
 ///     .build()
 ///     .unwrap();
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,

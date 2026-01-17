@@ -16,11 +16,19 @@ mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
+use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collomatique_binding_colloscopes::views::ObjectId,
+    collomatique_binding_colloscopes::vars::Var,
+>;
+
 #[derive(Debug)]
 pub enum ColloscopeInput {
     Update(
         collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
+        Option<Result<ProblemBuilder, SimpleProblemError>>,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -38,14 +46,8 @@ pub enum ColloscopeInput {
     ShowBlamedConstraints,
 }
 
-type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collomatique_binding_colloscopes::views::ObjectId,
-    collomatique_binding_colloscopes::vars::Var,
->;
-
 #[derive(Debug)]
 pub enum ColloscopeCommandOutput {
-    IlpProblemBuilderReady(Result<ProblemBuilder, String>),
     IlpProblemComputed(Result<IlpProblem, String>),
     IlpReprComputed(IlpRepr),
 }
@@ -56,7 +58,7 @@ pub enum ColloscopeOutput {
     SolveColloscopeClicked,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_binding_colloscopes::views::Env,
     problem: collo_ml::problem::Problem<
@@ -65,14 +67,14 @@ pub struct IlpProblem {
     >,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
     warnings: Vec<Origin<ObjectId>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblemBuilder {
     builder: ProblemBuilder,
     ilp_repr: Option<Result<IlpRepr, String>>,
@@ -95,7 +97,7 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_problem_builder: Option<Result<IlpProblemBuilder, String>>,
+    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleProblemError>>,
 }
 
 impl Colloscope {
@@ -361,19 +363,30 @@ impl Component for Colloscope {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ColloscopeInput::Update(params, colloscope) => {
+            ColloscopeInput::Update(params, colloscope, builder) => {
                 self.params = params;
                 self.colloscope = colloscope;
 
-                match &self.ilp_problem_builder {
-                    None | Some(Err(_)) => {
-                        self.compute_ilp_problem_builder(sender.clone());
-                    }
-                    Some(Ok(builder)) => {
-                        if self.should_recompute_problem_builder() {
-                            self.compute_ilp_problem_builder(sender.clone());
-                        } else {
-                            match &builder.ilp_repr {
+                match builder {
+                    None => self.ilp_problem_builder = None,
+                    Some(Err(e)) => self.ilp_problem_builder = Some(Err(e)),
+                    Some(Ok(pb_builder)) => match &self.ilp_problem_builder {
+                        None | Some(Err(_)) => {
+                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
+                                builder: pb_builder,
+                                ilp_repr: None,
+                            }));
+                            self.compute_ilp_repr(sender.clone());
+                        }
+                        Some(Ok(old_builder)) if old_builder.builder != pb_builder => {
+                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
+                                builder: pb_builder,
+                                ilp_repr: None,
+                            }));
+                            self.compute_ilp_repr(sender.clone());
+                        }
+                        Some(Ok(old_builder)) => {
+                            match &old_builder.ilp_repr {
                                 None | Some(Err(_)) => {
                                     self.compute_ilp_repr(sender.clone());
                                 }
@@ -388,7 +401,7 @@ impl Component for Colloscope {
                                 }
                             }
                         }
-                    }
+                    },
                 }
 
                 self.update_group_list_entries();
@@ -515,15 +528,6 @@ impl Component for Colloscope {
         _root: &Self::Root,
     ) {
         match message {
-            ColloscopeCommandOutput::IlpProblemBuilderReady(result) => match result {
-                Ok(builder) => {
-                    self.update_ilp_problem_builder(Some(Ok(builder)));
-                    self.compute_ilp_repr(sender);
-                }
-                Err(msg) => {
-                    self.update_ilp_problem_builder(Some(Err(msg)));
-                }
-            },
             ColloscopeCommandOutput::IlpProblemComputed(result) => {
                 match result {
                     Ok(ilp_problem) => {
@@ -584,23 +588,6 @@ impl Colloscope {
         });
     }
 
-    fn compute_ilp_problem_builder(&mut self, sender: ComponentSender<Self>) {
-        self.update_ilp_problem_builder(None);
-        sender.spawn_oneshot_command(move || {
-            use collomatique_binding_colloscopes::scripts::{
-                default_problem_builder, get_default_main_module,
-            };
-            match default_problem_builder(get_default_main_module()) {
-                Ok(builder) => ColloscopeCommandOutput::IlpProblemBuilderReady(Ok(builder)),
-                Err(e) => ColloscopeCommandOutput::IlpProblemBuilderReady(Err(format!("{}", e))),
-            }
-        });
-    }
-
-    fn should_recompute_problem_builder(&self) -> bool {
-        false // Placeholder - always false since source code is constant
-    }
-
     fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
         self.update_ilp_repr(None);
 
@@ -640,16 +627,6 @@ impl Colloscope {
                     .map_err(|e| e.clone())
             })))
             .unwrap();
-    }
-
-    fn update_ilp_problem_builder(&mut self, result: Option<Result<ProblemBuilder, String>>) {
-        self.ilp_problem_builder = result.map(|r| {
-            r.map(|builder| IlpProblemBuilder {
-                builder,
-                ilp_repr: None,
-            })
-        });
-        self.update_blame_dialog();
     }
 
     fn update_ilp_repr(&mut self, ilp_repr: Option<Result<IlpRepr, String>>) {
