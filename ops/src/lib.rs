@@ -38,6 +38,8 @@ pub mod group_lists;
 pub use group_lists::*;
 pub mod settings;
 pub use settings::*;
+pub mod main_script;
+pub use main_script::*;
 pub mod colloscope;
 pub use colloscope::*;
 
@@ -71,6 +73,7 @@ pub enum UpdateOp {
     Incompatibilities(IncompatibilitiesUpdateOp),
     GroupLists(GroupListsUpdateOp),
     Settings(SettingsUpdateOp),
+    MainScript(MainScriptUpdateOp),
     Colloscope(ColloscopeUpdateOp),
 }
 
@@ -97,6 +100,8 @@ pub enum UpdateError {
     #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
     #[error(transparent)]
+    MainScript(#[from] MainScriptUpdateError),
+    #[error(transparent)]
     Colloscope(#[from] ColloscopeUpdateError),
 }
 
@@ -112,6 +117,7 @@ pub enum UpdateWarning {
     Incompatibilities(IncompatibilitiesUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
     Settings(SettingsUpdateWarning),
+    MainScript(MainScriptUpdateWarning),
     Colloscope(ColloscopeUpdateWarning),
 }
 
@@ -175,6 +181,12 @@ impl From<SettingsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<MainScriptUpdateWarning> for UpdateWarning {
+    fn from(value: MainScriptUpdateWarning) -> Self {
+        UpdateWarning::MainScript(value)
+    }
+}
+
 impl From<ColloscopeUpdateWarning> for UpdateWarning {
     fn from(value: ColloscopeUpdateWarning) -> Self {
         UpdateWarning::Colloscope(value)
@@ -197,6 +209,7 @@ impl UpdateWarning {
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
+            UpdateWarning::MainScript(w) => w.build_desc_from_data(data),
             UpdateWarning::Colloscope(w) => w.build_desc_from_data(data),
         }
     }
@@ -270,6 +283,9 @@ impl UpdateOp {
             UpdateOp::Settings(settings_op) => {
                 CleaningOp::downcast(settings_op.get_next_cleaning_op(data))
             }
+            UpdateOp::MainScript(main_script_op) => {
+                CleaningOp::downcast(main_script_op.get_next_cleaning_op(data))
+            }
             UpdateOp::Colloscope(colloscope_op) => {
                 CleaningOp::downcast(colloscope_op.get_next_cleaning_op(data))
             }
@@ -321,6 +337,10 @@ impl UpdateOp {
                 settings_op.apply_no_cleaning(data)?;
                 Ok(None)
             }
+            UpdateOp::MainScript(main_script_op) => {
+                main_script_op.apply_no_cleaning(data)?;
+                Ok(None)
+            }
             UpdateOp::Colloscope(colloscope_op) => {
                 colloscope_op.apply_no_cleaning(data)?;
                 Ok(None)
@@ -364,6 +384,7 @@ impl UpdateOp {
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
+            UpdateOp::MainScript(main_script_op) => main_script_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
         }
     }

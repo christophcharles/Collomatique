@@ -24,6 +24,7 @@ mod colloscope;
 mod general_planning;
 mod group_lists;
 mod incompats;
+mod main_script;
 mod run_second_instance;
 mod settings;
 mod slots;
@@ -103,7 +104,8 @@ enum PanelNumbers {
     Assignments = 7,
     GroupLists = 8,
     ExtraSettings = 9,
-    Colloscope = 10,
+    MainScript = 10,
+    Colloscope = 11,
 }
 
 impl PanelNumbers {
@@ -119,6 +121,7 @@ impl PanelNumbers {
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
             PanelNumbers::ExtraSettings,
+            PanelNumbers::MainScript,
             PanelNumbers::Colloscope,
         ]
         .into_iter()
@@ -136,6 +139,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
             PanelNumbers::ExtraSettings => "extra_settings",
+            PanelNumbers::MainScript => "main_script",
             PanelNumbers::Colloscope => "colloscope",
         }
     }
@@ -152,6 +156,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
+            PanelNumbers::MainScript => "Script ColloML (avancé)",
             PanelNumbers::Colloscope => "Colloscope",
         }
     }
@@ -182,6 +187,7 @@ pub struct EditorPanel {
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
     settings: Controller<settings::Settings>,
+    main_script: Controller<main_script::MainScript>,
     colloscope: Controller<colloscope::Colloscope>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_second_instance_dialog: Controller<run_second_instance::Dialog>,
@@ -396,6 +402,17 @@ impl EditorPanel {
                     .get_inner_data()
                     .params
                     .settings
+                    .clone(),
+            ))
+            .unwrap();
+        self.main_script
+            .sender()
+            .send(main_script::MainScriptInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .main_script
                     .clone(),
             ))
             .unwrap();
@@ -660,6 +677,8 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
+        let main_script = main_script::MainScript::builder().launch(()).detach();
+
         let colloscope =
             colloscope::Colloscope::builder()
                 .launch(())
@@ -725,6 +744,7 @@ impl Component for EditorPanel {
             incompats,
             group_lists,
             settings,
+            main_script,
             colloscope,
             check_script_dialog,
             run_second_instance_dialog,
@@ -744,6 +764,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
+                PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
             };
             widgets

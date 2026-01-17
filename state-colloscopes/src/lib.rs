@@ -9,7 +9,7 @@ use ops::AnnotatedColloscopeOp;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{tools, InMemoryData, Operation};
-use ops::AnnotatedSettingsOp;
+use ops::{AnnotatedMainScriptOp, AnnotatedSettingsOp};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -26,8 +26,8 @@ use ops::{
     AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PeriodOp, SettingsOp,
-    SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, MainScriptOp, Op, PeriodOp,
+    SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -564,6 +564,12 @@ pub enum SettingsError {
     InvalidStudentId(StudentId),
 }
 
+/// Errors for main script operations
+///
+/// These errors can be returned when trying to modify [Data] with a main script op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum MainScriptError {}
+
 /// Errors for colloscopes operations
 ///
 /// These errors can be returned when trying to modify [Data] with a colloscope op.
@@ -644,6 +650,8 @@ pub enum Error {
     GroupList(#[from] GroupListError),
     #[error(transparent)]
     Settings(#[from] SettingsError),
+    #[error(transparent)]
+    MainScript(#[from] MainScriptError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeError),
 }
@@ -824,6 +832,11 @@ impl InMemoryData for Data {
             AnnotatedOp::Settings(settings_op) => {
                 Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
             }
+            AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(_)) => {
+                Ok(AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(
+                    self.inner_data.params.main_script.clone(),
+                )))
+            }
             AnnotatedOp::Colloscope(colloscope_op) => Ok(AnnotatedOp::Colloscope(
                 self.build_rev_colloscope(colloscope_op)?,
             )),
@@ -844,6 +857,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
+            AnnotatedOp::MainScript(main_script_op) => self.apply_main_script(main_script_op)?,
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
         }
         self.check_invariants();
@@ -2491,7 +2505,22 @@ impl Data {
 
     /// Used internally
     ///
-    /// Apply settings operations
+    /// Apply main script operations
+    fn apply_main_script(
+        &mut self,
+        main_script_op: &AnnotatedMainScriptOp,
+    ) -> std::result::Result<(), MainScriptError> {
+        match main_script_op {
+            AnnotatedMainScriptOp::Update(new_script) => {
+                self.inner_data.params.main_script = new_script.clone();
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Apply colloscope operations
     fn apply_colloscope(
         &mut self,
         colloscope_op: &AnnotatedColloscopeOp,

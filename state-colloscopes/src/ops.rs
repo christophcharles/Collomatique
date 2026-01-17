@@ -36,6 +36,8 @@ pub enum Op {
     GroupList(GroupListOp),
     /// Operation on settings
     Settings(SettingsOp),
+    /// Operation on main script
+    MainScript(MainScriptOp),
     /// Operation on colloscopes
     Colloscope(ColloscopeOp),
 }
@@ -188,6 +190,16 @@ pub enum SettingsOp {
     Update(settings::Settings),
 }
 
+/// Main script operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// main script we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MainScriptOp {
+    /// Update the main script (None = use default, Some = custom script)
+    Update(Option<String>),
+}
+
 /// Colloscope operation enumeration
 ///
 /// This is the list of all possible operations related to the
@@ -234,6 +246,8 @@ pub enum AnnotatedOp {
     GroupList(AnnotatedGroupListOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
+    /// Operation on main script
+    MainScript(AnnotatedMainScriptOp),
     /// Operation on colloscopes
     Colloscope(AnnotatedColloscopeOp),
 }
@@ -295,6 +309,12 @@ impl From<AnnotatedGroupListOp> for AnnotatedOp {
 impl From<AnnotatedSettingsOp> for AnnotatedOp {
     fn from(value: AnnotatedSettingsOp) -> Self {
         AnnotatedOp::Settings(value)
+    }
+}
+
+impl From<AnnotatedMainScriptOp> for AnnotatedOp {
+    fn from(value: AnnotatedMainScriptOp) -> Self {
+        AnnotatedOp::MainScript(value)
     }
 }
 
@@ -487,6 +507,19 @@ pub enum AnnotatedSettingsOp {
     Update(settings::Settings),
 }
 
+/// Main script operation enumeration
+///
+/// Compared to [MainScriptOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedMainScriptOp {
+    /// Update the main script
+    Update(Option<String>),
+}
+
 /// Colloscope operation enumeration
 ///
 /// Compared to [ColloscopeOp], this is a annotated operation,
@@ -559,6 +592,10 @@ impl AnnotatedOp {
             }
             Op::Settings(settings_op) => {
                 let op = AnnotatedSettingsOp::annotate(settings_op);
+                (op.into(), None)
+            }
+            Op::MainScript(main_script_op) => {
+                let op = AnnotatedMainScriptOp::annotate(main_script_op);
                 (op.into(), None)
             }
             Op::Colloscope(colloscope_op) => {
@@ -780,6 +817,17 @@ impl AnnotatedSettingsOp {
     fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
         match settings_op {
             SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
+        }
+    }
+}
+
+impl AnnotatedMainScriptOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [MainScriptOp].
+    fn annotate(main_script_op: MainScriptOp) -> AnnotatedMainScriptOp {
+        match main_script_op {
+            MainScriptOp::Update(script) => AnnotatedMainScriptOp::Update(script),
         }
     }
 }

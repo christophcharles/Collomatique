@@ -30,6 +30,7 @@ pub struct Parameters {
     pub incompats: incompats::Incompats,
     pub group_lists: group_lists::GroupLists,
     pub settings: settings::Settings,
+    pub main_script: Option<String>,
 }
 
 impl Parameters {
