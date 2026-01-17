@@ -77,73 +77,74 @@ impl Component for MainScript {
 
     view! {
         #[root]
-        adw::ToolbarView {
+        gtk::Box {
             set_hexpand: true,
             set_vexpand: true,
-            add_top_bar = &adw::Banner {
-                set_title: "Script par défaut",
-                #[watch]
-                set_revealed: model.is_default(),
+            set_orientation: gtk::Orientation::Vertical,
+            set_margin_all: 5,
+            set_spacing: 10,
+
+            // Title row with buttons
+            gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "Script de génération des contraintes",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                },
+                gtk::Button {
+                    set_icon_name: "document-edit-symbolic",
+                    add_css_class: "flat",
+                    set_tooltip_text: Some("Modifier le script"),
+                    connect_clicked => MainScriptInput::EditClicked,
+                },
+                gtk::Button {
+                    set_icon_name: "view-list-symbolic",
+                    add_css_class: "flat",
+                    set_tooltip_text: Some("Afficher les modules disponibles"),
+                    connect_clicked => MainScriptInput::ShowModulesClicked,
+                },
+                // Spacer to push restore button to far right
+                gtk::Box {
+                    set_hexpand: true,
+                },
+                gtk::Button {
+                    set_icon_name: "edit-delete-symbolic",
+                    add_css_class: "flat",
+                    set_tooltip_text: Some("Restaurer le script par défaut"),
+                    #[watch]
+                    set_sensitive: !model.is_default(),
+                    connect_clicked => MainScriptInput::RestoreDefaultClicked,
+                },
             },
-            #[wrap(Some)]
-            set_content = &gtk::Box {
+
+            // Paned: script view (top) + error display (bottom)
+            gtk::Paned {
                 set_hexpand: true,
                 set_vexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
-                set_margin_all: 5,
-                set_spacing: 10,
+                set_position: 400,
 
-                // Title row with buttons
-                gtk::Box {
-                    set_hexpand: true,
-                    set_orientation: gtk::Orientation::Horizontal,
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_label: "Script de génération des contraintes",
-                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                    },
-                    gtk::Button {
-                        set_icon_name: "document-edit-symbolic",
-                        add_css_class: "flat",
-                        set_tooltip_text: Some("Modifier le script"),
-                        connect_clicked => MainScriptInput::EditClicked,
-                    },
-                    gtk::Button {
-                        set_icon_name: "view-list-symbolic",
-                        add_css_class: "flat",
-                        set_tooltip_text: Some("Afficher les modules disponibles"),
-                        connect_clicked => MainScriptInput::ShowModulesClicked,
-                    },
-                    // Spacer to push restore button to far right
-                    gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Button {
-                        set_icon_name: "edit-delete-symbolic",
-                        add_css_class: "flat",
-                        set_tooltip_text: Some("Restaurer le script par défaut"),
+                // Top: Script TextView
+                #[wrap(Some)]
+                set_start_child = &gtk::Overlay {
+                    add_overlay = &gtk::Label {
+                        set_label: "<b>Script par défaut sélectionné</b>",
+                        set_use_markup: true,
                         #[watch]
-                        set_sensitive: !model.is_default(),
-                        connect_clicked => MainScriptInput::RestoreDefaultClicked,
+                        set_visible: model.is_default(),
                     },
-                },
-
-                // Paned: script view (top) + error display (bottom)
-                gtk::Paned {
-                    set_hexpand: true,
-                    set_vexpand: true,
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_position: 400,
-
-                    // Top: Script TextView
                     #[wrap(Some)]
-                    set_start_child = &gtk::ScrolledWindow {
+                    set_child = &gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
                         gtk::TextView {
                             set_editable: false,
                             set_monospace: true,
+                            #[watch]
+                            set_sensitive: !model.is_default(),
                             #[wrap(Some)]
                             set_buffer = &gtk::TextBuffer {
                                 #[watch]
@@ -151,66 +152,67 @@ impl Component for MainScript {
                             },
                         }
                     },
+                },
 
-                    // Bottom: Error display (conditional)
-                    #[wrap(Some)]
-                    set_end_child = &gtk::Box {
+                // Bottom: Error display (conditional)
+                #[wrap(Some)]
+                set_end_child = &gtk::Box {
+                    set_hexpand: true,
+                    set_vexpand: true,
+                    set_orientation: gtk::Orientation::Vertical,
+
+                    // State 1: Compiling (errors is None)
+                    gtk::Box {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_spacing: 10,
+                        #[watch]
+                        set_visible: model.errors.is_none(),
 
-                        // State 1: Compiling (errors is None)
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_halign: gtk::Align::Center,
-                            set_valign: gtk::Align::Center,
-                            set_spacing: 10,
-                            #[watch]
-                            set_visible: model.errors.is_none(),
-
-                            adw::Spinner {},
-                            gtk::Label {
-                                set_label: "Compilation du script...",
-                            },
+                        adw::Spinner {},
+                        gtk::Label {
+                            set_label: "Compilation du script...",
                         },
+                    },
 
-                        // State 2: No errors (errors is Some([]))
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_halign: gtk::Align::Center,
-                            set_valign: gtk::Align::Center,
-                            set_spacing: 10,
-                            #[watch]
-                            set_visible: matches!(&model.errors, Some(e) if e.is_empty()),
+                    // State 2: No errors (errors is Some([]))
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_spacing: 10,
+                        #[watch]
+                        set_visible: matches!(&model.errors, Some(e) if e.is_empty()),
 
-                            gtk::Image {
-                                set_icon_name: Some("object-select-symbolic"),
-                                add_css_class: "success",
-                            },
-                            gtk::Label {
-                                set_label: "Aucune erreur",
-                            },
+                        gtk::Image {
+                            set_icon_name: Some("object-select-symbolic"),
+                            add_css_class: "success",
                         },
+                        gtk::Label {
+                            set_label: "<b>Aucune erreur</b>",
+                            set_use_markup: true,
+                        },
+                    },
 
-                        // State 3: Has errors (errors is Some([...]))
-                        gtk::ScrolledWindow {
+                    // State 3: Has errors (errors is Some([...]))
+                    gtk::ScrolledWindow {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                        #[watch]
+                        set_visible: matches!(&model.errors, Some(e) if !e.is_empty()),
+
+                        #[local_ref]
+                        errors_listbox -> gtk::ListBox {
                             set_hexpand: true,
                             set_vexpand: true,
-                            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                            #[watch]
-                            set_visible: matches!(&model.errors, Some(e) if !e.is_empty()),
-
-                            #[local_ref]
-                            errors_listbox -> gtk::ListBox {
-                                set_hexpand: true,
-                                set_vexpand: true,
-                                add_css_class: "boxed-list",
-                                set_selection_mode: gtk::SelectionMode::None,
-                            },
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
                         },
                     },
                 },
