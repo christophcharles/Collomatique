@@ -56,13 +56,13 @@ impl MainScriptUpdateOp {
 
     pub fn get_desc(&self) -> (OpCategory, String) {
         (
-            OpCategory::Settings,
+            OpCategory::MainScript,
             match self {
                 MainScriptUpdateOp::UpdateScript(Some(_)) => {
-                    "Mettre \u{00e0} jour le script principal personnalis\u{00e9}".into()
+                    "Mettre à jour le script ColloML".into()
                 }
                 MainScriptUpdateOp::UpdateScript(None) => {
-                    "Utiliser le script principal par d\u{00e9}faut".into()
+                    "Utiliser le script ColloML par défaut".into()
                 }
             },
         )

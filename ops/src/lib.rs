@@ -58,6 +58,7 @@ pub enum OpCategory {
     Incompatibilities,
     GroupLists,
     Settings,
+    MainScript,
     Colloscope,
 }
 
