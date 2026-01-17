@@ -190,7 +190,7 @@ impl Component for MainScript {
                         set_visible: matches!(&model.errors, Some(e) if e.is_empty()),
 
                         gtk::Image {
-                            set_icon_name: Some("object-select-symbolic"),
+                            set_icon_name: Some("emblem-ok-symbolic"),
                             add_css_class: "success",
                         },
                         gtk::Label {
