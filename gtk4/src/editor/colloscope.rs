@@ -123,9 +123,17 @@ impl Colloscope {
         }
     }
 
-    fn has_error(&self) -> bool {
+    fn has_compilation_error(&self) -> bool {
         match &self.ilp_problem_builder {
             Some(Err(_)) => true,
+            Some(Ok(_)) => false,
+            None => false,
+        }
+    }
+
+    fn has_evaluation_error(&self) -> bool {
+        match &self.ilp_problem_builder {
+            Some(Err(_)) => false,
             Some(Ok(builder)) => matches!(&builder.ilp_repr, Some(Err(_))),
             None => false,
         }
@@ -202,15 +210,36 @@ impl Component for Colloscope {
                             },
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                add_css_class: "error",
                                 #[watch]
-                                set_visible: model.has_error(),
+                                set_visible: model.has_compilation_error(),
                                 gtk::Image {
-                                    set_icon_name: Some("dialog-error"),
+                                    set_icon_name: Some("dialog-error-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "<b>Erreur de compilation</b>",
+                                    set_use_markup: true,
                                 },
                             },
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
+                                add_css_class: "error",
+                                #[watch]
+                                set_visible: model.has_evaluation_error(),
+                                gtk::Image {
+                                    set_icon_name: Some("dialog-error-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "<b>Erreur d'évaluation</b>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                add_css_class: "warning",
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
@@ -220,7 +249,6 @@ impl Component for Colloscope {
                                     #[watch]
                                     set_label: &model.generate_warning_text(),
                                     set_use_markup: true,
-                                    add_css_class: "warning",
                                 },
                             },
                         },
@@ -368,8 +396,14 @@ impl Component for Colloscope {
                 self.colloscope = colloscope;
 
                 match builder {
-                    None => self.ilp_problem_builder = None,
-                    Some(Err(e)) => self.ilp_problem_builder = Some(Err(e)),
+                    None => {
+                        self.ilp_problem_builder = None;
+                        self.update_blame_dialog();
+                    }
+                    Some(Err(e)) => {
+                        self.ilp_problem_builder = Some(Err(e));
+                        self.update_blame_dialog();
+                    }
                     Some(Ok(pb_builder)) => match &self.ilp_problem_builder {
                         None | Some(Err(_)) => {
                             self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
@@ -613,19 +647,21 @@ impl Colloscope {
     }
 
     fn update_blame_dialog(&self) {
-        let ilp_repr_opt = self
-            .ilp_problem_builder
-            .as_ref()
-            .and_then(|r| r.as_ref().ok())
-            .and_then(|b| b.ilp_repr.as_ref());
+        let ilp_repr_opt = match &self.ilp_problem_builder {
+            Some(r) => match r {
+                Ok(b) => b.ilp_repr.as_ref().map(|r| {
+                    r.as_ref()
+                        .map(|x| x.warnings.clone())
+                        .map_err(|e| e.clone())
+                }),
+                Err(e) => Some(Err(e.to_string())),
+            },
+            None => None,
+        };
 
         self.blame_dialog
             .sender()
-            .send(blame_dialog::DialogInput::Update(ilp_repr_opt.map(|r| {
-                r.as_ref()
-                    .map(|x| x.warnings.clone())
-                    .map_err(|e| e.clone())
-            })))
+            .send(blame_dialog::DialogInput::Update(ilp_repr_opt))
             .unwrap();
     }
 

@@ -103,7 +103,7 @@ impl SimpleComponent for Dialog {
                                 #[watch]
                                 set_label: &model.warnings.as_ref()
                                     .and_then(|r| r.as_ref().err())
-                                    .map(|e| format!("Erreur dans un script: {}", e))
+                                    .map(|e| e.to_string())
                                     .unwrap_or_default(),
                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                             },
