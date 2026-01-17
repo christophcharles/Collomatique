@@ -164,23 +164,6 @@ impl Id for GroupListId {
     }
 }
 
-/// This type represents an ID for a rule
-///
-/// Every rule gets a unique ID. IDs then identify rules
-/// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct RuleId(u64);
-
-impl Id for RuleId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    unsafe fn new(value: u64) -> RuleId {
-        RuleId(value)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -241,10 +224,5 @@ impl IdIssuer {
     /// Get a new unused ID for a group list
     pub fn get_group_list_id(&mut self) -> GroupListId {
         GroupListId(self.helper.get_new_id().inner())
-    }
-
-    /// Get a new unused ID for a rule
-    pub fn get_rule_id(&mut self) -> RuleId {
-        RuleId(self.helper.get_new_id().inner())
     }
 }

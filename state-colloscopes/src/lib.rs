@@ -17,18 +17,17 @@ pub mod ids;
 use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
-    GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
-    WeekPatternId,
+    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
 };
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPeriodOp,
-    AnnotatedRuleOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
+    AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
     AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PeriodOp, RuleOp,
-    SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PeriodOp, SettingsOp,
+    SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -40,7 +39,6 @@ pub mod colloscopes;
 pub mod group_lists;
 pub mod incompats;
 pub mod periods;
-pub mod rules;
 pub mod settings;
 pub mod slots;
 pub mod students;
@@ -251,10 +249,6 @@ pub enum PeriodError {
     #[error("period id ({0:?}) has non-default group list associations and cannot be removed")]
     PeriodStillHasNonTrivialGroupListAssociation(PeriodId),
 
-    /// The period is referenced by a rule
-    #[error("period id ({0:?}) is referenced by rule {1:?}")]
-    PeriodIsReferencedByRule(PeriodId, RuleId),
-
     /// Period is not empty in colloscope
     #[error("period id ({0:?}) is not empty in colloscope")]
     NotEmptyPeriodInColloscope(PeriodId),
@@ -459,10 +453,6 @@ pub enum SlotError {
     #[error("The slot start time is too late and the slot overlaps with the next day")]
     SlotOverlapsWithNextDay,
 
-    /// The slot is referenced by a rule
-    #[error("Slot id ({0:?}) is referenced by rule {1:?}")]
-    SlotIsReferencedByRule(SlotId, RuleId),
-
     /// The slot is not empty in colloscope
     #[error("slot {0:?} in colloscope is not empty for period {1:?}")]
     NotEmptySlotInColloscope(SlotId, PeriodId),
@@ -564,31 +554,6 @@ pub enum GroupListError {
     InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 }
 
-/// Errors for rules operations
-///
-/// These errors can be returned when trying to modify [Data] with a rule op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum RuleError {
-    /// rule id is invalid
-    #[error("invalid rule id ({0:?})")]
-    InvalidRuleId(RuleId),
-
-    /// The rule id already exists
-    #[error("rule id ({0:?}) already exists")]
-    RuleIdAlreadyExists(RuleId),
-
-    /// period id is invalid
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-
-    /// slot id is invalid
-    #[error("invalid slot id ({0:?})")]
-    InvalidSlotId(SlotId),
-    /* /// Rule is referenced in a colloscope id map
-    #[error("rule id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
-    RuleIsReferencedInColloscopeIdMaps(RuleId, ColloscopeId),*/
-}
-
 /// Errors for settings operations
 ///
 /// These errors can be returned when trying to modify [Data] with a settings op.
@@ -678,8 +643,6 @@ pub enum Error {
     #[error(transparent)]
     GroupList(#[from] GroupListError),
     #[error(transparent)]
-    Rule(#[from] RuleError),
-    #[error(transparent)]
     Settings(#[from] SettingsError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeError),
@@ -698,8 +661,6 @@ pub enum FromDataError {
     InconsistentSlots,
     #[error("Inconsistent group lists")]
     InconsistentGroupLists,
-    #[error("Inconsistent rules")]
-    InconsistentRules,
 }
 
 /// Errors for IDs
@@ -722,7 +683,6 @@ pub enum NewId {
     SlotId(SlotId),
     IncompatId(IncompatId),
     GroupListId(GroupListId),
-    RuleId(RuleId),
 }
 
 impl From<StudentId> for NewId {
@@ -773,12 +733,6 @@ impl From<GroupListId> for NewId {
     }
 }
 
-impl From<RuleId> for NewId {
-    fn from(value: RuleId) -> Self {
-        NewId::RuleId(value)
-    }
-}
-
 /// Errors for students operations
 ///
 /// These errors can be returned when trying to modify [Data] with a student op.
@@ -820,8 +774,6 @@ pub enum InvariantError {
     SubjectAssociationForSubjectWithoutInterrogations,
     #[error("subject association given but subject does not run on given period")]
     SubjectAssociationForSubjectNotRunningOnPeriod,
-    #[error("invalid rule")]
-    InvalidRule,
     #[error("invalid student id in settings")]
     InvalidStudentIdInSettings,
     #[error("week pattern is invalid")]
@@ -869,7 +821,6 @@ impl InMemoryData for Data {
             AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
                 self.build_rev_group_list(group_list_op)?,
             )),
-            AnnotatedOp::Rule(rule_op) => Ok(AnnotatedOp::Rule(self.build_rev_rule(rule_op)?)),
             AnnotatedOp::Settings(settings_op) => {
                 Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
             }
@@ -892,7 +843,6 @@ impl InMemoryData for Data {
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
-            AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
         }
@@ -1225,12 +1175,6 @@ impl Data {
                             *period_id,
                             *subject_id,
                         ));
-                    }
-                }
-
-                for (rule_id, rule) in &self.inner_data.params.rules.rule_map {
-                    if rule.excluded_periods.contains(period_id) {
-                        return Err(PeriodError::PeriodIsReferencedByRule(*period_id, *rule_id));
                     }
                 }
 
@@ -2148,12 +2092,6 @@ impl Data {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
 
-                for (rule_id, rule) in &self.inner_data.params.rules.rule_map {
-                    if rule.desc.references_slot(*id) {
-                        return Err(SlotError::SlotIsReferencedByRule(*id, *rule_id));
-                    }
-                }
-
                 for (period_id, collo_period) in &self.inner_data.colloscope.period_map {
                     let Some(collo_slot) = collo_period.slot_map.get(id) else {
                         continue;
@@ -2529,53 +2467,6 @@ impl Data {
                         subject_map.remove(subject_id);
                     }
                 }
-
-                Ok(())
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Apply rule operations
-    fn apply_rule(&mut self, rule_op: &AnnotatedRuleOp) -> std::result::Result<(), RuleError> {
-        match rule_op {
-            AnnotatedRuleOp::Add(new_id, rule) => {
-                if self.inner_data.params.rules.rule_map.contains_key(new_id) {
-                    return Err(RuleError::RuleIdAlreadyExists(*new_id));
-                };
-
-                self.inner_data.params.validate_rule(rule)?;
-
-                self.inner_data
-                    .params
-                    .rules
-                    .rule_map
-                    .insert(*new_id, rule.clone());
-
-                Ok(())
-            }
-            AnnotatedRuleOp::Remove(id) => {
-                if !self.inner_data.params.rules.rule_map.contains_key(id) {
-                    return Err(RuleError::InvalidRuleId(*id));
-                }
-
-                self.inner_data.params.rules.rule_map.remove(id);
-
-                Ok(())
-            }
-            AnnotatedRuleOp::Update(id, rule) => {
-                if !self.inner_data.params.rules.rule_map.contains_key(id) {
-                    return Err(RuleError::InvalidRuleId(*id));
-                }
-
-                self.inner_data.params.validate_rule(rule)?;
-
-                self.inner_data
-                    .params
-                    .rules
-                    .rule_map
-                    .insert(*id, rule.clone());
 
                 Ok(())
             }
@@ -3286,32 +3177,6 @@ impl Data {
                     *subject_id,
                     old_group_list_id,
                 ))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a rule operation
-    fn build_rev_rule(
-        &self,
-        rule_op: &AnnotatedRuleOp,
-    ) -> std::result::Result<AnnotatedRuleOp, RuleError> {
-        match rule_op {
-            AnnotatedRuleOp::Add(new_id, _rule) => Ok(AnnotatedRuleOp::Remove(new_id.clone())),
-            AnnotatedRuleOp::Remove(rule_id) => {
-                let Some(old_rule) = self.inner_data.params.rules.rule_map.get(rule_id) else {
-                    return Err(RuleError::InvalidRuleId(*rule_id));
-                };
-
-                Ok(AnnotatedRuleOp::Add(*rule_id, old_rule.clone()))
-            }
-            AnnotatedRuleOp::Update(rule_id, _new_rule) => {
-                let Some(old_rule) = self.inner_data.params.rules.rule_map.get(rule_id) else {
-                    return Err(RuleError::InvalidRuleId(*rule_id));
-                };
-
-                Ok(AnnotatedRuleOp::Update(*rule_id, old_rule.clone()))
             }
         }
     }

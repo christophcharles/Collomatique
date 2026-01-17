@@ -2,10 +2,6 @@ use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SlotsUpdateWarning {
-    LooseRuleReferencingSlot(
-        collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::RuleId,
-    ),
     LooseColloscopeDataForSlot(collomatique_state_colloscopes::SlotId),
 }
 
@@ -17,22 +13,6 @@ impl SlotsUpdateWarning {
         data: &T,
     ) -> Option<String> {
         match self {
-            SlotsUpdateWarning::LooseRuleReferencingSlot(_slot_id, rule_id) => {
-                let Some(rule) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .rules
-                    .rule_map
-                    .get(rule_id)
-                else {
-                    return None;
-                };
-                Some(format!(
-                    "Perte de la règle \"{}\" qui utilise le créneau",
-                    rule.name,
-                ))
-            }
             Self::LooseColloscopeDataForSlot(slot_id) => {
                 let Some((subject_id, position)) = data
                     .get_data()
@@ -314,17 +294,6 @@ impl SlotsUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
-                    if rule.desc.references_slot(*slot_id) {
-                        return Some(CleaningOp {
-                            warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
-                                *slot_id, *rule_id,
-                            ),
-                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
-                        });
-                    }
-                }
-
                 None
             }
             SlotsUpdateOp::MoveSlotUp(_id) => None,
@@ -433,9 +402,6 @@ impl SlotsUpdateOp {
                             match se {
                                 collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => {
                                     DeleteSlotError::InvalidSlotId(id)
-                                }
-                                collomatique_state_colloscopes::SlotError::SlotIsReferencedByRule(_slot_id, _rule_id) => {
-                                    panic!("Rules should be cleaned before removing a slot");
                                 }
                                 _ => panic!("Unexpected slot error during DeleteSlot: {:?}", se),
                             }

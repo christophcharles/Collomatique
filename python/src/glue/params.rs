@@ -28,8 +28,6 @@ pub struct Parameters {
     #[pyo3(get)]
     pub group_lists_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, group_lists::GroupListId>>,
     #[pyo3(get)]
-    pub rules: BTreeMap<rules::RuleId, rules::Rule>,
-    #[pyo3(get)]
     pub settings: settings::Settings,
 }
 
@@ -165,25 +163,6 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                     )
                 })
                 .collect(),
-            rules: value
-                .rules
-                .rule_map
-                .into_iter()
-                .map(|(rule_id, rule)| {
-                    PyResult::Ok((
-                        RuleId::from(rule_id),
-                        rules::Rule {
-                            name: rule.name,
-                            logic_rule: rule.desc.try_into()?,
-                            excluded_periods: rule
-                                .excluded_periods
-                                .into_iter()
-                                .map(|x| x.into())
-                                .collect(),
-                        },
-                    ))
-                })
-                .collect::<Result<_, _>>()?,
             settings: value.settings.into(),
         })
     }

@@ -36,8 +36,6 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod group_lists;
 pub use group_lists::*;
-pub mod rules;
-pub use rules::*;
 pub mod settings;
 pub use settings::*;
 pub mod colloscope;
@@ -57,7 +55,6 @@ pub enum OpCategory {
     Slots,
     Incompatibilities,
     GroupLists,
-    Rules,
     Settings,
     Colloscope,
 }
@@ -73,7 +70,6 @@ pub enum UpdateOp {
     Slots(SlotsUpdateOp),
     Incompatibilities(IncompatibilitiesUpdateOp),
     GroupLists(GroupListsUpdateOp),
-    Rules(RulesUpdateOp),
     Settings(SettingsUpdateOp),
     Colloscope(ColloscopeUpdateOp),
 }
@@ -99,8 +95,6 @@ pub enum UpdateError {
     #[error(transparent)]
     GroupLists(#[from] GroupListsUpdateError),
     #[error(transparent)]
-    Rules(#[from] RulesUpdateError),
-    #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeUpdateError),
@@ -117,7 +111,6 @@ pub enum UpdateWarning {
     Slots(SlotsUpdateWarning),
     Incompatibilities(IncompatibilitiesUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
-    Rules(RulesUpdateWarning),
     Settings(SettingsUpdateWarning),
     Colloscope(ColloscopeUpdateWarning),
 }
@@ -176,12 +169,6 @@ impl From<GroupListsUpdateWarning> for UpdateWarning {
     }
 }
 
-impl From<RulesUpdateWarning> for UpdateWarning {
-    fn from(value: RulesUpdateWarning) -> Self {
-        UpdateWarning::Rules(value)
-    }
-}
-
 impl From<SettingsUpdateWarning> for UpdateWarning {
     fn from(value: SettingsUpdateWarning) -> Self {
         UpdateWarning::Settings(value)
@@ -209,7 +196,6 @@ impl UpdateWarning {
             UpdateWarning::Slots(w) => w.build_desc_from_data(data),
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
-            UpdateWarning::Rules(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
             UpdateWarning::Colloscope(w) => w.build_desc_from_data(data),
         }
@@ -281,7 +267,6 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => {
                 CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
             UpdateOp::Settings(settings_op) => {
                 CleaningOp::downcast(settings_op.get_next_cleaning_op(data))
             }
@@ -332,10 +317,6 @@ impl UpdateOp {
                 let result = group_list_op.apply_no_cleaning(data)?;
                 Ok(result.map(|x| x.into()))
             }
-            UpdateOp::Rules(rule_op) => {
-                let result = rule_op.apply_no_cleaning(data)?;
-                Ok(result.map(|x| x.into()))
-            }
             UpdateOp::Settings(settings_op) => {
                 settings_op.apply_no_cleaning(data)?;
                 Ok(None)
@@ -382,7 +363,6 @@ impl UpdateOp {
             UpdateOp::Slots(slot_op) => slot_op.get_desc(),
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
-            UpdateOp::Rules(rule_op) => rule_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
         }

@@ -16,10 +16,6 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
-    LooseRuleDataForPeriod(
-        collomatique_state_colloscopes::RuleId,
-        collomatique_state_colloscopes::PeriodId,
-    ),
     LooseWeekPatternDataForPeriod(
         collomatique_state_colloscopes::WeekPatternId,
         collomatique_state_colloscopes::PeriodId,
@@ -138,32 +134,6 @@ impl GeneralPlanningUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
                     subject.parameters.name, group_list.params.name, period_num+1
-                ))
-            }
-            GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(rule_id, period_id) => {
-                let Some(rule) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .rules
-                    .rule_map
-                    .get(rule_id)
-                else {
-                    return None;
-                };
-                let Some(period_index) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                else {
-                    return None;
-                };
-                Some(format!(
-                    "Perte des informations de la règle \"{}\" sur la période {}",
-                    rule.name,
-                    period_index + 1
                 ))
             }
             GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
@@ -520,19 +490,6 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
-                    if rule.excluded_periods.contains(period_id) {
-                        return Some(CleaningOp {
-                            warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
-                                *rule_id, *period_id,
-                            ),
-                            op: UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
-                                *rule_id, *period_id, true,
-                            )),
-                        });
-                    }
-                }
-
                 for (student_id, student) in
                     &data.get_data().get_inner_data().params.students.student_map
                 {
@@ -645,23 +602,6 @@ impl GeneralPlanningUpdateOp {
                                 *subject_id,
                                 *period_id,
                                 !subject.excluded_periods.contains(&previous_id),
-                            )),
-                        });
-                    }
-                }
-
-                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
-                    if rule.excluded_periods.contains(period_id)
-                        != rule.excluded_periods.contains(&previous_id)
-                    {
-                        return Some(CleaningOp {
-                            warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
-                                *rule_id, *period_id,
-                            ),
-                            op: UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
-                                *rule_id,
-                                *period_id,
-                                !rule.excluded_periods.contains(&previous_id),
                             )),
                         });
                     }
@@ -968,33 +908,6 @@ impl GeneralPlanningUpdateOp {
                                     collomatique_state_colloscopes::SubjectOp::Update(
                                         *subject_id,
                                         new_subject,
-                                    ),
-                                ),
-                                self.get_desc(),
-                            )
-                            .expect("All data should be valid at this point");
-                        if result.is_some() {
-                            panic!("Unexpected result! {:?}", result);
-                        }
-                    }
-                }
-
-                let rule_map = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .rules
-                    .rule_map
-                    .clone();
-                for (rule_id, rule) in &rule_map {
-                    if rule.excluded_periods.contains(period_id) {
-                        let mut new_rule = rule.clone();
-                        new_rule.excluded_periods.insert(new_id.clone());
-                        let result = data
-                            .apply(
-                                collomatique_state_colloscopes::Op::Rule(
-                                    collomatique_state_colloscopes::RuleOp::Update(
-                                        *rule_id, new_rule,
                                     ),
                                 ),
                                 self.get_desc(),

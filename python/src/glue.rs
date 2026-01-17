@@ -8,20 +8,18 @@ use collomatique_rpc::{
 };
 
 use collomatique_ops::{
-    AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
-    AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AddNewWeekPatternError,
-    AssignAllError, AssignError, AssignGroupListToSubjectError, AssignmentsUpdateError,
-    CutPeriodError, DeleteGroupListError, DeleteIncompatError, DeletePeriodError, DeleteRuleError,
-    DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
-    DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningUpdateError,
-    GroupListsUpdateError, IncompatibilitiesUpdateError, MergeWithPreviousPeriodError,
-    MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError, MoveSubjectUpError,
-    PrefillGroupListError, RemoveStudentLimitsError, RulesUpdateError, SettingsUpdateError,
+    AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
+    AddNewSubjectError, AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
+    AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
+    DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+    DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
+    GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
+    MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
+    MoveSubjectUpError, PrefillGroupListError, RemoveStudentLimitsError, SettingsUpdateError,
     SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
-    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
-    UpdatePeriodStatusForRuleError, UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError,
-    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
-    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
+    UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
+    UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
     WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
@@ -50,8 +48,6 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<incompatibilities::Incompat>()?;
     m.add_class::<group_lists::GroupListParameters>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
-    m.add_class::<rules::LogicRule>()?;
-    m.add_class::<rules::Rule>()?;
     m.add_class::<common::PersonWithContact>()?;
     m.add_class::<common::RangeInclusiveU32>()?;
     m.add_class::<settings::Limits>()?;
@@ -177,11 +173,9 @@ mod students;
 use students::{Student, StudentId};
 mod week_patterns;
 use week_patterns::{WeekPattern, WeekPatternId};
+mod colloscopes;
 mod group_lists;
 mod incompatibilities;
-mod rules;
-use rules::RuleId;
-mod colloscopes;
 mod params;
 mod settings;
 mod slots;
@@ -1321,100 +1315,6 @@ impl CollomatiqueFile {
                         "Period id {:?} is the first period",
                         id
                     )))
-                }
-            },
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn rules_add(self_: PyRef<'_, Self>, rule: rules::Rule) -> PyResult<rules::RuleId> {
-        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
-            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::AddNewRule(
-                rule.name,
-                rule.logic_rule.into(),
-            )),
-        ));
-
-        match result {
-            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::RuleId(id))) => {
-                Ok(id.into())
-            }
-            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::AddNewRule(e))) => match e {
-                AddNewRuleError::InvalidSlotId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
-                }
-            },
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn rules_update(self_: PyRef<'_, Self>, id: rules::RuleId, rule: rules::Rule) -> PyResult<()> {
-        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
-            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::UpdateRule(
-                id.into(),
-                rule.name,
-                rule.logic_rule.into(),
-            )),
-        ));
-
-        match result {
-            ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::UpdateRule(e))) => match e {
-                UpdateRuleError::InvalidRuleId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
-                }
-                UpdateRuleError::InvalidSlotId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
-                }
-            },
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn rules_delete(self_: PyRef<'_, Self>, id: rules::RuleId) -> PyResult<()> {
-        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
-            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::DeleteRule(
-                id.into(),
-            )),
-        ));
-
-        match result {
-            ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::DeleteRule(e))) => match e {
-                DeleteRuleError::InvalidRuleId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
-                }
-            },
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn rules_update_period_status(
-        self_: PyRef<'_, Self>,
-        rule_id: RuleId,
-        period_id: PeriodId,
-        new_status: bool,
-    ) -> PyResult<()> {
-        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
-            collomatique_ops::UpdateOp::Rules(
-                collomatique_ops::RulesUpdateOp::UpdatePeriodStatusForRule(
-                    rule_id.into(),
-                    period_id.into(),
-                    new_status,
-                ),
-            ),
-        ));
-
-        match result {
-            ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::UpdatePeriodStatusForRule(
-                e,
-            ))) => match e {
-                UpdatePeriodStatusForRuleError::InvalidRuleId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
-                }
-                UpdatePeriodStatusForRuleError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
             },
             _ => panic!("Unexpected result: {:?}", result),
