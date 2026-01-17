@@ -84,9 +84,11 @@ impl Component for MainScript {
                         set_hexpand: true,
                     },
                     gtk::Button {
-                        set_icon_name: "edit-undo-symbolic",
+                        set_icon_name: "edit-delete-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Restaurer le script par défaut"),
+                        #[watch]
+                        set_sensitive: !model.is_default(),
                         connect_clicked => MainScriptInput::RestoreDefaultClicked,
                     },
                 },
