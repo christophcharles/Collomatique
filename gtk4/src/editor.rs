@@ -425,6 +425,7 @@ impl EditorPanel {
                     .params
                     .main_script
                     .clone(),
+                self.main_script_ast.clone(),
             ))
             .unwrap();
         self.colloscope

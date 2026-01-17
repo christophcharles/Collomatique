@@ -7,6 +7,13 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 
+use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collomatique_binding_colloscopes::views::ObjectId,
+    collomatique_binding_colloscopes::vars::Var,
+>;
+
 mod edit_dialog;
 mod modules_dialog;
 
@@ -20,7 +27,10 @@ pub struct MainScript {
 
 #[derive(Debug)]
 pub enum MainScriptInput {
-    Update(Option<String>),
+    Update(
+        Option<String>,
+        Option<Result<ProblemBuilder, SimpleProblemError>>,
+    ),
     RestoreDefaultClicked,
     EditClicked,
     DialogAccepted(String),
@@ -231,8 +241,30 @@ impl Component for MainScript {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            MainScriptInput::Update(main_script) => {
+            MainScriptInput::Update(main_script, main_script_ast) => {
                 self.main_script = main_script;
+                self.errors = match main_script_ast {
+                    None => None,
+                    Some(Err(e)) => match e {
+                        SimpleProblemError::UnexpectedError(e) => Some(vec![e]),
+                        SimpleProblemError::ParsingError(e) => Some(vec![e.to_string()]),
+                        SimpleProblemError::SemanticErrors { errors, warnings } => Some(
+                            errors
+                                .into_iter()
+                                .map(|e| e.to_string())
+                                .chain(warnings.into_iter().map(|w| w.to_string()))
+                                .collect(),
+                        ),
+                    },
+                    Some(Ok(builder)) => Some(
+                        builder
+                            .get_warnings()
+                            .iter()
+                            .map(|w| w.to_string())
+                            .collect(),
+                    ),
+                };
+                self.update_errors_list();
             }
             MainScriptInput::RestoreDefaultClicked => {
                 sender
