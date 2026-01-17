@@ -677,7 +677,11 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
-        let main_script = main_script::MainScript::builder().launch(()).detach();
+        let main_script = main_script::MainScript::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::MainScript(op))
+            });
 
         let colloscope =
             colloscope::Colloscope::builder()

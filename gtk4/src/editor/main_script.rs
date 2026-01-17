@@ -1,14 +1,22 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
+
+mod edit_dialog;
 
 pub struct MainScript {
     main_script: Option<String>,
+    dialog: Controller<edit_dialog::Dialog>,
 }
 
 #[derive(Debug)]
 pub enum MainScriptInput {
     Update(Option<String>),
+    RestoreDefaultClicked,
+    EditClicked,
+    DialogAccepted(String),
 }
 
 impl MainScript {
@@ -30,7 +38,7 @@ impl MainScript {
 impl Component for MainScript {
     type Init = ();
     type Input = MainScriptInput;
-    type Output = ();
+    type Output = collomatique_ops::MainScriptUpdateOp;
     type CommandOutput = ();
 
     view! {
@@ -64,6 +72,7 @@ impl Component for MainScript {
                         set_icon_name: "document-edit-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Modifier le script"),
+                        connect_clicked => MainScriptInput::EditClicked,
                     },
                     gtk::Button {
                         set_icon_name: "view-list-symbolic",
@@ -78,6 +87,7 @@ impl Component for MainScript {
                         set_icon_name: "edit-undo-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Restaurer le script par défaut"),
+                        connect_clicked => MainScriptInput::RestoreDefaultClicked,
                     },
                 },
 
@@ -102,18 +112,46 @@ impl Component for MainScript {
 
     fn init(
         _params: Self::Init,
-        _root: Self::Root,
-        _sender: ComponentSender<Self>,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = MainScript { main_script: None };
+        let dialog = edit_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                edit_dialog::DialogOutput::Accepted(text) => MainScriptInput::DialogAccepted(text),
+            });
+
+        let model = MainScript {
+            main_script: None,
+            dialog,
+        };
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             MainScriptInput::Update(main_script) => {
                 self.main_script = main_script;
+            }
+            MainScriptInput::RestoreDefaultClicked => {
+                sender
+                    .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(None))
+                    .unwrap();
+            }
+            MainScriptInput::EditClicked => {
+                self.dialog
+                    .sender()
+                    .send(edit_dialog::DialogInput::Show(self.get_display_text()))
+                    .unwrap();
+            }
+            MainScriptInput::DialogAccepted(text) => {
+                sender
+                    .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(Some(
+                        text,
+                    )))
+                    .unwrap();
             }
         }
     }
