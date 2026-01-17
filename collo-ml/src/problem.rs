@@ -108,22 +108,12 @@ pub enum ProblemError<T: EvalObject> {
         expected: usize,
         found: usize,
     },
-    #[error("Value \"{0}\" is invalid")]
-    InvalidExprValue(String),
-    #[error("Variable \"{0}\" is already defined")]
-    VariableAlreadyDefined(String),
     #[error(transparent)]
     CompileError(#[from] CompileError),
     #[error("Function {func} returns {returned} instead of {expected}")]
     WrongReturnType {
         func: String,
         returned: ExprType,
-        expected: ExprType,
-    },
-    #[error("Function {func} has returned {returned:?} instead of type {expected}")]
-    UnexpectedReturnValue {
-        func: String,
-        returned: ExprValue<T>,
         expected: ExprType,
     },
     #[error("Panic: {0}")]
