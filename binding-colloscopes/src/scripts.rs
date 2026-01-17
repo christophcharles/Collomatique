@@ -64,6 +64,10 @@ pub fn get_default_main_module() -> &'static str {
     MAIN_MODULE
 }
 
+pub fn get_modules() -> &'static [(&'static str, &'static str)] {
+    MODULES
+}
+
 #[cfg(test)]
 mod tests;
 

@@ -5,10 +5,12 @@ use relm4::{
 };
 
 mod edit_dialog;
+mod modules_dialog;
 
 pub struct MainScript {
     main_script: Option<String>,
-    dialog: Controller<edit_dialog::Dialog>,
+    edit_dialog: Controller<edit_dialog::Dialog>,
+    modules_dialog: Controller<modules_dialog::Dialog>,
 }
 
 #[derive(Debug)]
@@ -17,6 +19,7 @@ pub enum MainScriptInput {
     RestoreDefaultClicked,
     EditClicked,
     DialogAccepted(String),
+    ShowModulesClicked,
 }
 
 impl MainScript {
@@ -78,6 +81,7 @@ impl Component for MainScript {
                         set_icon_name: "view-list-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Afficher les modules disponibles"),
+                        connect_clicked => MainScriptInput::ShowModulesClicked,
                     },
                     // Spacer to push restore button to far right
                     gtk::Box {
@@ -117,16 +121,22 @@ impl Component for MainScript {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let dialog = edit_dialog::Dialog::builder()
+        let edit_dialog = edit_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 edit_dialog::DialogOutput::Accepted(text) => MainScriptInput::DialogAccepted(text),
             });
 
+        let modules_dialog = modules_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let model = MainScript {
             main_script: None,
-            dialog,
+            edit_dialog,
+            modules_dialog,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -143,7 +153,7 @@ impl Component for MainScript {
                     .unwrap();
             }
             MainScriptInput::EditClicked => {
-                self.dialog
+                self.edit_dialog
                     .sender()
                     .send(edit_dialog::DialogInput::Show(self.get_display_text()))
                     .unwrap();
@@ -153,6 +163,12 @@ impl Component for MainScript {
                     .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(Some(
                         text,
                     )))
+                    .unwrap();
+            }
+            MainScriptInput::ShowModulesClicked => {
+                self.modules_dialog
+                    .sender()
+                    .send(modules_dialog::DialogInput::Show)
                     .unwrap();
             }
         }
