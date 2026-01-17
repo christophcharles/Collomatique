@@ -1,4 +1,7 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
+use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::FactorySender;
 use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
@@ -9,6 +12,8 @@ mod modules_dialog;
 
 pub struct MainScript {
     main_script: Option<String>,
+    errors: Option<Vec<String>>,
+    errors_list: FactoryVecDeque<ErrorEntry>,
     edit_dialog: Controller<edit_dialog::Dialog>,
     modules_dialog: Controller<modules_dialog::Dialog>,
 }
@@ -34,6 +39,16 @@ impl MainScript {
 
     fn is_default(&self) -> bool {
         self.main_script.is_none()
+    }
+
+    fn update_errors_list(&mut self) {
+        let messages: Vec<String> = self.errors.as_ref().map(|e| e.clone()).unwrap_or_default();
+
+        crate::tools::factories::update_vec_deque(
+            &mut self.errors_list,
+            messages.into_iter(),
+            |x| ErrorEntryInput::Update(x),
+        );
     }
 }
 
@@ -97,20 +112,83 @@ impl Component for MainScript {
                     },
                 },
 
-                // Script text view
-                gtk::ScrolledWindow {
+                // Paned: script view (top) + error display (bottom)
+                gtk::Paned {
                     set_hexpand: true,
                     set_vexpand: true,
-                    set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                    gtk::TextView {
-                        set_editable: false,
-                        set_monospace: true,
-                        #[wrap(Some)]
-                        set_buffer = &gtk::TextBuffer {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_position: 400,
+
+                    // Top: Script TextView
+                    #[wrap(Some)]
+                    set_start_child = &gtk::ScrolledWindow {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                        gtk::TextView {
+                            set_editable: false,
+                            set_monospace: true,
+                            #[wrap(Some)]
+                            set_buffer = &gtk::TextBuffer {
+                                #[watch]
+                                set_text: &model.get_display_text(),
+                            },
+                        }
+                    },
+
+                    // Bottom: Error display (conditional)
+                    #[wrap(Some)]
+                    set_end_child = &gtk::Box {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_orientation: gtk::Orientation::Vertical,
+
+                        // State 1: Compiling (errors is None)
+                        gtk::Label {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_label: "Compilation du script...",
                             #[watch]
-                            set_text: &model.get_display_text(),
+                            set_visible: model.errors.is_none(),
                         },
-                    }
+
+                        // State 2: No errors (errors is Some([]))
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 10,
+                            #[watch]
+                            set_visible: matches!(&model.errors, Some(e) if e.is_empty()),
+
+                            gtk::Image {
+                                set_icon_name: Some("object-select-symbolic"),
+                                add_css_class: "success",
+                            },
+                            gtk::Label {
+                                set_label: "Aucune erreur",
+                            },
+                        },
+
+                        // State 3: Has errors (errors is Some([...]))
+                        gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                            #[watch]
+                            set_visible: matches!(&model.errors, Some(e) if !e.is_empty()),
+
+                            #[local_ref]
+                            errors_listbox -> gtk::ListBox {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                add_css_class: "boxed-list",
+                                set_selection_mode: gtk::SelectionMode::None,
+                            },
+                        },
+                    },
                 },
             },
         }
@@ -133,11 +211,20 @@ impl Component for MainScript {
             .launch(())
             .detach();
 
+        let errors_list = FactoryVecDeque::builder()
+            .launch(gtk::ListBox::default())
+            .detach();
+
         let model = MainScript {
             main_script: None,
+            errors: None,
+            errors_list,
             edit_dialog,
             modules_dialog,
         };
+
+        let errors_listbox = model.errors_list.widget();
+
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -170,6 +257,59 @@ impl Component for MainScript {
                     .sender()
                     .send(modules_dialog::DialogInput::Show)
                     .unwrap();
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ErrorEntry {
+    message: String,
+}
+
+#[derive(Debug)]
+enum ErrorEntryInput {
+    Update(String),
+}
+
+#[relm4::factory]
+impl FactoryComponent for ErrorEntry {
+    type Init = String;
+    type Input = ErrorEntryInput;
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        #[root]
+        gtk::Box {
+            set_margin_all: 5,
+            set_orientation: gtk::Orientation::Horizontal,
+            add_css_class: "error",
+            gtk::Image {
+                set_margin_end: 5,
+                set_icon_name: Some("dialog-error-symbolic"),
+            },
+            gtk::Label {
+                set_halign: gtk::Align::Start,
+                #[watch]
+                set_label: &self.message,
+            },
+        },
+    }
+
+    fn init_model(
+        message: Self::Init,
+        _index: &DynamicIndex,
+        _sender: FactorySender<Self>,
+    ) -> Self {
+        Self { message }
+    }
+
+    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+        match msg {
+            ErrorEntryInput::Update(message) => {
+                self.message = message;
             }
         }
     }
