@@ -160,12 +160,20 @@ impl Component for MainScript {
                         set_orientation: gtk::Orientation::Vertical,
 
                         // State 1: Compiling (errors is None)
-                        gtk::Label {
+                        gtk::Box {
                             set_hexpand: true,
                             set_vexpand: true,
-                            set_label: "Compilation du script...",
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 10,
                             #[watch]
                             set_visible: model.errors.is_none(),
+
+                            adw::Spinner {},
+                            gtk::Label {
+                                set_label: "Compilation du script...",
+                            },
                         },
 
                         // State 2: No errors (errors is Some([]))
