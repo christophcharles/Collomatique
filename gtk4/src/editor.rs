@@ -1105,7 +1105,9 @@ impl EditorPanel {
             }
         }
 
-        if (self.data.get_data().get_inner_data().params.main_script == previous_script) && self.main_script_ast.is_some() {
+        if (self.data.get_data().get_inner_data().params.main_script == previous_script)
+            && self.main_script_ast.is_some()
+        {
             return;
         }
 

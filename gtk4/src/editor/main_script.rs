@@ -17,9 +17,15 @@ type ProblemBuilder = collo_ml::problem::ProblemBuilder<
 mod edit_dialog;
 mod modules_dialog;
 
+#[derive(Clone, Debug)]
+pub enum ErrorMsg {
+    Error(String),
+    Warning(String),
+}
+
 pub struct MainScript {
     main_script: Option<String>,
-    errors: Option<Vec<String>>,
+    errors: Option<Vec<ErrorMsg>>,
     errors_list: FactoryVecDeque<ErrorEntry>,
     edit_dialog: Controller<edit_dialog::Dialog>,
     modules_dialog: Controller<modules_dialog::Dialog>,
@@ -52,7 +58,7 @@ impl MainScript {
     }
 
     fn update_errors_list(&mut self) {
-        let messages: Vec<String> = self.errors.as_ref().map(|e| e.clone()).unwrap_or_default();
+        let messages = self.errors.as_ref().map(|e| e.clone()).unwrap_or_default();
 
         crate::tools::factories::update_vec_deque(
             &mut self.errors_list,
@@ -246,13 +252,19 @@ impl Component for MainScript {
                 self.errors = match main_script_ast {
                     None => None,
                     Some(Err(e)) => match e {
-                        SimpleProblemError::UnexpectedError(e) => Some(vec![e]),
-                        SimpleProblemError::ParsingError(e) => Some(vec![e.to_string()]),
+                        SimpleProblemError::UnexpectedError(e) => Some(vec![ErrorMsg::Error(e)]),
+                        SimpleProblemError::ParsingError(e) => {
+                            Some(vec![ErrorMsg::Error(e.to_string())])
+                        }
                         SimpleProblemError::SemanticErrors { errors, warnings } => Some(
                             errors
                                 .into_iter()
-                                .map(|e| e.to_string())
-                                .chain(warnings.into_iter().map(|w| w.to_string()))
+                                .map(|e| ErrorMsg::Error(e.to_string()))
+                                .chain(
+                                    warnings
+                                        .into_iter()
+                                        .map(|w| ErrorMsg::Warning(w.to_string())),
+                                )
                                 .collect(),
                         ),
                     },
@@ -260,7 +272,7 @@ impl Component for MainScript {
                         builder
                             .get_warnings()
                             .iter()
-                            .map(|w| w.to_string())
+                            .map(|w| ErrorMsg::Warning(w.to_string()))
                             .collect(),
                     ),
                 };
@@ -296,17 +308,26 @@ impl Component for MainScript {
 
 #[derive(Debug)]
 struct ErrorEntry {
-    message: String,
+    message: ErrorMsg,
 }
 
 #[derive(Debug)]
 enum ErrorEntryInput {
-    Update(String),
+    Update(ErrorMsg),
+}
+
+impl ErrorEntry {
+    fn get_text(&self) -> &str {
+        match &self.message {
+            ErrorMsg::Error(e) => e.as_str(),
+            ErrorMsg::Warning(w) => w.as_str(),
+        }
+    }
 }
 
 #[relm4::factory]
 impl FactoryComponent for ErrorEntry {
-    type Init = String;
+    type Init = ErrorMsg;
     type Input = ErrorEntryInput;
     type Output = ();
     type CommandOutput = ();
@@ -314,18 +335,26 @@ impl FactoryComponent for ErrorEntry {
 
     view! {
         #[root]
+        #[name(root_box)]
         gtk::Box {
             set_margin_all: 5,
             set_orientation: gtk::Orientation::Horizontal,
-            add_css_class: "error",
+            add_css_class: match &self.message {
+                ErrorMsg::Error(_) => "error",
+                ErrorMsg::Warning(_) => "warning",
+            },
             gtk::Image {
                 set_margin_end: 5,
-                set_icon_name: Some("dialog-error-symbolic"),
+                #[watch]
+                set_icon_name: Some(match &self.message {
+                    ErrorMsg::Error(_) => "dialog-error-symbolic",
+                    ErrorMsg::Warning(_) => "dialog-warning-symbolic",
+                }),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
                 #[watch]
-                set_label: &self.message,
+                set_label: self.get_text(),
             },
         },
     }
@@ -344,5 +373,14 @@ impl FactoryComponent for ErrorEntry {
                 self.message = message;
             }
         }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.root_box.remove_css_class("error");
+        widgets.root_box.remove_css_class("warning");
+        widgets.root_box.add_css_class(match &self.message {
+            ErrorMsg::Error(_) => "error",
+            ErrorMsg::Warning(_) => "warning",
+        });
     }
 }
