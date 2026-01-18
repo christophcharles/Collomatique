@@ -28,7 +28,13 @@ fn try_solve() -> Result<(), anyhow::Error> {
         default_problem_builder, get_default_main_module,
     };
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
-    let problem = match default_problem_builder(get_default_main_module())
+    let main_script = env
+        .get_params()
+        .main_script
+        .as_ref()
+        .map(|x| x.as_str())
+        .unwrap_or(get_default_main_module());
+    let problem = match default_problem_builder(&main_script)
         .map_err(|e| format!("{}", e))
         .and_then(|b| b.build(&env).map_err(|e| format!("{}", e)))
     {
