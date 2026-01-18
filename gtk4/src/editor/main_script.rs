@@ -14,7 +14,6 @@ type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collomatique_binding_colloscopes::vars::Var,
 >;
 
-mod edit_dialog;
 mod modules_dialog;
 
 #[derive(Clone, Debug)]
@@ -25,10 +24,13 @@ pub enum ErrorMsg {
 
 pub struct MainScript {
     main_script: Option<String>,
+    current_buffer: String,
+    last_snapshot: String,
     errors: Option<Vec<ErrorMsg>>,
     errors_list: FactoryVecDeque<ErrorEntry>,
-    edit_dialog: Controller<edit_dialog::Dialog>,
     modules_dialog: Controller<modules_dialog::Dialog>,
+    should_redraw: bool,
+    check_scheduled: bool,
 }
 
 #[derive(Debug)]
@@ -38,9 +40,14 @@ pub enum MainScriptInput {
         Option<Result<ProblemBuilder, SimpleProblemError>>,
     ),
     RestoreDefaultClicked,
-    EditClicked,
-    DialogAccepted(String),
+    ModifyScriptClicked,
+    TextChanged(String),
     ShowModulesClicked,
+}
+
+#[derive(Debug)]
+pub enum MainScriptCommandOutput {
+    CheckBuffer,
 }
 
 impl MainScript {
@@ -73,7 +80,7 @@ impl Component for MainScript {
     type Init = ();
     type Input = MainScriptInput;
     type Output = collomatique_ops::MainScriptUpdateOp;
-    type CommandOutput = ();
+    type CommandOutput = MainScriptCommandOutput;
 
     view! {
         #[root]
@@ -92,12 +99,6 @@ impl Component for MainScript {
                     set_halign: gtk::Align::Start,
                     set_label: "Script de génération des contraintes",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                },
-                gtk::Button {
-                    set_icon_name: "document-edit-symbolic",
-                    add_css_class: "flat",
-                    set_tooltip_text: Some("Modifier le script"),
-                    connect_clicked => MainScriptInput::EditClicked,
                 },
                 gtk::Button {
                     set_icon_name: "view-list-symbolic",
@@ -129,11 +130,41 @@ impl Component for MainScript {
                 // Top: Script TextView
                 #[wrap(Some)]
                 set_start_child = &gtk::Overlay {
-                    add_overlay = &gtk::Label {
-                        set_label: "<b>Script par défaut sélectionné</b>",
-                        set_use_markup: true,
+                    add_overlay = &gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_vexpand: true,
+                        set_hexpand: true,
                         #[watch]
                         set_visible: model.is_default(),
+                        gtk::Box {
+                            set_vexpand: true,
+                            set_hexpand: true,
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_hexpand: true,
+                            set_spacing: 5,
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Label {
+                                set_label: "<b>Script par défaut sélectionné</b>",
+                                set_use_markup: true,
+                            },
+                            gtk::Button {
+                                set_icon_name: "document-edit-symbolic",
+                                add_css_class: "flat",
+                                set_tooltip_text: Some("Modifier le script"),
+                                connect_clicked => MainScriptInput::ModifyScriptClicked,
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                        },
+                        gtk::Box {
+                            set_vexpand: true,
+                            set_hexpand: true,
+                        },
                     },
                     #[wrap(Some)]
                     set_child = &gtk::ScrolledWindow {
@@ -141,14 +172,18 @@ impl Component for MainScript {
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
                         gtk::TextView {
-                            set_editable: false,
+                            set_editable: true,
                             set_monospace: true,
                             #[watch]
                             set_sensitive: !model.is_default(),
                             #[wrap(Some)]
                             set_buffer = &gtk::TextBuffer {
-                                #[watch]
+                                #[track(model.should_redraw)]
                                 set_text: &model.get_display_text(),
+                                connect_changed[sender] => move |buffer| {
+                                    let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+                                    sender.input(MainScriptInput::TextChanged(text.to_string()));
+                                },
                             },
                         }
                     },
@@ -225,13 +260,6 @@ impl Component for MainScript {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let edit_dialog = edit_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                edit_dialog::DialogOutput::Accepted(text) => MainScriptInput::DialogAccepted(text),
-            });
-
         let modules_dialog = modules_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -243,10 +271,15 @@ impl Component for MainScript {
 
         let model = MainScript {
             main_script: None,
+            current_buffer: collomatique_binding_colloscopes::scripts::get_default_main_module()
+                .to_string(),
+            last_snapshot: collomatique_binding_colloscopes::scripts::get_default_main_module()
+                .to_string(),
             errors: None,
             errors_list,
-            edit_dialog,
             modules_dialog,
+            should_redraw: false,
+            check_scheduled: false,
         };
 
         let errors_listbox = model.errors_list.widget();
@@ -256,9 +289,18 @@ impl Component for MainScript {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.should_redraw = false;
         match msg {
             MainScriptInput::Update(main_script, main_script_ast) => {
                 self.main_script = main_script;
+                if self.get_display_text() != self.last_snapshot {
+                    // If display text and snapshot are equal
+                    // this means the update probably comes from our own update
+                    // we ignore it (and if does not come from there, we don't need any updates anyway)
+                    self.last_snapshot = self.get_display_text();
+                    self.current_buffer = self.get_display_text();
+                    self.should_redraw = true;
+                }
                 self.errors = match main_script_ast {
                     None => None,
                     Some(Err(e)) => match e {
@@ -293,18 +335,20 @@ impl Component for MainScript {
                     .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(None))
                     .unwrap();
             }
-            MainScriptInput::EditClicked => {
-                self.edit_dialog
-                    .sender()
-                    .send(edit_dialog::DialogInput::Show(self.get_display_text()))
-                    .unwrap();
-            }
-            MainScriptInput::DialogAccepted(text) => {
+            MainScriptInput::ModifyScriptClicked => {
                 sender
                     .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(Some(
-                        text,
+                        collomatique_binding_colloscopes::scripts::get_default_main_module()
+                            .to_string(),
                     )))
                     .unwrap();
+            }
+            MainScriptInput::TextChanged(new_text) => {
+                if self.current_buffer == new_text {
+                    return;
+                }
+                self.current_buffer = new_text;
+                self.schedule_check(sender);
             }
             MainScriptInput::ShowModulesClicked => {
                 self.modules_dialog
@@ -313,6 +357,44 @@ impl Component for MainScript {
                     .unwrap();
             }
         }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            MainScriptCommandOutput::CheckBuffer => {
+                self.check_scheduled = false;
+                if self.main_script.is_none() {
+                    // Spurious check - we've returned to default since schedule_check
+                    return;
+                }
+                if self.last_snapshot != self.current_buffer {
+                    self.last_snapshot = self.current_buffer.clone();
+                    sender
+                        .output(collomatique_ops::MainScriptUpdateOp::UpdateScript(Some(
+                            self.last_snapshot.clone(),
+                        )))
+                        .unwrap();
+                }
+            }
+        }
+    }
+}
+
+impl MainScript {
+    fn schedule_check(&mut self, sender: ComponentSender<Self>) {
+        if self.check_scheduled {
+            return;
+        }
+        self.check_scheduled = true;
+        sender.oneshot_command(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            MainScriptCommandOutput::CheckBuffer
+        });
     }
 }
 
