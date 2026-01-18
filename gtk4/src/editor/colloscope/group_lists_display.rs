@@ -93,7 +93,7 @@ impl FactoryComponent for Entry {
             },
             gtk::Image {
                 set_margin_end: 5,
-                set_icon_name: Some("dialog-warning"),
+                set_icon_name: Some("dialog-warning-symbolic"),
                 #[watch]
                 set_visible: !self.compatible_with_prefill,
             },

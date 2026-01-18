@@ -19,8 +19,8 @@ impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
             EntryData::Success(_) => "emblem-ok-symbolic".into(),
-            EntryData::Invalid(_) => "dialog-error".into(),
-            EntryData::Failed(_) => "dialog-warning".into(),
+            EntryData::Invalid(_) => "dialog-error-symbolic".into(),
+            EntryData::Failed(_) => "dialog-warning-symbolic".into(),
         }
     }
 

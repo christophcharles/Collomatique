@@ -23,7 +23,7 @@ impl fmt::Display for SimpleProblemError {
             SimpleProblemError::ParsingError(err) => write!(f, "{}", err),
             SimpleProblemError::SemanticErrors { errors, .. } => {
                 for err in errors {
-                    writeln!(f, "{}", err)?;
+                    write!(f, "{}", err)?;
                 }
                 Ok(())
             }

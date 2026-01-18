@@ -55,13 +55,26 @@ impl SimpleComponent for Dialog {
                     gtk::Box {
                         set_orientation: gtk::Orientation::Vertical,
                         set_hexpand: true,
-                        gtk::Label {
+                        gtk::Box {
                             set_hexpand: true,
                             set_vexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 10,
                             #[watch]
                             set_visible: model.warnings.is_none(),
-                            set_label: "Constraintes en cours de reconstruction...",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            adw::Spinner {
+                                set_size_request: (30,30),
+                            },
+                            gtk::Label {
+                                set_label: "Constraintes en cours de reconstruction...",
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
                         },
                         gtk::Box {
                             set_hexpand: true,
@@ -90,6 +103,7 @@ impl SimpleComponent for Dialog {
                             set_vexpand: true,
                             set_orientation: gtk::Orientation::Horizontal,
                             set_spacing: 10,
+                            add_css_class: "error",
                             gtk::Box {
                                 set_hexpand: true,
                             },
@@ -97,7 +111,7 @@ impl SimpleComponent for Dialog {
                             set_visible: matches!(&model.warnings, Some(Err(_))),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
-                                set_icon_name: Some("dialog-error"),
+                                set_icon_name: Some("dialog-error-symbolic"),
                             },
                             gtk::Label {
                                 #[watch]
@@ -206,7 +220,7 @@ enum EntryInput {
 impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
-            EntryData::Warning(_) => "dialog-warning".into(),
+            EntryData::Warning(_) => "dialog-warning-symbolic".into(),
         }
     }
 

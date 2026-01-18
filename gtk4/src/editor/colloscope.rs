@@ -243,7 +243,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
-                                    set_icon_name: Some("dialog-warning"),
+                                    set_icon_name: Some("dialog-warning-symbolic"),
                                 },
                                 gtk::Label {
                                     #[watch]
