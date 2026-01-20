@@ -12,6 +12,8 @@ use crate::ast::Spanned;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Derivative)]
 #[derivative(PartialOrd, Ord, PartialEq, Eq)]
@@ -21,28 +23,36 @@ pub struct ScriptVar<T: EvalObject> {
     pub from_list: Option<usize>,
     pub params: Vec<ExprValue<T>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: String,
+    params_str: Arc<str>,
 }
 
 impl<T: EvalObject> ScriptVar<T> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
+        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
         module: String,
         name: String,
         from_list: Option<usize>,
         params: Vec<ExprValue<T>>,
     ) -> Self {
-        let args: Vec<_> = params
-            .iter()
-            .map(|x| x.convert_to_string(env, cache))
-            .collect();
+        let params_str = if let Some(cached) = var_str_cache.get(&params) {
+            cached.clone()
+        } else {
+            let args: Vec<_> = params
+                .iter()
+                .map(|x| x.convert_to_string(env, cache))
+                .collect();
+            let s: Arc<str> = args.join(", ").into();
+            var_str_cache.insert(params.clone(), s.clone());
+            s
+        };
         ScriptVar {
             module,
             name,
             from_list,
             params,
-            params_str: args.join(", "),
+            params_str,
         }
     }
 
@@ -58,7 +68,7 @@ impl<T: EvalObject> ScriptVar<T> {
             name,
             from_list,
             params,
-            params_str: args.join(", "),
+            params_str: args.join(", ").into(),
         }
     }
 }
@@ -82,24 +92,32 @@ pub struct ExternVar<T: EvalObject> {
     pub name: String,
     pub params: Vec<ExprValue<T>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: String,
+    params_str: Arc<str>,
 }
 
 impl<T: EvalObject> ExternVar<T> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
+        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
         name: String,
         params: Vec<ExprValue<T>>,
     ) -> Self {
-        let args: Vec<_> = params
-            .iter()
-            .map(|x| x.convert_to_string(env, cache))
-            .collect();
+        let params_str = if let Some(cached) = var_str_cache.get(&params) {
+            cached.clone()
+        } else {
+            let args: Vec<_> = params
+                .iter()
+                .map(|x| x.convert_to_string(env, cache))
+                .collect();
+            let s: Arc<str> = args.join(", ").into();
+            var_str_cache.insert(params.clone(), s.clone());
+            s
+        };
         ExternVar {
             name,
             params,
-            params_str: args.join(", "),
+            params_str,
         }
     }
 
@@ -108,7 +126,7 @@ impl<T: EvalObject> ExternVar<T> {
         ExternVar {
             name,
             params,
-            params_str: args.join(", "),
+            params_str: args.join(", ").into(),
         }
     }
 }

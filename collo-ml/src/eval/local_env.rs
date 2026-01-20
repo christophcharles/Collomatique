@@ -450,6 +450,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
                             eval_history.env,
                             &mut eval_history.cache,
+                            &mut eval_history.var_str_cache,
                             ext_var_name,
                             args,
                         ))))
@@ -478,6 +479,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                         ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
                             eval_history.env,
                             &mut eval_history.cache,
+                            &mut eval_history.var_str_cache,
                             var_module,
                             var_name,
                             None,
@@ -1126,6 +1128,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                                         ScriptVar::new(
                                             eval_history.env,
                                             &mut eval_history.cache,
+                                            &mut eval_history.var_str_cache,
                                             var_module.clone(),
                                             var_name.clone(),
                                             Some(i),

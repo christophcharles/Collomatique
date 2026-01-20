@@ -13,6 +13,7 @@ use crate::semantics::FunctionDesc;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct EvalHistory<'a, T: EvalObject> {
@@ -22,6 +23,7 @@ pub struct EvalHistory<'a, T: EvalObject> {
     pub(crate) funcs: BTreeMap<(String, String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
     pub(crate) vars: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
     pub(crate) var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
+    pub(crate) var_str_cache: BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
 }
 
 impl<'a, T: EvalObject> EvalHistory<'a, T> {
@@ -39,6 +41,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             funcs: BTreeMap::new(),
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
+            var_str_cache: BTreeMap::new(),
         })
     }
 
