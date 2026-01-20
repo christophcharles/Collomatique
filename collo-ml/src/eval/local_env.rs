@@ -249,10 +249,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 }
                 let value = self.eval_expr(eval_history, &args[0])?;
 
-                let orig_type = eval_history
-                    .ast
-                    .resolve_type(self.current_module(), typ)
-                    .expect("At this point types should be valid");
+                let orig_type = eval_history.ast.get_resolved_type(&typ.span);
                 let target_type = orig_type
                     .as_simple()
                     .expect("ComplexTypeCast should have a simple type as target");
@@ -299,13 +296,10 @@ impl<T: EvalObject> LocalEvalEnv<T> {
             }
             Expr::CastFallible { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = eval_history
-                    .ast
-                    .resolve_type(self.current_module(), typ)
-                    .expect("At this point types should be valid");
+                let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
-                if value.fits_in_typ(eval_history.env, &target_type) {
+                if value.fits_in_typ(eval_history.env, target_type) {
                     value
                 } else {
                     ExprValue::None
@@ -313,13 +307,10 @@ impl<T: EvalObject> LocalEvalEnv<T> {
             }
             Expr::CastPanic { expr, typ } => {
                 let value = self.eval_expr(eval_history, &expr)?;
-                let target_type = eval_history
-                    .ast
-                    .resolve_type(self.current_module(), typ)
-                    .expect("At this point types should be valid");
+                let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
-                if value.fits_in_typ(eval_history.env, &target_type) {
+                if value.fits_in_typ(eval_history.env, target_type) {
                     value
                 } else {
                     return Err(EvalError::Panic(Box::new(ExprValue::String(format!(
@@ -357,10 +348,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 )
             }
             Expr::GlobalList(typ_name) => {
-                let expr_type = eval_history
-                    .ast
-                    .resolve_type(self.current_module(), typ_name)
-                    .expect("At this point, types should be valid");
+                let expr_type = eval_history.ast.get_resolved_type(&typ_name.span);
 
                 let mut collection = vec![];
                 for variant in expr_type.get_variants() {
@@ -803,11 +791,8 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 for branch in branches {
                     let does_typ_match = match &branch.as_typ {
                         Some(t) => {
-                            let target_type = eval_history
-                                .ast
-                                .resolve_type(self.current_module(), t)
-                                .expect("At this point types should be valid");
-                            value.fits_in_typ(&eval_history.env, &target_type)
+                            let target_type = eval_history.ast.get_resolved_type(&t.span);
+                            value.fits_in_typ(&eval_history.env, target_type)
                         }
                         None => true,
                     };

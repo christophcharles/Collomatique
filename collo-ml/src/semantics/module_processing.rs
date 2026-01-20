@@ -24,6 +24,7 @@ impl GlobalEnv {
             Self,
             TypeInfo,
             HashMap<Span, ExprType>,
+            HashMap<Span, ExprType>,
             Vec<SemError>,
             Vec<SemWarning>,
         ),
@@ -69,6 +70,7 @@ impl GlobalEnv {
 
         let mut type_info = TypeInfo::new();
         let mut expr_types = HashMap::new();
+        let mut resolved_types = HashMap::new();
         let mut errors = vec![];
         let mut warnings = vec![];
 
@@ -334,6 +336,7 @@ impl GlobalEnv {
                         body,
                         &mut type_info,
                         &mut expr_types,
+                        &mut resolved_types,
                         &mut errors,
                         &mut warnings,
                     );
@@ -344,7 +347,14 @@ impl GlobalEnv {
         temp_env.check_unused_fn(&mut warnings);
         temp_env.check_unused_var(&mut warnings);
 
-        Ok((temp_env, type_info, expr_types, errors, warnings))
+        Ok((
+            temp_env,
+            type_info,
+            expr_types,
+            resolved_types,
+            errors,
+            warnings,
+        ))
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
@@ -702,6 +712,7 @@ impl GlobalEnv {
         local_env: &mut LocalCheckEnv,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -711,7 +722,14 @@ impl GlobalEnv {
                     // Check the expression - it's already wrapped in String(...)
                     // so it should type-check if the inner expression can convert to String
                     local_env.check_expr(
-                        self, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                        self,
+                        &expr.node,
+                        &expr.span,
+                        type_info,
+                        expr_types,
+                        resolved_types,
+                        errors,
+                        warnings,
                     );
                 }
             }
@@ -726,6 +744,7 @@ impl GlobalEnv {
         body: &Spanned<Expr>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
@@ -753,13 +772,21 @@ impl GlobalEnv {
             &mut local_env,
             type_info,
             expr_types,
+            resolved_types,
             errors,
             warnings,
         );
 
         // Then validate body
         let body_type_opt = local_env.check_expr(
-            self, &body.node, &body.span, type_info, expr_types, errors, warnings,
+            self,
+            &body.node,
+            &body.span,
+            type_info,
+            expr_types,
+            resolved_types,
+            errors,
+            warnings,
         );
         local_env.pop_scope(warnings);
 

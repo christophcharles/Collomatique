@@ -36,7 +36,7 @@ pub(crate) fn analyze(
         .expect("AST conversion failed");
 
     let modules = BTreeMap::from([("main", file)]);
-    let (_global_env, type_info, _expr_types, errors, warnings) =
+    let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
         GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
@@ -91,7 +91,7 @@ pub(crate) fn analyze_multi(
         })
         .collect();
 
-    let (_global_env, type_info, _expr_types, errors, warnings) =
+    let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
         GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)

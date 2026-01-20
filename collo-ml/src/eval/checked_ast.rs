@@ -21,6 +21,7 @@ pub struct CheckedAST<T: EvalObject = NoObject> {
     pub(crate) global_env: GlobalEnv,
     pub(crate) type_info: TypeInfo,
     pub(crate) expr_types: HashMap<crate::ast::Span, ExprType>,
+    pub(crate) resolved_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) warnings: Vec<SemWarning>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
@@ -109,7 +110,7 @@ impl<T: EvalObject> CheckedAST<T> {
             modules.insert(*name, file);
         }
 
-        let (global_env, type_info, expr_types, errors, warnings) =
+        let (global_env, type_info, expr_types, resolved_types, errors, warnings) =
             GlobalEnv::new(T::type_schemas(), vars, &modules)?;
 
         if !errors.is_empty() {
@@ -120,6 +121,7 @@ impl<T: EvalObject> CheckedAST<T> {
             global_env,
             type_info,
             expr_types,
+            resolved_types,
             warnings,
             _phantom: std::marker::PhantomData,
         })
@@ -154,6 +156,13 @@ impl<T: EvalObject> CheckedAST<T> {
         typ: &crate::ast::Spanned<crate::ast::TypeName>,
     ) -> Result<ExprType, SemError> {
         self.global_env.resolve_type(typ, module)
+    }
+
+    /// Get a resolved type from the cache (populated during semantic analysis)
+    pub fn get_resolved_type(&self, span: &crate::ast::Span) -> &ExprType {
+        self.resolved_types
+            .get(span)
+            .expect("Type should have been resolved during semantic analysis")
     }
 
     pub fn get_functions(&self) -> HashMap<(String, String), (ArgsType, ExprType)> {

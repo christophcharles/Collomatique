@@ -19,11 +19,19 @@ impl LocalCheckEnv {
         span: &Span,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         let result = self.check_expr_internal(
-            global_env, expr, span, type_info, expr_types, errors, warnings,
+            global_env,
+            expr,
+            span,
+            type_info,
+            expr_types,
+            resolved_types,
+            errors,
+            warnings,
         );
         if let Some(typ) = &result {
             expr_types.insert(span.clone(), typ.clone());
@@ -147,6 +155,7 @@ impl LocalCheckEnv {
         global_span: &Span,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
@@ -162,7 +171,14 @@ impl LocalCheckEnv {
                 .map(|x| x.into()),
             Expr::Path { object, segments } => self
                 .check_path(
-                    global_env, object, segments, type_info, expr_types, errors, warnings,
+                    global_env,
+                    object,
+                    segments,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 )
                 .map(|x| x.into()),
 
@@ -170,7 +186,14 @@ impl LocalCheckEnv {
             Expr::ExplicitType { expr, typ } => {
                 // Check the inner expression
                 let expr_type = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &expr.node,
+                    &expr.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 // Convert the declared type
@@ -191,6 +214,9 @@ impl LocalCheckEnv {
                     });
                     return expr_type; // Fallback to inferred type
                 }
+
+                // Cache the resolved type for use during evaluation
+                resolved_types.insert(typ.span.clone(), target_type.clone());
 
                 if let Some(inferred) = expr_type {
                     // Check if the inferred type can convert to the target type
@@ -212,7 +238,14 @@ impl LocalCheckEnv {
             Expr::CastFallible { expr, typ } => {
                 // Check the inner expression
                 let expr_type = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &expr.node,
+                    &expr.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 // Convert the declared type
@@ -233,6 +266,9 @@ impl LocalCheckEnv {
                     });
                     return expr_type; // Fallback to inferred type
                 }
+
+                // Cache the resolved type for use during evaluation
+                resolved_types.insert(typ.span.clone(), target_type.clone());
 
                 if let Some(inferred) = expr_type {
                     // For cast?, target must be subtype of expr type (narrowing)
@@ -253,7 +289,14 @@ impl LocalCheckEnv {
             Expr::CastPanic { expr, typ } => {
                 // Check the inner expression
                 let expr_type = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &expr.node,
+                    &expr.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 // Convert the declared type
@@ -274,6 +317,9 @@ impl LocalCheckEnv {
                     });
                     return expr_type; // Fallback to inferred type
                 }
+
+                // Cache the resolved type for use during evaluation
+                resolved_types.insert(typ.span.clone(), target_type.clone());
 
                 if let Some(inferred) = expr_type {
                     // For cast!, target must be subtype of expr type (narrowing)
@@ -296,7 +342,14 @@ impl LocalCheckEnv {
                 let mut arg_types = Vec::new();
                 for arg in args {
                     let arg_type = self.check_expr(
-                        global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings,
+                        global_env,
+                        &arg.node,
+                        &arg.span,
+                        type_info,
+                        expr_types,
+                        resolved_types,
+                        errors,
+                        warnings,
                     );
                     arg_types.push((arg, arg_type));
                 }
@@ -319,6 +372,10 @@ impl LocalCheckEnv {
                     });
                     return None;
                 }
+
+                // Cache the resolved type for use during evaluation
+                resolved_types.insert(typ.span.clone(), target_type.clone());
+
                 let concrete_target = target_type.to_simple().unwrap().into_concrete().unwrap();
 
                 // For type conversion, we expect exactly one argument
@@ -361,7 +418,14 @@ impl LocalCheckEnv {
             // String + String -> String
             Expr::Add(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -369,6 +433,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -458,7 +523,14 @@ impl LocalCheckEnv {
             // [Type1] - [Type2] -> [Type1] if Type1 and Type2 overlap
             Expr::Sub(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -466,6 +538,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -566,7 +639,14 @@ impl LocalCheckEnv {
             // Unary negation - for LinExpr and Int
             Expr::Neg(term) => {
                 let term_type = self.check_expr(
-                    global_env, &term.node, &term.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &term.node,
+                    &term.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 match term_type.clone() {
@@ -588,7 +668,14 @@ impl LocalCheckEnv {
             // But NOT LinExpr * LinExpr (non-linear!)
             Expr::Mul(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -596,6 +683,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -666,7 +754,14 @@ impl LocalCheckEnv {
             // These are NOT allowed on LinExpr
             Expr::Div(left, right) | Expr::Mod(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -674,6 +769,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -742,7 +838,14 @@ impl LocalCheckEnv {
             | Expr::ConstraintLe(left, right)
             | Expr::ConstraintGe(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -750,6 +853,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -786,7 +890,14 @@ impl LocalCheckEnv {
             // ========== Comparison Operations ==========
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -794,6 +905,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -818,7 +930,14 @@ impl LocalCheckEnv {
             | Expr::Lt(left, right)
             | Expr::Gt(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -826,6 +945,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -859,7 +979,14 @@ impl LocalCheckEnv {
             // Bool and Bool -> Bool, Constraint and Constraint -> Constraint
             Expr::And(left, right) | Expr::Or(left, right) => {
                 let left_type = self.check_expr(
-                    global_env, &left.node, &left.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &left.node,
+                    &left.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let right_type = self.check_expr(
                     global_env,
@@ -867,6 +994,7 @@ impl LocalCheckEnv {
                     &right.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -933,7 +1061,14 @@ impl LocalCheckEnv {
 
             Expr::Not(expr) => {
                 let expr_type = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &expr.node,
+                    &expr.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 match expr_type {
@@ -955,10 +1090,24 @@ impl LocalCheckEnv {
             // x ?? default -> (typeof x - None) | typeof default
             Expr::NullCoalesce(lhs, rhs) => {
                 let lhs_type = self.check_expr(
-                    global_env, &lhs.node, &lhs.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &lhs.node,
+                    &lhs.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let rhs_type = self.check_expr(
-                    global_env, &rhs.node, &rhs.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &rhs.node,
+                    &rhs.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 match (lhs_type, rhs_type) {
@@ -1002,6 +1151,7 @@ impl LocalCheckEnv {
                     &inner_expr.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1014,7 +1164,14 @@ impl LocalCheckEnv {
             // x in collection -> Bool
             Expr::In { item, collection } => {
                 let item_type = self.check_expr(
-                    global_env, &item.node, &item.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &item.node,
+                    &item.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
                 let coll_type = self.check_expr(
                     global_env,
@@ -1022,6 +1179,7 @@ impl LocalCheckEnv {
                     &collection.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1075,6 +1233,7 @@ impl LocalCheckEnv {
                     &collection.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1143,6 +1302,7 @@ impl LocalCheckEnv {
                         &filter_expr.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     );
@@ -1161,7 +1321,14 @@ impl LocalCheckEnv {
 
                 // Check body (must be Constraint or Bool)
                 let body_type = self.check_expr(
-                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &body.node,
+                    &body.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 self.pop_scope(warnings);
@@ -1194,6 +1361,7 @@ impl LocalCheckEnv {
                     &collection.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1263,6 +1431,7 @@ impl LocalCheckEnv {
                         &filter_expr.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     );
@@ -1281,7 +1450,14 @@ impl LocalCheckEnv {
 
                 // Check body (must be arithmetic: Int or LinExpr)
                 let body_type = self.check_expr(
-                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &body.node,
+                    &body.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 self.pop_scope(warnings);
@@ -1318,6 +1494,7 @@ impl LocalCheckEnv {
                     &collection.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1328,6 +1505,7 @@ impl LocalCheckEnv {
                     &init_value.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1423,6 +1601,7 @@ impl LocalCheckEnv {
                             &filter_expr.span,
                             type_info,
                             expr_types,
+                            resolved_types,
                             errors,
                             warnings,
                         );
@@ -1441,7 +1620,14 @@ impl LocalCheckEnv {
 
                     // Check body (must match accumulator)
                     let body_type = self.check_expr(
-                        global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                        global_env,
+                        &body.node,
+                        &body.span,
+                        type_info,
+                        expr_types,
+                        resolved_types,
+                        errors,
+                        warnings,
                     );
 
                     self.pop_scope(warnings);
@@ -1476,6 +1662,7 @@ impl LocalCheckEnv {
                     &condition.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1497,6 +1684,7 @@ impl LocalCheckEnv {
                     &then_expr.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1506,6 +1694,7 @@ impl LocalCheckEnv {
                     &else_expr.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -1526,6 +1715,7 @@ impl LocalCheckEnv {
                     &match_expr.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 ) else {
@@ -1548,6 +1738,8 @@ impl LocalCheckEnv {
                                     });
                                     continue;
                                 }
+                                // Cache the resolved type for use during evaluation
+                                resolved_types.insert(bt.span.clone(), t.clone());
                                 Some(t)
                             }
                             Err(e) => {
@@ -1604,6 +1796,7 @@ impl LocalCheckEnv {
                                 &filter_expr.span,
                                 type_info,
                                 expr_types,
+                                resolved_types,
                                 errors,
                                 warnings,
                             );
@@ -1626,6 +1819,7 @@ impl LocalCheckEnv {
                             &branch.body.span,
                             type_info,
                             expr_types,
+                            resolved_types,
                             errors,
                             warnings,
                         );
@@ -1717,7 +1911,13 @@ impl LocalCheckEnv {
                             args.iter().zip(var_args.iter()).enumerate()
                         {
                             let arg_type = self.check_expr(
-                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                global_env,
+                                &arg.node,
+                                &arg.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
                                 warnings,
                             );
 
@@ -1763,7 +1963,13 @@ impl LocalCheckEnv {
                             args.iter().zip(var_args.iter()).enumerate()
                         {
                             let arg_type = self.check_expr(
-                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                global_env,
+                                &arg.node,
+                                &arg.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
                                 warnings,
                             );
 
@@ -1852,7 +2058,13 @@ impl LocalCheckEnv {
                             args.iter().zip(var_args.iter()).enumerate()
                         {
                             let arg_type = self.check_expr(
-                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                global_env,
+                                &arg.node,
+                                &arg.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
                                 warnings,
                             );
 
@@ -1940,8 +2152,14 @@ impl LocalCheckEnv {
                                     args.iter().zip(fn_type.args.iter()).enumerate()
                                 {
                                     let arg_type = self.check_expr(
-                                        global_env, &arg.node, &arg.span, type_info, expr_types,
-                                        errors, warnings,
+                                        global_env,
+                                        &arg.node,
+                                        &arg.span,
+                                        type_info,
+                                        expr_types,
+                                        resolved_types,
+                                        errors,
+                                        warnings,
                                     );
 
                                     if let Some(found_type) = arg_type {
@@ -1973,6 +2191,7 @@ impl LocalCheckEnv {
                             &path.span,
                             type_info,
                             expr_types,
+                            resolved_types,
                             errors,
                             warnings,
                         )
@@ -2038,6 +2257,7 @@ impl LocalCheckEnv {
                         &path.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     ),
@@ -2087,6 +2307,8 @@ impl LocalCheckEnv {
                     });
                     None
                 } else {
+                    // Cache the resolved type for use during evaluation
+                    resolved_types.insert(type_name.span.clone(), typ.clone());
                     Some(SimpleType::List(typ).into())
                 }
             }
@@ -2103,13 +2325,21 @@ impl LocalCheckEnv {
                     &elements[0].span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
 
                 for item in &elements[1..] {
                     let item_type = self.check_expr(
-                        global_env, &item.node, &item.span, type_info, expr_types, errors, warnings,
+                        global_env,
+                        &item.node,
+                        &item.span,
+                        type_info,
+                        expr_types,
+                        resolved_types,
+                        errors,
+                        warnings,
                     );
 
                     match (unified_type.clone(), item_type) {
@@ -2143,7 +2373,13 @@ impl LocalCheckEnv {
                     .iter()
                     .filter_map(|elem| {
                         self.check_expr(
-                            global_env, &elem.node, &elem.span, type_info, expr_types, errors,
+                            global_env,
+                            &elem.node,
+                            &elem.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
                             warnings,
                         )
                     })
@@ -2183,6 +2419,7 @@ impl LocalCheckEnv {
                         &field_expr.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     ) {
@@ -2207,11 +2444,19 @@ impl LocalCheckEnv {
                     &start.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
                 let end_type = self.check_expr(
-                    global_env, &end.node, &end.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &end.node,
+                    &end.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 if let (Some(s), Some(e)) = (start_type, end_type) {
@@ -2254,6 +2499,7 @@ impl LocalCheckEnv {
                         &collection.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     );
@@ -2330,6 +2576,7 @@ impl LocalCheckEnv {
                         &filter_expr.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     );
@@ -2348,7 +2595,14 @@ impl LocalCheckEnv {
 
                 // Check the output expression - this determines the result element type
                 let elem_type = self.check_expr(
-                    global_env, &expr.node, &expr.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &expr.node,
+                    &expr.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 for (_var, _collection) in vars_and_collections {
@@ -2369,6 +2623,7 @@ impl LocalCheckEnv {
                     &collection.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -2395,6 +2650,7 @@ impl LocalCheckEnv {
                     &value.span,
                     type_info,
                     expr_types,
+                    resolved_types,
                     errors,
                     warnings,
                 );
@@ -2436,7 +2692,14 @@ impl LocalCheckEnv {
                 self.push_scope();
 
                 let body_type = self.check_expr(
-                    global_env, &body.node, &body.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &body.node,
+                    &body.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 self.pop_scope(warnings);
@@ -2460,6 +2723,7 @@ impl LocalCheckEnv {
         span: &Span,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
@@ -2488,7 +2752,14 @@ impl LocalCheckEnv {
                 // Check the argument type and validate conversion
                 let arg = &args[0];
                 let arg_type = self.check_expr(
-                    global_env, &arg.node, &arg.span, type_info, expr_types, errors, warnings,
+                    global_env,
+                    &arg.node,
+                    &arg.span,
+                    type_info,
+                    expr_types,
+                    resolved_types,
+                    errors,
+                    warnings,
                 );
 
                 if let Some(inferred) = arg_type {
@@ -2553,7 +2824,13 @@ impl LocalCheckEnv {
                     }
                     if let Some(arg) = args.first() {
                         let arg_type = self.check_expr(
-                            global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                            global_env,
+                            &arg.node,
+                            &arg.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
                             warnings,
                         );
                         if let Some(inferred) = arg_type {
@@ -2582,7 +2859,13 @@ impl LocalCheckEnv {
                         }
                         for arg in args {
                             self.check_expr(
-                                global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                                global_env,
+                                &arg.node,
+                                &arg.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
                                 warnings,
                             );
                         }
@@ -2602,7 +2885,13 @@ impl LocalCheckEnv {
                         (args.first(), underlying_simple.as_ref())
                     {
                         let arg_type = self.check_expr(
-                            global_env, &arg.node, &arg.span, type_info, expr_types, errors,
+                            global_env,
+                            &arg.node,
+                            &arg.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
                             warnings,
                         );
 
@@ -2644,6 +2933,7 @@ impl LocalCheckEnv {
         span: &Span,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
@@ -2730,6 +3020,7 @@ impl LocalCheckEnv {
                                 &field_expr.span,
                                 type_info,
                                 expr_types,
+                                resolved_types,
                                 errors,
                                 warnings,
                             );
@@ -2912,6 +3203,7 @@ impl LocalCheckEnv {
         segments: &Vec<Spanned<crate::ast::PathSegment>>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
+        resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
@@ -2925,6 +3217,7 @@ impl LocalCheckEnv {
             &object.span,
             type_info,
             expr_types,
+            resolved_types,
             errors,
             warnings,
         )?;
@@ -3045,6 +3338,7 @@ impl LocalCheckEnv {
                         &index_expr.span,
                         type_info,
                         expr_types,
+                        resolved_types,
                         errors,
                         warnings,
                     )?;
