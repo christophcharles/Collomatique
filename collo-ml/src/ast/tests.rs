@@ -1,5 +1,6 @@
 // Test modules organized by feature area
 use super::*;
+use crate::parser::Rule;
 
 mod collections;
 mod enums;

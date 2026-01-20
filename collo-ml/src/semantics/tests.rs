@@ -1,3 +1,4 @@
+use super::global_env::ObjectFields;
 use super::*;
 use crate::parser::{ColloMLParser, Rule};
 use pest::Parser;
