@@ -370,30 +370,22 @@ impl<T: EvalObject> ExprValue<T> {
         }
     }
 
-    pub fn convert_to(
+    pub unsafe fn convert_to_unchecked(
         self,
         env: &T::Env,
         cache: &mut T::Cache,
-        target: &ConcreteType,
-    ) -> Option<ExprValue<T>> {
-        if !self.can_convert_to(env, target) {
-            return None;
-        }
-
-        Some(match (self, target.inner()) {
+        target: &SimpleType,
+    ) -> ExprValue<T> {
+        match (self, target) {
             // This should also work for empty lists as the iterator will be empty
             (Self::List(list), SimpleType::List(inner_typ)) => {
                 let inner_target = inner_typ
                     .as_simple()
                     .expect("Inner list target type should have already been checked");
-                let concrete_inner = inner_target
-                    .clone()
-                    .into_concrete()
-                    .expect("Type should be concrete");
                 Self::List(
                     list.into_iter()
-                        .map(|x| x.convert_to(env, cache, &concrete_inner))
-                        .collect::<Option<_>>()?,
+                        .map(|x| unsafe { x.convert_to_unchecked(env, cache, &inner_target) })
+                        .collect(),
                 )
             }
             (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(val as f64)),
@@ -402,38 +394,30 @@ impl<T: EvalObject> ExprValue<T> {
             (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
             // Tuple conversion: element-wise
             (Self::Tuple(elements), SimpleType::Tuple(target_elems)) => {
-                let converted: Option<Vec<_>> = elements
+                let converted = elements
                     .into_iter()
                     .zip(target_elems.iter())
                     .map(|(e, t)| {
-                        let t_concrete = t
-                            .as_simple()
-                            .expect("Type should be concrete")
-                            .clone()
-                            .into_concrete()
-                            .expect("Type should be concrete");
-                        e.convert_to(env, cache, &t_concrete)
+                        let target_type = t.as_simple().expect("Type should be concrete");
+                        unsafe { e.convert_to_unchecked(env, cache, target_type) }
                     })
                     .collect();
-                Self::Tuple(converted?)
+                Self::Tuple(converted)
             }
             // Structs: field-wise conversion
             (Self::Struct(fields), SimpleType::Struct(target_fields)) => {
-                let converted: Option<BTreeMap<_, _>> = fields
+                let converted = fields
                     .into_iter()
                     .map(|(k, v)| {
-                        let target_type = target_fields.get(&k)?;
-                        let t_concrete = target_type
-                            .as_simple()
-                            .expect("Type should be concrete")
-                            .clone()
-                            .into_concrete()
-                            .expect("Type should be concrete");
-                        let converted_v = v.convert_to(env, cache, &t_concrete)?;
-                        Some((k, converted_v))
+                        let target_type = target_fields.get(&k).expect("Field should exist");
+                        let inner_target =
+                            target_type.as_simple().expect("Type should be concrete");
+                        let converted_v =
+                            unsafe { v.convert_to_unchecked(env, cache, inner_target) };
+                        (k, converted_v)
                     })
                     .collect();
-                Self::Struct(converted?)
+                Self::Struct(converted)
             }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
@@ -448,18 +432,29 @@ impl<T: EvalObject> ExprValue<T> {
             // Converting FROM a Custom type: unwrap and convert the content
             (Self::Custom(custom), target_typ) => {
                 // Recursively convert the inner content to the target type
-                let inner_target = target_typ
-                    .clone()
-                    .into_concrete()
-                    .expect("Should be concrete");
-                custom
-                    .content
-                    .clone()
-                    .convert_to(env, cache, &inner_target)?
+                unsafe {
+                    custom
+                        .content
+                        .clone()
+                        .convert_to_unchecked(env, cache, &target_typ)
+                }
             }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (orig, _) => orig,
-        })
+        }
+    }
+
+    pub fn convert_to(
+        self,
+        env: &T::Env,
+        cache: &mut T::Cache,
+        target: &ConcreteType,
+    ) -> Option<ExprValue<T>> {
+        if !self.can_convert_to(env, target) {
+            return None;
+        }
+
+        Some(unsafe { self.convert_to_unchecked(env, cache, target.inner()) })
     }
 
     pub(crate) fn convert_to_string(&self, env: &T::Env, cache: &mut T::Cache) -> String {

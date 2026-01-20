@@ -249,19 +249,21 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 }
                 let value = self.eval_expr(eval_history, &args[0])?;
 
-                let target_type = eval_history
+                let orig_type = eval_history
                     .ast
                     .resolve_type(self.current_module(), typ)
-                    .expect("At this point types should be valid")
-                    .to_simple()
+                    .expect("At this point types should be valid");
+                let target_type = orig_type
+                    .as_simple()
                     .expect("ComplexTypeCast should have a simple type as target");
-                let concrete_target = target_type
-                    .into_concrete()
-                    .expect("Should be concrete at this point");
 
-                value
-                    .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
-                    .expect("Resulting expression should be convertible to target type")
+                unsafe {
+                    value.convert_to_unchecked(
+                        eval_history.env,
+                        &mut eval_history.cache,
+                        target_type,
+                    )
+                }
             }
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
@@ -549,32 +551,22 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
-                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value1);
-                }
-                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value2);
-                }
-
-                let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr1) = (unsafe {
+                    value1.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr2) = (unsafe {
+                    value2.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -584,32 +576,22 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
-                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value1);
-                }
-                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value2);
-                }
-
-                let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr1) = (unsafe {
+                    value1.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr2) = (unsafe {
+                    value2.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -619,32 +601,22 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 let value1 = self.eval_expr(eval_history, &*expr1)?;
                 let value2 = self.eval_expr(eval_history, &*expr2)?;
 
-                let concrete_lin_expr = SimpleType::LinExpr.into_concrete().unwrap();
-                if !value1.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value1);
-                }
-                if !value2.can_convert_to(&eval_history.env, &concrete_lin_expr) {
-                    panic!("Operand for === does not convert to LinExpr: {:?}", value2);
-                }
-
-                let ExprValue::LinExpr(lin_expr1) = value1
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr1) = (unsafe {
+                    value1.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = value2
-                    .convert_to(
+                let ExprValue::LinExpr(lin_expr2) = (unsafe {
+                    value2.convert_to_unchecked(
                         &eval_history.env,
                         &mut eval_history.cache,
-                        &concrete_lin_expr,
+                        &SimpleType::LinExpr,
                     )
-                    .unwrap()
-                else {
+                }) else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -1238,13 +1210,13 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                     "Built-in type cast should have exactly 1 argument"
                 );
                 let value = self.eval_expr(eval_history, &args[0])?;
-                let concrete_target = simple_type
-                    .clone()
-                    .into_concrete()
-                    .expect("Built-in types are always concrete");
-                Ok(value
-                    .convert_to(eval_history.env, &mut eval_history.cache, &concrete_target)
-                    .expect("Semantic analysis should have validated conversion"))
+                Ok(unsafe {
+                    value.convert_to_unchecked(
+                        eval_history.env,
+                        &mut eval_history.cache,
+                        &simple_type,
+                    )
+                })
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)
