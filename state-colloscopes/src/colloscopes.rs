@@ -538,7 +538,7 @@ impl ColloscopeInterrogation {
                     .get(group_list_id)
                     .expect("Group list id should be valid");
 
-                group_list.params.group_count.end() + 1
+                *group_list.params.group_count.end()
             }
         };
 
