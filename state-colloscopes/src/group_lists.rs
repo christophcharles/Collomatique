@@ -119,8 +119,8 @@ pub struct GroupListParameters {
     pub name: String,
     /// Range of possible count of students per group
     pub students_per_group: RangeInclusive<NonZeroU32>,
-    /// Range of possible number of groups in the list
-    pub group_count: RangeInclusive<u32>,
+    /// Maximum number of groups in the list
+    pub max_group_count: u32,
     /// Students set that are not covered by the group list
     pub excluded_students: BTreeSet<StudentId>,
 }
@@ -130,7 +130,7 @@ impl Default for GroupListParameters {
         GroupListParameters {
             name: "Liste".into(),
             students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-            group_count: 0..=u32::MAX,
+            max_group_count: 16, // <- needs sane default; 16 is the number of groups for a class of 48 with 3 students per group
             excluded_students: BTreeSet::new(),
         }
     }
@@ -150,8 +150,7 @@ impl GroupList {
         {
             return false;
         }
-        let max_group_count = *self.params.group_count.end();
-        self.prefilled_groups.groups.len() == (max_group_count as usize)
+        self.prefilled_groups.groups.len() == (self.params.max_group_count as usize)
     }
 
     /// Returns the set of students that are not already in a prefilled group

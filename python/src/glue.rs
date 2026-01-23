@@ -1144,9 +1144,6 @@ impl CollomatiqueFile {
                 AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
                     Err(PyValueError::new_err("Empty students per group range"))
                 }
-                AddNewGroupListError::GroupCountRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty group count range"))
-                }
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -1177,9 +1174,6 @@ impl CollomatiqueFile {
                 ))),
                 UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
                     Err(PyValueError::new_err("Empty students per group range"))
-                }
-                UpdateGroupListError::GroupCountRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty group count range"))
                 }
             },
             _ => panic!("Unexpected result: {:?}", result),

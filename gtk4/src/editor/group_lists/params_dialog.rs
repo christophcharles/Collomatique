@@ -19,8 +19,7 @@ pub struct Dialog {
     selected_name: String,
     selected_students_per_group_minimum: u32,
     selected_students_per_group_maximum: u32,
-    selected_group_count_minimum: u32,
-    selected_group_count_maximum: u32,
+    selected_max_group_count: u32,
     excluded_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
 
     student_entries: FactoryVecDeque<StudentEntry>,
@@ -38,8 +37,7 @@ pub enum DialogInput {
     UpdateSelectedName(String),
     UpdateStudentsPerGroupMinimum(u32),
     UpdateStudentsPerGroupMaximum(u32),
-    UpdateGroupCountMinimum(u32),
-    UpdateGroupCountMaximum(u32),
+    UpdateMaxGroupCount(u32),
 
     UpdateStudentStatus(usize, bool),
 }
@@ -157,37 +155,15 @@ impl SimpleComponent for Dialog {
                         },
                         adw::PreferencesGroup {
                             set_title: "Nombre de groupes",
-                            set_description: Some("Nombre total de groupes dans la liste"),
+                            set_description: Some("Nombre maximum de groupes dans la liste"),
                             set_margin_all: 5,
                             set_hexpand: true,
-                            adw::SpinRow {
-                                set_hexpand: true,
-                                set_title: "Minimum",
-                                #[wrap(Some)]
-                                set_adjustment = &gtk::Adjustment {
-                                    set_lower: 0.,
-                                    #[watch]
-                                    set_upper: model.selected_group_count_maximum as f64,
-                                    set_step_increment: 1.,
-                                    set_page_increment: 5.,
-                                },
-                                set_wrap: false,
-                                set_snap_to_ticks: true,
-                                set_numeric: true,
-                                #[track(model.should_redraw)]
-                                set_value: model.selected_group_count_minimum as f64,
-                                connect_value_notify[sender] => move |widget| {
-                                    let groups_count_min_u32 = widget.value() as u32;
-                                    sender.input(DialogInput::UpdateGroupCountMinimum(groups_count_min_u32));
-                                },
-                            },
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Maximum",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
-                                    #[watch]
-                                    set_lower: model.selected_group_count_minimum as f64,
+                                    set_lower: 0.,
                                     set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
@@ -196,10 +172,10 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.selected_group_count_maximum as f64,
+                                set_value: model.selected_max_group_count as f64,
                                 connect_value_notify[sender] => move |widget| {
-                                    let groups_count_max_u32 = widget.value() as u32;
-                                    sender.input(DialogInput::UpdateGroupCountMaximum(groups_count_max_u32));
+                                    let max_group_count = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateMaxGroupCount(max_group_count));
                                 },
                             },
                         },
@@ -237,9 +213,8 @@ impl SimpleComponent for Dialog {
             ordered_students: vec![],
             selected_name: String::new(),
             selected_students_per_group_minimum: 1,
-            selected_group_count_maximum: 3,
-            selected_group_count_minimum: 0,
             selected_students_per_group_maximum: u32::MAX,
+            selected_max_group_count: 16,
             student_entries,
             excluded_students: BTreeSet::new(),
         };
@@ -298,17 +273,11 @@ impl SimpleComponent for Dialog {
                 }
                 self.selected_students_per_group_maximum = selected_students_per_group_maximum;
             }
-            DialogInput::UpdateGroupCountMinimum(selected_group_count_minimum) => {
-                if self.selected_group_count_minimum == selected_group_count_minimum {
+            DialogInput::UpdateMaxGroupCount(selected_max_group_count) => {
+                if self.selected_max_group_count == selected_max_group_count {
                     return;
                 }
-                self.selected_group_count_minimum = selected_group_count_minimum;
-            }
-            DialogInput::UpdateGroupCountMaximum(selected_group_count_maximum) => {
-                if self.selected_group_count_maximum == selected_group_count_maximum {
-                    return;
-                }
-                self.selected_group_count_maximum = selected_group_count_maximum;
+                self.selected_max_group_count = selected_max_group_count;
             }
             DialogInput::UpdateStudentStatus(student_num, new_status) => {
                 assert!(student_num < self.ordered_students.len());
@@ -360,8 +329,7 @@ impl Dialog {
         self.selected_name = data.name;
         self.selected_students_per_group_minimum = data.students_per_group.start().get();
         self.selected_students_per_group_maximum = data.students_per_group.end().get();
-        self.selected_group_count_minimum = *data.group_count.start();
-        self.selected_group_count_maximum = *data.group_count.end();
+        self.selected_max_group_count = data.max_group_count;
         self.excluded_students = data.excluded_students;
     }
 
@@ -370,7 +338,7 @@ impl Dialog {
             name: self.selected_name.clone(),
             students_per_group: NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()
                 ..=NonZeroU32::new(self.selected_students_per_group_maximum).unwrap(),
-            group_count: self.selected_group_count_minimum..=self.selected_group_count_maximum,
+            max_group_count: self.selected_max_group_count,
             excluded_students: self.excluded_students.clone(),
         }
     }

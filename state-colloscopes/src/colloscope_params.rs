@@ -557,9 +557,6 @@ impl Parameters {
         params: &group_lists::GroupListParameters,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        if params.group_count.is_empty() {
-            return Err(GroupListError::GroupCountRangeIsEmpty);
-        }
         if params.students_per_group.is_empty() {
             return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
         }

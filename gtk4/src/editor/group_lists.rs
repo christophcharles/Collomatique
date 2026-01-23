@@ -221,7 +221,7 @@ impl Component for GroupLists {
                     collomatique_state_colloscopes::group_lists::GroupListParameters::default();
                 let max_group_count = (self.students.student_map.len() as u32)
                     / (group_list_params.students_per_group.start().get());
-                group_list_params.group_count = 0..=max_group_count.max(1);
+                group_list_params.max_group_count = max_group_count.max(1);
 
                 self.params_dialog
                     .sender()

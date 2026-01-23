@@ -50,16 +50,10 @@ impl Entry {
     }
 
     fn generate_group_count_text(&self) -> String {
-        let range = &self.data.group_list.params.group_count;
-        if range.start() == range.end() {
-            format!("<b>Nombre de groupes :</b> {}", range.start())
-        } else {
-            format!(
-                "<b>Nombre de groupes :</b> {} à {}",
-                range.start(),
-                range.end()
-            )
-        }
+        format!(
+            "<b>Nombre de groupes :</b> {}",
+            self.data.group_list.params.max_group_count
+        )
     }
 }
 

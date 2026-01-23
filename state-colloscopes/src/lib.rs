@@ -517,10 +517,6 @@ pub enum GroupListError {
     #[error("invalid subject id {0:?} for period {1:?}")]
     SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
 
-    /// empty group count range
-    #[error("group_count range is empty")]
-    GroupCountRangeIsEmpty,
-
     /// students per group range is empty
     #[error("students_per_group range is empty")]
     StudentsPerGroupRangeIsEmpty,
@@ -2423,7 +2419,7 @@ impl Data {
                     None => None,
                 };
                 let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => *group_list.params.group_count.end(),
+                    Some(group_list) => group_list.params.max_group_count,
                     None => 0,
                 };
 

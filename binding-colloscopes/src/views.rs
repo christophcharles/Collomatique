@@ -92,7 +92,6 @@ pub struct GroupList {
     min_students_per_group: i32,
     max_students_per_group: i32,
     max_group_count: i32,
-    min_group_count: i32,
     already_counted_students: i32,
 }
 
@@ -341,8 +340,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
             students,
             min_students_per_group: group_list_data.params.students_per_group.start().get() as i32,
             max_students_per_group: group_list_data.params.students_per_group.end().get() as i32,
-            min_group_count: *group_list_data.params.group_count.start() as i32,
-            max_group_count: *group_list_data.params.group_count.end() as i32,
+            max_group_count: group_list_data.params.max_group_count as i32,
         })
     }
 }
@@ -352,7 +350,7 @@ impl GroupList {
         let group_list_data = env.params.group_lists.group_list_map.get(group_list_id)?;
 
         Some(
-            (0..(*group_list_data.params.group_count.end() as i32))
+            (0..(group_list_data.params.max_group_count as i32))
                 .into_iter()
                 .map(|num| GroupId {
                     group_list: *group_list_id,

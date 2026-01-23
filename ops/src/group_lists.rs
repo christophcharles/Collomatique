@@ -259,8 +259,6 @@ pub enum GroupListsUpdateError {
 pub enum AddNewGroupListError {
     #[error("Student id ({0:?}) is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),
-    #[error("group_count range is empty")]
-    GroupCountRangeIsEmpty,
     #[error("students_per_group range is empty")]
     StudentsPerGroupRangeIsEmpty,
 }
@@ -271,8 +269,6 @@ pub enum UpdateGroupListError {
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
     #[error("Student id ({0:?}) is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),
-    #[error("group_count range is empty")]
-    GroupCountRangeIsEmpty,
     #[error("students_per_group range is empty")]
     StudentsPerGroupRangeIsEmpty,
 }
@@ -410,7 +406,7 @@ impl GroupListsUpdateOp {
 
                                 let mut new_assigned_groups = interrogation.assigned_groups.clone();
                                 for group in &interrogation.assigned_groups {
-                                    if *group < *params.group_count.end() {
+                                    if *group < params.max_group_count {
                                         continue;
                                     }
                                     new_assigned_groups.remove(group);
@@ -605,7 +601,7 @@ impl GroupListsUpdateOp {
                     None => None,
                 };
                 let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => *group_list.params.group_count.end(),
+                    Some(group_list) => group_list.params.max_group_count,
                     None => 0,
                 };
 
@@ -733,7 +729,7 @@ impl GroupListsUpdateOp {
                         None => None,
                     };
                     let first_forbidden_group_number = match new_group_list {
-                        Some(group_list) => *group_list.params.group_count.end(),
+                        Some(group_list) => group_list.params.max_group_count,
                         None => 0,
                     };
 
@@ -811,9 +807,6 @@ impl GroupListsUpdateOp {
                     }
                 }
 
-                if params.group_count.is_empty() {
-                    return Err(AddNewGroupListError::GroupCountRangeIsEmpty.into());
-                }
                 if params.students_per_group.is_empty() {
                     return Err(AddNewGroupListError::StudentsPerGroupRangeIsEmpty.into());
                 }
@@ -846,9 +839,6 @@ impl GroupListsUpdateOp {
                     }
                 }
 
-                if params.group_count.is_empty() {
-                    return Err(UpdateGroupListError::GroupCountRangeIsEmpty.into());
-                }
                 if params.students_per_group.is_empty() {
                     return Err(UpdateGroupListError::StudentsPerGroupRangeIsEmpty.into());
                 }

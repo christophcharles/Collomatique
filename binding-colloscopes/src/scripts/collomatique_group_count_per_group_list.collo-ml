@@ -8,13 +8,7 @@ let count_groups_in_list(group_list: GroupList) -> LinExpr =
 let max_groups_per_list(group_list: GroupList) -> Constraint =
     count_groups_in_list(group_list) <== group_list.max_group_count;
 
-let min_groups_per_list(group_list: GroupList) -> Constraint =
-    count_groups_in_list(group_list) >== group_list.min_group_count;
-
-let enforce_group_count(group_list: GroupList) -> Constraint =
-    max_groups_per_list(group_list) and min_groups_per_list(group_list);
-
 pub let constraint() -> Constraint =
     forall group_list in @[GroupList] {
-        enforce_group_count(group_list)
+        max_groups_per_list(group_list)
     };

@@ -308,7 +308,7 @@ impl Dialog {
         let group_names_list: Vec<_> = ["(Aucun groupe)".into()]
             .into_iter()
             .chain(
-                (0..=*self.group_list.params.group_count.end())
+                (0..=self.group_list.params.max_group_count)
                     .into_iter()
                     .map(
                         |num| match self.group_list.prefilled_groups.groups.get(num as usize) {
