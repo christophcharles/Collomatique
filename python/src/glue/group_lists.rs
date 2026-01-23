@@ -91,7 +91,7 @@ pub struct GroupListParameters {
     #[pyo3(set, get)]
     pub students_per_group_max: NonZeroU32,
     #[pyo3(set, get)]
-    pub max_group_count: u32,
+    pub group_names: Vec<Option<String>>,
     #[pyo3(set, get)]
     pub excluded_students: BTreeSet<StudentId>,
 }
@@ -104,7 +104,7 @@ impl GroupListParameters {
             name,
             students_per_group_min: NonZeroU32::new(2).unwrap(),
             students_per_group_max: NonZeroU32::new(3).unwrap(),
-            max_group_count: 16,
+            group_names: vec![None; 16],
             excluded_students: BTreeSet::new(),
         }
     }
@@ -123,7 +123,11 @@ impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
             name: value.name,
             students_per_group_min: *value.students_per_group.start(),
             students_per_group_max: *value.students_per_group.end(),
-            max_group_count: value.max_group_count,
+            group_names: value
+                .group_names
+                .into_iter()
+                .map(|opt| opt.map(|s| s.into_inner()))
+                .collect(),
             excluded_students: value
                 .excluded_students
                 .into_iter()
@@ -140,7 +144,11 @@ impl From<GroupListParameters>
         collomatique_state_colloscopes::group_lists::GroupListParameters {
             name: value.name,
             students_per_group: value.students_per_group_min..=value.students_per_group_max,
-            max_group_count: value.max_group_count,
+            group_names: value
+                .group_names
+                .into_iter()
+                .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
+                .collect(),
             excluded_students: value
                 .excluded_students
                 .into_iter()

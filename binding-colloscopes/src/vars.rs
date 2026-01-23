@@ -26,7 +26,7 @@ impl Var {
             Some(data) => data,
             None => return 0.,
         };
-        (group_list_data.params.max_group_count - 1) as f64
+        (group_list_data.params.group_names.len() as i32 - 1) as f64
     }
 
     fn compute_group_range(env: &Env, interrogation: &InterrogationData) -> std::ops::Range<i32> {
@@ -56,7 +56,7 @@ impl Var {
             Some(group_list) => group_list,
             None => return default_range,
         };
-        0..group_list.params.max_group_count as i32
+        0..group_list.params.group_names.len() as i32
     }
 
     fn fix_student_group(env: &Env, student: &StudentId, group_list: &GroupListId) -> Option<f64> {

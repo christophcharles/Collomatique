@@ -52,7 +52,7 @@ impl Entry {
     fn generate_group_count_text(&self) -> String {
         format!(
             "<b>Nombre de groupes :</b> {}",
-            self.data.group_list.params.max_group_count
+            self.data.group_list.params.group_names.len()
         )
     }
 }

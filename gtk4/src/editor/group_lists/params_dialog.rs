@@ -20,9 +20,11 @@ pub struct Dialog {
     selected_students_per_group_minimum: u32,
     selected_students_per_group_maximum: u32,
     selected_max_group_count: u32,
+    group_name_data: Vec<String>,
     excluded_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
 
     student_entries: FactoryVecDeque<StudentEntry>,
+    group_name_entries: FactoryVecDeque<GroupNameEntry>,
 }
 
 #[derive(Debug)]
@@ -38,6 +40,7 @@ pub enum DialogInput {
     UpdateStudentsPerGroupMinimum(u32),
     UpdateStudentsPerGroupMaximum(u32),
     UpdateMaxGroupCount(u32),
+    UpdateGroupName(usize, String),
 
     UpdateStudentStatus(usize, bool),
 }
@@ -180,6 +183,13 @@ impl SimpleComponent for Dialog {
                             },
                         },
                         #[local_ref]
+                        group_name_entries_widget -> adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: model.selected_max_group_count > 0,
+                        },
+                        #[local_ref]
                         student_entries_widget -> adw::PreferencesGroup {
                             set_title: "Élèves dans la liste",
                             set_margin_all: 5,
@@ -206,6 +216,12 @@ impl SimpleComponent for Dialog {
                 }
             });
 
+        let group_name_entries = FactoryVecDeque::builder()
+            .launch(adw::PreferencesGroup::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                GroupNameOutput::UpdateName(num, name) => DialogInput::UpdateGroupName(num, name),
+            });
+
         let model = Dialog {
             hidden: true,
             should_redraw: false,
@@ -215,11 +231,14 @@ impl SimpleComponent for Dialog {
             selected_students_per_group_minimum: 1,
             selected_students_per_group_maximum: u32::MAX,
             selected_max_group_count: 16,
+            group_name_data: vec![String::new(); 16],
             student_entries,
+            group_name_entries,
             excluded_students: BTreeSet::new(),
         };
 
         let student_entries_widget = model.student_entries.widget();
+        let group_name_entries_widget = model.group_name_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -245,6 +264,8 @@ impl SimpleComponent for Dialog {
                         }),
                     |data| StudentInput::UpdateData(data),
                 );
+
+                self.update_group_name_entries();
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -278,6 +299,12 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.selected_max_group_count = selected_max_group_count;
+                self.update_group_name_entries();
+            }
+            DialogInput::UpdateGroupName(group_num, name) => {
+                if group_num < self.group_name_data.len() {
+                    self.group_name_data[group_num] = name;
+                }
             }
             DialogInput::UpdateStudentStatus(student_num, new_status) => {
                 assert!(student_num < self.ordered_students.len());
@@ -329,7 +356,16 @@ impl Dialog {
         self.selected_name = data.name;
         self.selected_students_per_group_minimum = data.students_per_group.start().get();
         self.selected_students_per_group_maximum = data.students_per_group.end().get();
-        self.selected_max_group_count = data.max_group_count;
+        self.selected_max_group_count = data.group_names.len() as u32;
+        self.group_name_data = data
+            .group_names
+            .iter()
+            .map(|opt| {
+                opt.as_ref()
+                    .map(|s| s.clone().into_inner())
+                    .unwrap_or_default()
+            })
+            .collect();
         self.excluded_students = data.excluded_students;
     }
 
@@ -338,9 +374,37 @@ impl Dialog {
             name: self.selected_name.clone(),
             students_per_group: NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()
                 ..=NonZeroU32::new(self.selected_students_per_group_maximum).unwrap(),
-            max_group_count: self.selected_max_group_count,
+            group_names: self
+                .group_name_data
+                .iter()
+                .take(self.selected_max_group_count as usize)
+                .map(|s| non_empty_string::NonEmptyString::new(s.clone()).ok())
+                .collect(),
             excluded_students: self.excluded_students.clone(),
         }
+    }
+
+    fn update_group_name_entries(&mut self) {
+        let entries_count = self.selected_max_group_count as usize;
+
+        // Resize group_name_data if needed
+        if entries_count > self.group_name_data.len() {
+            self.group_name_data.resize(entries_count, String::new());
+        }
+
+        // Sync factory with model
+        crate::tools::factories::update_vec_deque(
+            &mut self.group_name_entries,
+            self.group_name_data
+                .iter()
+                .take(entries_count)
+                .enumerate()
+                .map(|(num, name)| GroupNameData {
+                    name: name.clone(),
+                    group_num: num,
+                }),
+            |data| GroupNameInput::UpdateData(data),
+        );
     }
 }
 
@@ -431,6 +495,97 @@ impl FactoryComponent for StudentEntry {
                     .output(StudentOutput::UpdateStatus(
                         self.index.current_index(),
                         new_status,
+                    ))
+                    .unwrap();
+            }
+        }
+    }
+}
+
+// Group name entry factory component
+#[derive(Debug, Clone)]
+struct GroupNameData {
+    name: String,
+    group_num: usize,
+}
+
+#[derive(Debug)]
+struct GroupNameEntry {
+    data: GroupNameData,
+    index: DynamicIndex,
+    should_redraw: bool,
+}
+
+#[derive(Debug, Clone)]
+enum GroupNameInput {
+    UpdateData(GroupNameData),
+    UpdateName(String),
+}
+
+#[derive(Debug)]
+enum GroupNameOutput {
+    UpdateName(usize, String),
+}
+
+#[relm4::factory]
+impl FactoryComponent for GroupNameEntry {
+    type Init = GroupNameData;
+    type Input = GroupNameInput;
+    type Output = GroupNameOutput;
+    type CommandOutput = ();
+    type ParentWidget = adw::PreferencesGroup;
+
+    view! {
+        #[root]
+        adw::EntryRow {
+            set_hexpand: true,
+            #[watch]
+            set_title: &format!("Groupe {}", self.data.group_num + 1),
+            #[track(self.should_redraw)]
+            set_text: &self.data.name,
+            connect_text_notify[sender] => move |widget| {
+                let text: String = widget.text().into();
+                sender.input(GroupNameInput::UpdateName(text));
+            },
+        }
+    }
+
+    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+            data,
+            index: index.clone(),
+            should_redraw: false,
+        }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        self.should_redraw = false;
+        match msg {
+            GroupNameInput::UpdateData(new_data) => {
+                self.data = new_data;
+                self.should_redraw = true;
+            }
+            GroupNameInput::UpdateName(new_name) => {
+                if self.data.name == new_name {
+                    return;
+                }
+                self.data.name = new_name.clone();
+                sender
+                    .output(GroupNameOutput::UpdateName(
+                        self.index.current_index(),
+                        new_name,
                     ))
                     .unwrap();
             }

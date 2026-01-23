@@ -406,7 +406,7 @@ impl GroupListsUpdateOp {
 
                                 let mut new_assigned_groups = interrogation.assigned_groups.clone();
                                 for group in &interrogation.assigned_groups {
-                                    if *group < params.max_group_count {
+                                    if (*group as usize) < params.group_names.len() {
                                         continue;
                                     }
                                     new_assigned_groups.remove(group);
@@ -601,7 +601,7 @@ impl GroupListsUpdateOp {
                     None => None,
                 };
                 let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => group_list.params.max_group_count,
+                    Some(group_list) => group_list.params.group_names.len() as u32,
                     None => 0,
                 };
 
@@ -729,7 +729,7 @@ impl GroupListsUpdateOp {
                         None => None,
                     };
                     let first_forbidden_group_number = match new_group_list {
-                        Some(group_list) => group_list.params.max_group_count,
+                        Some(group_list) => group_list.params.group_names.len() as u32,
                         None => 0,
                     };
 

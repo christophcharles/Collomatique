@@ -145,7 +145,7 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
 
                 let week = first_week_in_period + week_num;
 
-                for group_num in 0..group_list.params.max_group_count {
+                for group_num in 0..group_list.params.group_names.len() as u32 {
                     if interrogation.assigned_groups.contains(&group_num) {
                         continue;
                     }

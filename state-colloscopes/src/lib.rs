@@ -2419,7 +2419,7 @@ impl Data {
                     None => None,
                 };
                 let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => group_list.params.max_group_count,
+                    Some(group_list) => group_list.params.group_names.len() as u32,
                     None => 0,
                 };
 
