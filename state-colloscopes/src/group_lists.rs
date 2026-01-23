@@ -43,8 +43,6 @@ pub struct GroupListPrefilledGroups {
 /// Prefilled groups for a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefilledGroup {
-    /// Optional name for the group
-    pub name: Option<non_empty_string::NonEmptyString>,
     /// Students set
     ///
     /// Set of students that are in the group
@@ -61,7 +59,6 @@ pub struct PrefilledGroup {
 impl Default for PrefilledGroup {
     fn default() -> Self {
         PrefilledGroup {
-            name: None,
             students: BTreeSet::new(),
             sealed: false,
         }

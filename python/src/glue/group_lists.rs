@@ -162,8 +162,6 @@ impl From<GroupListParameters>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefilledGroup {
     #[pyo3(set, get)]
-    pub name: String,
-    #[pyo3(set, get)]
     pub students: BTreeSet<StudentId>,
     #[pyo3(set, get)]
     pub sealed: bool,
@@ -174,7 +172,6 @@ impl PrefilledGroup {
     #[new]
     fn new() -> Self {
         PrefilledGroup {
-            name: String::new(),
             students: BTreeSet::new(),
             sealed: false,
         }
@@ -189,10 +186,6 @@ impl PrefilledGroup {
 impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
     fn from(value: collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
         PrefilledGroup {
-            name: match value.name {
-                None => String::new(),
-                Some(n) => n.into_inner(),
-            },
             students: value.students.into_iter().map(|x| x.into()).collect(),
             sealed: value.sealed,
         }
@@ -202,7 +195,6 @@ impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for Prefi
 impl From<PrefilledGroup> for collomatique_state_colloscopes::group_lists::PrefilledGroup {
     fn from(value: PrefilledGroup) -> Self {
         collomatique_state_colloscopes::group_lists::PrefilledGroup {
-            name: non_empty_string::NonEmptyString::new(value.name).ok(),
             students: value.students.into_iter().map(|x| x.into()).collect(),
             sealed: value.sealed,
         }

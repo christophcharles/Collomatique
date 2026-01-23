@@ -138,10 +138,10 @@ impl SimpleComponent for Dialog {
                             num,
                             name: self
                                 .group_list
-                                .prefilled_groups
-                                .groups
+                                .params
+                                .group_names
                                 .get(num as usize)
-                                .map(|x| x.name.clone())
+                                .cloned()
                                 .flatten(),
                             status: self.interrogation.assigned_groups.contains(&num),
                         }),

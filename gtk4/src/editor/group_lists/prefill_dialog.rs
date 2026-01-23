@@ -1,6 +1,4 @@
-use adw::prelude::{
-    AdjustmentExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
-};
+use adw::prelude::{AdjustmentExt, ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
@@ -14,6 +12,7 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     list_name: String,
+    group_names: Vec<Option<non_empty_string::NonEmptyString>>,
     filtered_students: BTreeMap<
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::students::Student,
@@ -167,6 +166,7 @@ impl SimpleComponent for Dialog {
             group_entries,
             available_students: BTreeSet::new(),
             list_name: String::new(),
+            group_names: vec![],
         };
 
         let entries_widget = model.group_entries.widget();
@@ -226,6 +226,7 @@ impl Dialog {
     fn update_from_data(&mut self, data: collomatique_state_colloscopes::group_lists::GroupList) {
         let selected_students: BTreeSet<_> = data.prefilled_groups.iter_students().collect();
         self.list_name = data.params.name.clone();
+        self.group_names = data.params.group_names.clone();
         self.available_students = self
             .filtered_students
             .iter()
@@ -241,13 +242,10 @@ impl Dialog {
             .prefilled_groups
             .groups
             .iter()
-            .map(|group| GroupEntryData {
+            .enumerate()
+            .map(|(index, group)| GroupEntryData {
                 sealed: group.sealed,
-                name: group
-                    .name
-                    .clone()
-                    .map(|x| x.into_inner())
-                    .unwrap_or_default(),
+                group_name: self.group_names.get(index).cloned().flatten(),
                 available_students: self.available_students.clone(),
                 filtered_students: self.filtered_students.clone(),
                 students: group.students.iter().map(|x| Some(x.clone())).collect(),
@@ -301,18 +299,16 @@ impl Dialog {
     fn update_group_entries(&mut self) {
         let entries_count = self.selected_group_count as usize;
 
-        if entries_count > self.group_data.len() {
-            self.group_data.resize(
-                entries_count,
-                GroupEntryData {
-                    sealed: false,
-                    name: String::new(),
-                    available_students: self.available_students.clone(),
-                    students: vec![],
-                    selected_student_count: 0,
-                    filtered_students: self.filtered_students.clone(),
-                },
-            )
+        while self.group_data.len() < entries_count {
+            let index = self.group_data.len();
+            self.group_data.push(GroupEntryData {
+                sealed: false,
+                group_name: self.group_names.get(index).cloned().flatten(),
+                available_students: self.available_students.clone(),
+                students: vec![],
+                selected_student_count: 0,
+                filtered_students: self.filtered_students.clone(),
+            });
         }
 
         crate::tools::factories::update_vec_deque(
@@ -334,7 +330,6 @@ impl Dialog {
                 .map(|group| {
                     let student_count = group.selected_student_count as usize;
                     collomatique_state_colloscopes::group_lists::PrefilledGroup {
-                        name: non_empty_string::NonEmptyString::new(group.name.clone()).ok(),
                         sealed: group.sealed,
                         students: group
                             .students
@@ -352,7 +347,7 @@ impl Dialog {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupEntryData {
     sealed: bool,
-    name: String,
+    group_name: Option<non_empty_string::NonEmptyString>,
     selected_student_count: u32,
     students: Vec<Option<collomatique_state_colloscopes::StudentId>>,
     available_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
@@ -373,7 +368,6 @@ struct GroupEntry {
 enum GroupEntryInput {
     UpdateData(GroupEntryData),
 
-    UpdateName(String),
     UpdateSealed(bool),
     UpdateSelectedStudentCount(u32),
     UpdateStudent(usize, Option<collomatique_state_colloscopes::StudentId>),
@@ -386,7 +380,10 @@ enum GroupEntryOutput {
 
 impl GroupEntry {
     fn generate_group_title(&self) -> String {
-        format!("Groupe {}", self.index.current_index() + 1)
+        match &self.data.group_name {
+            Some(name) => format!("Groupe {} : {}", self.index.current_index() + 1, name),
+            None => format!("Groupe {}", self.index.current_index() + 1),
+        }
     }
 }
 
@@ -410,16 +407,6 @@ impl FactoryComponent for GroupEntry {
                 set_title: &self.generate_group_title(),
                 set_margin_all: 5,
                 set_hexpand: true,
-                adw::EntryRow {
-                    set_hexpand: true,
-                    set_title: "Nom du groupe",
-                    #[track(self.should_redraw)]
-                    set_text: &self.data.name,
-                    connect_text_notify[sender] => move |widget| {
-                        let text : String = widget.text().into();
-                        sender.input(GroupEntryInput::UpdateName(text));
-                    },
-                },
                 adw::SwitchRow {
                     set_hexpand: true,
                     set_use_markup: false,
@@ -504,18 +491,6 @@ impl FactoryComponent for GroupEntry {
                 self.data = new_data;
                 self.should_redraw = true;
                 self.update_entries();
-            }
-            GroupEntryInput::UpdateName(new_name) => {
-                if self.data.name == new_name {
-                    return;
-                }
-                self.data.name = new_name;
-                sender
-                    .output(GroupEntryOutput::UpdateGroup(
-                        self.index.current_index(),
-                        self.data.clone(),
-                    ))
-                    .unwrap();
             }
             GroupEntryInput::UpdateSealed(new_sealed) => {
                 if self.data.sealed == new_sealed {

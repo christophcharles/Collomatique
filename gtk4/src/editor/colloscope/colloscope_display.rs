@@ -284,10 +284,10 @@ impl Display {
                                                     *num,
                                                     match group_list {
                                                         Some(list) => list
-                                                            .prefilled_groups
-                                                            .groups
+                                                            .params
+                                                            .group_names
                                                             .get(*num as usize)
-                                                            .map(|group| group.name.clone())
+                                                            .cloned()
                                                             .flatten(),
                                                         None => None,
                                                     },

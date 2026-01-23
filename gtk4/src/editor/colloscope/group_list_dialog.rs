@@ -307,28 +307,16 @@ impl Dialog {
     fn update_list_model(&mut self) {
         let group_names_list: Vec<_> = ["(Aucun groupe)".into()]
             .into_iter()
-            .chain(
-                (0..self.group_list.params.group_names.len() as u32)
-                    .into_iter()
-                    .map(
-                        |num| match self.group_list.prefilled_groups.groups.get(num as usize) {
-                            Some(prefilled_group) => {
-                                format!(
-                                    "Groupe {} : {}",
-                                    num + 1,
-                                    prefilled_group
-                                        .name
-                                        .as_ref()
-                                        .map(|x| x.clone().into_inner())
-                                        .unwrap_or_default()
-                                )
-                            }
-                            None => {
-                                format!("Groupe {}", num + 1)
-                            }
-                        },
-                    ),
-            )
+            .chain(self.group_list.params.group_names.iter().enumerate().map(
+                |(num, group_name)| match group_name {
+                    Some(name) => {
+                        format!("Groupe {} : {}", num + 1, name)
+                    }
+                    None => {
+                        format!("Groupe {}", num + 1)
+                    }
+                },
+            ))
             .collect();
         let group_names_list_ref: Vec<_> = group_names_list.iter().map(|x| x.as_str()).collect();
         self.list_model = gtk::StringList::new(&group_names_list_ref[..]);
