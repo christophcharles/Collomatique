@@ -157,13 +157,13 @@ impl SimpleComponent for Dialog {
                             },
                         },
                         adw::PreferencesGroup {
-                            set_title: "Nombre de groupes",
-                            set_description: Some("Nombre maximum de groupes dans la liste"),
+                            set_title: "Groupes de colles",
+                            set_description: Some("Nombre et noms des groupes"),
                             set_margin_all: 5,
                             set_hexpand: true,
                             adw::SpinRow {
                                 set_hexpand: true,
-                                set_title: "Maximum",
+                                set_title: "Nombre de groupe",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 0.,
@@ -540,7 +540,7 @@ impl FactoryComponent for GroupNameEntry {
         adw::EntryRow {
             set_hexpand: true,
             #[watch]
-            set_title: &format!("Groupe {}", self.data.group_num + 1),
+            set_title: &format!("Nom du groupe {}", self.data.group_num + 1),
             #[track(self.should_redraw)]
             set_text: &self.data.name,
             connect_text_notify[sender] => move |widget| {
