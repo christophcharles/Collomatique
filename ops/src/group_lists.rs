@@ -345,8 +345,11 @@ impl GroupListsUpdateOp {
                     .group_lists
                     .get(group_list_id)
                     .expect("Group list ID should be valid");
-                for (student_id, _group) in &collo_group_list.groups_for_students {
-                    if params.excluded_students.contains(student_id) {
+                for (student_id, group) in &collo_group_list.groups_for_students {
+                    // Check if student is excluded OR assigned to a group that no longer exists
+                    if params.excluded_students.contains(student_id)
+                        || (*group as usize) >= params.group_names.len()
+                    {
                         let mut new_collo_group_list = collo_group_list.clone();
                         new_collo_group_list.groups_for_students.remove(student_id);
                         return Some(CleaningOp {
