@@ -7,6 +7,10 @@ pub enum GroupListsUpdateWarning {
         collomatique_state_colloscopes::GroupListId,
         Vec<collomatique_state_colloscopes::StudentId>,
     ),
+    LooseExcludedStudents(
+        collomatique_state_colloscopes::GroupListId,
+        Vec<collomatique_state_colloscopes::StudentId>,
+    ),
     LooseSubjectAssociation(
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::SubjectId,
@@ -83,6 +87,41 @@ impl GroupListsUpdateWarning {
 
                 Some(format!(
                     "Perte du préremplissage de la liste de groupe \"{}\" avec les élèves: {}",
+                    group_list.params.name,
+                    student_names.join(", ")
+                ))
+            }
+            Self::LooseExcludedStudents(group_list_id, student_ids) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+                let mut student_names = vec![];
+                for student_id in student_ids {
+                    let Some(student) = data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .students
+                        .student_map
+                        .get(student_id)
+                    else {
+                        return None;
+                    };
+                    student_names.push(format!(
+                        "{} {}",
+                        student.desc.firstname, student.desc.surname,
+                    ));
+                }
+
+                Some(format!(
+                    "Perte des élèves exclus de la liste de groupe \"{}\": {}",
                     group_list.params.name,
                     student_names.join(", ")
                 ))
@@ -524,6 +563,27 @@ impl GroupListsUpdateOp {
                                 });
                             }
                         }
+                    }
+                }
+
+                // Clear excluded_students if Automatic mode with non-empty excluded_students
+                if let collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                    excluded_students,
+                } = &old_group_list.filling
+                {
+                    if !excluded_students.is_empty() {
+                        return Some(CleaningOp {
+                            warning: GroupListsUpdateWarning::LooseExcludedStudents(
+                                *group_list_id,
+                                excluded_students.iter().copied().collect(),
+                            ),
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::SetFilling(
+                                *group_list_id,
+                                collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                                    excluded_students: std::collections::BTreeSet::new(),
+                                },
+                            )),
+                        });
                     }
                 }
 
