@@ -74,7 +74,7 @@ impl Var {
         };
 
         let Some(num) = prefilled.find_student_group(*student) else {
-            return None;
+            return Some(-1.0);
         };
 
         Some(num as f64)
