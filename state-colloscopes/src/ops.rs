@@ -174,8 +174,8 @@ pub enum GroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list (None = automatic)
-    PreFill(GroupListId, Option<group_lists::GroupListPrefilledGroups>),
+    /// Set filling strategy for a group list
+    SetFilling(GroupListId, group_lists::GroupListFilling),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -488,8 +488,8 @@ pub enum AnnotatedGroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list (None = automatic)
-    PreFill(GroupListId, Option<group_lists::GroupListPrefilledGroups>),
+    /// Set filling strategy for a group list
+    SetFilling(GroupListId, group_lists::GroupListFilling),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -799,9 +799,10 @@ impl AnnotatedGroupListOp {
             GroupListOp::Update(group_list_id, params) => {
                 (AnnotatedGroupListOp::Update(group_list_id, params), None)
             }
-            GroupListOp::PreFill(group_list_id, map) => {
-                (AnnotatedGroupListOp::PreFill(group_list_id, map), None)
-            }
+            GroupListOp::SetFilling(group_list_id, filling) => (
+                AnnotatedGroupListOp::SetFilling(group_list_id, filling),
+                None,
+            ),
             GroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => (
                 AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id),
                 None,

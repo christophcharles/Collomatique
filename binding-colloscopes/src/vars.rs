@@ -65,15 +65,21 @@ impl Var {
             None => return Some(-1.),
         };
 
-        if group_list_data.params.excluded_students.contains(student) {
+        if group_list_data
+            .filling
+            .excluded_students()
+            .contains(student)
+        {
             return Some(-1.);
         }
 
-        let Some(prefilled) = &group_list_data.prefilled_groups else {
+        let collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { .. } =
+            &group_list_data.filling
+        else {
             return None;
         };
 
-        let Some(num) = prefilled.find_student_group(*student) else {
+        let Some(num) = group_list_data.filling.find_student_group(*student) else {
             return Some(-1.0);
         };
 

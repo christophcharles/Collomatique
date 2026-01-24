@@ -6,33 +6,24 @@ use relm4::FactorySender;
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
-use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    students: collomatique_state_colloscopes::students::Students,
-
-    ordered_students: Vec<(collomatique_state_colloscopes::StudentId, String, String)>,
 
     selected_name: String,
     selected_students_per_group_minimum: u32,
     selected_students_per_group_maximum: u32,
     selected_max_group_count: u32,
     group_name_data: Vec<String>,
-    excluded_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
 
-    student_entries: FactoryVecDeque<StudentEntry>,
     group_name_entries: FactoryVecDeque<GroupNameEntry>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(
-        collomatique_state_colloscopes::group_lists::GroupListParameters,
-        collomatique_state_colloscopes::students::Students,
-    ),
+    Show(collomatique_state_colloscopes::group_lists::GroupListParameters),
     Cancel,
     Accept,
 
@@ -41,8 +32,6 @@ pub enum DialogInput {
     UpdateStudentsPerGroupMaximum(u32),
     UpdateMaxGroupCount(u32),
     UpdateGroupName(usize, String),
-
-    UpdateStudentStatus(usize, bool),
 }
 
 #[derive(Debug)]
@@ -189,14 +178,6 @@ impl SimpleComponent for Dialog {
                             #[watch]
                             set_visible: model.selected_max_group_count > 0,
                         },
-                        #[local_ref]
-                        student_entries_widget -> adw::PreferencesGroup {
-                            set_title: "Élèves dans la liste",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            #[watch]
-                            set_visible: !model.ordered_students.is_empty(),
-                        },
                     },
                 },
             }
@@ -208,14 +189,6 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let student_entries = FactoryVecDeque::builder()
-            .launch(adw::PreferencesGroup::default())
-            .forward(sender.input_sender(), |msg| match msg {
-                StudentOutput::UpdateStatus(num, status) => {
-                    DialogInput::UpdateStudentStatus(num, status)
-                }
-            });
-
         let group_name_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -225,19 +198,14 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             should_redraw: false,
-            students: collomatique_state_colloscopes::students::Students::default(),
-            ordered_students: vec![],
             selected_name: String::new(),
             selected_students_per_group_minimum: 1,
             selected_students_per_group_maximum: u32::MAX,
             selected_max_group_count: 16,
             group_name_data: vec![String::new(); 16],
-            student_entries,
             group_name_entries,
-            excluded_students: BTreeSet::new(),
         };
 
-        let student_entries_widget = model.student_entries.widget();
         let group_name_entries_widget = model.group_name_entries.widget();
         let widgets = view_output!();
 
@@ -247,23 +215,10 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(group_list_data, students) => {
+            DialogInput::Show(group_list_data) => {
                 self.hidden = false;
                 self.should_redraw = true;
-                self.students = students;
-                self.update_ordered_students();
                 self.update_from_data(group_list_data);
-
-                crate::tools::factories::update_vec_deque(
-                    &mut self.student_entries,
-                    self.ordered_students
-                        .iter()
-                        .map(|(id, firstname, surname)| StudentData {
-                            name: format!("{} {}", firstname, surname),
-                            included: !self.excluded_students.contains(id),
-                        }),
-                    |data| StudentInput::UpdateData(data),
-                );
 
                 self.update_group_name_entries();
             }
@@ -306,16 +261,6 @@ impl SimpleComponent for Dialog {
                     self.group_name_data[group_num] = name;
                 }
             }
-            DialogInput::UpdateStudentStatus(student_num, new_status) => {
-                assert!(student_num < self.ordered_students.len());
-                let student_id = self.ordered_students[student_num].0;
-
-                if new_status {
-                    self.excluded_students.remove(&student_id);
-                } else {
-                    self.excluded_students.insert(student_id);
-                }
-            }
         }
     }
 
@@ -329,26 +274,6 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn update_ordered_students(&mut self) {
-        self.ordered_students = self
-            .students
-            .student_map
-            .iter()
-            .map(|(student_id, student)| {
-                (
-                    student_id.clone(),
-                    student.desc.firstname.clone(),
-                    student.desc.surname.clone(),
-                )
-            })
-            .collect();
-
-        self.ordered_students
-            .sort_by_key(|(id, firstname, surname)| {
-                (surname.clone(), firstname.clone(), id.clone())
-            });
-    }
-
     fn update_from_data(
         &mut self,
         data: collomatique_state_colloscopes::group_lists::GroupListParameters,
@@ -366,7 +291,6 @@ impl Dialog {
                     .unwrap_or_default()
             })
             .collect();
-        self.excluded_students = data.excluded_students;
     }
 
     fn generate_data(&self) -> collomatique_state_colloscopes::group_lists::GroupListParameters {
@@ -380,7 +304,6 @@ impl Dialog {
                 .take(self.selected_max_group_count as usize)
                 .map(|s| non_empty_string::NonEmptyString::new(s.clone()).ok())
                 .collect(),
-            excluded_students: self.excluded_students.clone(),
         }
     }
 
@@ -405,100 +328,6 @@ impl Dialog {
                 }),
             |data| GroupNameInput::UpdateData(data),
         );
-    }
-}
-
-#[derive(Debug, Clone)]
-struct StudentData {
-    name: String,
-    included: bool,
-}
-
-#[derive(Debug)]
-struct StudentEntry {
-    data: StudentData,
-    index: DynamicIndex,
-    should_redraw: bool,
-}
-
-#[derive(Debug, Clone)]
-enum StudentInput {
-    UpdateData(StudentData),
-
-    UpdateStatus(bool),
-}
-
-#[derive(Debug)]
-enum StudentOutput {
-    UpdateStatus(usize, bool),
-}
-
-#[relm4::factory]
-impl FactoryComponent for StudentEntry {
-    type Init = StudentData;
-    type Input = StudentInput;
-    type Output = StudentOutput;
-    type CommandOutput = ();
-    type ParentWidget = adw::PreferencesGroup;
-
-    view! {
-        #[root]
-        adw::SwitchRow {
-            set_hexpand: true,
-            set_use_markup: false,
-            #[watch]
-            set_title: &self.data.name,
-            #[track(self.should_redraw)]
-            set_active: self.data.included,
-            connect_active_notify[sender] => move |widget| {
-                let status = widget.is_active();
-                sender.input(
-                    StudentInput::UpdateStatus(status)
-                );
-            },
-        }
-    }
-
-    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self {
-            data,
-            index: index.clone(),
-            should_redraw: false,
-        }
-    }
-
-    fn init_widgets(
-        &mut self,
-        _index: &DynamicIndex,
-        root: Self::Root,
-        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        sender: FactorySender<Self>,
-    ) -> Self::Widgets {
-        let widgets = view_output!();
-
-        widgets
-    }
-
-    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
-        self.should_redraw = false;
-        match msg {
-            StudentInput::UpdateData(new_data) => {
-                self.data = new_data;
-                self.should_redraw = true;
-            }
-            StudentInput::UpdateStatus(new_status) => {
-                if self.data.included == new_status {
-                    return;
-                }
-                self.data.included = new_status;
-                sender
-                    .output(StudentOutput::UpdateStatus(
-                        self.index.current_index(),
-                        new_status,
-                    ))
-                    .unwrap();
-            }
-        }
     }
 }
 

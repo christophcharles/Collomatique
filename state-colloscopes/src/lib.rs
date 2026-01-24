@@ -521,13 +521,9 @@ pub enum GroupListError {
     #[error("students_per_group range is empty")]
     StudentsPerGroupRangeIsEmpty,
 
-    /// student is both excluded and associated to a group
-    #[error("Student id {0:?} is both excluded and included in prefilled groups")]
-    StudentBothIncludedAndExcluded(StudentId),
-
-    /// cannot remove group list as there are still prefilled groups
-    #[error("Group list still has prefilled groups and cannot be removed")]
-    RemainingPrefilledGroups,
+    /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
+    #[error("Group list still has a filling and cannot be removed")]
+    RemainingFilling,
 
     /// students appear multiple times in prefilled groups
     #[error("Some students appear multiple times in prefilled groups")]
@@ -982,21 +978,17 @@ impl Data {
                 for (group_list_id, group_list) in
                     &self.inner_data.params.group_lists.group_list_map
                 {
-                    if group_list.params.excluded_students.contains(id) {
+                    if group_list.filling.excluded_students().contains(id) {
                         return Err(StudentError::StudentIsStillExcludedByGroupList(
                             *id,
                             *group_list_id,
                         ));
                     }
-                    if let Some(prefilled) = &group_list.prefilled_groups {
-                        if prefilled.contains_student(*id) {
-                            return Err(
-                                StudentError::StudentIsStillReferencedByPrefilledGroupList(
-                                    *id,
-                                    *group_list_id,
-                                ),
-                            );
-                        }
+                    if group_list.filling.contains_student(*id) {
+                        return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
                     }
                 }
 
@@ -2278,7 +2270,7 @@ impl Data {
                 };
                 let new_group_list = group_lists::GroupList {
                     params: params.clone(),
-                    prefilled_groups: None,
+                    filling: group_lists::GroupListFilling::default(),
                 };
 
                 self.inner_data
@@ -2305,19 +2297,27 @@ impl Data {
                     return Err(GroupListError::InvalidGroupListId(*id));
                 };
                 let was_prefilled = old_group_list.is_prefilled();
-                if let Some(prefilled) = &old_group_list.prefilled_groups {
-                    if !prefilled.is_empty() {
-                        return Err(GroupListError::RemainingPrefilledGroups);
+
+                // Check filling is empty before removal
+                match &old_group_list.filling {
+                    group_lists::GroupListFilling::Prefilled { groups } => {
+                        if groups.iter().any(|g| !g.students.is_empty()) {
+                            return Err(GroupListError::RemainingFilling);
+                        }
                     }
-                } else {
-                    let collo_group_list = self
-                        .inner_data
-                        .colloscope
-                        .group_lists
-                        .get(id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-                    if !collo_group_list.is_empty() {
-                        return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
+                    group_lists::GroupListFilling::Automatic { excluded_students } => {
+                        if !excluded_students.is_empty() {
+                            return Err(GroupListError::RemainingFilling);
+                        }
+                        let collo_group_list = self
+                            .inner_data
+                            .colloscope
+                            .group_lists
+                            .get(id)
+                            .expect("Non-prefilled group list should have colloscope entry");
+                        if !collo_group_list.is_empty() {
+                            return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
+                        }
                     }
                 }
 
@@ -2361,6 +2361,7 @@ impl Data {
                         .validate_against_params(
                             *group_list_id,
                             new_params,
+                            &old_group_list.filling,
                             &self.inner_data.params.students,
                         )
                         .is_err()
@@ -2371,41 +2372,47 @@ impl Data {
                     }
                 }
 
-                // Atomically adjust prefilled_groups when size changes
-                let new_prefilled_groups = match &old_group_list.prefilled_groups {
-                    None => None,
-                    Some(old_prefilled) => {
+                // Atomically adjust filling when size changes
+                let new_filling = match &old_group_list.filling {
+                    group_lists::GroupListFilling::Automatic { excluded_students } => {
+                        group_lists::GroupListFilling::Automatic {
+                            excluded_students: excluded_students.clone(),
+                        }
+                    }
+                    group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
                         let old_count = old_group_list.params.group_names.len();
                         let new_count = new_params.group_names.len();
 
                         if new_count < old_count {
                             // Reducing groups: check last groups are empty
-                            for group in old_prefilled.groups.iter().skip(new_count) {
+                            for group in old_groups.iter().skip(new_count) {
                                 if !group.students.is_empty() {
                                     return Err(GroupListError::NonEmptyGroupsWhenReducing);
                                 }
                             }
                             // Truncate to new size
-                            Some(group_lists::GroupListPrefilledGroups {
-                                groups: old_prefilled.groups[..new_count].to_vec(),
-                            })
+                            group_lists::GroupListFilling::Prefilled {
+                                groups: old_groups[..new_count].to_vec(),
+                            }
                         } else if new_count > old_count {
                             // Increasing groups: extend with empty groups
-                            let mut new_groups = old_prefilled.groups.clone();
+                            let mut new_groups = old_groups.clone();
                             for _ in old_count..new_count {
                                 new_groups.push(group_lists::PrefilledGroup::default());
                             }
-                            Some(group_lists::GroupListPrefilledGroups { groups: new_groups })
+                            group_lists::GroupListFilling::Prefilled { groups: new_groups }
                         } else {
                             // Same size: keep as is
-                            Some(old_prefilled.clone())
+                            group_lists::GroupListFilling::Prefilled {
+                                groups: old_groups.clone(),
+                            }
                         }
                     }
                 };
 
                 let new_group_list = group_lists::GroupList {
                     params: new_params.clone(),
-                    prefilled_groups: new_prefilled_groups,
+                    filling: new_filling,
                 };
 
                 self.inner_data
@@ -2420,7 +2427,7 @@ impl Data {
 
                 Ok(())
             }
-            AnnotatedGroupListOp::PreFill(group_list_id, prefilled_groups) => {
+            AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
                 let Some(old_group_list) = self
                     .inner_data
                     .params
@@ -2431,10 +2438,10 @@ impl Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                // Check that prefilled_groups count matches group_names count
-                if let Some(prefilled) = prefilled_groups {
+                // Check that prefilled groups count matches group_names count
+                if let group_lists::GroupListFilling::Prefilled { groups } = filling {
                     let expected = old_group_list.params.group_names.len();
-                    let actual = prefilled.groups.len();
+                    let actual = groups.len();
                     if actual != expected {
                         return Err(GroupListError::PrefillGroupCountMismatch { expected, actual });
                     }
@@ -2442,7 +2449,7 @@ impl Data {
 
                 // Handle colloscope group list based on prefill transition
                 let was_prefilled = old_group_list.is_prefilled();
-                let will_be_prefilled = prefilled_groups.is_some();
+                let will_be_prefilled = filling.is_prefilled();
 
                 if !was_prefilled && will_be_prefilled {
                     // Transitioning to prefilled: check colloscope is empty, then remove entry
@@ -2468,7 +2475,7 @@ impl Data {
 
                 let new_group_list = group_lists::GroupList {
                     params: old_group_list.params.clone(),
-                    prefilled_groups: prefilled_groups.clone(),
+                    filling: filling.clone(),
                 };
 
                 self.inner_data
@@ -2636,6 +2643,7 @@ impl Data {
                 group_list.validate_against_params(
                     *group_list_id,
                     &params_group_list.params,
+                    &params_group_list.filling,
                     &self.inner_data.params.students,
                 )?;
 
@@ -3245,8 +3253,17 @@ impl Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                if old_group_list.prefilled_groups.is_some() {
-                    return Err(GroupListError::RemainingPrefilledGroups);
+                match &old_group_list.filling {
+                    group_lists::GroupListFilling::Prefilled { groups } => {
+                        if groups.iter().any(|g| !g.students.is_empty()) {
+                            return Err(GroupListError::RemainingFilling);
+                        }
+                    }
+                    group_lists::GroupListFilling::Automatic { excluded_students } => {
+                        if !excluded_students.is_empty() {
+                            return Err(GroupListError::RemainingFilling);
+                        }
+                    }
                 }
 
                 Ok(AnnotatedGroupListOp::Add(
@@ -3270,7 +3287,7 @@ impl Data {
                     old_group_list.params.clone(),
                 ))
             }
-            AnnotatedGroupListOp::PreFill(group_list_id, _prefilled_groups) => {
+            AnnotatedGroupListOp::SetFilling(group_list_id, _filling) => {
                 let Some(old_group_list) = self
                     .inner_data
                     .params
@@ -3281,9 +3298,9 @@ impl Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                Ok(AnnotatedGroupListOp::PreFill(
+                Ok(AnnotatedGroupListOp::SetFilling(
                     *group_list_id,
-                    old_group_list.prefilled_groups.clone(),
+                    old_group_list.filling.clone(),
                 ))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, _group_list_id) => {

@@ -552,47 +552,48 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
+    /// Checks that group list parameters are valid
     fn validate_group_list_params_internal(
         params: &group_lists::GroupListParameters,
-        students: &students::Students,
     ) -> Result<(), GroupListError> {
         if params.students_per_group.is_empty() {
             return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
         }
-        for student_id in &params.excluded_students {
-            if !students.student_map.contains_key(student_id) {
-                return Err(GroupListError::InvalidStudentId(*student_id));
-            }
-        }
         Ok(())
     }
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
-    fn validate_group_list_prefilled_groups_internal(
-        prefilled_groups: &group_lists::GroupListPrefilledGroups,
+    /// Checks that group list filling is valid
+    fn validate_group_list_filling_internal(
+        filling: &group_lists::GroupListFilling,
         students: &students::Students,
-        excluded_students: &BTreeSet<StudentId>,
         group_names_len: usize,
     ) -> Result<(), GroupListError> {
-        if prefilled_groups.groups.len() != group_names_len {
-            return Err(GroupListError::PrefillGroupCountMismatch {
-                expected: group_names_len,
-                actual: prefilled_groups.groups.len(),
-            });
-        }
-        if !prefilled_groups.check_duplicated_student() {
-            return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
-        }
-        for group in &prefilled_groups.groups {
-            for student_id in &group.students {
-                if !students.student_map.contains_key(student_id) {
-                    return Err(GroupListError::InvalidStudentId(*student_id));
+        match filling {
+            group_lists::GroupListFilling::Prefilled { groups } => {
+                if groups.len() != group_names_len {
+                    return Err(GroupListError::PrefillGroupCountMismatch {
+                        expected: group_names_len,
+                        actual: groups.len(),
+                    });
                 }
-                if excluded_students.contains(student_id) {
-                    return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+                if !filling.check_duplicated_student() {
+                    return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
+                }
+                for group in groups {
+                    for student_id in &group.students {
+                        if !students.student_map.contains_key(student_id) {
+                            return Err(GroupListError::InvalidStudentId(*student_id));
+                        }
+                    }
+                }
+            }
+            group_lists::GroupListFilling::Automatic { excluded_students } => {
+                for student_id in excluded_students {
+                    if !students.student_map.contains_key(student_id) {
+                        return Err(GroupListError::InvalidStudentId(*student_id));
+                    }
                 }
             }
         }
@@ -601,20 +602,17 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
+    /// Checks that a group list is valid
     fn validate_group_list_internal(
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        Self::validate_group_list_params_internal(&group_list.params, students)?;
-        if let Some(prefilled) = &group_list.prefilled_groups {
-            Self::validate_group_list_prefilled_groups_internal(
-                prefilled,
-                students,
-                &group_list.params.excluded_students,
-                group_list.params.group_names.len(),
-            )?;
-        }
+        Self::validate_group_list_params_internal(&group_list.params)?;
+        Self::validate_group_list_filling_internal(
+            &group_list.filling,
+            students,
+            group_list.params.group_names.len(),
+        )?;
         Ok(())
     }
 

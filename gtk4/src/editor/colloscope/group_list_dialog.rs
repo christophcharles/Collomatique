@@ -202,7 +202,7 @@ impl Dialog {
             .student_map
             .iter()
             .filter_map(|(id, student)| {
-                if self.group_list.params.excluded_students.contains(id) {
+                if self.group_list.filling.excluded_students().contains(id) {
                     return None;
                 }
                 Some((

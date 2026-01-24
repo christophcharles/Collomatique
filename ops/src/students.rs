@@ -246,40 +246,46 @@ impl StudentsUpdateOp {
                     .group_lists
                     .group_list_map
                 {
-                    if let Some(prefilled) = &group_list.prefilled_groups {
-                        if prefilled.contains_student(*student_id) {
-                            let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-                                groups: prefilled.groups.iter().map(
+                    match &group_list.filling {
+                        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+                            if group_list.filling.contains_student(*student_id) {
+                                let new_groups: Vec<_> = groups.iter().map(
                                     |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
                                         students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),
                                     }
-                                ).collect(),
-                            };
-                            return Some(CleaningOp {
-                                warning: StudentsUpdateWarning::LoosePrefilledGroup(
-                                    *student_id,
-                                    *group_list_id,
-                                ),
-                                op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
-                                    *group_list_id,
-                                    Some(new_prefilled_groups),
-                                )),
-                            });
+                                ).collect();
+                                return Some(CleaningOp {
+                                    warning: StudentsUpdateWarning::LoosePrefilledGroup(
+                                        *student_id,
+                                        *group_list_id,
+                                    ),
+                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::SetFilling(
+                                        *group_list_id,
+                                        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                                            groups: new_groups,
+                                        },
+                                    )),
+                                });
+                            }
                         }
-                    }
-                    if group_list.params.excluded_students.contains(student_id) {
-                        let mut new_params = group_list.params.clone();
-                        new_params.excluded_students.remove(student_id);
-                        return Some(CleaningOp {
-                            warning: StudentsUpdateWarning::LooseExclusionFromGroupList(
-                                *student_id,
-                                *group_list_id,
-                            ),
-                            op: UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
-                                *group_list_id,
-                                new_params,
-                            )),
-                        });
+                        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic { excluded_students } => {
+                            if excluded_students.contains(student_id) {
+                                let mut new_excluded = excluded_students.clone();
+                                new_excluded.remove(student_id);
+                                return Some(CleaningOp {
+                                    warning: StudentsUpdateWarning::LooseExclusionFromGroupList(
+                                        *student_id,
+                                        *group_list_id,
+                                    ),
+                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::SetFilling(
+                                        *group_list_id,
+                                        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                                            excluded_students: new_excluded,
+                                        },
+                                    )),
+                                });
+                            }
+                        }
                     }
                 }
 

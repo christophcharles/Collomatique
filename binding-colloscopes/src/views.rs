@@ -298,16 +298,12 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
     fn build(env: &Env, id: &GroupListId) -> Option<Self::Object> {
         let group_list_data = env.params.group_lists.group_list_map.get(id)?;
 
-        let students: Vec<_> = env
-            .params
-            .students
-            .student_map
-            .keys()
-            .copied()
-            .filter(|x| !group_list_data.params.excluded_students.contains(x))
-            .collect();
+        let prefilled = group_list_data.filling.is_prefilled();
 
-        let prefilled = group_list_data.prefilled_groups.is_some();
+        let students: Vec<_> = group_list_data
+            .students(&env.params.students.student_map.keys().copied().collect())
+            .into_iter()
+            .collect();
 
         Some(GroupList {
             groups: GroupList::enumerate_groups(env, id)?,
@@ -353,12 +349,16 @@ impl ViewBuilder<Env, GroupId> for ObjectId {
 
     fn build(env: &Env, id: &GroupId) -> Option<Self::Object> {
         let group_list_data = env.params.group_lists.group_list_map.get(&id.group_list)?;
-        let prefilled_students = match &group_list_data.prefilled_groups {
-            Some(prefilled) => match prefilled.groups.get(id.num as usize) {
-                Some(prefilled_group) => prefilled_group.students.iter().copied().collect(),
-                None => vec![],
-            },
-            None => vec![],
+        let prefilled_students = match &group_list_data.filling {
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+                match groups.get(id.num as usize) {
+                    Some(prefilled_group) => prefilled_group.students.iter().copied().collect(),
+                    None => vec![],
+                }
+            }
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic { .. } => {
+                vec![]
+            }
         };
 
         Some(Group {

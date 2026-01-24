@@ -80,7 +80,7 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
             continue;
         }
         for (student_id, _student) in &env.params.students.student_map {
-            if group_list.params.excluded_students.contains(student_id) {
+            if group_list.filling.excluded_students().contains(student_id) {
                 continue;
             }
             let var = Var::StudentGroup {

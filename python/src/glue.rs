@@ -15,7 +15,7 @@ use collomatique_ops::{
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, PrefillGroupListError, RemoveStudentLimitsError, SettingsUpdateError,
+    MoveSubjectUpError, RemoveStudentLimitsError, SetFillingError, SettingsUpdateError,
     SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
     UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
     UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
@@ -47,6 +47,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<week_patterns::WeekPattern>()?;
     m.add_class::<incompatibilities::Incompat>()?;
     m.add_class::<group_lists::GroupListParameters>()?;
+    m.add_class::<group_lists::GroupListFilling>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
     m.add_class::<common::PersonWithContact>()?;
     m.add_class::<common::RangeInclusiveU32>()?;
@@ -1137,10 +1138,6 @@ impl CollomatiqueFile {
             ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::AddNewGroupList(
                 e,
             ))) => match e {
-                AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
                 AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
                     Err(PyValueError::new_err("Empty students per group range"))
                 }
@@ -1168,10 +1165,6 @@ impl CollomatiqueFile {
                 UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-                UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
                 UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
                     Err(PyValueError::new_err("Empty students per group range"))
                 }
@@ -1200,43 +1193,31 @@ impl CollomatiqueFile {
         }
     }
 
-    fn group_lists_prefill(
+    fn group_lists_set_filling(
         self_: PyRef<'_, Self>,
         id: group_lists::GroupListId,
-        prefilled_groups: Option<Vec<group_lists::PrefilledGroup>>,
+        filling: group_lists::GroupListFilling,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
             collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::PrefillGroupList(
-                    id.into(),
-                    prefilled_groups.map(|groups| {
-                        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-                            groups: groups.into_iter().map(|x| x.into()).collect(),
-                        }
-                    }),
-                ),
+                collomatique_ops::GroupListsUpdateOp::SetFilling(id.into(), filling.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::PrefillGroupList(
-                e,
-            ))) => match e {
-                PrefillGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
-                    format!("Invalid group list id {:?}", id),
-                )),
-                PrefillGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
-                PrefillGroupListError::StudentIsExcluded(group_list_id, student_id) => {
-                    Err(PyValueError::new_err(format!(
-                        "Student id {:?} is excluded from group list {:?}",
-                        student_id, group_list_id
-                    )))
+            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::SetFilling(e))) => {
+                match e {
+                    SetFillingError::InvalidGroupListId(id) => Err(PyValueError::new_err(format!(
+                        "Invalid group list id {:?}",
+                        id
+                    ))),
+                    SetFillingError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                        "Invalid student id {:?}",
+                        id
+                    ))),
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }

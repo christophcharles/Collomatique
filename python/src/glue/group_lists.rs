@@ -45,7 +45,7 @@ pub struct GroupList {
     #[pyo3(set, get)]
     pub parameters: GroupListParameters,
     #[pyo3(set, get)]
-    pub prefilled_groups: Option<Vec<PrefilledGroup>>,
+    pub filling: GroupListFilling,
 }
 
 #[pymethods]
@@ -54,7 +54,9 @@ impl GroupList {
     fn new(parameters: GroupListParameters) -> Self {
         GroupList {
             parameters,
-            prefilled_groups: None,
+            filling: GroupListFilling::Automatic {
+                excluded_students: BTreeSet::new(),
+            },
         }
     }
 
@@ -68,9 +70,7 @@ impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList 
     fn from(value: collomatique_state_colloscopes::group_lists::GroupList) -> Self {
         GroupList {
             parameters: value.params.into(),
-            prefilled_groups: value
-                .prefilled_groups
-                .map(|prefilled| prefilled.groups.into_iter().map(|x| x.into()).collect()),
+            filling: value.filling.into(),
         }
     }
 }
@@ -89,8 +89,6 @@ pub struct GroupListParameters {
     pub students_per_group_max: NonZeroU32,
     #[pyo3(set, get)]
     pub group_names: Vec<Option<String>>,
-    #[pyo3(set, get)]
-    pub excluded_students: BTreeSet<StudentId>,
 }
 
 #[pymethods]
@@ -102,7 +100,6 @@ impl GroupListParameters {
             students_per_group_min: NonZeroU32::new(2).unwrap(),
             students_per_group_max: NonZeroU32::new(3).unwrap(),
             group_names: vec![None; 16],
-            excluded_students: BTreeSet::new(),
         }
     }
 
@@ -125,11 +122,6 @@ impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
                 .into_iter()
                 .map(|opt| opt.map(|s| s.into_inner()))
                 .collect(),
-            excluded_students: value
-                .excluded_students
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
         }
     }
 }
@@ -146,11 +138,69 @@ impl From<GroupListParameters>
                 .into_iter()
                 .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
                 .collect(),
-            excluded_students: value
-                .excluded_students
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupListFilling {
+    Prefilled {
+        groups: Vec<PrefilledGroup>,
+    },
+    Automatic {
+        excluded_students: BTreeSet<StudentId>,
+    },
+}
+
+#[pymethods]
+impl GroupListFilling {
+    #[staticmethod]
+    fn prefilled(groups: Vec<PrefilledGroup>) -> Self {
+        GroupListFilling::Prefilled { groups }
+    }
+
+    #[staticmethod]
+    fn automatic(excluded_students: BTreeSet<StudentId>) -> Self {
+        GroupListFilling::Automatic { excluded_students }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_state_colloscopes::group_lists::GroupListFilling> for GroupListFilling {
+    fn from(value: collomatique_state_colloscopes::group_lists::GroupListFilling) -> Self {
+        match value {
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+                GroupListFilling::Prefilled {
+                    groups: groups.into_iter().map(|x| x.into()).collect(),
+                }
+            }
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                excluded_students,
+            } => GroupListFilling::Automatic {
+                excluded_students: excluded_students.into_iter().map(|x| x.into()).collect(),
+            },
+        }
+    }
+}
+
+impl From<GroupListFilling> for collomatique_state_colloscopes::group_lists::GroupListFilling {
+    fn from(value: GroupListFilling) -> Self {
+        match value {
+            GroupListFilling::Prefilled { groups } => {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                    groups: groups.into_iter().map(|x| x.into()).collect(),
+                }
+            }
+            GroupListFilling::Automatic { excluded_students } => {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                    excluded_students: excluded_students.into_iter().map(|x| x.into()).collect(),
+                }
+            }
         }
     }
 }

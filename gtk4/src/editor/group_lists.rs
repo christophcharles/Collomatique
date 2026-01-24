@@ -26,9 +26,7 @@ pub enum GroupListsInput {
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
     GroupListParamsSelected(collomatique_state_colloscopes::group_lists::GroupListParameters),
-    GroupListPrefillSelected(
-        Option<collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>,
-    ),
+    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListFilling),
 }
 
 #[derive(Debug)]
@@ -227,10 +225,7 @@ impl Component for GroupLists {
 
                 self.params_dialog
                     .sender()
-                    .send(params_dialog::DialogInput::Show(
-                        group_list_params,
-                        self.students.clone(),
-                    ))
+                    .send(params_dialog::DialogInput::Show(group_list_params))
                     .unwrap();
             }
             GroupListsInput::EditGroupList(group_list_id) => {
@@ -244,10 +239,7 @@ impl Component for GroupLists {
                 self.params_selection_reason = GroupListParamsSelectionReason::Edit(group_list_id);
                 self.params_dialog
                     .sender()
-                    .send(params_dialog::DialogInput::Show(
-                        group_list_params,
-                        self.students.clone(),
-                    ))
+                    .send(params_dialog::DialogInput::Show(group_list_params))
                     .unwrap();
             }
             GroupListsInput::PrefillGroupList(group_list_id) => {
@@ -257,17 +249,8 @@ impl Component for GroupLists {
                     .get(&group_list_id)
                     .expect("Group list ID should be valid")
                     .clone();
-                let filtered_students = self
-                    .students
-                    .student_map
-                    .iter()
-                    .filter_map(|(student_id, student)| {
-                        if group_list.params.excluded_students.contains(student_id) {
-                            return None;
-                        }
-                        Some((student_id.clone(), student.clone()))
-                    })
-                    .collect();
+                // Pass all students - exclusion is now handled in the prefill dialog
+                let filtered_students = self.students.student_map.clone();
                 self.prefill_group_list_id = Some(group_list_id);
                 self.prefill_dialog
                     .sender()
@@ -296,13 +279,13 @@ impl Component for GroupLists {
                     }
                 }
             }
-            GroupListsInput::GroupListPrefillSelected(prefill) => {
+            GroupListsInput::GroupListPrefillSelected(filling) => {
                 let group_list_id = self
                     .prefill_group_list_id
                     .take()
                     .expect("There should be a currently edited group list ID");
                 sender
-                    .output(GroupListsUpdateOp::PrefillGroupList(group_list_id, prefill))
+                    .output(GroupListsUpdateOp::SetFilling(group_list_id, filling))
                     .unwrap();
             }
         }

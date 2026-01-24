@@ -140,6 +140,7 @@ impl Colloscope {
             group_list.validate_against_params(
                 *group_list_id,
                 &params_group_list.params,
+                &params_group_list.filling,
                 &params.students,
             )?;
         }
@@ -599,14 +600,16 @@ impl ColloscopeGroupList {
         &self,
         group_list_id: GroupListId,
         group_list_params: &super::group_lists::GroupListParameters,
+        group_list_filling: &super::group_lists::GroupListFilling,
         students: &super::students::Students,
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
         let first_forbidden_value = group_list_params.group_names.len() as u32;
+        let excluded_students = group_list_filling.excluded_students();
 
         for (student_id, group_num) in &self.groups_for_students {
-            if group_list_params.excluded_students.contains(student_id) {
+            if excluded_students.contains(student_id) {
                 return Err(ColloscopeError::ExcludedStudentInGroupList(
                     group_list_id,
                     *student_id,
