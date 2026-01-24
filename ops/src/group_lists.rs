@@ -1,5 +1,3 @@
-use collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups;
-
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -229,7 +227,7 @@ pub enum GroupListsUpdateOp {
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     PrefillGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups,
+        Option<collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>,
     ),
     AssignGroupListToSubject(
         collomatique_state_colloscopes::PeriodId,
@@ -430,25 +428,27 @@ impl GroupListsUpdateOp {
                     }
                 }
 
-                let mut students_to_exclude = vec![];
-                let mut new_prefilled_groups = old_group_list.prefilled_groups.clone();
-                for student_id in old_group_list.prefilled_groups.iter_students() {
-                    if params.excluded_students.contains(&student_id) {
-                        new_prefilled_groups.remove_student(student_id);
-                        students_to_exclude.push(student_id);
+                if let Some(prefilled) = &old_group_list.prefilled_groups {
+                    let mut students_to_exclude = vec![];
+                    let mut new_prefilled_groups = prefilled.clone();
+                    for student_id in prefilled.iter_students() {
+                        if params.excluded_students.contains(&student_id) {
+                            new_prefilled_groups.remove_student(student_id);
+                            students_to_exclude.push(student_id);
+                        }
                     }
-                }
-                if !students_to_exclude.is_empty() {
-                    return Some(CleaningOp {
-                        warning: GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
-                            *group_list_id,
-                            students_to_exclude,
-                        ),
-                        op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
-                            *group_list_id,
-                            new_prefilled_groups,
-                        )),
-                    });
+                    if !students_to_exclude.is_empty() {
+                        return Some(CleaningOp {
+                            warning: GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
+                                *group_list_id,
+                                students_to_exclude,
+                            ),
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                                *group_list_id,
+                                Some(new_prefilled_groups),
+                            )),
+                        });
+                    }
                 }
 
                 None
@@ -534,14 +534,14 @@ impl GroupListsUpdateOp {
                     });
                 }
 
-                if !old_group_list.prefilled_groups.is_empty() {
+                if old_group_list.prefilled_groups.is_some() {
                     return Some(CleaningOp {
                         warning: GroupListsUpdateWarning::LooseWholePrefilledGroupList(
                             *group_list_id,
                         ),
                         op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
                             *group_list_id,
-                            GroupListPrefilledGroups { groups: vec![] },
+                            None,
                         )),
                     });
                 }
@@ -918,23 +918,25 @@ impl GroupListsUpdateOp {
                     return Err(PrefillGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
 
-                for student_id in prefilled_groups.iter_students() {
-                    if group_list.params.excluded_students.contains(&student_id) {
-                        return Err(PrefillGroupListError::StudentIsExcluded(
-                            *group_list_id,
-                            student_id,
-                        )
-                        .into());
-                    }
-                    if !data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .students
-                        .student_map
-                        .contains_key(&student_id)
-                    {
-                        return Err(PrefillGroupListError::InvalidStudentId(student_id).into());
+                if let Some(prefilled) = prefilled_groups {
+                    for student_id in prefilled.iter_students() {
+                        if group_list.params.excluded_students.contains(&student_id) {
+                            return Err(PrefillGroupListError::StudentIsExcluded(
+                                *group_list_id,
+                                student_id,
+                            )
+                            .into());
+                        }
+                        if !data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .students
+                            .student_map
+                            .contains_key(&student_id)
+                        {
+                            return Err(PrefillGroupListError::InvalidStudentId(student_id).into());
+                        }
                     }
                 }
 

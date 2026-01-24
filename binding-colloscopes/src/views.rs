@@ -15,22 +15,9 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Env {
     pub(crate) params: Parameters,
-    pub(crate) ignore_prefill_for_group_lists: BTreeSet<GroupListId>,
 }
 
 impl Env {
-    pub fn with_ignore_all_prefill(params: Parameters) -> Self {
-        Env {
-            ignore_prefill_for_group_lists: params
-                .group_lists
-                .group_list_map
-                .keys()
-                .cloned()
-                .collect(),
-            params,
-        }
-    }
-
     pub fn get_params(&self) -> &Parameters {
         &self.params
     }
@@ -38,10 +25,7 @@ impl Env {
 
 impl From<Parameters> for Env {
     fn from(value: Parameters) -> Self {
-        Env {
-            params: value,
-            ignore_prefill_for_group_lists: BTreeSet::new(),
-        }
+        Env { params: value }
     }
 }
 
@@ -87,12 +71,11 @@ pub struct Week {
 #[eval_object(ObjectId)]
 pub struct GroupList {
     groups: Vec<GroupId>,
-    complete_students: Vec<StudentId>,
+    prefilled: bool,
     students: Vec<StudentId>,
     min_students_per_group: i32,
     max_students_per_group: i32,
     max_group_count: i32,
-    already_counted_students: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -102,7 +85,6 @@ pub struct Group {
     num: i32,
     next: GroupId,
     prefilled_students: Vec<StudentId>,
-    sealed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -316,7 +298,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
     fn build(env: &Env, id: &GroupListId) -> Option<Self::Object> {
         let group_list_data = env.params.group_lists.group_list_map.get(id)?;
 
-        let complete_students: Vec<_> = env
+        let students: Vec<_> = env
             .params
             .students
             .student_map
@@ -324,19 +306,12 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
             .copied()
             .filter(|x| !group_list_data.params.excluded_students.contains(x))
             .collect();
-        let students = if env.ignore_prefill_for_group_lists.contains(id) {
-            complete_students.clone()
-        } else {
-            complete_students
-                .iter()
-                .copied()
-                .filter(|x| !group_list_data.prefilled_groups.contains_student(*x))
-                .collect()
-        };
+
+        let prefilled = group_list_data.prefilled_groups.is_some();
+
         Some(GroupList {
             groups: GroupList::enumerate_groups(env, id)?,
-            already_counted_students: (complete_students.len() - students.len()) as i32,
-            complete_students,
+            prefilled,
             students,
             min_students_per_group: group_list_data.params.students_per_group.start().get() as i32,
             max_students_per_group: group_list_data.params.students_per_group.end().get() as i32,
@@ -377,19 +352,14 @@ impl ViewBuilder<Env, GroupId> for ObjectId {
     }
 
     fn build(env: &Env, id: &GroupId) -> Option<Self::Object> {
-        let (prefilled_students, sealed) =
-            if env.ignore_prefill_for_group_lists.contains(&id.group_list) {
-                (vec![], false)
-            } else {
-                let group_list_data = env.params.group_lists.group_list_map.get(&id.group_list)?;
-                match group_list_data.prefilled_groups.groups.get(id.num as usize) {
-                    Some(prefilled_group) => (
-                        prefilled_group.students.iter().copied().collect(),
-                        prefilled_group.sealed,
-                    ),
-                    None => (vec![], false),
-                }
-            };
+        let group_list_data = env.params.group_lists.group_list_map.get(&id.group_list)?;
+        let prefilled_students = match &group_list_data.prefilled_groups {
+            Some(prefilled) => match prefilled.groups.get(id.num as usize) {
+                Some(prefilled_group) => prefilled_group.students.iter().copied().collect(),
+                None => vec![],
+            },
+            None => vec![],
+        };
 
         Some(Group {
             group_list: id.group_list,
@@ -399,7 +369,6 @@ impl ViewBuilder<Env, GroupId> for ObjectId {
                 num: id.num + 1,
             },
             prefilled_students,
-            sealed,
         })
     }
 }

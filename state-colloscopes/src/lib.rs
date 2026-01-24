@@ -970,11 +970,15 @@ impl Data {
                             *group_list_id,
                         ));
                     }
-                    if group_list.prefilled_groups.contains_student(*id) {
-                        return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
-                            *id,
-                            *group_list_id,
-                        ));
+                    if let Some(prefilled) = &group_list.prefilled_groups {
+                        if prefilled.contains_student(*id) {
+                            return Err(
+                                StudentError::StudentIsStillReferencedByPrefilledGroupList(
+                                    *id,
+                                    *group_list_id,
+                                ),
+                            );
+                        }
                     }
                 }
 
@@ -2256,7 +2260,7 @@ impl Data {
                 };
                 let new_group_list = group_lists::GroupList {
                     params: params.clone(),
-                    prefilled_groups: group_lists::GroupListPrefilledGroups::default(),
+                    prefilled_groups: None,
                 };
 
                 self.inner_data
@@ -2282,7 +2286,7 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*id));
                 };
-                if !old_group_list.prefilled_groups.is_empty() {
+                if old_group_list.prefilled_groups.is_some() {
                     return Err(GroupListError::RemainingPrefilledGroups);
                 }
                 let collo_group_list = self
@@ -3145,7 +3149,7 @@ impl Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                if !old_group_list.prefilled_groups.is_empty() {
+                if old_group_list.prefilled_groups.is_some() {
                     return Err(GroupListError::RemainingPrefilledGroups);
                 }
 

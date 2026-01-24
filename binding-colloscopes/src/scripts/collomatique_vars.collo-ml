@@ -11,9 +11,13 @@ let student_in_group(student: Student, group: Group) -> Constraint =
 pub reify student_in_group as $StudentInGroup;
 
 let group_has_students(group: Group) -> Constraint =
-    sum student in group.group_list.students {
-        $StudentInGroup(student, group)
-    } + |group.prefilled_students| >== 1;
+    if group.group_list.prefilled {
+        |group.prefilled_students| >== 1
+    } else {
+        sum student in group.group_list.students {
+            $StudentInGroup(student, group)
+        } >== 1
+    };
 
 pub reify group_has_students as $GroupHasStudents;
 
@@ -22,11 +26,6 @@ let student_at_interrogation_in_group(student: Student, interrogation: Interroga
     $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation, group.num) >== 1;
 
 pub reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
-
-let student_in_prefilled_group(student: Student, group_list: GroupList) -> Bool =
-    fold group in group_list.groups with result = false {
-        result || student in group.prefilled_students
-    };
 
 let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
     // returns -1 if no group corresponds
@@ -41,13 +40,13 @@ let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
     };
 
 let student_at_interrogation(student: Student, interrogation: Interrogation) -> Constraint =
-    if student_in_prefilled_group(student, interrogation.group_list) {
+    if interrogation.group_list.prefilled {
         $GroupInInterrogation(
             interrogation,
             student_prefilled_group(student, interrogation.group_list)
         )
     } else {
-        sum group in interrogation.group_list.groups where !group.sealed {
+        sum group in interrogation.group_list.groups {
             $StudentAtInterrogationInGroup(student, interrogation, group)
         }
     } >== 1; // Test for bigger than one: we can't actually exceed it but this will save some reification constraints

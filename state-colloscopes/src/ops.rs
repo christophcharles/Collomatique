@@ -174,8 +174,8 @@ pub enum GroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list
-    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
+    /// Change pre-fill for a group list (None = automatic)
+    PreFill(GroupListId, Option<group_lists::GroupListPrefilledGroups>),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -488,8 +488,8 @@ pub enum AnnotatedGroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list
-    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
+    /// Change pre-fill for a group list (None = automatic)
+    PreFill(GroupListId, Option<group_lists::GroupListPrefilledGroups>),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }

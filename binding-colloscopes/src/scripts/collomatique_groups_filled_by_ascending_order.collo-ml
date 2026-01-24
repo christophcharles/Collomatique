@@ -6,6 +6,6 @@ let group_is_not_empty_if_next_group_is_not_empty(group: Group) -> Constraint =
     $GroupHasStudents(group) >== $GroupHasStudents(group.next);
 
 pub let constraint() -> Constraint =
-    forall group in @[Group] {
+    forall group in @[Group] where !group.group_list.prefilled {
         group_is_not_empty_if_next_group_is_not_empty(group)
     };

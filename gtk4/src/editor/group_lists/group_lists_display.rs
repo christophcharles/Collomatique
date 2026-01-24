@@ -131,15 +131,7 @@ impl FactoryComponent for Entry {
                 set_label: "Liste préremplie",
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.group_list.prefilled_groups.is_empty() && !self.data.group_list.is_sealed(),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::End,
-                set_margin_end: 5,
-                set_label: "Liste scellée",
-                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
-                #[watch]
-                set_visible: self.data.group_list.is_sealed(),
+                set_visible: self.data.group_list.is_prefilled(),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

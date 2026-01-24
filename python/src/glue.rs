@@ -1203,15 +1203,17 @@ impl CollomatiqueFile {
     fn group_lists_prefill(
         self_: PyRef<'_, Self>,
         id: group_lists::GroupListId,
-        prefilled_groups: Vec<group_lists::PrefilledGroup>,
+        prefilled_groups: Option<Vec<group_lists::PrefilledGroup>>,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
             collomatique_ops::UpdateOp::GroupLists(
                 collomatique_ops::GroupListsUpdateOp::PrefillGroupList(
                     id.into(),
-                    collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-                        groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
-                    },
+                    prefilled_groups.map(|groups| {
+                        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                            groups: groups.into_iter().map(|x| x.into()).collect(),
+                        }
+                    }),
                 ),
             ),
         ));

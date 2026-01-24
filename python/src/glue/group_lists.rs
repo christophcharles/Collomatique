@@ -45,7 +45,7 @@ pub struct GroupList {
     #[pyo3(set, get)]
     pub parameters: GroupListParameters,
     #[pyo3(set, get)]
-    pub prefilled_groups: Vec<PrefilledGroup>,
+    pub prefilled_groups: Option<Vec<PrefilledGroup>>,
 }
 
 #[pymethods]
@@ -54,7 +54,7 @@ impl GroupList {
     fn new(parameters: GroupListParameters) -> Self {
         GroupList {
             parameters,
-            prefilled_groups: vec![],
+            prefilled_groups: None,
         }
     }
 
@@ -70,10 +70,7 @@ impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList 
             parameters: value.params.into(),
             prefilled_groups: value
                 .prefilled_groups
-                .groups
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
+                .map(|prefilled| prefilled.groups.into_iter().map(|x| x.into()).collect()),
         }
     }
 }
@@ -163,8 +160,6 @@ impl From<GroupListParameters>
 pub struct PrefilledGroup {
     #[pyo3(set, get)]
     pub students: BTreeSet<StudentId>,
-    #[pyo3(set, get)]
-    pub sealed: bool,
 }
 
 #[pymethods]
@@ -173,7 +168,6 @@ impl PrefilledGroup {
     fn new() -> Self {
         PrefilledGroup {
             students: BTreeSet::new(),
-            sealed: false,
         }
     }
 
@@ -187,7 +181,6 @@ impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for Prefi
     fn from(value: collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
         PrefilledGroup {
             students: value.students.into_iter().map(|x| x.into()).collect(),
-            sealed: value.sealed,
         }
     }
 }
@@ -196,7 +189,6 @@ impl From<PrefilledGroup> for collomatique_state_colloscopes::group_lists::Prefi
     fn from(value: PrefilledGroup) -> Self {
         collomatique_state_colloscopes::group_lists::PrefilledGroup {
             students: value.students.into_iter().map(|x| x.into()).collect(),
-            sealed: value.sealed,
         }
     }
 }

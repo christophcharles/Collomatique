@@ -246,25 +246,26 @@ impl StudentsUpdateOp {
                     .group_lists
                     .group_list_map
                 {
-                    if group_list.prefilled_groups.contains_student(*student_id) {
-                        let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-                            groups: group_list.prefilled_groups.groups.iter().map(
-                                |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
-                                    sealed: g.sealed,
-                                    students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),
-                                }
-                            ).collect(),
-                        };
-                        return Some(CleaningOp {
-                            warning: StudentsUpdateWarning::LoosePrefilledGroup(
-                                *student_id,
-                                *group_list_id,
-                            ),
-                            op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
-                                *group_list_id,
-                                new_prefilled_groups,
-                            )),
-                        });
+                    if let Some(prefilled) = &group_list.prefilled_groups {
+                        if prefilled.contains_student(*student_id) {
+                            let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                                groups: prefilled.groups.iter().map(
+                                    |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                                        students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),
+                                    }
+                                ).collect(),
+                            };
+                            return Some(CleaningOp {
+                                warning: StudentsUpdateWarning::LoosePrefilledGroup(
+                                    *student_id,
+                                    *group_list_id,
+                                ),
+                                op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                                    *group_list_id,
+                                    Some(new_prefilled_groups),
+                                )),
+                            });
+                        }
                     }
                     if group_list.params.excluded_students.contains(student_id) {
                         let mut new_params = group_list.params.clone();

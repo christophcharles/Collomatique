@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use adw::prelude::{ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{
     AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
@@ -32,7 +30,6 @@ pub enum DialogInput {
     Accept,
 
     UsePrefillClicked,
-    EmptySealedClicked,
     UpdateStudentGroup(collomatique_state_colloscopes::StudentId, u32),
 }
 
@@ -143,11 +140,6 @@ impl SimpleComponent for Dialog {
             set_hexpand: true,
             connect_clicked => DialogInput::UsePrefillClicked,
         },
-        empty_sealed_btn = gtk::Button {
-            set_label: "Vider les groupes scellés",
-            set_hexpand: true,
-            connect_clicked => DialogInput::EmptySealedClicked,
-        },
     }
 
     fn init(
@@ -181,9 +173,6 @@ impl SimpleComponent for Dialog {
         widgets
             .btn_grid
             .attach(&widgets.use_prefill_btn, 0, 0, 1, 1);
-        widgets
-            .btn_grid
-            .attach(&widgets.empty_sealed_btn, 1, 0, 1, 1);
 
         ComponentParts { model, widgets }
     }
@@ -216,10 +205,6 @@ impl SimpleComponent for Dialog {
                 self.fill_with_prefill();
                 self.update_factory();
             }
-            DialogInput::EmptySealedClicked => {
-                self.empty_sealed_groups();
-                self.update_factory();
-            }
             DialogInput::UpdateStudentGroup(student_id, selected) => {
                 match Self::selected_to_group_opt(selected) {
                     Some(group) => {
@@ -247,39 +232,14 @@ impl SimpleComponent for Dialog {
 
 impl Dialog {
     fn fill_with_prefill(&mut self) {
-        for (group_num, prefilled_group) in
-            self.group_list.prefilled_groups.groups.iter().enumerate()
-        {
-            for student_id in &prefilled_group.students {
-                self.collo_group_list
-                    .groups_for_students
-                    .insert(*student_id, group_num as u32);
+        if let Some(prefilled) = &self.group_list.prefilled_groups {
+            for (group_num, prefilled_group) in prefilled.groups.iter().enumerate() {
+                for student_id in &prefilled_group.students {
+                    self.collo_group_list
+                        .groups_for_students
+                        .insert(*student_id, group_num as u32);
+                }
             }
-        }
-    }
-
-    fn empty_sealed_groups(&mut self) {
-        let mut students_to_erase = BTreeSet::new();
-        for (student_id, group) in &self.collo_group_list.groups_for_students {
-            let Some(prefilled_group) =
-                self.group_list.prefilled_groups.groups.get(*group as usize)
-            else {
-                continue;
-            };
-            if !prefilled_group.sealed {
-                continue;
-            }
-
-            if prefilled_group.students.contains(student_id) {
-                continue;
-            }
-            students_to_erase.insert(*student_id);
-        }
-
-        for student_id in students_to_erase {
-            self.collo_group_list
-                .groups_for_students
-                .remove(&student_id);
         }
     }
 

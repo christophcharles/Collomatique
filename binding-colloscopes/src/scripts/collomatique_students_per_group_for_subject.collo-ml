@@ -1,9 +1,13 @@
 import "collomatique_vars" as *;
 
 let count_students_in_group(group: Group, subject_period: SubjectPeriod) -> LinExpr =
-    sum student in group.group_list.students where student in subject_period.students {
-        $StudentInGroup(student, group)
-    } + |[student for student in group.prefilled_students where student in subject_period.students]|;
+    if group.group_list.prefilled {
+        LinExpr(|[student for student in group.prefilled_students where student in subject_period.students]|)
+    } else {
+        sum student in group.group_list.students where student in subject_period.students {
+            $StudentInGroup(student, group)
+        }
+    };
 
 let group_has_students_for_subject(group: Group, subject_period: SubjectPeriod) -> Constraint =
     count_students_in_group(group, subject_period) >== 1;

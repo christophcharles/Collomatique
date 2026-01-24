@@ -569,7 +569,13 @@ impl ColloscopeGroupList {
     }
 
     pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
-        for (group_num, group) in group_list.prefilled_groups.groups.iter().enumerate() {
+        let Some(prefilled) = &group_list.prefilled_groups else {
+            // No prefilled groups, any configuration is compatible
+            return true;
+        };
+
+        // Check that the students in groups are assigned to the correct groups
+        for (group_num, group) in prefilled.groups.iter().enumerate() {
             for student_id in &group.students {
                 let Some(stored_num) = self.groups_for_students.get(student_id) else {
                     return false;
@@ -580,13 +586,12 @@ impl ColloscopeGroupList {
             }
         }
 
+        // Check that no student is assigned to a group they don't belong to
         for (student_id, group) in &self.groups_for_students {
             let group_index = *group as usize;
-            if let Some(group) = group_list.prefilled_groups.groups.get(group_index) {
-                if group.sealed {
-                    if !group.students.contains(student_id) {
-                        return false;
-                    }
+            if let Some(group) = prefilled.groups.get(group_index) {
+                if !group.students.contains(student_id) {
+                    return false;
                 }
             }
         }

@@ -1,9 +1,13 @@
 import "collomatique_vars" as *;
 
 let count_students_in_group(group: Group) -> LinExpr =
-    sum student in group.group_list.students {
-        $StudentInGroup(student, group)
-    } + |group.prefilled_students|;
+    if group.group_list.prefilled {
+        LinExpr(|group.prefilled_students|)
+    } else {
+        sum student in group.group_list.students {
+            $StudentInGroup(student, group)
+        }
+    };
 
 let enforce_min_students_per_group(group: Group) -> Constraint =
     count_students_in_group(group) >==

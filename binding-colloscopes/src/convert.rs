@@ -8,23 +8,16 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
 
     for (group_list_id, group_list) in &colloscope.group_lists {
-        let data_group_list = if env.ignore_prefill_for_group_lists.contains(group_list_id) {
-            None
-        } else {
-            Some(
-                env.params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                    .expect("Group list ID should be valid"),
-            )
-        };
+        let data_group_list = env
+            .params
+            .group_lists
+            .group_list_map
+            .get(group_list_id)
+            .expect("Group list ID should be valid");
+        if data_group_list.is_prefilled() {
+            continue;
+        }
         for (student_id, group) in &group_list.groups_for_students {
-            if let Some(gl) = data_group_list {
-                if gl.prefilled_groups.contains_student(*student_id) {
-                    continue;
-                }
-            }
             config_data = config_data.set(
                 Var::StudentGroup {
                     student: *student_id,
@@ -77,25 +70,18 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
     let mut config_data = build_config(env, colloscope);
 
     for (group_list_id, group_list) in &env.params.group_lists.group_list_map {
-        let data_group_list = if env.ignore_prefill_for_group_lists.contains(group_list_id) {
-            None
-        } else {
-            Some(
-                env.params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                    .expect("Group list ID should be valid"),
-            )
-        };
+        let data_group_list = env
+            .params
+            .group_lists
+            .group_list_map
+            .get(group_list_id)
+            .expect("Group list ID should be valid");
+        if data_group_list.is_prefilled() {
+            continue;
+        }
         for (student_id, _student) in &env.params.students.student_map {
             if group_list.params.excluded_students.contains(student_id) {
                 continue;
-            }
-            if let Some(gl) = data_group_list {
-                if gl.prefilled_groups.contains_student(*student_id) {
-                    continue;
-                }
             }
             let var = Var::StudentGroup {
                 student: *student_id,
@@ -175,18 +161,17 @@ pub fn build_empty_colloscope_with_prefilled_groups(env: &Env) -> Colloscope {
     let mut colloscope = Colloscope::new_empty_from_params(&env.params);
 
     for (group_list_id, group_list) in &env.params.group_lists.group_list_map {
-        if env.ignore_prefill_for_group_lists.contains(group_list_id) {
-            continue;
-        }
-        let collo_group_list = colloscope
-            .group_lists
-            .get_mut(group_list_id)
-            .expect("Group list ID should be valid");
-        for (num, group) in group_list.prefilled_groups.groups.iter().enumerate() {
-            for student_id in &group.students {
-                collo_group_list
-                    .groups_for_students
-                    .insert(*student_id, num as u32);
+        if let Some(prefilled) = &group_list.prefilled_groups {
+            let collo_group_list = colloscope
+                .group_lists
+                .get_mut(group_list_id)
+                .expect("Group list ID should be valid");
+            for (num, group) in prefilled.groups.iter().enumerate() {
+                for student_id in &group.students {
+                    collo_group_list
+                        .groups_for_students
+                        .insert(*student_id, num as u32);
+                }
             }
         }
     }

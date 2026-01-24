@@ -4,13 +4,11 @@ import "collomatique_incompats" as incompats;
 import "collomatique_interrogation_cost" as interrogation_cost;
 import "collomatique_limits" as limits;
 import "collomatique_one_interrogation_at_once" as one_interrogation_at_once;
-import "collomatique_sealed_groups" as sealed_groups;
 import "collomatique_students_have_groups" as students_have_groups;
 import "collomatique_students_per_group_for_subject" as students_per_group_for_subject;
 import "collomatique_students_per_group" as students_per_group;
 
 pub let default_constraint() -> Constraint =
-    sealed_groups::constraint() and
     one_interrogation_at_once::constraint() and
     group_count_per_interrogation::constraint() and
     students_per_group::constraint() and

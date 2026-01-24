@@ -600,11 +600,13 @@ impl Parameters {
         students: &students::Students,
     ) -> Result<(), GroupListError> {
         Self::validate_group_list_params_internal(&group_list.params, students)?;
-        Self::validate_group_list_prefilled_groups_internal(
-            &group_list.prefilled_groups,
-            students,
-            &group_list.params.excluded_students,
-        )?;
+        if let Some(prefilled) = &group_list.prefilled_groups {
+            Self::validate_group_list_prefilled_groups_internal(
+                prefilled,
+                students,
+                &group_list.params.excluded_students,
+            )?;
+        }
         Ok(())
     }
 

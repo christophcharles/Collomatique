@@ -69,14 +69,11 @@ impl Var {
             return Some(-1.);
         }
 
-        if env.ignore_prefill_for_group_lists.contains(group_list) {
+        let Some(prefilled) = &group_list_data.prefilled_groups else {
             return None;
-        }
+        };
 
-        let Some(num) = group_list_data
-            .prefilled_groups
-            .find_student_group(*student)
-        else {
+        let Some(num) = prefilled.find_student_group(*student) else {
             return None;
         };
 

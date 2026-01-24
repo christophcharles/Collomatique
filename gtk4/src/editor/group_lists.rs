@@ -26,7 +26,9 @@ pub enum GroupListsInput {
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
     GroupListParamsSelected(collomatique_state_colloscopes::group_lists::GroupListParameters),
-    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups),
+    GroupListPrefillSelected(
+        Option<collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>,
+    ),
 }
 
 #[derive(Debug)]

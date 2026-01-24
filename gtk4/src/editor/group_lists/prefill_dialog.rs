@@ -8,9 +8,17 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(super) enum PrefillMode {
+    #[default]
+    Automatic,
+    Prefilled,
+}
+
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
+    prefill_mode: PrefillMode,
     list_name: String,
     group_names: Vec<Option<non_empty_string::NonEmptyString>>,
     filtered_students: BTreeMap<
@@ -36,18 +44,37 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
+    UpdatePrefillMode(PrefillMode),
     UpdateSelectedGroupCount(u32),
     UpdateGroup(usize, GroupEntryData),
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups),
+    Accepted(Option<collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>),
 }
 
 impl Dialog {
     fn generate_list_name(&self) -> String {
         format!("Liste concernée : {}", self.list_name)
+    }
+
+    fn generate_prefill_mode_model() -> gtk::StringList {
+        gtk::StringList::new(&["Remplir automatiquement", "Préremplir la liste"])
+    }
+
+    fn prefill_mode_to_selected(mode: PrefillMode) -> u32 {
+        match mode {
+            PrefillMode::Automatic => 0,
+            PrefillMode::Prefilled => 1,
+        }
+    }
+
+    fn selected_to_prefill_mode(selected: u32) -> PrefillMode {
+        match selected {
+            0 => PrefillMode::Automatic,
+            _ => PrefillMode::Prefilled,
+        }
     }
 }
 
@@ -103,33 +130,58 @@ impl SimpleComponent for Dialog {
                                 set_title: "",
                                 set_margin_all: 5,
                                 set_hexpand: true,
-                                adw::SpinRow {
-                                    set_hexpand: true,
-                                    set_title: "Nombre de groupes",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 0.,
-                                        set_upper: u32::MAX as f64,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 5.,
-                                    },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
+                                adw::ComboRow {
+                                    set_title: "Mode de remplissage",
                                     #[track(model.should_redraw)]
-                                    set_value: model.selected_group_count as f64,
-                                    connect_value_notify[sender] => move |widget| {
-                                        let value = widget.value() as u32;
-                                        sender.input(DialogInput::UpdateSelectedGroupCount(value));
+                                    set_model: Some(&Dialog::generate_prefill_mode_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: Dialog::prefill_mode_to_selected(model.prefill_mode),
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected() as u32;
+                                        let mode = Dialog::selected_to_prefill_mode(selected);
+                                        sender.input(DialogInput::UpdatePrefillMode(mode));
                                     },
                                 },
                             },
-                            #[local_ref]
-                            entries_widget -> gtk::Box {
+                            gtk::Box {
                                 set_hexpand: true,
                                 set_margin_all: 0,
                                 set_spacing: 10,
                                 set_orientation: gtk::Orientation::Vertical,
+                                #[watch]
+                                set_visible: model.prefill_mode == PrefillMode::Prefilled,
+                                adw::PreferencesGroup {
+                                    set_title: "",
+                                    set_margin_all: 5,
+                                    set_hexpand: true,
+                                    adw::SpinRow {
+                                        set_hexpand: true,
+                                        set_title: "Nombre de groupes",
+                                        #[wrap(Some)]
+                                        set_adjustment = &gtk::Adjustment {
+                                            set_lower: 0.,
+                                            set_upper: u32::MAX as f64,
+                                            set_step_increment: 1.,
+                                            set_page_increment: 5.,
+                                        },
+                                        set_wrap: false,
+                                        set_snap_to_ticks: true,
+                                        set_numeric: true,
+                                        #[track(model.should_redraw)]
+                                        set_value: model.selected_group_count as f64,
+                                        connect_value_notify[sender] => move |widget| {
+                                            let value = widget.value() as u32;
+                                            sender.input(DialogInput::UpdateSelectedGroupCount(value));
+                                        },
+                                    },
+                                },
+                                #[local_ref]
+                                entries_widget -> gtk::Box {
+                                    set_hexpand: true,
+                                    set_margin_all: 0,
+                                    set_spacing: 10,
+                                    set_orientation: gtk::Orientation::Vertical,
+                                },
                             },
                         },
                     },
@@ -160,6 +212,7 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             should_redraw: false,
+            prefill_mode: PrefillMode::default(),
             filtered_students: BTreeMap::new(),
             selected_group_count: 0,
             group_data: vec![],
@@ -182,6 +235,10 @@ impl SimpleComponent for Dialog {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.filtered_students = filtered_students;
+                self.prefill_mode = match &group_list_data.prefilled_groups {
+                    None => PrefillMode::Automatic,
+                    Some(_) => PrefillMode::Prefilled,
+                };
                 self.update_from_data(group_list_data);
                 self.update_group_entries();
             }
@@ -193,6 +250,12 @@ impl SimpleComponent for Dialog {
                 sender
                     .output(DialogOutput::Accepted(self.generate_data()))
                     .unwrap();
+            }
+            DialogInput::UpdatePrefillMode(mode) => {
+                if self.prefill_mode == mode {
+                    return;
+                }
+                self.prefill_mode = mode;
             }
             DialogInput::UpdateSelectedGroupCount(selected_group_count) => {
                 if self.selected_group_count == selected_group_count {
@@ -224,34 +287,42 @@ impl SimpleComponent for Dialog {
 
 impl Dialog {
     fn update_from_data(&mut self, data: collomatique_state_colloscopes::group_lists::GroupList) {
-        let selected_students: BTreeSet<_> = data.prefilled_groups.iter_students().collect();
         self.list_name = data.params.name.clone();
         self.group_names = data.params.group_names.clone();
-        self.available_students = self
-            .filtered_students
-            .iter()
-            .filter_map(|(id, _student)| {
-                if selected_students.contains(id) {
-                    return None;
-                }
-                Some(id.clone())
-            })
-            .collect();
-        self.selected_group_count = data.prefilled_groups.groups.len() as u32;
-        self.group_data = data
-            .prefilled_groups
-            .groups
-            .iter()
-            .enumerate()
-            .map(|(index, group)| GroupEntryData {
-                sealed: group.sealed,
-                group_name: self.group_names.get(index).cloned().flatten(),
-                available_students: self.available_students.clone(),
-                filtered_students: self.filtered_students.clone(),
-                students: group.students.iter().map(|x| Some(x.clone())).collect(),
-                selected_student_count: group.students.len() as u32,
-            })
-            .collect();
+
+        match &data.prefilled_groups {
+            None => {
+                self.available_students = self.filtered_students.keys().cloned().collect();
+                self.selected_group_count = 0;
+                self.group_data = vec![];
+            }
+            Some(prefilled) => {
+                let selected_students: BTreeSet<_> = prefilled.iter_students().collect();
+                self.available_students = self
+                    .filtered_students
+                    .iter()
+                    .filter_map(|(id, _student)| {
+                        if selected_students.contains(id) {
+                            return None;
+                        }
+                        Some(id.clone())
+                    })
+                    .collect();
+                self.selected_group_count = prefilled.groups.len() as u32;
+                self.group_data = prefilled
+                    .groups
+                    .iter()
+                    .enumerate()
+                    .map(|(index, group)| GroupEntryData {
+                        group_name: self.group_names.get(index).cloned().flatten(),
+                        available_students: self.available_students.clone(),
+                        filtered_students: self.filtered_students.clone(),
+                        students: group.students.iter().map(|x| Some(x.clone())).collect(),
+                        selected_student_count: group.students.len() as u32,
+                    })
+                    .collect();
+            }
+        }
     }
 
     fn update_available_students(&mut self) {
@@ -302,7 +373,6 @@ impl Dialog {
         while self.group_data.len() < entries_count {
             let index = self.group_data.len();
             self.group_data.push(GroupEntryData {
-                sealed: false,
                 group_name: self.group_names.get(index).cloned().flatten(),
                 available_students: self.available_students.clone(),
                 students: vec![],
@@ -320,33 +390,38 @@ impl Dialog {
 
     fn generate_data(
         &self,
-    ) -> collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-        let entries_count = self.selected_group_count as usize;
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-            groups: self
-                .group_data
-                .iter()
-                .take(entries_count)
-                .map(|group| {
-                    let student_count = group.selected_student_count as usize;
-                    collomatique_state_colloscopes::group_lists::PrefilledGroup {
-                        sealed: group.sealed,
-                        students: group
-                            .students
+    ) -> Option<collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups> {
+        match self.prefill_mode {
+            PrefillMode::Automatic => None,
+            PrefillMode::Prefilled => {
+                let entries_count = self.selected_group_count as usize;
+                Some(
+                    collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                        groups: self
+                            .group_data
                             .iter()
-                            .take(student_count)
-                            .filter_map(|student| student.clone())
+                            .take(entries_count)
+                            .map(|group| {
+                                let student_count = group.selected_student_count as usize;
+                                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                                    students: group
+                                        .students
+                                        .iter()
+                                        .take(student_count)
+                                        .filter_map(|student| student.clone())
+                                        .collect(),
+                                }
+                            })
                             .collect(),
-                    }
-                })
-                .collect(),
+                    },
+                )
+            }
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupEntryData {
-    sealed: bool,
     group_name: Option<non_empty_string::NonEmptyString>,
     selected_student_count: u32,
     students: Vec<Option<collomatique_state_colloscopes::StudentId>>,
@@ -368,7 +443,6 @@ struct GroupEntry {
 enum GroupEntryInput {
     UpdateData(GroupEntryData),
 
-    UpdateSealed(bool),
     UpdateSelectedStudentCount(u32),
     UpdateStudent(usize, Option<collomatique_state_colloscopes::StudentId>),
 }
@@ -407,17 +481,6 @@ impl FactoryComponent for GroupEntry {
                 set_title: &self.generate_group_title(),
                 set_margin_all: 5,
                 set_hexpand: true,
-                adw::SwitchRow {
-                    set_hexpand: true,
-                    set_use_markup: false,
-                    set_title: "Groupe scellé",
-                    #[track(self.should_redraw)]
-                    set_active: self.data.sealed,
-                    connect_active_notify[sender] => move |widget| {
-                        let sealed = widget.is_active();
-                        sender.input(GroupEntryInput::UpdateSealed(sealed));
-                    },
-                },
                 adw::SpinRow {
                     set_hexpand: true,
                     set_title: "Nombre d'élèves préremplis",
@@ -491,18 +554,6 @@ impl FactoryComponent for GroupEntry {
                 self.data = new_data;
                 self.should_redraw = true;
                 self.update_entries();
-            }
-            GroupEntryInput::UpdateSealed(new_sealed) => {
-                if self.data.sealed == new_sealed {
-                    return;
-                }
-                self.data.sealed = new_sealed;
-                sender
-                    .output(GroupEntryOutput::UpdateGroup(
-                        self.index.current_index(),
-                        self.data.clone(),
-                    ))
-                    .unwrap();
             }
             GroupEntryInput::UpdateSelectedStudentCount(selected_student_count) => {
                 if self.data.selected_student_count == selected_student_count {

@@ -29,8 +29,8 @@ pub struct GroupLists {
 pub struct GroupList {
     /// parameters for the group list
     pub params: GroupListParameters,
-    /// Prefilled groups
-    pub prefilled_groups: GroupListPrefilledGroups,
+    /// Prefilled groups (None = automatic filling)
+    pub prefilled_groups: Option<GroupListPrefilledGroups>,
 }
 
 /// Prefilled groups for a single group list
@@ -41,28 +41,12 @@ pub struct GroupListPrefilledGroups {
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefilledGroup {
     /// Students set
     ///
     /// Set of students that are in the group
     pub students: BTreeSet<StudentId>,
-    /// Sealed switch
-    ///
-    /// If `true`, the group is sealed
-    /// and no other students should be added.
-    ///
-    /// This can also be used to force a group to be empty
-    pub sealed: bool,
-}
-
-impl Default for PrefilledGroup {
-    fn default() -> Self {
-        PrefilledGroup {
-            students: BTreeSet::new(),
-            sealed: false,
-        }
-    }
 }
 
 impl GroupListPrefilledGroups {
@@ -134,20 +118,11 @@ impl Default for GroupListParameters {
 }
 
 impl GroupList {
-    /// Checks whether the group list is sealed
+    /// Checks whether the group list is prefilled
     ///
-    /// This means each prefilled group is sealed and there is no room for another
-    /// group
-    pub fn is_sealed(&self) -> bool {
-        if !self
-            .prefilled_groups
-            .groups
-            .iter()
-            .all(|group| group.sealed)
-        {
-            return false;
-        }
-        self.prefilled_groups.groups.len() == self.params.group_names.len()
+    /// Returns true if prefilled_groups is Some (i.e., groups are prefilled)
+    pub fn is_prefilled(&self) -> bool {
+        self.prefilled_groups.is_some()
     }
 
     /// Returns the set of students that are not already in a prefilled group
@@ -155,17 +130,17 @@ impl GroupList {
         &self,
         students: &BTreeSet<StudentId>,
     ) -> BTreeSet<StudentId> {
-        let mut output: BTreeSet<_> = students
+        let non_excluded: BTreeSet<_> = students
             .difference(&self.params.excluded_students)
             .copied()
             .collect();
 
-        for group in &self.prefilled_groups.groups {
-            for student_id in &group.students {
-                output.remove(student_id);
-            }
+        match &self.prefilled_groups {
+            None => non_excluded,
+            Some(prefilled) => non_excluded
+                .into_iter()
+                .filter(|id| !prefilled.contains_student(*id))
+                .collect(),
         }
-
-        output
     }
 }
