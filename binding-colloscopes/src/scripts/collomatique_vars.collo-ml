@@ -1,7 +1,17 @@
+let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
+    match interrogation.group_list {
+        gl as GroupList {
+            sum group in gl.groups {
+                $GroupInInterrogation(interrogation, group.num)
+            }
+        }
+        _ as None {
+            LinExpr(0)
+        }
+    };
+
 let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
-    sum group in interrogation.group_list.groups {
-        $GroupInInterrogation(interrogation, group.num)
-    } >== 1;
+    count_groups_in_interrogation(interrogation) >== 1;
 
 pub reify interrogation_has_groups as $InterrogationHasGroups;
 
@@ -40,14 +50,21 @@ let student_prefilled_group(student: Student, group_list: GroupList) -> Int =
     };
 
 let student_at_interrogation(student: Student, interrogation: Interrogation) -> Constraint =
-    if interrogation.group_list.prefilled {
-        $GroupInInterrogation(
-            interrogation,
-            student_prefilled_group(student, interrogation.group_list)
-        )
-    } else {
-        sum group in interrogation.group_list.groups {
-            $StudentAtInterrogationInGroup(student, interrogation, group)
+    match interrogation.group_list {
+        gl as GroupList {
+            if gl.prefilled {
+                $GroupInInterrogation(
+                    interrogation,
+                    student_prefilled_group(student, gl)
+                )
+            } else {
+                sum group in gl.groups {
+                    $StudentAtInterrogationInGroup(student, interrogation, group)
+                }
+            }
+        }
+        _ as None {
+            0
         }
     } >== 1; // Test for bigger than one: we can't actually exceed it but this will save some reification constraints
 

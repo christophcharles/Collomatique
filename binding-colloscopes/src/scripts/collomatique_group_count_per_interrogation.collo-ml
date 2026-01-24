@@ -1,14 +1,22 @@
 import "collomatique_vars" as *;
 
+let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
+    match interrogation.group_list {
+        gl as GroupList {
+            sum group in gl.groups {
+                $GroupInInterrogation(interrogation, group.num)
+            }
+        }
+        _ as None {
+            LinExpr(0)
+        }
+    };
+
 let max_group_per_interrogation(interrogation: Interrogation) -> Constraint =
-    sum group in interrogation.group_list.groups {
-        $GroupInInterrogation(interrogation, group.num)
-    } <== interrogation.subject.max_group_per_interrogation;
+    count_groups_in_interrogation(interrogation) <== interrogation.subject.max_group_per_interrogation;
 
 let min_group_per_interrogation(interrogation: Interrogation) -> Constraint =
-    sum group in interrogation.group_list.groups {
-        $GroupInInterrogation(interrogation, group.num)
-    } >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(interrogation);
+    count_groups_in_interrogation(interrogation) >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(interrogation);
 
 let enforce_group_count(interrogation: Interrogation) -> Constraint =
     max_group_per_interrogation(interrogation) and min_group_per_interrogation(interrogation);

@@ -54,7 +54,7 @@ pub enum ObjectId {
 pub struct Interrogation {
     subject: SubjectId,
     week: WeekId,
-    group_list: GroupListId,
+    group_list: Option<GroupListId>,
     students: Vec<StudentId>,
     cost: i32,
 }
@@ -219,7 +219,7 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
             .group_lists
             .subjects_associations
             .get(&period_id)?;
-        let group_list_id = period_associations.get(&subject_id)?;
+        let group_list_id = period_associations.get(&subject_id);
 
         let students = match env
             .params
@@ -243,7 +243,7 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
         Some(Interrogation {
             subject: subject_id,
             week: WeekId(id.week),
-            group_list: *group_list_id,
+            group_list: group_list_id.cloned(),
             students,
             cost: slot.cost,
         })
