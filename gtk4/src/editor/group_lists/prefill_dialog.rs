@@ -27,7 +27,6 @@ pub struct Dialog {
     >,
     available_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
 
-    selected_group_count: u32,
     group_data: Vec<GroupEntryData>,
     group_entries: FactoryVecDeque<GroupEntry>,
 }
@@ -45,7 +44,6 @@ pub enum DialogInput {
     Accept,
 
     UpdatePrefillMode(PrefillMode),
-    UpdateSelectedGroupCount(u32),
     UpdateGroup(usize, GroupEntryData),
 }
 
@@ -150,31 +148,6 @@ impl SimpleComponent for Dialog {
                                 set_orientation: gtk::Orientation::Vertical,
                                 #[watch]
                                 set_visible: model.prefill_mode == PrefillMode::Prefilled,
-                                adw::PreferencesGroup {
-                                    set_title: "",
-                                    set_margin_all: 5,
-                                    set_hexpand: true,
-                                    adw::SpinRow {
-                                        set_hexpand: true,
-                                        set_title: "Nombre de groupes",
-                                        #[wrap(Some)]
-                                        set_adjustment = &gtk::Adjustment {
-                                            set_lower: 0.,
-                                            set_upper: u32::MAX as f64,
-                                            set_step_increment: 1.,
-                                            set_page_increment: 5.,
-                                        },
-                                        set_wrap: false,
-                                        set_snap_to_ticks: true,
-                                        set_numeric: true,
-                                        #[track(model.should_redraw)]
-                                        set_value: model.selected_group_count as f64,
-                                        connect_value_notify[sender] => move |widget| {
-                                            let value = widget.value() as u32;
-                                            sender.input(DialogInput::UpdateSelectedGroupCount(value));
-                                        },
-                                    },
-                                },
                                 #[local_ref]
                                 entries_widget -> gtk::Box {
                                     set_hexpand: true,
@@ -214,7 +187,6 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             prefill_mode: PrefillMode::default(),
             filtered_students: BTreeMap::new(),
-            selected_group_count: 0,
             group_data: vec![],
             group_entries,
             available_students: BTreeSet::new(),
@@ -257,14 +229,6 @@ impl SimpleComponent for Dialog {
                 }
                 self.prefill_mode = mode;
             }
-            DialogInput::UpdateSelectedGroupCount(selected_group_count) => {
-                if self.selected_group_count == selected_group_count {
-                    return;
-                }
-                self.selected_group_count = selected_group_count;
-                self.update_available_students();
-                self.update_group_entries();
-            }
             DialogInput::UpdateGroup(index, group_data) => {
                 assert!(index < self.group_data.len());
                 if self.group_data[index] == group_data {
@@ -290,11 +254,21 @@ impl Dialog {
         self.list_name = data.params.name.clone();
         self.group_names = data.params.group_names.clone();
 
+        let group_count = self.group_names.len();
+
         match &data.prefilled_groups {
             None => {
+                // No prefilling: create empty group data for each group
                 self.available_students = self.filtered_students.keys().cloned().collect();
-                self.selected_group_count = 0;
-                self.group_data = vec![];
+                self.group_data = (0..group_count)
+                    .map(|index| GroupEntryData {
+                        group_name: self.group_names.get(index).cloned().flatten(),
+                        available_students: self.available_students.clone(),
+                        filtered_students: self.filtered_students.clone(),
+                        students: vec![],
+                        selected_student_count: 0,
+                    })
+                    .collect();
             }
             Some(prefilled) => {
                 let selected_students: BTreeSet<_> = prefilled.iter_students().collect();
@@ -308,7 +282,7 @@ impl Dialog {
                         Some(id.clone())
                     })
                     .collect();
-                self.selected_group_count = prefilled.groups.len() as u32;
+                // Use data from prefilled groups (should match group_names.len())
                 self.group_data = prefilled
                     .groups
                     .iter()
@@ -326,7 +300,7 @@ impl Dialog {
     }
 
     fn update_available_students(&mut self) {
-        let entries_count = self.selected_group_count as usize;
+        let entries_count = self.group_names.len();
         let selected_students: BTreeSet<_> = self
             .group_data
             .iter()
@@ -368,8 +342,9 @@ impl Dialog {
     }
 
     fn update_group_entries(&mut self) {
-        let entries_count = self.selected_group_count as usize;
+        let entries_count = self.group_names.len();
 
+        // Ensure group_data has exactly entries_count elements
         while self.group_data.len() < entries_count {
             let index = self.group_data.len();
             self.group_data.push(GroupEntryData {
@@ -394,7 +369,7 @@ impl Dialog {
         match self.prefill_mode {
             PrefillMode::Automatic => None,
             PrefillMode::Prefilled => {
-                let entries_count = self.selected_group_count as usize;
+                let entries_count = self.group_names.len();
                 Some(
                     collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
                         groups: self

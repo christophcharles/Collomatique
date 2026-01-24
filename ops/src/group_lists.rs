@@ -429,6 +429,39 @@ impl GroupListsUpdateOp {
                 }
 
                 if let Some(prefilled) = &old_group_list.prefilled_groups {
+                    let new_count = params.group_names.len();
+                    let old_count = old_group_list.params.group_names.len();
+
+                    if new_count < old_count {
+                        // Collect students from groups to be removed
+                        let students_to_remove: Vec<_> = prefilled
+                            .groups
+                            .iter()
+                            .skip(new_count)
+                            .flat_map(|g| g.students.iter().cloned())
+                            .collect();
+
+                        if !students_to_remove.is_empty() {
+                            // Clear students from groups to be removed (keep group count same)
+                            let mut cleaned = prefilled.clone();
+                            for group in cleaned.groups.iter_mut().skip(new_count) {
+                                group.students.clear();
+                            }
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
+                                    *group_list_id,
+                                    students_to_remove,
+                                ),
+                                op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                                    *group_list_id,
+                                    Some(cleaned),
+                                )),
+                            });
+                        }
+                        // If last groups are empty, state layer handles truncation atomically
+                    }
+                    // If increasing, state layer handles extension atomically
+
                     let mut students_to_exclude = vec![];
                     let mut new_prefilled_groups = prefilled.clone();
                     for student_id in prefilled.iter_students() {
@@ -867,7 +900,7 @@ impl GroupListsUpdateOp {
                         Ok(r) => r,
                         Err(collomatique_state_colloscopes::Error::GroupList(ge)) => match ge {
                             collomatique_state_colloscopes::GroupListError::StudentBothIncludedAndExcluded(_) => panic!("Prefilled groups should be properly cleaned"),
-                            _ => panic!("Unexpected error when calling GroupListOp::Update")
+                            _ => panic!("Unexpected error when calling GroupListOp::Update: {:?}", ge)
                         }
                         _ => panic!("Unexpected error when calling GroupListOp::Update")
                     };

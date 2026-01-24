@@ -548,6 +548,14 @@ pub enum GroupListError {
     /// The subject has non-empty slots associated to the old group list with invalid numbers
     #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number")]
     InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
+
+    /// Prefilled groups count does not match group_names count
+    #[error("prefilled groups count ({actual}) does not match group names count ({expected})")]
+    PrefillGroupCountMismatch { expected: usize, actual: usize },
+
+    /// Cannot reduce group count when last groups have students
+    #[error("cannot reduce group count: groups to be removed still have students (ops layer should clean first)")]
+    NonEmptyGroupsWhenReducing,
 }
 
 /// Errors for settings operations
@@ -2343,9 +2351,41 @@ impl Data {
                     ));
                 }
 
+                // Atomically adjust prefilled_groups when size changes
+                let new_prefilled_groups = match &old_group_list.prefilled_groups {
+                    None => None,
+                    Some(old_prefilled) => {
+                        let old_count = old_group_list.params.group_names.len();
+                        let new_count = new_params.group_names.len();
+
+                        if new_count < old_count {
+                            // Reducing groups: check last groups are empty
+                            for group in old_prefilled.groups.iter().skip(new_count) {
+                                if !group.students.is_empty() {
+                                    return Err(GroupListError::NonEmptyGroupsWhenReducing);
+                                }
+                            }
+                            // Truncate to new size
+                            Some(group_lists::GroupListPrefilledGroups {
+                                groups: old_prefilled.groups[..new_count].to_vec(),
+                            })
+                        } else if new_count > old_count {
+                            // Increasing groups: extend with empty groups
+                            let mut new_groups = old_prefilled.groups.clone();
+                            for _ in old_count..new_count {
+                                new_groups.push(group_lists::PrefilledGroup::default());
+                            }
+                            Some(group_lists::GroupListPrefilledGroups { groups: new_groups })
+                        } else {
+                            // Same size: keep as is
+                            Some(old_prefilled.clone())
+                        }
+                    }
+                };
+
                 let new_group_list = group_lists::GroupList {
                     params: new_params.clone(),
-                    prefilled_groups: old_group_list.prefilled_groups.clone(),
+                    prefilled_groups: new_prefilled_groups,
                 };
 
                 self.inner_data
@@ -2370,6 +2410,16 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
+
+                // Check that prefilled_groups count matches group_names count
+                if let Some(prefilled) = prefilled_groups {
+                    let expected = old_group_list.params.group_names.len();
+                    let actual = prefilled.groups.len();
+                    if actual != expected {
+                        return Err(GroupListError::PrefillGroupCountMismatch { expected, actual });
+                    }
+                }
+
                 let new_group_list = group_lists::GroupList {
                     params: old_group_list.params.clone(),
                     prefilled_groups: prefilled_groups.clone(),

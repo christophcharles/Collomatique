@@ -575,7 +575,14 @@ impl Parameters {
         prefilled_groups: &group_lists::GroupListPrefilledGroups,
         students: &students::Students,
         excluded_students: &BTreeSet<StudentId>,
+        group_names_len: usize,
     ) -> Result<(), GroupListError> {
+        if prefilled_groups.groups.len() != group_names_len {
+            return Err(GroupListError::PrefillGroupCountMismatch {
+                expected: group_names_len,
+                actual: prefilled_groups.groups.len(),
+            });
+        }
         if !prefilled_groups.check_duplicated_student() {
             return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
         }
@@ -605,6 +612,7 @@ impl Parameters {
                 prefilled,
                 students,
                 &group_list.params.excluded_students,
+                group_list.params.group_names.len(),
             )?;
         }
         Ok(())
