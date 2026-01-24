@@ -279,6 +279,8 @@ impl Component for Colloscope {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
+                #[watch]
+                set_visible: !model.colloscope.group_lists.is_empty(),
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -286,7 +288,7 @@ impl Component for Colloscope {
                     gtk::Label {
                         set_halign: gtk::Align::Start,
                         set_margin_top: 10,
-                        set_label: "Listes de groupes",
+                        set_label: "Groupes à répartir",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
                     gtk::ScrolledWindow {
@@ -301,15 +303,6 @@ impl Component for Colloscope {
                                 set_hexpand: true,
                                 add_css_class: "boxed-list",
                                 set_selection_mode: gtk::SelectionMode::None,
-                                #[watch]
-                                set_visible: !model.colloscope.group_lists.is_empty(),
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<i>Aucune liste à afficher</i>",
-                                set_use_markup: true,
-                                #[watch]
-                                set_visible: model.colloscope.group_lists.is_empty(),
                             },
                             gtk::Box {
                                 set_hexpand: true,
@@ -679,6 +672,7 @@ impl Colloscope {
             .group_lists
             .group_list_map
             .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
                 id: id.clone(),
                 group_list: group_list.clone(),
@@ -686,7 +680,7 @@ impl Colloscope {
                     .colloscope
                     .group_lists
                     .get(id)
-                    .expect("Group list ID should be valid")
+                    .expect("Non-prefilled group list should have colloscope entry")
                     .clone(),
                 total_student_count: self.params.students.student_map.len(),
             })

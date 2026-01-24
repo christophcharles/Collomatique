@@ -338,32 +338,34 @@ impl GroupListsUpdateOp {
                     return None;
                 };
 
-                let collo_group_list = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .group_lists
-                    .get(group_list_id)
-                    .expect("Group list ID should be valid");
-                for (student_id, group) in &collo_group_list.groups_for_students {
-                    // Check if student is excluded OR assigned to a group that no longer exists
-                    if params.excluded_students.contains(student_id)
-                        || (*group as usize) >= params.group_names.len()
-                    {
-                        let mut new_collo_group_list = collo_group_list.clone();
-                        new_collo_group_list.groups_for_students.remove(student_id);
-                        return Some(CleaningOp {
-                            warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
-                                *group_list_id,
-                                *student_id,
-                            ),
-                            op: UpdateOp::Colloscope(
-                                ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                if !old_group_list.is_prefilled() {
+                    let collo_group_list = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Group list ID should be valid");
+                    for (student_id, group) in &collo_group_list.groups_for_students {
+                        // Check if student is excluded OR assigned to a group that no longer exists
+                        if params.excluded_students.contains(student_id)
+                            || (*group as usize) >= params.group_names.len()
+                        {
+                            let mut new_collo_group_list = collo_group_list.clone();
+                            new_collo_group_list.groups_for_students.remove(student_id);
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
                                     *group_list_id,
-                                    new_collo_group_list,
+                                    *student_id,
                                 ),
-                            ),
-                        });
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                        *group_list_id,
+                                        new_collo_group_list,
+                                    ),
+                                ),
+                            });
+                        }
                     }
                 }
 
@@ -611,7 +613,51 @@ impl GroupListsUpdateOp {
 
                 None
             }
-            GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => None,
+            GroupListsUpdateOp::PrefillGroupList(group_list_id, prefilled_groups) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+
+                // Only need cleaning when transitioning from non-prefilled to prefilled
+                if !group_list.is_prefilled() && prefilled_groups.is_some() {
+                    let collo_group_list = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Non-prefilled group list should have colloscope entry");
+
+                    // Emit warning for each student that needs removal
+                    if let Some((student_id, _)) =
+                        collo_group_list.groups_for_students.iter().next()
+                    {
+                        let mut new_collo_group_list = collo_group_list.clone();
+                        new_collo_group_list.groups_for_students.remove(student_id);
+                        return Some(CleaningOp {
+                            warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                                *group_list_id,
+                                *student_id,
+                            ),
+                            op: UpdateOp::Colloscope(
+                                ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                    *group_list_id,
+                                    new_collo_group_list,
+                                ),
+                            ),
+                        });
+                    }
+                }
+
+                None
+            }
             GroupListsUpdateOp::AssignGroupListToSubject(period_id, subject_id, group_list_id) => {
                 let Some(collo_period) = data
                     .get_data()

@@ -1,7 +1,5 @@
 use adw::prelude::{ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
-use gtk::prelude::{
-    AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
-};
+use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
@@ -29,7 +27,6 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
-    UsePrefillClicked,
     UpdateStudentGroup(collomatique_state_colloscopes::StudentId, u32),
 }
 
@@ -100,30 +97,11 @@ impl SimpleComponent for Dialog {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                        gtk::Box {
-                            set_hexpand: true,
+                        #[local_ref]
+                        student_entries_widget -> adw::PreferencesGroup {
+                            set_title: "Affectation des élèves dans les groupes",
                             set_margin_all: 5,
-                            set_spacing: 10,
-                            set_orientation: gtk::Orientation::Vertical,
-                            gtk::Label {
-                                set_label: "<b>Options de préremplissage</b>",
-                                set_use_markup: true,
-                                set_halign: gtk::Align::Start,
-                            },
-                            #[name(btn_grid)]
-                            gtk::Grid {
-                                set_hexpand: true,
-                                set_column_homogeneous: true,
-                                set_row_homogeneous: true,
-                                set_column_spacing: 5,
-                                set_row_spacing: 5,
-                            },
-                            #[local_ref]
-                            student_entries_widget -> adw::PreferencesGroup {
-                                set_title: "Affectation des élèves dans les groupes",
-                                set_margin_all: 5,
-                                set_hexpand: true,
-                            },
+                            set_hexpand: true,
                         },
                     },
                     gtk::Label {
@@ -134,11 +112,6 @@ impl SimpleComponent for Dialog {
                     },
                 },
             }
-        },
-        use_prefill_btn = gtk::Button {
-            set_label: "Préremplir",
-            set_hexpand: true,
-            connect_clicked => DialogInput::UsePrefillClicked,
         },
     }
 
@@ -170,10 +143,6 @@ impl SimpleComponent for Dialog {
         let student_entries_widget = model.student_entries.widget();
         let widgets = view_output!();
 
-        widgets
-            .btn_grid
-            .attach(&widgets.use_prefill_btn, 0, 0, 1, 1);
-
         ComponentParts { model, widgets }
     }
 
@@ -201,10 +170,6 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(self.collo_group_list.clone()))
                     .unwrap();
             }
-            DialogInput::UsePrefillClicked => {
-                self.fill_with_prefill();
-                self.update_factory();
-            }
             DialogInput::UpdateStudentGroup(student_id, selected) => {
                 match Self::selected_to_group_opt(selected) {
                     Some(group) => {
@@ -231,18 +196,6 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn fill_with_prefill(&mut self) {
-        if let Some(prefilled) = &self.group_list.prefilled_groups {
-            for (group_num, prefilled_group) in prefilled.groups.iter().enumerate() {
-                for student_id in &prefilled_group.students {
-                    self.collo_group_list
-                        .groups_for_students
-                        .insert(*student_id, group_num as u32);
-                }
-            }
-        }
-    }
-
     fn update_students_to_display(&mut self) {
         self.students_to_display = self
             .students

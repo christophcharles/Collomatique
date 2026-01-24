@@ -28,6 +28,7 @@ impl Colloscope {
             .group_lists
             .group_list_map
             .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(group_list_id, _group_list)| (*group_list_id, ColloscopeGroupList::new_empty()))
             .collect();
 
@@ -125,20 +126,31 @@ impl Colloscope {
             period.validate_against_params(*period_id, params)?;
         }
 
-        if self.group_lists.len() != params.group_lists.group_list_map.len() {
-            return Err(ColloscopeError::WrongPeriodCountInColloscopeData);
-        }
-
+        // Validate group lists: should contain exactly non-prefilled group lists
         for (group_list_id, group_list) in &self.group_lists {
             let Some(params_group_list) = params.group_lists.group_list_map.get(group_list_id)
             else {
                 return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
             };
+            if params_group_list.is_prefilled() {
+                return Err(ColloscopeError::PrefilledGroupListInColloscope(
+                    *group_list_id,
+                ));
+            }
             group_list.validate_against_params(
                 *group_list_id,
                 &params_group_list.params,
                 &params.students,
             )?;
+        }
+
+        // Check all non-prefilled group lists are present
+        for (group_list_id, group_list) in &params.group_lists.group_list_map {
+            if !group_list.is_prefilled() && !self.group_lists.contains_key(group_list_id) {
+                return Err(ColloscopeError::MissingNonPrefilledGroupList(
+                    *group_list_id,
+                ));
+            }
         }
 
         Ok(())
@@ -566,37 +578,6 @@ pub struct ColloscopeGroupList {
 impl ColloscopeGroupList {
     pub fn is_empty(&self) -> bool {
         self.groups_for_students.is_empty()
-    }
-
-    pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
-        let Some(prefilled) = &group_list.prefilled_groups else {
-            // No prefilled groups, any configuration is compatible
-            return true;
-        };
-
-        // Check that the students in groups are assigned to the correct groups
-        for (group_num, group) in prefilled.groups.iter().enumerate() {
-            for student_id in &group.students {
-                let Some(stored_num) = self.groups_for_students.get(student_id) else {
-                    return false;
-                };
-                if *stored_num != group_num as u32 {
-                    return false;
-                }
-            }
-        }
-
-        // Check that no student is assigned to a group they don't belong to
-        for (student_id, group) in &self.groups_for_students {
-            let group_index = *group as usize;
-            if let Some(group) = prefilled.groups.get(group_index) {
-                if !group.students.contains(student_id) {
-                    return false;
-                }
-            }
-        }
-
-        true
     }
 
     /// Builds an empty group list compatible with the given parameters

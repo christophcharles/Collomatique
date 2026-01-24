@@ -647,7 +647,10 @@ impl<
                         .eval_fn(module, fn_name, args.clone())
                         .map_err(|e| match e {
                             EvalError::Panic(v) => ProblemError::Panic(v),
-                            _ => panic!("Evaluation should succeed (function was validated)"),
+                            _ => panic!(
+                                "Evaluation should succeed (function was validated): {:?}",
+                                e
+                            ),
                         })?;
                     Ok((module.clone(), fn_name.clone(), result))
                 })

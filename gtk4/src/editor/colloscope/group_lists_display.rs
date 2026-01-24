@@ -16,7 +16,6 @@ pub struct EntryData {
 pub struct Entry {
     data: EntryData,
     remaining_student_count: usize,
-    compatible_with_prefill: bool,
 }
 
 #[derive(Debug)]
@@ -91,21 +90,6 @@ impl FactoryComponent for Entry {
             gtk::Box {
                 set_hexpand: true,
             },
-            gtk::Image {
-                set_margin_end: 5,
-                set_icon_name: Some("dialog-warning-symbolic"),
-                #[watch]
-                set_visible: !self.compatible_with_prefill,
-            },
-            gtk::Label {
-                set_halign: gtk::Align::End,
-                set_margin_end: 5,
-                add_css_class: "warning",
-                set_label: "Ne correspond pas au préremplissage",
-                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
-                #[watch]
-                set_visible: !self.compatible_with_prefill,
-            },
         }
     }
 
@@ -113,11 +97,9 @@ impl FactoryComponent for Entry {
         let mut model = Self {
             data,
             remaining_student_count: 0,
-            compatible_with_prefill: false,
         };
 
         model.update_remaining_student_count();
-        model.update_compatible_with_prefill();
 
         model
     }
@@ -139,7 +121,6 @@ impl FactoryComponent for Entry {
             EntryInput::UpdateData(new_data) => {
                 self.data = new_data;
                 self.update_remaining_student_count();
-                self.update_compatible_with_prefill();
             }
             EntryInput::EditClicked => {
                 sender
@@ -155,12 +136,5 @@ impl Entry {
         self.remaining_student_count = self.data.total_student_count
             - self.data.group_list.params.excluded_students.len()
             - self.data.collo_group_list.groups_for_students.len();
-    }
-
-    fn update_compatible_with_prefill(&mut self) {
-        self.compatible_with_prefill = self
-            .data
-            .collo_group_list
-            .is_compatible_with_prefill(&self.data.group_list);
     }
 }

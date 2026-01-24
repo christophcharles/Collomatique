@@ -157,30 +157,8 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
     config_data
 }
 
-pub fn build_empty_colloscope_with_prefilled_groups(env: &Env) -> Colloscope {
-    let mut colloscope = Colloscope::new_empty_from_params(&env.params);
-
-    for (group_list_id, group_list) in &env.params.group_lists.group_list_map {
-        if let Some(prefilled) = &group_list.prefilled_groups {
-            let collo_group_list = colloscope
-                .group_lists
-                .get_mut(group_list_id)
-                .expect("Group list ID should be valid");
-            for (num, group) in prefilled.groups.iter().enumerate() {
-                for student_id in &group.students {
-                    collo_group_list
-                        .groups_for_students
-                        .insert(*student_id, num as u32);
-                }
-            }
-        }
-    }
-
-    colloscope
-}
-
 pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Colloscope> {
-    let mut colloscope = build_empty_colloscope_with_prefilled_groups(env);
+    let mut colloscope = Colloscope::new_empty_from_params(&env.params);
 
     for (var, value) in config_data.get_values() {
         match var {

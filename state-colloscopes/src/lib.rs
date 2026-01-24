@@ -556,6 +556,10 @@ pub enum GroupListError {
     /// Cannot reduce group count when last groups have students
     #[error("cannot reduce group count: groups to be removed still have students (ops layer should clean first)")]
     NonEmptyGroupsWhenReducing,
+
+    /// Cannot set prefilling: colloscope group list has students assigned
+    #[error("Cannot set prefilling: colloscope group list {0:?} has students assigned")]
+    NonEmptyColloscopeGroupListWhenPrefilling(GroupListId),
 }
 
 /// Errors for settings operations
@@ -627,6 +631,12 @@ pub enum ColloscopeError {
 
     #[error("No interrogation for the given week in period and slot")]
     NoInterrogationOnWeek(PeriodId, SlotId, usize),
+
+    #[error("Prefilled group list {0:?} should not be in colloscope")]
+    PrefilledGroupListInColloscope(GroupListId),
+
+    #[error("Non-prefilled group list {0:?} is missing from colloscope")]
+    MissingNonPrefilledGroupList(GroupListId),
 }
 
 /// Errors for colloscopes modification
@@ -2294,17 +2304,21 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*id));
                 };
-                if old_group_list.prefilled_groups.is_some() {
-                    return Err(GroupListError::RemainingPrefilledGroups);
-                }
-                let collo_group_list = self
-                    .inner_data
-                    .colloscope
-                    .group_lists
-                    .get(id)
-                    .expect("Group list ID should be valid at this point");
-                if !collo_group_list.is_empty() {
-                    return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
+                let was_prefilled = old_group_list.is_prefilled();
+                if let Some(prefilled) = &old_group_list.prefilled_groups {
+                    if !prefilled.is_empty() {
+                        return Err(GroupListError::RemainingPrefilledGroups);
+                    }
+                } else {
+                    let collo_group_list = self
+                        .inner_data
+                        .colloscope
+                        .group_lists
+                        .get(id)
+                        .expect("Non-prefilled group list should have colloscope entry");
+                    if !collo_group_list.is_empty() {
+                        return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
+                    }
                 }
 
                 for (_period_id, subject_map) in
@@ -2318,7 +2332,9 @@ impl Data {
                 }
 
                 self.inner_data.params.group_lists.group_list_map.remove(id);
-                self.inner_data.colloscope.group_lists.remove(id);
+                if !was_prefilled {
+                    self.inner_data.colloscope.group_lists.remove(id);
+                }
 
                 Ok(())
             }
@@ -2332,23 +2348,27 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
-                let collo_group_list = self
-                    .inner_data
-                    .colloscope
-                    .group_lists
-                    .get(group_list_id)
-                    .expect("Group list ID should be valid at this point");
-                if collo_group_list
-                    .validate_against_params(
-                        *group_list_id,
-                        new_params,
-                        &self.inner_data.params.students,
-                    )
-                    .is_err()
-                {
-                    return Err(GroupListError::NotCompatibleGroupListInColloscope(
-                        *group_list_id,
-                    ));
+
+                // Only validate colloscope entry for non-prefilled group lists
+                if !old_group_list.is_prefilled() {
+                    let collo_group_list = self
+                        .inner_data
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Non-prefilled group list should have colloscope entry");
+                    if collo_group_list
+                        .validate_against_params(
+                            *group_list_id,
+                            new_params,
+                            &self.inner_data.params.students,
+                        )
+                        .is_err()
+                    {
+                        return Err(GroupListError::NotCompatibleGroupListInColloscope(
+                            *group_list_id,
+                        ));
+                    }
                 }
 
                 // Atomically adjust prefilled_groups when size changes
@@ -2418,6 +2438,32 @@ impl Data {
                     if actual != expected {
                         return Err(GroupListError::PrefillGroupCountMismatch { expected, actual });
                     }
+                }
+
+                // Handle colloscope group list based on prefill transition
+                let was_prefilled = old_group_list.is_prefilled();
+                let will_be_prefilled = prefilled_groups.is_some();
+
+                if !was_prefilled && will_be_prefilled {
+                    // Transitioning to prefilled: check colloscope is empty, then remove entry
+                    let collo_group_list = self
+                        .inner_data
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Non-prefilled group list should have colloscope entry");
+                    if !collo_group_list.groups_for_students.is_empty() {
+                        return Err(GroupListError::NonEmptyColloscopeGroupListWhenPrefilling(
+                            *group_list_id,
+                        ));
+                    }
+                    self.inner_data.colloscope.group_lists.remove(group_list_id);
+                } else if was_prefilled && !will_be_prefilled {
+                    // Transitioning from prefilled: add empty colloscope entry
+                    self.inner_data.colloscope.group_lists.insert(
+                        *group_list_id,
+                        colloscopes::ColloscopeGroupList::new_empty(),
+                    );
                 }
 
                 let new_group_list = group_lists::GroupList {
