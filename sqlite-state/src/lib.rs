@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("Invalid weekday: {0}")]
     InvalidWeekday(i64),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Validation errors for database invariants
@@ -151,14 +154,22 @@ pub async fn sqlite_to_inner_data(pool: &SqlitePool) -> Result<InnerData, Error>
 /// Export the database to a file
 ///
 /// Uses SQLite's `VACUUM INTO` to create a clean, compacted copy of the database.
-/// Note: `VACUUM INTO` doesn't support parameter bindings, so the path is quoted manually.
 pub async fn export_to_file(pool: &SqlitePool, path: &std::path::Path) -> Result<(), Error> {
-    // VACUUM INTO requires a string literal, not a bound parameter.
-    // We escape single quotes by doubling them (SQL standard escaping).
-    let path_str = path.to_string_lossy().replace('\'', "''");
-    sqlx::query(&format!("VACUUM INTO '{path_str}'"))
+    // Remove existing file if present (VACUUM INTO requires non-existent target)
+    if path.exists() {
+        std::fs::remove_file(path)?;
+    }
+
+    let path_str = path.to_string_lossy();
+
+    // Use file: URI with mode=rwc to force file creation (needed when main db is in-memory)
+    let vacuum_uri = format!("file:{path_str}?mode=rwc");
+
+    sqlx::query("VACUUM INTO ?")
+        .bind(vacuum_uri)
         .execute(pool)
         .await?;
+
     Ok(())
 }
 
