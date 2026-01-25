@@ -162,11 +162,12 @@ CREATE TABLE week_patterns (
     name TEXT NOT NULL
 );
 
-CREATE TABLE week_pattern_weeks (
+CREATE TABLE week_pattern_disabled_weeks (
     week_pattern_id INTEGER NOT NULL REFERENCES week_patterns(id) ON DELETE CASCADE,
-    global_week_index INTEGER NOT NULL CHECK (global_week_index >= 0),
-    is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
-    PRIMARY KEY (week_pattern_id, global_week_index)
+    period_id INTEGER NOT NULL,
+    week_index INTEGER NOT NULL,
+    PRIMARY KEY (week_pattern_id, period_id, week_index),
+    FOREIGN KEY (period_id, week_index) REFERENCES period_weeks(period_id, week_index) ON DELETE RESTRICT
 );
 
 -- ============================================================================

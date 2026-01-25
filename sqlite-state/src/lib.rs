@@ -436,8 +436,6 @@ async fn insert_week_patterns(
     week_patterns: &week_patterns::WeekPatterns,
     periods: &periods::Periods,
 ) -> Result<(), Error> {
-    let total_weeks = periods.count_weeks();
-
     for (week_pattern_id, week_pattern) in &week_patterns.week_pattern_map {
         let id = week_pattern_id.inner() as i64;
 
@@ -447,17 +445,28 @@ async fn insert_week_patterns(
             .execute(&mut **tx)
             .await?;
 
-        for week_index in 0..total_weeks {
-            let is_active = week_pattern.weeks.get(week_index).copied().unwrap_or(true);
-
-            sqlx::query(
-                "INSERT INTO week_pattern_weeks (week_pattern_id, global_week_index, is_active) VALUES (?, ?, ?)",
-            )
-            .bind(id)
-            .bind(week_index as i64)
-            .bind(is_active as i64)
-            .execute(&mut **tx)
-            .await?;
+        // Convert global index to period-relative and insert only disabled weeks
+        let mut global_index = 0usize;
+        for (period_id, period_weeks) in &periods.ordered_period_list {
+            for week_index in 0..period_weeks.len() {
+                let is_active = week_pattern
+                    .weeks
+                    .get(global_index)
+                    .copied()
+                    .unwrap_or(true);
+                if !is_active {
+                    sqlx::query(
+                        "INSERT INTO week_pattern_disabled_weeks
+                         (week_pattern_id, period_id, week_index) VALUES (?, ?, ?)",
+                    )
+                    .bind(id)
+                    .bind(period_id.inner() as i64)
+                    .bind(week_index as i64)
+                    .execute(&mut **tx)
+                    .await?;
+                }
+                global_index += 1;
+            }
         }
     }
 
@@ -819,7 +828,7 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
     let subjects = read_subjects(pool).await?;
     let students = read_students(pool).await?;
     let teachers = read_teachers(pool).await?;
-    let week_patterns = read_week_patterns(pool).await?;
+    let week_patterns = read_week_patterns(pool, &periods).await?;
     let slots = read_slots(pool).await?;
     let incompats = read_incompats(pool).await?;
     let group_lists = read_group_lists(pool).await?;
@@ -1140,7 +1149,10 @@ async fn read_teachers(pool: &SqlitePool) -> Result<teachers::Teachers, Error> {
     Ok(teachers::Teachers { teacher_map })
 }
 
-async fn read_week_patterns(pool: &SqlitePool) -> Result<week_patterns::WeekPatterns, Error> {
+async fn read_week_patterns(
+    pool: &SqlitePool,
+    periods: &periods::Periods,
+) -> Result<week_patterns::WeekPatterns, Error> {
     let pattern_rows: Vec<(i64, String)> = sqlx::query_as("SELECT id, name FROM week_patterns")
         .fetch_all(pool)
         .await?;
@@ -1148,18 +1160,25 @@ async fn read_week_patterns(pool: &SqlitePool) -> Result<week_patterns::WeekPatt
     let mut week_pattern_map = BTreeMap::new();
 
     for (pattern_id, name) in pattern_rows {
-        let week_rows: Vec<(i64, i64)> = sqlx::query_as(
-            "SELECT global_week_index, is_active FROM week_pattern_weeks
-             WHERE week_pattern_id = ? ORDER BY global_week_index",
+        // Get all disabled weeks for this pattern
+        let disabled_rows: Vec<(i64, i64)> = sqlx::query_as(
+            "SELECT period_id, week_index FROM week_pattern_disabled_weeks
+             WHERE week_pattern_id = ?",
         )
         .bind(pattern_id)
         .fetch_all(pool)
         .await?;
 
-        let weeks: Vec<bool> = week_rows
-            .into_iter()
-            .map(|(_idx, active)| active != 0)
-            .collect();
+        let disabled_set: BTreeSet<(i64, i64)> = disabled_rows.into_iter().collect();
+
+        // Build flat Vec<bool> from periods, checking disabled set
+        let mut weeks = Vec::new();
+        for (period_id, period_weeks) in &periods.ordered_period_list {
+            for week_index in 0..period_weeks.len() {
+                let key = (period_id.inner() as i64, week_index as i64);
+                weeks.push(!disabled_set.contains(&key));
+            }
+        }
 
         let pattern = week_patterns::WeekPattern { name, weeks };
 
