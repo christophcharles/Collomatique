@@ -148,6 +148,20 @@ pub async fn sqlite_to_inner_data(pool: &SqlitePool) -> Result<InnerData, Error>
     Ok(InnerData { params, colloscope })
 }
 
+/// Export the database to a file
+///
+/// Uses SQLite's `VACUUM INTO` to create a clean, compacted copy of the database.
+/// Note: `VACUUM INTO` doesn't support parameter bindings, so the path is quoted manually.
+pub async fn export_to_file(pool: &SqlitePool, path: &std::path::Path) -> Result<(), Error> {
+    // VACUUM INTO requires a string literal, not a bound parameter.
+    // We escape single quotes by doubling them (SQL standard escaping).
+    let path_str = path.to_string_lossy().replace('\'', "''");
+    sqlx::query(&format!("VACUUM INTO '{path_str}'"))
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Validate all invariants on the SQLite database
 pub async fn validate_database(pool: &SqlitePool) -> Result<(), ValidationError> {
     // 1. Teacher-subject consistency: slots.teacher_id must teach slots.subject_id
