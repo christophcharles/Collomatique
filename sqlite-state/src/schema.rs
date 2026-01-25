@@ -64,7 +64,41 @@ CREATE TABLE subject_interrogation_params (
     groups_per_interrogation_min INTEGER NOT NULL CHECK (groups_per_interrogation_min > 0),
     groups_per_interrogation_max INTEGER NOT NULL CHECK (groups_per_interrogation_max >= groups_per_interrogation_min),
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
-    take_duration_into_account INTEGER NOT NULL CHECK (take_duration_into_account IN (0, 1))
+    take_duration_into_account INTEGER NOT NULL CHECK (take_duration_into_account IN (0, 1)),
+
+    -- ExactlyPeriodic (1 field)
+    ep_periodicity_in_weeks INTEGER CHECK (ep_periodicity_in_weeks > 0),
+
+    -- OnceForEveryBlockOfWeeks (2 fields)
+    ofeb_weeks_per_block INTEGER CHECK (ofeb_weeks_per_block > 0),
+    ofeb_minimum_week_separation INTEGER CHECK (ofeb_minimum_week_separation > 0),
+
+    -- AmountInYear (3 fields)
+    aiy_count_min INTEGER CHECK (aiy_count_min >= 0),
+    aiy_count_max INTEGER CHECK (aiy_count_max >= aiy_count_min),
+    aiy_minimum_week_separation INTEGER CHECK (aiy_minimum_week_separation >= 0),
+
+    -- AmountForEveryArbitraryBlock (1 field here, blocks in separate table)
+    afab_minimum_week_separation INTEGER CHECK (afab_minimum_week_separation >= 0),
+
+    -- Consistency: OnceForEveryBlockOfWeeks fields must be all NULL or all non-NULL
+    CHECK (
+        (ofeb_weeks_per_block IS NULL) = (ofeb_minimum_week_separation IS NULL)
+    ),
+
+    -- Consistency: AmountInYear fields must be all NULL or all non-NULL
+    CHECK (
+        (aiy_count_min IS NULL) = (aiy_count_max IS NULL) AND
+        (aiy_count_min IS NULL) = (aiy_minimum_week_separation IS NULL)
+    ),
+
+    -- Exactly one periodicity type must be set
+    CHECK (
+        (ep_periodicity_in_weeks IS NOT NULL) +
+        (ofeb_weeks_per_block IS NOT NULL) +
+        (aiy_count_min IS NOT NULL) +
+        (afab_minimum_week_separation IS NOT NULL) = 1
+    )
 );
 
 CREATE TABLE subject_excluded_periods (
@@ -73,31 +107,8 @@ CREATE TABLE subject_excluded_periods (
     PRIMARY KEY (subject_id, period_id)
 );
 
-CREATE TABLE periodicity_once_for_every_block_of_weeks (
-    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
-    weeks_per_block INTEGER NOT NULL CHECK (weeks_per_block > 0),
-    minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation > 0)
-);
-
-CREATE TABLE periodicity_exactly_periodic (
-    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
-    periodicity_in_weeks INTEGER NOT NULL CHECK (periodicity_in_weeks > 0)
-);
-
-CREATE TABLE periodicity_amount_in_year (
-    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
-    interrogation_count_min INTEGER NOT NULL CHECK (interrogation_count_min >= 0),
-    interrogation_count_max INTEGER NOT NULL CHECK (interrogation_count_max >= interrogation_count_min),
-    minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation >= 0)
-);
-
-CREATE TABLE periodicity_amount_for_every_arbitrary_block (
-    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
-    minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation >= 0)
-);
-
 CREATE TABLE periodicity_week_blocks (
-    subject_id INTEGER NOT NULL REFERENCES periodicity_amount_for_every_arbitrary_block(subject_id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
     block_index INTEGER NOT NULL CHECK (block_index >= 0),
     delay_in_weeks INTEGER NOT NULL CHECK (delay_in_weeks >= 0),
     size_in_weeks INTEGER NOT NULL CHECK (size_in_weeks > 0),

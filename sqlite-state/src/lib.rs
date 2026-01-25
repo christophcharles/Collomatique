@@ -241,12 +241,75 @@ async fn insert_subjects(
 
         // Insert interrogation parameters if present
         if let Some(interrogation_params) = &subject.parameters.interrogation_parameters {
+            // Prepare periodicity column values based on periodicity variant
+            let (ep, ofeb_wpb, ofeb_mws, aiy_min, aiy_max, aiy_mws, afab_mws): (
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+            ) = match &interrogation_params.periodicity {
+                subjects::SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks,
+                } => (
+                    Some(periodicity_in_weeks.get() as i64),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                    weeks_per_block,
+                    minimum_week_separation,
+                } => (
+                    None,
+                    Some(weeks_per_block.get() as i64),
+                    Some(minimum_week_separation.get() as i64),
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                subjects::SubjectPeriodicity::AmountInYear {
+                    interrogation_count_in_year,
+                    minimum_week_separation,
+                } => (
+                    None,
+                    None,
+                    None,
+                    Some(*interrogation_count_in_year.start() as i64),
+                    Some(*interrogation_count_in_year.end() as i64),
+                    Some(*minimum_week_separation as i64),
+                    None,
+                ),
+                subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                    minimum_week_separation,
+                    ..
+                } => (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(*minimum_week_separation as i64),
+                ),
+            };
+
             sqlx::query(
                 "INSERT INTO subject_interrogation_params (
                     subject_id, students_per_group_min, students_per_group_max,
                     groups_per_interrogation_min, groups_per_interrogation_max,
-                    duration_minutes, take_duration_into_account
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    duration_minutes, take_duration_into_account,
+                    ep_periodicity_in_weeks,
+                    ofeb_weeks_per_block, ofeb_minimum_week_separation,
+                    aiy_count_min, aiy_count_max, aiy_minimum_week_separation,
+                    afab_minimum_week_separation
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(id)
             .bind(interrogation_params.students_per_group.start().get() as i64)
@@ -255,82 +318,35 @@ async fn insert_subjects(
             .bind(interrogation_params.groups_per_interrogation.end().get() as i64)
             .bind(interrogation_params.duration.get().get() as i64)
             .bind(interrogation_params.take_duration_into_account as i64)
+            .bind(ep)
+            .bind(ofeb_wpb)
+            .bind(ofeb_mws)
+            .bind(aiy_min)
+            .bind(aiy_max)
+            .bind(aiy_mws)
+            .bind(afab_mws)
             .execute(&mut **tx)
             .await?;
 
-            // Insert periodicity details
-            match &interrogation_params.periodicity {
-                subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                    weeks_per_block,
-                    minimum_week_separation,
-                } => {
+            // Insert week blocks for AmountForEveryArbitraryBlock periodicity
+            if let subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock { blocks, .. } =
+                &interrogation_params.periodicity
+            {
+                for (block_index, block) in blocks.iter().enumerate() {
                     sqlx::query(
-                        "INSERT INTO periodicity_once_for_every_block_of_weeks
-                         (subject_id, weeks_per_block, minimum_week_separation) VALUES (?, ?, ?)",
+                        "INSERT INTO periodicity_week_blocks
+                         (subject_id, block_index, delay_in_weeks, size_in_weeks,
+                          interrogation_count_min, interrogation_count_max)
+                         VALUES (?, ?, ?, ?, ?, ?)",
                     )
                     .bind(id)
-                    .bind(weeks_per_block.get() as i64)
-                    .bind(minimum_week_separation.get() as i64)
+                    .bind(block_index as i64)
+                    .bind(block.delay_in_weeks as i64)
+                    .bind(block.size_in_weeks.get() as i64)
+                    .bind(*block.interrogation_count_in_block.start() as i64)
+                    .bind(*block.interrogation_count_in_block.end() as i64)
                     .execute(&mut **tx)
                     .await?;
-                }
-                subjects::SubjectPeriodicity::ExactlyPeriodic {
-                    periodicity_in_weeks,
-                } => {
-                    sqlx::query(
-                        "INSERT INTO periodicity_exactly_periodic
-                         (subject_id, periodicity_in_weeks) VALUES (?, ?)",
-                    )
-                    .bind(id)
-                    .bind(periodicity_in_weeks.get() as i64)
-                    .execute(&mut **tx)
-                    .await?;
-                }
-                subjects::SubjectPeriodicity::AmountInYear {
-                    interrogation_count_in_year,
-                    minimum_week_separation,
-                } => {
-                    sqlx::query(
-                        "INSERT INTO periodicity_amount_in_year
-                         (subject_id, interrogation_count_min, interrogation_count_max, minimum_week_separation)
-                         VALUES (?, ?, ?, ?)",
-                    )
-                    .bind(id)
-                    .bind(*interrogation_count_in_year.start() as i64)
-                    .bind(*interrogation_count_in_year.end() as i64)
-                    .bind(*minimum_week_separation as i64)
-                    .execute(&mut **tx)
-                    .await?;
-                }
-                subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                    blocks,
-                    minimum_week_separation,
-                } => {
-                    sqlx::query(
-                        "INSERT INTO periodicity_amount_for_every_arbitrary_block
-                         (subject_id, minimum_week_separation) VALUES (?, ?)",
-                    )
-                    .bind(id)
-                    .bind(*minimum_week_separation as i64)
-                    .execute(&mut **tx)
-                    .await?;
-
-                    for (block_index, block) in blocks.iter().enumerate() {
-                        sqlx::query(
-                            "INSERT INTO periodicity_week_blocks
-                             (subject_id, block_index, delay_in_weeks, size_in_weeks,
-                              interrogation_count_min, interrogation_count_max)
-                             VALUES (?, ?, ?, ?, ?, ?)",
-                        )
-                        .bind(id)
-                        .bind(block_index as i64)
-                        .bind(block.delay_in_weeks as i64)
-                        .bind(block.size_in_weeks.get() as i64)
-                        .bind(*block.interrogation_count_in_block.start() as i64)
-                        .bind(*block.interrogation_count_in_block.end() as i64)
-                        .execute(&mut **tx)
-                        .await?;
-                    }
                 }
             }
         }
@@ -902,11 +918,29 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
             .map(|(pid,)| unsafe { PeriodId::new(pid as u64) })
             .collect();
 
-        // Read interrogation parameters
-        let interr_params: Option<(i64, i64, i64, i64, i64, i64)> = sqlx::query_as(
+        // Read interrogation parameters with inline periodicity columns
+        let interr_params: Option<(
+            i64,
+            i64,
+            i64,
+            i64,
+            i64,
+            i64,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+        )> = sqlx::query_as(
             "SELECT students_per_group_min, students_per_group_max,
                     groups_per_interrogation_min, groups_per_interrogation_max,
-                    duration_minutes, take_duration_into_account
+                    duration_minutes, take_duration_into_account,
+                    ep_periodicity_in_weeks,
+                    ofeb_weeks_per_block, ofeb_minimum_week_separation,
+                    aiy_count_min, aiy_count_max, aiy_minimum_week_separation,
+                    afab_minimum_week_separation
              FROM subject_interrogation_params WHERE subject_id = ?",
         )
         .bind(subject_id)
@@ -915,8 +949,25 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
 
         let interrogation_parameters = match interr_params {
             None => None,
-            Some((spg_min, spg_max, gpi_min, gpi_max, duration, take_duration)) => {
-                let periodicity = read_periodicity(pool, subject_id).await?;
+            Some((
+                spg_min,
+                spg_max,
+                gpi_min,
+                gpi_max,
+                duration,
+                take_duration,
+                ep,
+                ofeb_wpb,
+                ofeb_mws,
+                aiy_min,
+                aiy_max,
+                aiy_mws,
+                afab_mws,
+            )) => {
+                let periodicity = read_periodicity(
+                    pool, subject_id, ep, ofeb_wpb, ofeb_mws, aiy_min, aiy_max, aiy_mws, afab_mws,
+                )
+                .await?;
 
                 Some(subjects::SubjectInterrogationParameters {
                     students_per_group: NonZeroU32::new(spg_min as u32).unwrap()
@@ -950,61 +1001,38 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
 async fn read_periodicity(
     pool: &SqlitePool,
     subject_id: i64,
+    ep_periodicity_in_weeks: Option<i64>,
+    ofeb_weeks_per_block: Option<i64>,
+    ofeb_minimum_week_separation: Option<i64>,
+    aiy_count_min: Option<i64>,
+    aiy_count_max: Option<i64>,
+    aiy_minimum_week_separation: Option<i64>,
+    afab_minimum_week_separation: Option<i64>,
 ) -> Result<subjects::SubjectPeriodicity, Error> {
-    // Try each periodicity table in turn
-
-    // 1. Try exactly_periodic
-    if let Some(row) = sqlx::query_as::<_, (i64,)>(
-        "SELECT periodicity_in_weeks FROM periodicity_exactly_periodic WHERE subject_id = ?",
-    )
-    .bind(subject_id)
-    .fetch_optional(pool)
-    .await?
-    {
+    // Determine periodicity type from which column is set
+    if let Some(weeks) = ep_periodicity_in_weeks {
         return Ok(subjects::SubjectPeriodicity::ExactlyPeriodic {
-            periodicity_in_weeks: NonZeroU32::new(row.0 as u32).unwrap(),
+            periodicity_in_weeks: NonZeroU32::new(weeks as u32).unwrap(),
         });
     }
 
-    // 2. Try once_for_every_block_of_weeks
-    if let Some(row) = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT weeks_per_block, minimum_week_separation
-         FROM periodicity_once_for_every_block_of_weeks WHERE subject_id = ?",
-    )
-    .bind(subject_id)
-    .fetch_optional(pool)
-    .await?
-    {
+    if let (Some(wpb), Some(mws)) = (ofeb_weeks_per_block, ofeb_minimum_week_separation) {
         return Ok(subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-            weeks_per_block: NonZeroU32::new(row.0 as u32).unwrap(),
-            minimum_week_separation: NonZeroU32::new(row.1 as u32).unwrap(),
+            weeks_per_block: NonZeroU32::new(wpb as u32).unwrap(),
+            minimum_week_separation: NonZeroU32::new(mws as u32).unwrap(),
         });
     }
 
-    // 3. Try amount_in_year
-    if let Some(row) = sqlx::query_as::<_, (i64, i64, i64)>(
-        "SELECT interrogation_count_min, interrogation_count_max, minimum_week_separation
-         FROM periodicity_amount_in_year WHERE subject_id = ?",
-    )
-    .bind(subject_id)
-    .fetch_optional(pool)
-    .await?
+    if let (Some(count_min), Some(count_max), Some(mws)) =
+        (aiy_count_min, aiy_count_max, aiy_minimum_week_separation)
     {
         return Ok(subjects::SubjectPeriodicity::AmountInYear {
-            interrogation_count_in_year: (row.0 as u32)..=(row.1 as u32),
-            minimum_week_separation: row.2 as u32,
+            interrogation_count_in_year: (count_min as u32)..=(count_max as u32),
+            minimum_week_separation: mws as u32,
         });
     }
 
-    // 4. Try amount_for_every_arbitrary_block
-    if let Some(sep_row) = sqlx::query_as::<_, (i64,)>(
-        "SELECT minimum_week_separation
-         FROM periodicity_amount_for_every_arbitrary_block WHERE subject_id = ?",
-    )
-    .bind(subject_id)
-    .fetch_optional(pool)
-    .await?
-    {
+    if let Some(mws) = afab_minimum_week_separation {
         let block_rows: Vec<(i64, i64, i64, i64, i64)> = sqlx::query_as(
             "SELECT block_index, delay_in_weeks, size_in_weeks,
                     interrogation_count_min, interrogation_count_max
@@ -1027,11 +1055,11 @@ async fn read_periodicity(
 
         return Ok(subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
             blocks,
-            minimum_week_separation: sep_row.0 as u32,
+            minimum_week_separation: mws as u32,
         });
     }
 
-    // No periodicity found
+    // No periodicity found - this shouldn't happen if CHECK constraint is enforced
     Err(Error::MissingData(format!(
         "No periodicity found for subject {}",
         subject_id
