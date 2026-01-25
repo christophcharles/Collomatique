@@ -13,7 +13,7 @@ PRAGMA foreign_keys = ON;
 -- ============================================================================
 
 CREATE TABLE all_ids (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     entity_type TEXT NOT NULL CHECK (entity_type IN (
         'student', 'teacher', 'subject', 'period',
         'slot', 'week_pattern', 'incompat', 'group_list'
@@ -25,7 +25,7 @@ CREATE TABLE all_ids (
 -- ============================================================================
 
 CREATE TABLE metadata (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     first_week TEXT,
     main_script TEXT
 );
@@ -35,15 +35,15 @@ CREATE TABLE metadata (
 -- ============================================================================
 
 CREATE TABLE periods (
-    id INTEGER PRIMARY KEY,
-    position INTEGER NOT NULL UNIQUE
+    id INTEGER NOT NULL PRIMARY KEY,
+    position INTEGER NOT NULL UNIQUE CHECK (position >= 0)
 );
 
 CREATE TABLE period_weeks (
     period_id INTEGER NOT NULL REFERENCES periods(id) ON DELETE CASCADE,
     week_index INTEGER NOT NULL CHECK (week_index >= 0),
     has_interrogations INTEGER NOT NULL CHECK (has_interrogations IN (0, 1)),
-    annotation TEXT,
+    annotation TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (period_id, week_index)
 );
 
@@ -52,25 +52,19 @@ CREATE TABLE period_weeks (
 -- ============================================================================
 
 CREATE TABLE subjects (
-    id INTEGER PRIMARY KEY,
-    position INTEGER NOT NULL UNIQUE,
+    id INTEGER NOT NULL PRIMARY KEY,
+    position INTEGER NOT NULL UNIQUE CHECK (position >= 0),
     name TEXT NOT NULL
 );
 
 CREATE TABLE subject_interrogation_params (
-    subject_id INTEGER PRIMARY KEY REFERENCES subjects(id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subjects(id) ON DELETE CASCADE,
     students_per_group_min INTEGER NOT NULL CHECK (students_per_group_min > 0),
     students_per_group_max INTEGER NOT NULL CHECK (students_per_group_max >= students_per_group_min),
     groups_per_interrogation_min INTEGER NOT NULL CHECK (groups_per_interrogation_min > 0),
     groups_per_interrogation_max INTEGER NOT NULL CHECK (groups_per_interrogation_max >= groups_per_interrogation_min),
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
-    take_duration_into_account INTEGER NOT NULL CHECK (take_duration_into_account IN (0, 1)),
-    periodicity_type TEXT NOT NULL CHECK (periodicity_type IN (
-        'once_for_every_block_of_weeks',
-        'exactly_periodic',
-        'amount_in_year',
-        'amount_for_every_arbitrary_block'
-    ))
+    take_duration_into_account INTEGER NOT NULL CHECK (take_duration_into_account IN (0, 1))
 );
 
 CREATE TABLE subject_excluded_periods (
@@ -80,25 +74,25 @@ CREATE TABLE subject_excluded_periods (
 );
 
 CREATE TABLE periodicity_once_for_every_block_of_weeks (
-    subject_id INTEGER PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
     weeks_per_block INTEGER NOT NULL CHECK (weeks_per_block > 0),
     minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation > 0)
 );
 
 CREATE TABLE periodicity_exactly_periodic (
-    subject_id INTEGER PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
     periodicity_in_weeks INTEGER NOT NULL CHECK (periodicity_in_weeks > 0)
 );
 
 CREATE TABLE periodicity_amount_in_year (
-    subject_id INTEGER PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
     interrogation_count_min INTEGER NOT NULL CHECK (interrogation_count_min >= 0),
     interrogation_count_max INTEGER NOT NULL CHECK (interrogation_count_max >= interrogation_count_min),
     minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation >= 0)
 );
 
 CREATE TABLE periodicity_amount_for_every_arbitrary_block (
-    subject_id INTEGER PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL PRIMARY KEY REFERENCES subject_interrogation_params(subject_id) ON DELETE CASCADE,
     minimum_week_separation INTEGER NOT NULL CHECK (minimum_week_separation >= 0)
 );
 
@@ -117,11 +111,11 @@ CREATE TABLE periodicity_week_blocks (
 -- ============================================================================
 
 CREATE TABLE students (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     surname TEXT NOT NULL,
     firstname TEXT NOT NULL,
-    tel TEXT,
-    email TEXT
+    tel TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE student_excluded_periods (
@@ -135,11 +129,11 @@ CREATE TABLE student_excluded_periods (
 -- ============================================================================
 
 CREATE TABLE teachers (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     surname TEXT NOT NULL,
     firstname TEXT NOT NULL,
-    tel TEXT,
-    email TEXT
+    tel TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE teacher_subjects (
@@ -153,15 +147,15 @@ CREATE TABLE teacher_subjects (
 -- ============================================================================
 
 CREATE TABLE week_patterns (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     name TEXT NOT NULL
 );
 
 CREATE TABLE week_pattern_weeks (
     week_pattern_id INTEGER NOT NULL REFERENCES week_patterns(id) ON DELETE CASCADE,
-    week_index INTEGER NOT NULL CHECK (week_index >= 0),
+    global_week_index INTEGER NOT NULL CHECK (global_week_index >= 0),
     is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
-    PRIMARY KEY (week_pattern_id, week_index)
+    PRIMARY KEY (week_pattern_id, global_week_index)
 );
 
 -- ============================================================================
@@ -169,9 +163,9 @@ CREATE TABLE week_pattern_weeks (
 -- ============================================================================
 
 CREATE TABLE slots (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     subject_id INTEGER NOT NULL REFERENCES subject_interrogation_params(subject_id) ON DELETE RESTRICT,
-    position INTEGER NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
     teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE RESTRICT,
     day INTEGER NOT NULL CHECK (day >= 0 AND day <= 6),
     start_time TEXT NOT NULL,
@@ -186,7 +180,7 @@ CREATE TABLE slots (
 -- ============================================================================
 
 CREATE TABLE incompats (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     subject_id INTEGER NOT NULL REFERENCES subject_interrogation_params(subject_id) ON DELETE RESTRICT,
     name TEXT NOT NULL,
     minimum_free_slots INTEGER NOT NULL CHECK (minimum_free_slots > 0),
@@ -207,7 +201,7 @@ CREATE TABLE incompat_slots (
 -- ============================================================================
 
 CREATE TABLE group_lists (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
     students_per_group_min INTEGER NOT NULL CHECK (students_per_group_min > 0),
     students_per_group_max INTEGER NOT NULL CHECK (students_per_group_max >= students_per_group_min),
@@ -217,7 +211,7 @@ CREATE TABLE group_lists (
 CREATE TABLE group_list_group_names (
     group_list_id INTEGER NOT NULL REFERENCES group_lists(id) ON DELETE CASCADE,
     group_index INTEGER NOT NULL CHECK (group_index >= 0),
-    name TEXT,
+    name TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (group_list_id, group_index)
 );
 
@@ -258,7 +252,7 @@ CREATE TABLE assignments (
 -- ============================================================================
 
 CREATE TABLE settings_global (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     interrogations_per_week_min_value INTEGER,
     interrogations_per_week_min_soft INTEGER CHECK (interrogations_per_week_min_soft IN (0, 1)),
     interrogations_per_week_max_value INTEGER,
@@ -268,7 +262,7 @@ CREATE TABLE settings_global (
 );
 
 CREATE TABLE settings_students (
-    student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE RESTRICT,
+    student_id INTEGER NOT NULL PRIMARY KEY REFERENCES students(id) ON DELETE RESTRICT,
     interrogations_per_week_min_value INTEGER,
     interrogations_per_week_min_soft INTEGER CHECK (interrogations_per_week_min_soft IN (0, 1)),
     interrogations_per_week_max_value INTEGER,
@@ -276,6 +270,20 @@ CREATE TABLE settings_students (
     max_interrogations_per_day_value INTEGER CHECK (max_interrogations_per_day_value > 0),
     max_interrogations_per_day_soft INTEGER CHECK (max_interrogations_per_day_soft IN (0, 1))
 );
+
+-- View for effective settings with automatic fallback to global defaults
+CREATE VIEW settings_effective AS
+SELECT
+    st.id AS student_id,
+    COALESCE(ss.interrogations_per_week_min_value, sg.interrogations_per_week_min_value) AS interrogations_per_week_min_value,
+    COALESCE(ss.interrogations_per_week_min_soft, sg.interrogations_per_week_min_soft) AS interrogations_per_week_min_soft,
+    COALESCE(ss.interrogations_per_week_max_value, sg.interrogations_per_week_max_value) AS interrogations_per_week_max_value,
+    COALESCE(ss.interrogations_per_week_max_soft, sg.interrogations_per_week_max_soft) AS interrogations_per_week_max_soft,
+    COALESCE(ss.max_interrogations_per_day_value, sg.max_interrogations_per_day_value) AS max_interrogations_per_day_value,
+    COALESCE(ss.max_interrogations_per_day_soft, sg.max_interrogations_per_day_soft) AS max_interrogations_per_day_soft
+FROM students st
+CROSS JOIN settings_global sg
+LEFT JOIN settings_students ss ON ss.student_id = st.id;
 
 -- ============================================================================
 -- 13. Colloscope (Schedule Data)

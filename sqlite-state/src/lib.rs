@@ -199,18 +199,13 @@ async fn insert_periods(
             .await?;
 
         for (week_index, week_desc) in weeks.iter().enumerate() {
-            let annotation = week_desc
-                .annotation
-                .as_ref()
-                .map(|s| s.as_str().to_string());
-
             sqlx::query(
                 "INSERT INTO period_weeks (period_id, week_index, has_interrogations, annotation) VALUES (?, ?, ?, ?)",
             )
             .bind(id)
             .bind(week_index as i64)
             .bind(week_desc.interrogations as i64)
-            .bind(&annotation)
+            .bind(week_desc.annotation.as_ref().map(|s| s.as_str()).unwrap_or(""))
             .execute(&mut **tx)
             .await?;
         }
@@ -246,23 +241,12 @@ async fn insert_subjects(
 
         // Insert interrogation parameters if present
         if let Some(interrogation_params) = &subject.parameters.interrogation_parameters {
-            let periodicity_type = match &interrogation_params.periodicity {
-                subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks { .. } => {
-                    "once_for_every_block_of_weeks"
-                }
-                subjects::SubjectPeriodicity::ExactlyPeriodic { .. } => "exactly_periodic",
-                subjects::SubjectPeriodicity::AmountInYear { .. } => "amount_in_year",
-                subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock { .. } => {
-                    "amount_for_every_arbitrary_block"
-                }
-            };
-
             sqlx::query(
                 "INSERT INTO subject_interrogation_params (
                     subject_id, students_per_group_min, students_per_group_max,
                     groups_per_interrogation_min, groups_per_interrogation_max,
-                    duration_minutes, take_duration_into_account, periodicity_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    duration_minutes, take_duration_into_account
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(id)
             .bind(interrogation_params.students_per_group.start().get() as i64)
@@ -271,7 +255,6 @@ async fn insert_subjects(
             .bind(interrogation_params.groups_per_interrogation.end().get() as i64)
             .bind(interrogation_params.duration.get().get() as i64)
             .bind(interrogation_params.take_duration_into_account as i64)
-            .bind(periodicity_type)
             .execute(&mut **tx)
             .await?;
 
@@ -369,8 +352,15 @@ async fn insert_students(
         .bind(id)
         .bind(&student.desc.surname)
         .bind(&student.desc.firstname)
-        .bind(student.desc.tel.as_ref().map(|s| s.as_str()))
-        .bind(student.desc.email.as_ref().map(|s| s.as_str()))
+        .bind(student.desc.tel.as_ref().map(|s| s.as_str()).unwrap_or(""))
+        .bind(
+            student
+                .desc
+                .email
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(""),
+        )
         .execute(&mut **tx)
         .await?;
 
@@ -401,8 +391,15 @@ async fn insert_teachers(
         .bind(id)
         .bind(&teacher.desc.surname)
         .bind(&teacher.desc.firstname)
-        .bind(teacher.desc.tel.as_ref().map(|s| s.as_str()))
-        .bind(teacher.desc.email.as_ref().map(|s| s.as_str()))
+        .bind(teacher.desc.tel.as_ref().map(|s| s.as_str()).unwrap_or(""))
+        .bind(
+            teacher
+                .desc
+                .email
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or(""),
+        )
         .execute(&mut **tx)
         .await?;
 
@@ -438,7 +435,7 @@ async fn insert_week_patterns(
             let is_active = week_pattern.weeks.get(week_index).copied().unwrap_or(true);
 
             sqlx::query(
-                "INSERT INTO week_pattern_weeks (week_pattern_id, week_index, is_active) VALUES (?, ?, ?)",
+                "INSERT INTO week_pattern_weeks (week_pattern_id, global_week_index, is_active) VALUES (?, ?, ?)",
             )
             .bind(id)
             .bind(week_index as i64)
@@ -552,7 +549,7 @@ async fn insert_group_lists(
             )
             .bind(id)
             .bind(group_index as i64)
-            .bind(group_name.as_ref().map(|s| s.as_str()))
+            .bind(group_name.as_ref().map(|s| s.as_str()).unwrap_or(""))
             .execute(&mut **tx)
             .await?;
         }
@@ -858,7 +855,7 @@ async fn read_periods(pool: &SqlitePool) -> Result<periods::Periods, Error> {
     let mut ordered_period_list = Vec::new();
 
     for (period_id, _position) in period_rows {
-        let week_rows: Vec<(i64, i64, Option<String>)> = sqlx::query_as(
+        let week_rows: Vec<(i64, i64, String)> = sqlx::query_as(
             "SELECT week_index, has_interrogations, annotation FROM period_weeks
              WHERE period_id = ? ORDER BY week_index",
         )
@@ -870,7 +867,7 @@ async fn read_periods(pool: &SqlitePool) -> Result<periods::Periods, Error> {
             .into_iter()
             .map(|(_idx, has_interr, annot)| periods::WeekDesc {
                 interrogations: has_interr != 0,
-                annotation: annot.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()),
+                annotation: non_empty_string::NonEmptyString::new(annot).ok(),
             })
             .collect();
 
@@ -906,10 +903,10 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
             .collect();
 
         // Read interrogation parameters
-        let interr_params: Option<(i64, i64, i64, i64, i64, i64, String)> = sqlx::query_as(
+        let interr_params: Option<(i64, i64, i64, i64, i64, i64)> = sqlx::query_as(
             "SELECT students_per_group_min, students_per_group_max,
                     groups_per_interrogation_min, groups_per_interrogation_max,
-                    duration_minutes, take_duration_into_account, periodicity_type
+                    duration_minutes, take_duration_into_account
              FROM subject_interrogation_params WHERE subject_id = ?",
         )
         .bind(subject_id)
@@ -918,16 +915,8 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
 
         let interrogation_parameters = match interr_params {
             None => None,
-            Some((
-                spg_min,
-                spg_max,
-                gpi_min,
-                gpi_max,
-                duration,
-                take_duration,
-                periodicity_type,
-            )) => {
-                let periodicity = read_periodicity(pool, subject_id, &periodicity_type).await?;
+            Some((spg_min, spg_max, gpi_min, gpi_max, duration, take_duration)) => {
+                let periodicity = read_periodicity(pool, subject_id).await?;
 
                 Some(subjects::SubjectInterrogationParameters {
                     students_per_group: NonZeroU32::new(spg_min as u32).unwrap()
@@ -961,89 +950,96 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
 async fn read_periodicity(
     pool: &SqlitePool,
     subject_id: i64,
-    periodicity_type: &str,
 ) -> Result<subjects::SubjectPeriodicity, Error> {
-    match periodicity_type {
-        "once_for_every_block_of_weeks" => {
-            let row: (i64, i64) = sqlx::query_as(
-                "SELECT weeks_per_block, minimum_week_separation
-                 FROM periodicity_once_for_every_block_of_weeks WHERE subject_id = ?",
-            )
-            .bind(subject_id)
-            .fetch_one(pool)
-            .await?;
+    // Try each periodicity table in turn
 
-            Ok(subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                weeks_per_block: NonZeroU32::new(row.0 as u32).unwrap(),
-                minimum_week_separation: NonZeroU32::new(row.1 as u32).unwrap(),
-            })
-        }
-        "exactly_periodic" => {
-            let row: (i64,) = sqlx::query_as(
-                "SELECT periodicity_in_weeks FROM periodicity_exactly_periodic WHERE subject_id = ?",
-            )
-            .bind(subject_id)
-            .fetch_one(pool)
-            .await?;
-
-            Ok(subjects::SubjectPeriodicity::ExactlyPeriodic {
-                periodicity_in_weeks: NonZeroU32::new(row.0 as u32).unwrap(),
-            })
-        }
-        "amount_in_year" => {
-            let row: (i64, i64, i64) = sqlx::query_as(
-                "SELECT interrogation_count_min, interrogation_count_max, minimum_week_separation
-                 FROM periodicity_amount_in_year WHERE subject_id = ?",
-            )
-            .bind(subject_id)
-            .fetch_one(pool)
-            .await?;
-
-            Ok(subjects::SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year: (row.0 as u32)..=(row.1 as u32),
-                minimum_week_separation: row.2 as u32,
-            })
-        }
-        "amount_for_every_arbitrary_block" => {
-            let sep_row: (i64,) = sqlx::query_as(
-                "SELECT minimum_week_separation
-                 FROM periodicity_amount_for_every_arbitrary_block WHERE subject_id = ?",
-            )
-            .bind(subject_id)
-            .fetch_one(pool)
-            .await?;
-
-            let block_rows: Vec<(i64, i64, i64, i64, i64)> = sqlx::query_as(
-                "SELECT block_index, delay_in_weeks, size_in_weeks,
-                        interrogation_count_min, interrogation_count_max
-                 FROM periodicity_week_blocks WHERE subject_id = ? ORDER BY block_index",
-            )
-            .bind(subject_id)
-            .fetch_all(pool)
-            .await?;
-
-            let blocks: Vec<subjects::WeekBlock> = block_rows
-                .into_iter()
-                .map(
-                    |(_idx, delay, size, count_min, count_max)| subjects::WeekBlock {
-                        delay_in_weeks: delay as u32,
-                        size_in_weeks: NonZeroU32::new(size as u32).unwrap(),
-                        interrogation_count_in_block: (count_min as u32)..=(count_max as u32),
-                    },
-                )
-                .collect();
-
-            Ok(subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                blocks,
-                minimum_week_separation: sep_row.0 as u32,
-            })
-        }
-        other => Err(Error::InvalidPeriodicityType(other.to_string())),
+    // 1. Try exactly_periodic
+    if let Some(row) = sqlx::query_as::<_, (i64,)>(
+        "SELECT periodicity_in_weeks FROM periodicity_exactly_periodic WHERE subject_id = ?",
+    )
+    .bind(subject_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(subjects::SubjectPeriodicity::ExactlyPeriodic {
+            periodicity_in_weeks: NonZeroU32::new(row.0 as u32).unwrap(),
+        });
     }
+
+    // 2. Try once_for_every_block_of_weeks
+    if let Some(row) = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT weeks_per_block, minimum_week_separation
+         FROM periodicity_once_for_every_block_of_weeks WHERE subject_id = ?",
+    )
+    .bind(subject_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+            weeks_per_block: NonZeroU32::new(row.0 as u32).unwrap(),
+            minimum_week_separation: NonZeroU32::new(row.1 as u32).unwrap(),
+        });
+    }
+
+    // 3. Try amount_in_year
+    if let Some(row) = sqlx::query_as::<_, (i64, i64, i64)>(
+        "SELECT interrogation_count_min, interrogation_count_max, minimum_week_separation
+         FROM periodicity_amount_in_year WHERE subject_id = ?",
+    )
+    .bind(subject_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(subjects::SubjectPeriodicity::AmountInYear {
+            interrogation_count_in_year: (row.0 as u32)..=(row.1 as u32),
+            minimum_week_separation: row.2 as u32,
+        });
+    }
+
+    // 4. Try amount_for_every_arbitrary_block
+    if let Some(sep_row) = sqlx::query_as::<_, (i64,)>(
+        "SELECT minimum_week_separation
+         FROM periodicity_amount_for_every_arbitrary_block WHERE subject_id = ?",
+    )
+    .bind(subject_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        let block_rows: Vec<(i64, i64, i64, i64, i64)> = sqlx::query_as(
+            "SELECT block_index, delay_in_weeks, size_in_weeks,
+                    interrogation_count_min, interrogation_count_max
+             FROM periodicity_week_blocks WHERE subject_id = ? ORDER BY block_index",
+        )
+        .bind(subject_id)
+        .fetch_all(pool)
+        .await?;
+
+        let blocks: Vec<subjects::WeekBlock> = block_rows
+            .into_iter()
+            .map(
+                |(_idx, delay, size, count_min, count_max)| subjects::WeekBlock {
+                    delay_in_weeks: delay as u32,
+                    size_in_weeks: NonZeroU32::new(size as u32).unwrap(),
+                    interrogation_count_in_block: (count_min as u32)..=(count_max as u32),
+                },
+            )
+            .collect();
+
+        return Ok(subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+            blocks,
+            minimum_week_separation: sep_row.0 as u32,
+        });
+    }
+
+    // No periodicity found
+    Err(Error::MissingData(format!(
+        "No periodicity found for subject {}",
+        subject_id
+    )))
 }
 
 async fn read_students(pool: &SqlitePool) -> Result<students::Students, Error> {
-    let student_rows: Vec<(i64, String, String, Option<String>, Option<String>)> =
+    let student_rows: Vec<(i64, String, String, String, String)> =
         sqlx::query_as("SELECT id, surname, firstname, tel, email FROM students")
             .fetch_all(pool)
             .await?;
@@ -1066,8 +1062,8 @@ async fn read_students(pool: &SqlitePool) -> Result<students::Students, Error> {
             desc: PersonWithContact {
                 surname,
                 firstname,
-                tel: tel.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()),
-                email: email.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()),
+                tel: non_empty_string::NonEmptyString::new(tel).ok(),
+                email: non_empty_string::NonEmptyString::new(email).ok(),
             },
             excluded_periods,
         };
@@ -1080,7 +1076,7 @@ async fn read_students(pool: &SqlitePool) -> Result<students::Students, Error> {
 }
 
 async fn read_teachers(pool: &SqlitePool) -> Result<teachers::Teachers, Error> {
-    let teacher_rows: Vec<(i64, String, String, Option<String>, Option<String>)> =
+    let teacher_rows: Vec<(i64, String, String, String, String)> =
         sqlx::query_as("SELECT id, surname, firstname, tel, email FROM teachers")
             .fetch_all(pool)
             .await?;
@@ -1103,8 +1099,8 @@ async fn read_teachers(pool: &SqlitePool) -> Result<teachers::Teachers, Error> {
             desc: PersonWithContact {
                 surname,
                 firstname,
-                tel: tel.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()),
-                email: email.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()),
+                tel: non_empty_string::NonEmptyString::new(tel).ok(),
+                email: non_empty_string::NonEmptyString::new(email).ok(),
             },
             subjects,
         };
@@ -1125,8 +1121,8 @@ async fn read_week_patterns(pool: &SqlitePool) -> Result<week_patterns::WeekPatt
 
     for (pattern_id, name) in pattern_rows {
         let week_rows: Vec<(i64, i64)> = sqlx::query_as(
-            "SELECT week_index, is_active FROM week_pattern_weeks
-             WHERE week_pattern_id = ? ORDER BY week_index",
+            "SELECT global_week_index, is_active FROM week_pattern_weeks
+             WHERE week_pattern_id = ? ORDER BY global_week_index",
         )
         .bind(pattern_id)
         .fetch_all(pool)
@@ -1259,7 +1255,7 @@ async fn read_group_lists(pool: &SqlitePool) -> Result<group_lists::GroupLists, 
 
     for (list_id, name, spg_min, spg_max, filling_type) in list_rows {
         // Read group names
-        let name_rows: Vec<(i64, Option<String>)> = sqlx::query_as(
+        let name_rows: Vec<(i64, String)> = sqlx::query_as(
             "SELECT group_index, name FROM group_list_group_names
              WHERE group_list_id = ? ORDER BY group_index",
         )
@@ -1269,7 +1265,7 @@ async fn read_group_lists(pool: &SqlitePool) -> Result<group_lists::GroupLists, 
 
         let group_names: Vec<Option<non_empty_string::NonEmptyString>> = name_rows
             .into_iter()
-            .map(|(_idx, name)| name.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
+            .map(|(_idx, name)| non_empty_string::NonEmptyString::new(name).ok())
             .collect();
 
         let filling = match filling_type.as_str() {
