@@ -193,7 +193,7 @@ CREATE TABLE slots (
 
 CREATE TABLE incompats (
     id INTEGER NOT NULL PRIMARY KEY,
-    subject_id INTEGER NOT NULL REFERENCES subject_interrogation_params(subject_id) ON DELETE RESTRICT,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE RESTRICT,
     name TEXT NOT NULL,
     minimum_free_slots INTEGER NOT NULL CHECK (minimum_free_slots > 0),
     week_pattern_id INTEGER REFERENCES week_patterns(id) ON DELETE RESTRICT
