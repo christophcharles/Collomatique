@@ -444,6 +444,16 @@ impl GlobalEnv {
         SymbolPath(segments)
     }
 
+    /// Check if a name would conflict with an existing symbol in the symbol table.
+    /// Returns Some(existing_module_name) if there's a conflict, None otherwise.
+    fn check_symbol_conflict(&self, current_module: &str, name: &str) -> Option<String> {
+        let path = Self::make_symbol_path(None, name);
+        self.symbols
+            .get(current_module)
+            .and_then(|symbol_map| symbol_map.get(&path))
+            .map(|existing| existing.module_name().to_string())
+    }
+
     /// Import type symbols from source_module into target_module's symbol table
     fn import_type_symbols(
         &mut self,
@@ -660,6 +670,26 @@ impl GlobalEnv {
             return;
         }
 
+        // Check for conflict with queries (registered in same pass, before symbol table populated)
+        if let Some((_query_type, _span)) = self.lookup_query(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module: current_module.to_string(),
+            });
+            return;
+        }
+
+        // Check for conflict with existing symbols (types, modules)
+        if let Some(existing_module) = self.check_symbol_conflict(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module,
+            });
+            return;
+        }
+
         // Naming convention warning for function
         if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
             &name.node,
@@ -776,13 +806,33 @@ impl GlobalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
-        // Check for duplicate name
+        // Check for duplicate query name
         if let Some((_query_type, span)) = self.lookup_query(current_module, &name.node) {
             errors.push(SemError::QueryAlreadyDefined {
                 module: current_module.to_string(),
                 identifier: name.node.clone(),
                 span: name.span.clone(),
                 here: span.clone(),
+            });
+            return;
+        }
+
+        // Check for conflict with functions (registered in same pass, before symbol table populated)
+        if let Some((_fn_type, _span)) = self.lookup_fn(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module: current_module.to_string(),
+            });
+            return;
+        }
+
+        // Check for conflict with existing symbols (types, modules)
+        if let Some(existing_module) = self.check_symbol_conflict(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module,
             });
             return;
         }

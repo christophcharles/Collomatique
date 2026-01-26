@@ -537,3 +537,64 @@ fn public_query_not_warned_as_unused() {
         warnings
     );
 }
+
+// ========== Symbol Conflict Tests ==========
+
+#[test]
+fn function_conflicts_with_type() {
+    let input = r#"
+        type my_name = Int;
+        pub let my_name() -> Int = 42;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Function should conflict with type");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+}
+
+#[test]
+fn query_conflicts_with_type() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type my_name = Int;
+        pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Query should conflict with type");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+}
+
+#[test]
+fn query_conflicts_with_function() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub let my_name() -> Int = 42;
+        pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Query should conflict with function");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+}
+
+#[test]
+fn function_conflicts_with_query() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+        pub let my_name() -> Int = 42;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Function should conflict with query");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+}
