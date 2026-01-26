@@ -310,6 +310,16 @@ pub enum SemWarning {
         span: Span,
         suggestion: String,
     },
+
+    #[error(
+        "Type \"{identifier}\" in module \"{module}\" at {span:?} should use PascalCase (consider \"{suggestion}\")"
+    )]
+    TypeNamingConvention {
+        module: String,
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
     #[error("Unused identifier \"{identifier}\" in module \"{module}\" at {span:?}")]
     UnusedIdentifier {
         module: String,

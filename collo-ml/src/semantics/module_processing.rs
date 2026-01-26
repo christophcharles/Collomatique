@@ -89,6 +89,7 @@ impl GlobalEnv {
                             *public,
                             name,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     crate::ast::Statement::EnumDecl {
@@ -102,6 +103,7 @@ impl GlobalEnv {
                             name,
                             variants,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     _ => {}
@@ -1202,6 +1204,7 @@ impl GlobalEnv {
         public: bool,
         name: &Spanned<String>,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Check if type name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
@@ -1232,6 +1235,19 @@ impl GlobalEnv {
                 span: name.span.clone(),
             });
             return;
+        }
+
+        // Naming convention warning for type
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::PascalCase,
+        ) {
+            warnings.push(SemWarning::TypeNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
         }
 
         // Register with placeholder - will be resolved in pass 2
@@ -1296,6 +1312,7 @@ impl GlobalEnv {
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Check if enum name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
@@ -1327,6 +1344,19 @@ impl GlobalEnv {
             return;
         }
 
+        // Naming convention warning for enum root name
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::PascalCase,
+        ) {
+            warnings.push(SemWarning::TypeNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
+        }
+
         let mut variant_failure = false;
 
         for variant in variants {
@@ -1345,6 +1375,19 @@ impl GlobalEnv {
                 });
                 variant_failure = true;
                 continue;
+            }
+
+            // Naming convention warning for variant name
+            if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                &variant.node.name.node,
+                string_case::NamingConvention::PascalCase,
+            ) {
+                warnings.push(SemWarning::TypeNamingConvention {
+                    module: current_module.to_string(),
+                    identifier: variant.node.name.node.clone(),
+                    span: variant.node.name.span.clone(),
+                    suggestion,
+                });
             }
         }
 

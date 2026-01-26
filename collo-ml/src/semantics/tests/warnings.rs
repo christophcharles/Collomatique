@@ -454,7 +454,7 @@ fn no_warnings_for_well_written_code() {
     );
 
     let input = r#"
-        pub let compute_total(students: [Student]) -> LinExpr = 
+        pub let compute_total(students: [Student]) -> LinExpr =
             sum s in students where s.age > 18 { $StudentVar(s) };
     "#;
     let (_, _, warnings) = analyze(input, types, vars);
@@ -462,6 +462,78 @@ fn no_warnings_for_well_written_code() {
     assert!(
         warnings.is_empty(),
         "Well-written code should have no warnings: {:?}",
+        warnings
+    );
+}
+
+// ========== Type Naming Convention Warnings ==========
+
+#[test]
+fn type_naming_convention_warning() {
+    let input = "type my_type = Int;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::TypeNamingConvention { .. })),
+        "Should warn about type naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn type_correct_naming_no_warning() {
+    let input = "type MyType = Int;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::TypeNamingConvention { .. })),
+        "Should not warn about correct type naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn enum_root_naming_convention_warning() {
+    let input = "enum my_enum = Good;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::TypeNamingConvention { identifier, .. } if identifier == "my_enum")),
+        "Should warn about enum root naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn enum_variant_naming_convention_warning() {
+    let input = "enum MyEnum = bad_variant;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::TypeNamingConvention { identifier, .. } if identifier == "bad_variant")),
+        "Should warn about enum variant naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn enum_correct_naming_no_warning() {
+    let input = "enum MyEnum = GoodVariant(Int) | AnotherGood;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::TypeNamingConvention { .. })),
+        "Should not warn about correct enum naming: {:?}",
         warnings
     );
 }
