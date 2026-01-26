@@ -513,8 +513,9 @@ impl SimpleTypeName {
                     }
                     Rule::tuple_type => Self::from_tuple_type(inner_pair),
                     Rule::struct_type => Self::from_struct_type(inner_pair),
+                    Rule::database_schema_type => Self::from_database_schema_type(inner_pair),
                     _ => Err(AstError::UnexpectedRule {
-                        expected: "namespace_path, type_name, tuple_type, or struct_type",
+                        expected: "namespace_path, type_name, tuple_type, struct_type, or database_schema_type",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     }),
@@ -559,6 +560,18 @@ impl SimpleTypeName {
         }
 
         Ok(SimpleTypeName::Struct(fields))
+    }
+
+    fn from_database_schema_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // database_schema_type = { database_schema_start ~ string_literal+ ~ "}" }
+        // Concatenate all string literals
+        let schema_string: String = pair
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::string_literal)
+            .map(|p| parse_string_literal(p.as_str()))
+            .collect();
+
+        Ok(SimpleTypeName::DatabaseSchema(schema_string))
     }
 
     fn from_namespace_path_type(pair: Pair<Rule>) -> Result<Self, AstError> {

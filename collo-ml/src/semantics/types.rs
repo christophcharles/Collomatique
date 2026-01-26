@@ -52,6 +52,7 @@ pub enum SimpleType {
     Custom(String, String, Option<String>),
     Tuple(Vec<ExprType>),               // (Int, Bool), (Int, Bool, String), etc.
     Struct(BTreeMap<String, ExprType>), // {field1: Type1, field2: Type2}
+    DatabaseSchema(String),             // #{ "CREATE TABLE..." } - stores the schema SQL string
 }
 
 /// Represents a sum type (or a simple type if there is only one type in it)
@@ -216,6 +217,24 @@ impl SimpleType {
         }
     }
 
+    pub fn is_database_schema(&self) -> bool {
+        matches!(self, SimpleType::DatabaseSchema(_))
+    }
+
+    pub fn get_database_schema(&self) -> Option<&String> {
+        match self {
+            SimpleType::DatabaseSchema(schema) => Some(schema),
+            _ => None,
+        }
+    }
+
+    /// Check if two database schemas are compatible (one is subtype of the other).
+    /// For now, this is simple string equality. This function exists to allow
+    /// for future improvements (e.g., semantic schema comparison).
+    pub fn database_schema_is_subtype(schema1: &str, schema2: &str) -> bool {
+        schema1 == schema2
+    }
+
     pub fn is_concrete(&self) -> bool {
         match self {
             SimpleType::List(inner) => inner.is_concrete(),
@@ -269,6 +288,14 @@ impl SimpleType {
             (SimpleType::Custom(mod1, root1, Some(_)), SimpleType::Custom(mod2, root2, None)) => {
                 mod1 == mod2 && root1 == root2
             }
+            // Database schema types - use helper function for comparison
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            // For all other combinations with DatabaseSchema, it's not a subtype
+            // (Never is already handled at the top)
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
             // For all other combination, it's not
             _ => false,
         }
@@ -328,6 +355,12 @@ impl SimpleType {
                             .unwrap_or(false)
                     })
             }
+            // Database schema - use helper function (conversion allowed if subtype)
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
             // Anything can convert to String
             (_, SimpleType::String) => true,
             // Anything else: no conversion
@@ -399,6 +432,15 @@ impl SimpleType {
 
             // Structs don't overlap with non-structs
             (SimpleType::Struct(_), _) | (_, SimpleType::Struct(_)) => false,
+
+            // Database schema types overlap if one is subtype of the other
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2) || Self::database_schema_is_subtype(s2, s1)
+            }
+
+            // Database schema doesn't overlap with non-database-schema types
+            // (except Never, which is already handled)
+            (SimpleType::DatabaseSchema(_), _) | (_, SimpleType::DatabaseSchema(_)) => false,
 
             // Different primitive types don't overlap
             (SimpleType::Int, _)
@@ -472,6 +514,25 @@ impl std::fmt::Display for SimpleType {
                     .collect();
                 write!(f, "{{{}}}", field_strs.join(", "))
             }
+            SimpleType::DatabaseSchema(schema) => {
+                // Truncate for display if too long
+                let str_literal = if schema.len() > 50 {
+                    format!("{}...", &schema[..47])
+                } else {
+                    schema.clone()
+                };
+                let mut closing_delim = String::from("\"");
+                while str_literal.contains(&closing_delim) {
+                    closing_delim.push('~');
+                }
+                write!(
+                    f,
+                    "#{{{}{}{}}}",
+                    closing_delim.chars().rev().collect::<String>(),
+                    str_literal,
+                    closing_delim
+                )
+            }
         }
     }
 }
@@ -532,6 +593,7 @@ impl SimpleType {
                     .collect::<Result<_, SemError>>()?;
                 Ok(SimpleType::Struct(converted))
             }
+            SimpleTypeName::DatabaseSchema(schema) => Ok(SimpleType::DatabaseSchema(schema)),
         }
     }
 }

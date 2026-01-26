@@ -113,6 +113,7 @@ list_type = {
     "[" ~ type_name? ~ "]" |
     tuple_type |
     struct_type |
+    database_schema_type |
     namespace_path
 }
 
@@ -125,6 +126,11 @@ tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ","? ~ "
 // Supports empty struct {} and trailing comma
 struct_type = { "{" ~ (struct_field_type ~ ("," ~ struct_field_type)* ~ ","?)? ~ "}" }
 struct_field_type = { ident ~ ":" ~ type_name }
+
+// Database schema type: #{ "schema string" "more schema" ... }
+// Allows multiple string literals (concatenated) for readability and comments
+database_schema_start = @{ "#{" }  // Atomic: no space between # and {
+database_schema_type = { database_schema_start ~ string_literal+ ~ "}" }
 
 // ========== Unified Expressions ==========
 expr = { null_coalesce_expr }

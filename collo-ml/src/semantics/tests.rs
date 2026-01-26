@@ -10,6 +10,7 @@ mod coercion;
 mod collections;
 mod control_flow;
 mod custom_types;
+mod database_schema;
 mod enums;
 mod folds;
 mod let_expr;

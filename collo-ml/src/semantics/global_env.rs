@@ -142,6 +142,7 @@ impl GlobalEnv {
             }
             SimpleType::Tuple(elements) => elements.iter().all(|e| self.validate_type(e)),
             SimpleType::Struct(fields) => fields.values().all(|t| self.validate_type(t)),
+            SimpleType::DatabaseSchema(_) => true, // Database schemas are always valid (self-contained)
         }
     }
 

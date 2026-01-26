@@ -102,6 +102,7 @@ pub enum SimpleTypeName {
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
     Struct(Vec<(Spanned<String>, Spanned<TypeName>)>), // {field1: Type1, field2: Type2}
+    DatabaseSchema(String),        // #{ "CREATE TABLE..." } - stores the schema SQL string
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
