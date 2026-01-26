@@ -2196,6 +2196,68 @@ impl LocalCheckEnv {
                             warnings,
                         )
                     }
+                    ResolvedPathKind::Query { module, name } => {
+                        // Query call - type-checked like function call
+                        match global_env.lookup_query(&module, &name) {
+                            None => {
+                                // Shouldn't happen: resolve_path said it's a query
+                                errors.push(SemError::UnknownIdentifer {
+                                    module: self.current_module().to_string(),
+                                    identifier: name,
+                                    span: path.span.clone(),
+                                });
+                                None
+                            }
+                            Some((query_type, _)) => {
+                                // Mark query as used
+                                global_env.mark_query_used(&module, &name);
+
+                                if args.len() != query_type.args.len() {
+                                    errors.push(SemError::ArgumentCountMismatch {
+                                        identifier: name.clone(),
+                                        span: args
+                                            .last()
+                                            .map(|a| a.span.clone())
+                                            .unwrap_or_else(|| path.span.clone()),
+                                        expected: query_type.args.len(),
+                                        found: args.len(),
+                                    });
+                                }
+
+                                for (i, (arg, expected_type)) in
+                                    args.iter().zip(query_type.args.iter()).enumerate()
+                                {
+                                    let arg_type = self.check_expr(
+                                        global_env,
+                                        &arg.node,
+                                        &arg.span,
+                                        type_info,
+                                        expr_types,
+                                        resolved_types,
+                                        errors,
+                                        warnings,
+                                    );
+
+                                    if let Some(found_type) = arg_type {
+                                        if !found_type.is_subtype_of(expected_type) {
+                                            errors.push(SemError::TypeMismatch {
+                                                span: arg.span.clone(),
+                                                expected: expected_type.clone(),
+                                                found: found_type,
+                                                context: format!(
+                                                    "argument {} to query {}",
+                                                    i + 1,
+                                                    name
+                                                ),
+                                            });
+                                        }
+                                    }
+                                }
+
+                                Some(query_type.output)
+                            }
+                        }
+                    }
                     ResolvedPathKind::Module(name) => {
                         // Modules cannot be called
                         errors.push(SemError::UnknownIdentifer {
@@ -2246,6 +2308,15 @@ impl LocalCheckEnv {
                         errors.push(SemError::UnknownType {
                             module: self.current_module().to_string(),
                             typ: func,
+                            span: path.span.clone(),
+                        });
+                        None
+                    }
+                    ResolvedPathKind::Query { name, .. } => {
+                        // Cannot use struct syntax with queries
+                        errors.push(SemError::UnknownType {
+                            module: self.current_module().to_string(),
+                            typ: name,
                             span: path.span.clone(),
                         });
                         None
@@ -3172,6 +3243,15 @@ impl LocalCheckEnv {
                         None
                     }
                 }
+            }
+            ResolvedPathKind::Query { name, .. } => {
+                // Queries cannot be used as values without calling them
+                errors.push(SemError::UnknownIdentifer {
+                    module: self.current_module().to_string(),
+                    identifier: name,
+                    span: path.span.clone(),
+                });
+                None
             }
             ResolvedPathKind::Module(name) => {
                 // Modules cannot be used as values

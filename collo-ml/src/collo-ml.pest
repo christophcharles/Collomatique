@@ -23,7 +23,7 @@ raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
 raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
 raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 
-statement = { import_statement | let_statement | reify_statement | type_statement | enum_statement }
+statement = { import_statement | let_statement | query_statement | reify_statement | type_statement | enum_statement }
 
 // ========== Import statements ==========
 // import "module_name" as mod;    - Named import
@@ -47,6 +47,7 @@ ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char*
 reserved_keyword = {
     "import" |  // before "in"
     "forall" |  // before "for"
+    "query" |
     "false" |
     "reify" |
     "where" |
@@ -81,6 +82,9 @@ var_list_name = ${ "$[" ~ ident ~ "]" }
 // ========== Let statements ==========
 let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
 pub_modifier = { "pub" }
+
+// ========== Query statements ==========
+query_statement = { docstring* ~ pub_modifier? ~ "query" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ string_literal ~ ";" }
 // Supports trailing comma: (a: Int, b: Bool,)
 params = { param ~ ("," ~ param)* ~ ","? }
 param = { ident ~ ":" ~ type_name }
@@ -272,6 +276,7 @@ expr_complete = { SOI ~ expr ~ EOI }
 path_complete = { SOI ~ path ~ EOI }
 type_name_complete = { SOI ~ type_name ~ EOI }
 let_statement_complete = { SOI ~ let_statement ~ EOI }
+query_statement_complete = { SOI ~ query_statement ~ EOI }
 reify_statement_complete = { SOI ~ reify_statement ~ EOI }
 enum_statement_complete = { SOI ~ enum_statement ~ EOI }
 ident_complete = { SOI ~ ident ~ EOI }

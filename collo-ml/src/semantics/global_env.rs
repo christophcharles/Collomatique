@@ -17,6 +17,17 @@ pub struct FunctionDesc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryDesc {
+    pub name_span: Span,
+    pub typ: FunctionType, // Reuse - same signature structure
+    pub public: bool,
+    pub used: bool,
+    pub arg_names: Vec<String>,
+    pub query_string: Spanned<String>,
+    pub docstring: Vec<DocstringLine>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariableDesc {
     pub args: ArgsType,
     pub span: Span,
@@ -43,6 +54,7 @@ pub type SymbolMap = HashMap<SymbolPath, Symbol>;
 pub enum Symbol {
     Module(String),               // module name
     Function(String, String),     // (module, name)
+    Query(String, String),        // (module, name)
     CustomType(String, String),   // (module, name)
     Variable(String, String),     // (module, name)
     VariableList(String, String), // (module, name)
@@ -54,6 +66,7 @@ impl Symbol {
         match self {
             Symbol::Module(m) => m,
             Symbol::Function(m, _) => m,
+            Symbol::Query(m, _) => m,
             Symbol::CustomType(m, _) => m,
             Symbol::Variable(m, _) => m,
             Symbol::VariableList(m, _) => m,
@@ -67,6 +80,7 @@ pub struct GlobalEnv {
     pub(crate) object_types: HashMap<String, ObjectFields>, // external, no module
     pub(crate) custom_types: HashMap<(String, String), TypeDesc>, // (module, name) → desc
     pub(crate) functions: HashMap<(String, String), FunctionDesc>, // (module, name) → desc
+    pub(crate) queries: HashMap<(String, String), QueryDesc>, // (module, name) → desc
     pub(crate) external_variables: HashMap<String, ArgsType>, // external, no module
     pub(crate) internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     pub(crate) variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
@@ -281,6 +295,55 @@ impl GlobalEnv {
         );
 
         type_info.types.insert(body.span, fn_typ.into());
+    }
+
+    pub fn get_queries(&self) -> &HashMap<(String, String), QueryDesc> {
+        &self.queries
+    }
+
+    pub(crate) fn lookup_query(&self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
+        let query_desc = self.queries.get(&(module.to_string(), name.to_string()))?;
+        Some((query_desc.typ.clone(), query_desc.query_string.span.clone()))
+    }
+
+    pub(crate) fn mark_query_used(&mut self, module: &str, name: &str) {
+        if let Some(query_desc) = self
+            .queries
+            .get_mut(&(module.to_string(), name.to_string()))
+        {
+            query_desc.used = true;
+        }
+    }
+
+    pub(crate) fn register_query(
+        &mut self,
+        module: &str,
+        name: &str,
+        name_span: Span,
+        query_typ: FunctionType,
+        public: bool,
+        arg_names: Vec<String>,
+        query_string: Spanned<String>,
+        docstring: Vec<DocstringLine>,
+        type_info: &mut TypeInfo,
+    ) {
+        let key = (module.to_string(), name.to_string());
+        assert!(!self.queries.contains_key(&key));
+
+        self.queries.insert(
+            key,
+            QueryDesc {
+                name_span,
+                typ: query_typ.clone(),
+                public,
+                used: should_be_used_by_default(name),
+                arg_names,
+                query_string: query_string.clone(),
+                docstring,
+            },
+        );
+
+        type_info.types.insert(query_string.span, query_typ.into());
     }
 
     pub(crate) fn lookup_var(&self, module: &str, name: &str) -> Option<(ArgsType, Option<Span>)> {

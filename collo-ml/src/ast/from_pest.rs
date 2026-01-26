@@ -46,12 +46,13 @@ impl Statement {
     fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
         match pair.as_rule() {
             Rule::let_statement => Self::from_let_pest(pair),
+            Rule::query_statement => Self::from_query_pest(pair),
             Rule::reify_statement => Self::from_reify_pest(pair),
             Rule::type_statement => Self::from_type_pest(pair),
             Rule::enum_statement => Self::from_enum_pest(pair),
             Rule::import_statement => Self::from_import_pest(pair),
             _ => Err(AstError::UnexpectedRule {
-                expected: "let_statement, reify_statement, type_statement, enum_statement, or import_statement",
+                expected: "let_statement, query_statement, reify_statement, type_statement, enum_statement, or import_statement",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),
@@ -116,6 +117,68 @@ impl Statement {
             params,
             output_type: output_type.ok_or(AstError::MissingTypeName(span.clone()))?,
             body: body.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
+    fn from_query_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // query_statement = { docstring* ~ pub_modifier? ~ "query" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ string_literal ~ ";" }
+        let span = Span::from_pest(&pair);
+        let mut docstring = Vec::new();
+        let mut public = false;
+        let mut name = None;
+        let mut params = Vec::new();
+        let mut output_type = None;
+        let mut query_string = None;
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::docstring => {
+                    let docstring_span = Span::from_pest(&inner_pair);
+                    let content = inner_pair
+                        .into_inner()
+                        .next()
+                        .map(|p| p.as_str().to_string())
+                        .unwrap_or_default();
+                    let parsed_line = parse_docstring_line(&content, docstring_span.start)?;
+                    docstring.push(parsed_line);
+                }
+                Rule::pub_modifier => {
+                    public = true;
+                }
+                Rule::ident => {
+                    if name.is_none() {
+                        name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
+                    }
+                }
+                Rule::params => {
+                    params = parse_params(inner_pair)?;
+                }
+                Rule::type_name => {
+                    let type_name_span = Span::from_pest(&inner_pair);
+                    output_type = Some(Spanned::new(
+                        TypeName::from_pest(inner_pair)?,
+                        type_name_span,
+                    ));
+                }
+                Rule::string_literal => {
+                    let lit_span = Span::from_pest(&inner_pair);
+                    let content = parse_string_literal(inner_pair.as_str());
+                    query_string = Some(Spanned::new(content, lit_span));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Statement::Query {
+            docstring,
+            public,
+            name: name.ok_or(AstError::MissingName(span.clone()))?,
+            params,
+            output_type: output_type.ok_or(AstError::MissingTypeName(span.clone()))?,
+            query_string: query_string.ok_or(AstError::MissingBody(span))?,
         })
     }
 

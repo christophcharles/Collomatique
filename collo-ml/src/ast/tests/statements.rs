@@ -354,3 +354,108 @@ fn parse_empty_file() {
 
     assert_eq!(file.statements.len(), 0);
 }
+
+// ============= Query Statements =============
+
+#[test]
+fn parse_query_with_db_and_option_return() {
+    let input = r#"query get_student(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name,
+            params,
+            query_string,
+            public,
+            ..
+        } => {
+            assert_eq!(name.node, "get_student");
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].name.node, "db");
+            assert_eq!(params[1].name.node, "id");
+            assert_eq!(query_string.node, "SELECT name FROM students WHERE id = ?");
+            assert!(!public);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_db_and_list_return() {
+    let input = r#"pub query all_students(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name,
+            params,
+            public,
+            ..
+        } => {
+            assert_eq!(name.node, "all_students");
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].name.node, "db");
+            assert!(public);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_docstring() {
+    let input = r#"/// Fetches a student by ID
+query get_student(db: #{"CREATE TABLE students(id INTEGER)"}, id: Int) -> ?{id: Int} = "SELECT id FROM students WHERE id = ?";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name, docstring, ..
+        } => {
+            assert_eq!(name.node, "get_student");
+            assert_eq!(docstring.len(), 1);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_custom_db_type() {
+    // Using a type alias for the database
+    let input = r#"
+type MyDb = #{"CREATE TABLE users(id INTEGER, email TEXT)"};
+query get_user(db: MyDb, id: Int) -> ?{email: String} = "SELECT email FROM users WHERE id = ?";
+"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 2);
+    match &file.statements[1].node {
+        Statement::Query { name, params, .. } => {
+            assert_eq!(name.node, "get_user");
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].name.node, "db");
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_multiple_columns() {
+    let input = r#"query search(db: #{"CREATE TABLE t(a INT, b TEXT, c BOOL)"}) -> [{a: Int, b: String, c: Bool}] = "SELECT a, b, c FROM t";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Query { query_string, .. } => {
+            assert_eq!(query_string.node, "SELECT a, b, c FROM t");
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}

@@ -21,6 +21,14 @@ pub enum Statement {
         output_type: Spanned<TypeName>, // Declared type
         body: Spanned<Expr>,            // Body
     },
+    Query {
+        docstring: Vec<DocstringLine>,
+        public: bool,
+        name: Spanned<String>,
+        params: Vec<Param>,
+        output_type: Spanned<TypeName>,
+        query_string: Spanned<String>, // The SQL query string literal
+    },
     Reify {
         docstring: Vec<DocstringLine>,
         public: bool,

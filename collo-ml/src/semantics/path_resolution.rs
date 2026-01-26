@@ -13,6 +13,9 @@ pub enum ResolvedPathKind {
     /// A function in scope: `foo`, `helper`
     Function { module: String, func: String },
 
+    /// A query in scope: `get_user`, `count_all`
+    Query { module: String, name: String },
+
     /// A type (built-in, custom, or enum variant)
     /// - Built-in: `Int` → Type(SimpleType::Int)
     /// - Custom: `MyType` → Type(SimpleType::Custom("main", "MyType", None))
@@ -122,6 +125,10 @@ pub fn resolve_path(
             Symbol::Function(m, n) => Ok(ResolvedPathKind::Function {
                 module: m.clone(),
                 func: n.clone(),
+            }),
+            Symbol::Query(m, n) => Ok(ResolvedPathKind::Query {
+                module: m.clone(),
+                name: n.clone(),
             }),
             Symbol::Variable(m, n) => Ok(ResolvedPathKind::InternalVariable {
                 module: m.clone(),

@@ -70,6 +70,15 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
+    #[error(
+        "Query \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})"
+    )]
+    QueryAlreadyDefined {
+        module: String,
+        identifier: String,
+        span: Span,
+        here: Span,
+    },
     #[error("Type {typ} in module \"{module}\" at {span:?} is unknown")]
     UnknownType {
         module: String,
@@ -309,6 +318,12 @@ pub enum SemWarning {
     },
     #[error("Unused function \"{identifier}\" in module \"{module}\" at {span:?}")]
     UnusedFunction {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
+    #[error("Unused query \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnusedQuery {
         module: String,
         identifier: String,
         span: Span,

@@ -35,6 +35,7 @@ impl GlobalEnv {
             object_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
+            queries: HashMap::new(),
             external_variables: variables
                 .into_iter()
                 .map(|(var_name, args_type)| (var_name, args_type))
@@ -189,27 +190,50 @@ impl GlobalEnv {
         for (module_name, module_file) in modules {
             let current_module = *module_name;
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Let {
-                    public,
-                    name,
-                    params,
-                    output_type,
-                    body,
-                    docstring,
-                } = &statement.node
-                {
-                    temp_env.expand_with_let_statement_pass1(
-                        current_module,
-                        *public,
+                match &statement.node {
+                    crate::ast::Statement::Let {
+                        public,
                         name,
                         params,
                         output_type,
                         body,
                         docstring,
-                        &mut type_info,
-                        &mut errors,
-                        &mut warnings,
-                    );
+                    } => {
+                        temp_env.expand_with_let_statement_pass1(
+                            current_module,
+                            *public,
+                            name,
+                            params,
+                            output_type,
+                            body,
+                            docstring,
+                            &mut type_info,
+                            &mut errors,
+                            &mut warnings,
+                        );
+                    }
+                    crate::ast::Statement::Query {
+                        public,
+                        name,
+                        params,
+                        output_type,
+                        query_string,
+                        docstring,
+                    } => {
+                        temp_env.expand_with_query_statement_pass1(
+                            current_module,
+                            *public,
+                            name,
+                            params,
+                            output_type,
+                            query_string,
+                            docstring,
+                            &mut type_info,
+                            &mut errors,
+                            &mut warnings,
+                        );
+                    }
+                    _ => {}
                 }
             }
         }
@@ -345,6 +369,7 @@ impl GlobalEnv {
         }
 
         temp_env.check_unused_fn(&mut warnings);
+        temp_env.check_unused_query(&mut warnings);
         temp_env.check_unused_var(&mut warnings);
 
         Ok((
@@ -364,6 +389,18 @@ impl GlobalEnv {
                     module: module.clone(),
                     identifier: format!("{}::{}", module, fn_name),
                     span: fn_desc.body.span.clone(),
+                });
+            }
+        }
+    }
+
+    fn check_unused_query(&self, warnings: &mut Vec<SemWarning>) {
+        for ((module, query_name), query_desc) in &self.queries {
+            if !query_desc.public && !query_desc.used {
+                warnings.push(SemWarning::UnusedQuery {
+                    module: module.clone(),
+                    identifier: format!("{}::{}", module, query_name),
+                    span: query_desc.query_string.span.clone(),
                 });
             }
         }
@@ -495,6 +532,26 @@ impl GlobalEnv {
                 conflicts.push((path.0.join("::"), existing.module_name().to_string()));
             } else {
                 symbol_map.insert(path, Symbol::Function(mod_name, fn_name));
+            }
+        }
+
+        // Collect queries to add (queries are callable like functions)
+        // Skip private queries when importing from another module
+        let queries_to_add: Vec<_> = self
+            .queries
+            .iter()
+            .filter(|((mod_name, _), query_desc)| {
+                mod_name == source_module && (import_span.is_none() || query_desc.public)
+            })
+            .map(|((mod_name, query_name), _)| (mod_name.clone(), query_name.clone()))
+            .collect();
+
+        for (mod_name, query_name) in queries_to_add {
+            let path = Self::make_symbol_path(prefix, &query_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::Query(mod_name, query_name));
             }
         }
 
@@ -699,6 +756,133 @@ impl GlobalEnv {
                 public,
                 params.iter().map(|x| x.name.node.clone()).collect(),
                 body.clone(),
+                docstring.clone(),
+                type_info,
+            );
+        }
+    }
+
+    /// Register query signature (queries have no body to validate, just static SQL string)
+    fn expand_with_query_statement_pass1(
+        &mut self,
+        current_module: &str,
+        public: bool,
+        name: &Spanned<String>,
+        params: &Vec<Param>,
+        output_type: &Spanned<crate::ast::TypeName>,
+        query_string: &Spanned<String>,
+        docstring: &Vec<DocstringLine>,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) {
+        // Check for duplicate name
+        if let Some((_query_type, span)) = self.lookup_query(current_module, &name.node) {
+            errors.push(SemError::QueryAlreadyDefined {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                here: span.clone(),
+            });
+            return;
+        }
+
+        // Naming convention warning for query
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::SnakeCase,
+        ) {
+            warnings.push(SemWarning::FunctionNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
+        }
+
+        // Resolve and validate parameter types
+        let mut error_in_typs = false;
+        let mut params_typ = vec![];
+        let mut seen_param_names: HashMap<String, Span> = HashMap::new();
+
+        for param in params {
+            match self.resolve_type(&param.typ, current_module) {
+                Err(e) => {
+                    errors.push(e);
+                    error_in_typs = true;
+                }
+                Ok(param_typ) => {
+                    params_typ.push(param_typ.clone());
+                    if !self.validate_type(&param_typ) {
+                        errors.push(SemError::UnknownType {
+                            module: current_module.to_string(),
+                            typ: param_typ.to_string(),
+                            span: param.typ.span.clone(),
+                        });
+                        error_in_typs = true;
+                    }
+                }
+            }
+
+            // Check for duplicate parameter names
+            if let Some(prev_span) = seen_param_names.get(&param.name.node) {
+                errors.push(SemError::ParameterAlreadyDefined {
+                    module: current_module.to_string(),
+                    identifier: param.name.node.clone(),
+                    span: param.name.span.clone(),
+                    here: prev_span.clone(),
+                });
+            } else {
+                seen_param_names.insert(param.name.node.clone(), param.name.span.clone());
+
+                // Naming convention warning for parameter
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &param.name.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        module: current_module.to_string(),
+                        identifier: param.name.node.clone(),
+                        span: param.name.span.clone(),
+                        suggestion,
+                    });
+                }
+            }
+        }
+
+        // Resolve and validate output type
+        let out_typ = match self.resolve_type(output_type, current_module) {
+            Err(e) => {
+                errors.push(e);
+                return;
+            }
+            Ok(typ) => {
+                if !self.validate_type(&typ) {
+                    errors.push(SemError::UnknownType {
+                        module: current_module.to_string(),
+                        typ: typ.to_string(),
+                        span: output_type.span.clone(),
+                    });
+                    return;
+                }
+                typ
+            }
+        };
+
+        // Register the query (no body validation needed - it's just a string)
+        if !error_in_typs {
+            let query_typ = FunctionType {
+                args: params_typ,
+                output: out_typ,
+            };
+            self.register_query(
+                current_module,
+                &name.node,
+                name.span.clone(),
+                query_typ,
+                public,
+                params.iter().map(|x| x.name.node.clone()).collect(),
+                query_string.clone(),
                 docstring.clone(),
                 type_info,
             );

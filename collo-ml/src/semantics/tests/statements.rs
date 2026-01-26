@@ -409,3 +409,131 @@ fn forward_declaration_now_allowed() {
         errors
     );
 }
+
+// ========== Query Statement Tests ==========
+
+#[test]
+fn query_with_db_param_and_option_struct_return() {
+    let input = r#"
+        pub query get_student(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Query with db param and option struct return should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_with_db_param_and_list_struct_return() {
+    let input = r#"
+        pub query all_students(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Query with db param and list struct return should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_callable_from_function() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE students(id INTEGER, name TEXT)"};
+        pub query get_student(db: MyDb, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
+        pub let wrapper(db: MyDb, id: Int) -> ?{name: String} = get_student(db, id);
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Query should be callable from function: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_wrong_argument_count() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
+        pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db);
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Should error on wrong argument count");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
+}
+
+#[test]
+fn query_wrong_argument_type() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
+        pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db, "not an int");
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Should error on wrong argument type");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn query_duplicate_name_with_query() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+        query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Should error when query has same name as another query"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryAlreadyDefined { .. })));
+}
+
+#[test]
+fn unused_private_query_warning() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        query unused_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
+    assert!(
+        !warnings.is_empty(),
+        "Should warn about unused private query"
+    );
+    assert!(warnings
+        .iter()
+        .any(|w| matches!(w, SemWarning::UnusedQuery { .. })));
+}
+
+#[test]
+fn public_query_not_warned_as_unused() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query public_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
+    assert!(
+        warnings.is_empty(),
+        "Public query should not generate unused warning: {:?}",
+        warnings
+    );
+}

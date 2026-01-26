@@ -113,6 +113,9 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                             _ => panic!("Unexpected type in IdentPath: {:?}", simple_type),
                         }
                     }
+                    ResolvedPathKind::Query { .. } => {
+                        panic!("Query reference without call should not appear in IdentPath")
+                    }
                     ResolvedPathKind::Module(_)
                     | ResolvedPathKind::ExternalVariable(_)
                     | ResolvedPathKind::InternalVariable { .. }
@@ -390,6 +393,12 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                     ResolvedPathKind::Type(simple_type) => {
                         // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
                         self.eval_generic_call_type_cast(eval_history, &simple_type, args)?
+                    }
+                    ResolvedPathKind::Query { module, name } => {
+                        panic!(
+                            "Query evaluation is not implemented yet: '{}::{}'",
+                            module, name
+                        )
                     }
                     ResolvedPathKind::Module(_)
                     | ResolvedPathKind::ExternalVariable(_)
