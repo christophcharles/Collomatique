@@ -13,6 +13,23 @@ use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
 use std::collections::{BTreeMap, HashMap};
 
+/// Check if a deep-resolved type is SQL-compatible.
+/// Valid: Int, Bool, String, ?Int, ?Bool, ?String (after deep resolution).
+fn is_sql_compatible_resolved(resolved: &[SimpleType]) -> bool {
+    fn is_sql_primitive(t: &SimpleType) -> bool {
+        matches!(t, SimpleType::Int | SimpleType::Bool | SimpleType::String)
+    }
+    match resolved.len() {
+        1 => is_sql_primitive(&resolved[0]),
+        2 => {
+            let nones = resolved.iter().filter(|v| v.is_none()).count();
+            let prims = resolved.iter().filter(|v| is_sql_primitive(v)).count();
+            nones == 1 && prims == 1
+        }
+        _ => false,
+    }
+}
+
 impl GlobalEnv {
     /// Create a GlobalEnv from modules
     pub fn new(
@@ -975,6 +992,69 @@ impl GlobalEnv {
                     span: output_type.span.clone(),
                 });
                 return;
+            }
+        }
+
+        // Check: non-DB parameters must be SQL-compatible
+        for (param_typ, param) in params_typ.iter().skip(1).zip(params.iter().skip(1)) {
+            if let Some(resolved) = self.resolve_type_deep(param_typ) {
+                if !is_sql_compatible_resolved(&resolved) {
+                    errors.push(SemError::QueryParamNotSqlCompatible {
+                        module: current_module.to_string(),
+                        query_name: name.node.clone(),
+                        param_name: param.name.node.clone(),
+                        found: param_typ.to_string(),
+                        span: param.typ.span.clone(),
+                    });
+                    error_in_typs = true;
+                }
+            }
+        }
+
+        // Check: output struct field types must be SQL-compatible
+        let output_struct_fields: Option<BTreeMap<String, ExprType>> = {
+            let resolved_output = self.resolve_type_deep(&out_typ);
+            resolved_output.and_then(|ro| {
+                if ro.len() == 1 {
+                    if let SimpleType::List(inner) = &ro[0] {
+                        self.resolve_type_deep(inner).and_then(|ir| {
+                            ir.into_iter().find_map(|v| {
+                                if let SimpleType::Struct(fields) = v {
+                                    Some(fields)
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    ro.into_iter().find_map(|v| {
+                        if let SimpleType::Struct(fields) = v {
+                            Some(fields)
+                        } else {
+                            None
+                        }
+                    })
+                }
+            })
+        };
+
+        if let Some(fields) = &output_struct_fields {
+            for (field_name, field_typ) in fields {
+                if let Some(resolved_field) = self.resolve_type_deep(field_typ) {
+                    if !is_sql_compatible_resolved(&resolved_field) {
+                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            field_name: field_name.clone(),
+                            found: field_typ.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                }
             }
         }
 

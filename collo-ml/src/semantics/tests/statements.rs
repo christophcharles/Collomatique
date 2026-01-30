@@ -909,3 +909,262 @@ fn query_no_params_rejected() {
         .iter()
         .any(|e| matches!(e, SemError::QueryMissingDatabaseParam { .. })));
 }
+
+// ========== Query Parameter SQL-Compatibility Tests ==========
+
+// --- Valid parameter types ---
+
+#[test]
+fn query_param_int() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, id: Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Int param should be valid: {:?}", errors);
+}
+
+#[test]
+fn query_param_bool() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER, active BOOLEAN)"};
+        pub query q(db: MyDb, flag: Bool) -> [{id: Int}] = "SELECT id FROM t WHERE active = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Bool param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_param_string() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
+        pub query q(db: MyDb, name: String) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "String param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_param_optional_int() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, id: ?Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Optional Int param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_param_alias_to_int() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyId = Int;
+        pub query q(db: MyDb, id: MyId) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias to Int param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_param_enum_none_string() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
+        enum MaybeName = None | Name(String);
+        pub query q(db: MyDb, n: MaybeName) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Enum resolving to ?String param should be valid: {:?}",
+        errors
+    );
+}
+
+// --- Invalid parameter types ---
+
+#[test]
+fn query_param_struct_rejected() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, s: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "Struct param should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+}
+
+#[test]
+fn query_param_list_rejected() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, ids: [Int]) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "List param should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+}
+
+#[test]
+fn query_param_linexpr_rejected() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, x: LinExpr) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "LinExpr param should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+}
+
+#[test]
+fn query_param_constraint_rejected() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb, c: Constraint) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "Constraint param should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+}
+
+// ========== Query Output Field SQL-Compatibility Tests ==========
+
+// --- Valid output struct field types ---
+
+#[test]
+fn query_output_field_int() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(errors.is_empty(), "Int field should be valid: {:?}", errors);
+}
+
+#[test]
+fn query_output_field_optional_string() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: ?String}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Optional String field should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_field_alias_to_int() {
+    let input = r#"
+        type MyId = Int;
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: MyId}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias to Int field should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_field_enum_nullable() {
+    let input = r#"
+        enum MaybeName = None | Name(String);
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Enum resolving to ?String field should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_field_enum_variant() {
+    let input = r#"
+        enum MaybeName = None | Name(String);
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName::Name}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Enum variant resolving to String field should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_field_optional_struct() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> ?{id: Int, name: String} = "SELECT id, name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Fields in optional struct should be valid: {:?}",
+        errors
+    );
+}
+
+// --- Invalid output struct field types ---
+
+#[test]
+fn query_output_field_struct_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{nested: {a: Int}}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "Struct field should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+}
+
+#[test]
+fn query_output_field_list_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{ids: [Int]}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "List field should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+}
+
+#[test]
+fn query_output_field_linexpr_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{x: LinExpr}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "LinExpr field should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+}

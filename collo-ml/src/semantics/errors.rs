@@ -292,6 +292,24 @@ pub enum SemError {
         found: String,
         span: Span,
     },
+
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: parameter \"{param_name}\" must be a SQL-compatible type (Int, Bool, String, or optional variant), found {found}")]
+    QueryParamNotSqlCompatible {
+        module: String,
+        query_name: String,
+        param_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: output struct field \"{field_name}\" must be a SQL-compatible type (Int, Bool, String, or optional variant), found {found}")]
+    QueryOutputFieldNotSqlCompatible {
+        module: String,
+        query_name: String,
+        field_name: String,
+        found: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
