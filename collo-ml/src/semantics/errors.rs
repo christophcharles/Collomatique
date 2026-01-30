@@ -269,6 +269,29 @@ pub enum SemError {
     },
     #[error("Unsupported feature: {feature} at {span:?}")]
     UnsupportedFeature { feature: String, span: Span },
+
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: first parameter must be a database schema type, found {found}")]
+    QueryFirstParamNotDatabase {
+        module: String,
+        query_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: must have at least one parameter (a database schema)")]
+    QueryMissingDatabaseParam {
+        module: String,
+        query_name: String,
+        span: Span,
+    },
+
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: output type must be [{{...}}] (list of struct) or ?{{...}} (optional struct), found {found}")]
+    QueryInvalidOutputType {
+        module: String,
+        query_name: String,
+        found: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

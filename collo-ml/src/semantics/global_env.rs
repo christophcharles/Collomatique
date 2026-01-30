@@ -1,7 +1,7 @@
 use super::errors::{ArgsType, FunctionType, SemError};
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Span, Spanned};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type ObjectFields = HashMap<String, ExprType>;
 
@@ -480,6 +480,81 @@ impl GlobalEnv {
         self.variable_lists
             .get(&(module.to_string(), name.to_string()))
             .map(|desc| desc.args.clone())
+    }
+
+    /// Recursively resolve an ExprType by unwrapping Custom type aliases
+    /// and expanding enum variants. Returns a Vec<SimpleType> to preserve
+    /// duplicate variants (e.g., multiple unit enum variants all resolving
+    /// to None). Returns None if a cycle is detected.
+    pub fn resolve_type_deep(&self, typ: &ExprType) -> Option<Vec<SimpleType>> {
+        let mut visited = HashSet::new();
+        self.resolve_type_deep_inner(typ, &mut visited)
+    }
+
+    fn resolve_type_deep_inner(
+        &self,
+        typ: &ExprType,
+        visited: &mut HashSet<(String, String)>,
+    ) -> Option<Vec<SimpleType>> {
+        let mut result = Vec::new();
+        for variant in typ.get_variants() {
+            let resolved = self.resolve_simple_type_deep(variant, visited)?;
+            result.extend(resolved);
+        }
+        Some(result)
+    }
+
+    fn resolve_simple_type_deep(
+        &self,
+        typ: &SimpleType,
+        visited: &mut HashSet<(String, String)>,
+    ) -> Option<Vec<SimpleType>> {
+        match typ {
+            SimpleType::Custom(module, root, None) => {
+                let key = (module.clone(), root.clone());
+                if !visited.insert(key.clone()) {
+                    return None; // cycle
+                }
+                let variants = self.get_enum_variants(module, root);
+                let result = if !variants.is_empty() {
+                    // Enum root → expand each variant's underlying
+                    let mut all = Vec::new();
+                    for var_name in &variants {
+                        let qualified = format!("{}::{}", root, var_name);
+                        if let Some(underlying) =
+                            self.get_custom_type_underlying(module, &qualified)
+                        {
+                            all.extend(self.resolve_type_deep_inner(underlying, visited)?);
+                        }
+                    }
+                    Some(all)
+                } else if let Some(underlying) = self.get_custom_type_underlying(module, root) {
+                    // Type alias → unwrap
+                    self.resolve_type_deep_inner(underlying, visited)
+                } else {
+                    Some(vec![typ.clone()])
+                };
+                visited.remove(&key);
+                result
+            }
+            SimpleType::Custom(module, root, Some(variant)) => {
+                let qualified = format!("{}::{}", root, variant);
+                let key = (module.clone(), qualified.clone());
+                if !visited.insert(key.clone()) {
+                    return None; // cycle
+                }
+                let result =
+                    if let Some(underlying) = self.get_custom_type_underlying(module, &qualified) {
+                        self.resolve_type_deep_inner(underlying, visited)
+                    } else {
+                        Some(vec![typ.clone()])
+                    };
+                visited.remove(&key);
+                result
+            }
+            // Do NOT resolve inside List — checked separately
+            other => Some(vec![other.clone()]),
+        }
     }
 }
 

@@ -923,6 +923,61 @@ impl GlobalEnv {
             }
         };
 
+        // --- Query-specific validation ---
+
+        // Check: query must have at least one parameter, and the first must be a database schema
+        if params_typ.is_empty() {
+            errors.push(SemError::QueryMissingDatabaseParam {
+                module: current_module.to_string(),
+                query_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        } else if let Some(resolved_first) = self.resolve_type_deep(&params_typ[0]) {
+            let is_db = resolved_first.len() == 1 && resolved_first[0].is_database_schema();
+            if !is_db {
+                errors.push(SemError::QueryFirstParamNotDatabase {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: params_typ[0].to_string(),
+                    span: params[0].typ.span.clone(),
+                });
+                error_in_typs = true;
+            }
+        }
+
+        // Check: output type must be [Struct] or ?Struct (after deep resolution)
+        if let Some(resolved_output) = self.resolve_type_deep(&out_typ) {
+            let valid = match resolved_output.len() {
+                1 => {
+                    // Must be List(inner) where inner deep-resolves to a single Struct
+                    if let SimpleType::List(inner) = &resolved_output[0] {
+                        self.resolve_type_deep(inner).is_some_and(|inner_resolved| {
+                            inner_resolved.len() == 1 && inner_resolved[0].is_struct()
+                        })
+                    } else {
+                        false
+                    }
+                }
+                2 => {
+                    // Must be exactly one None and one Struct
+                    let nones = resolved_output.iter().filter(|v| v.is_none()).count();
+                    let structs = resolved_output.iter().filter(|v| v.is_struct()).count();
+                    nones == 1 && structs == 1
+                }
+                _ => false,
+            };
+            if !valid {
+                errors.push(SemError::QueryInvalidOutputType {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: out_typ.to_string(),
+                    span: output_type.span.clone(),
+                });
+                return;
+            }
+        }
+
         // Register the query (no body validation needed - it's just a string)
         if !error_in_typs {
             let query_typ = FunctionType {

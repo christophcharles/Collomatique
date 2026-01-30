@@ -598,3 +598,314 @@ fn function_conflicts_with_query() {
         .iter()
         .any(|e| matches!(e, SemError::SymbolConflict { .. })));
 }
+
+// ========== Query Output Type Validation Tests ==========
+
+// --- Valid output types ---
+
+#[test]
+fn query_output_list_struct_direct() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{name: String}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Direct list of struct should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_optional_struct_direct() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Direct optional struct should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_custom_alias_in_list() {
+    let input = r#"
+        type T = {name: String};
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [T] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Custom alias inside list should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_custom_alias_optional() {
+    let input = r#"
+        type T = {name: String};
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?T = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Custom alias in optional should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_alias_wrapping_optional() {
+    let input = r#"
+        type T = ?{name: String};
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias wrapping optional struct should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_alias_wrapping_list() {
+    let input = r#"
+        type T = [{name: String}];
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias wrapping list of struct should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_none_union_alias() {
+    let input = r#"
+        type T = {name: String};
+        type U = None | T;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Union through alias (None | Struct) should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_nested_alias() {
+    let input = r#"
+        type T = {name: String};
+        type U = ?T;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Chained alias (?T where T is struct) should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_enum_none_struct_variant() {
+    let input = r#"
+        enum E = None | V{name: String};
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Enum with None + struct variant should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_output_alias_chain_none() {
+    let input = r#"
+        type MyNone = None;
+        type T = {name: String};
+        type U = MyNone | T;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias to None in union should be valid: {:?}",
+        errors
+    );
+}
+
+// --- Invalid output types ---
+
+#[test]
+fn query_output_int_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> Int = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "Int output type should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+#[test]
+fn query_output_list_int_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [Int] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "List of Int output type should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+#[test]
+fn query_output_optional_int_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?Int = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Optional Int output type should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+#[test]
+fn query_output_bare_struct_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> {name: String} = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Bare struct output type should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+#[test]
+fn query_output_enum_multi_unit_rejected() {
+    let input = r#"
+        enum E = A | B | S{name: String};
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Enum with 2 unit + 1 struct variant should be rejected (3 resolved variants)"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+// ========== Query First Parameter Validation Tests ==========
+
+// --- Valid first parameter ---
+
+#[test]
+fn query_first_param_direct_schema() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Direct database schema param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_first_param_alias() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        pub query q(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Alias to database schema param should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn query_first_param_nested_alias() {
+    let input = r#"
+        type A = #{"CREATE TABLE t(id INTEGER)"};
+        type B = A;
+        pub query q(db: B) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        errors.is_empty(),
+        "Nested alias to database schema param should be valid: {:?}",
+        errors
+    );
+}
+
+// --- Invalid first parameter ---
+
+#[test]
+fn query_first_param_int_rejected() {
+    let input = r#"
+        pub query q(db: Int) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(!errors.is_empty(), "Int as first param should be rejected");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
+}
+
+#[test]
+fn query_first_param_struct_rejected() {
+    let input = r#"
+        pub query q(db: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Struct as first param should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
+}
+
+#[test]
+fn query_no_params_rejected() {
+    let input = r#"
+        pub query q() -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !errors.is_empty(),
+        "Query with no params should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryMissingDatabaseParam { .. })));
+}
