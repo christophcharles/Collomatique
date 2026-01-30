@@ -537,3 +537,89 @@ fn enum_correct_naming_no_warning() {
         warnings
     );
 }
+
+// ========== Field Naming Convention Warnings ==========
+
+#[test]
+fn field_naming_convention_warning_struct_literal() {
+    let input = r#"pub let f() -> { bad_field: Int } = { BadField: 5 };"#;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        warnings.iter().any(|w| matches!(w,
+            SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
+        "Should warn about struct literal field naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn field_naming_convention_warning_enum_struct_variant() {
+    let input = "enum MyEnum = Variant { BadField: Int };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        warnings.iter().any(|w| matches!(w,
+            SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
+        "Should warn about enum struct variant field naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn field_naming_convention_warning_type_alias() {
+    let input = "type MyType = { BadField: Int };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        warnings.iter().any(|w| matches!(w,
+            SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
+        "Should warn about type alias field naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn field_naming_convention_warning_param_type() {
+    let input = "pub let f(x: { BadField: Int }) -> Int = 42;";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        warnings.iter().any(|w| matches!(w,
+            SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
+        "Should warn about parameter type field naming: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn field_naming_convention_warning_return_type() {
+    let input = r#"pub let f() -> { BadField: Int } = { BadField: 5 };"#;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    // Warns twice: once for return type annotation, once for struct literal
+    let count = warnings
+        .iter()
+        .filter(|w| {
+            matches!(w,
+        SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")
+        })
+        .count();
+    assert_eq!(
+        count, 2,
+        "Should warn twice (return type + struct literal): {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn field_correct_naming_no_warning() {
+    let input = r#"
+        type MyType = { good_field: Int };
+        enum MyEnum = Variant { good_field: Int };
+        pub let f() -> { good_field: Int } = { good_field: 5 };
+    "#;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::FieldNamingConvention { .. })),
+        "Should not warn about correct field naming: {:?}",
+        warnings
+    );
+}

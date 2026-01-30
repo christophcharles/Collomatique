@@ -172,7 +172,17 @@ impl GlobalEnv {
         typ: &Spanned<crate::ast::TypeName>,
         current_module: &str,
     ) -> Result<ExprType, SemError> {
-        ExprType::from_ast(typ.clone(), current_module, self)
+        ExprType::from_ast(typ.clone(), current_module, self, None)
+    }
+
+    /// Resolve an AST type to an ExprType, collecting field naming warnings
+    pub fn resolve_type_with_warnings(
+        &self,
+        typ: &Spanned<crate::ast::TypeName>,
+        current_module: &str,
+        warnings: &mut Vec<super::errors::SemWarning>,
+    ) -> Result<ExprType, SemError> {
+        ExprType::from_ast(typ.clone(), current_module, self, Some(warnings))
     }
 
     /// Get the underlying type for a custom type

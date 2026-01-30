@@ -1,3 +1,4 @@
+use super::errors::SemWarning;
 use super::{GlobalEnv, ResolvedPathKind, SemError};
 
 use std::{
@@ -554,6 +555,7 @@ impl SimpleType {
         value: crate::ast::SimpleTypeName,
         current_module: &str,
         global_env: &GlobalEnv,
+        mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
@@ -573,24 +575,43 @@ impl SimpleType {
                 inner,
                 current_module,
                 global_env,
+                warnings.as_deref_mut(),
             )?)),
             SimpleTypeName::Tuple(elements) => {
-                let converted: Vec<ExprType> = elements
-                    .into_iter()
-                    .map(|e| ExprType::from_ast(e, current_module, global_env))
-                    .collect::<Result<_, _>>()?;
+                let mut converted = Vec::with_capacity(elements.len());
+                for e in elements {
+                    let resolved =
+                        ExprType::from_ast(e, current_module, global_env, warnings.as_deref_mut())?;
+                    converted.push(resolved);
+                }
                 Ok(SimpleType::Tuple(converted))
             }
             SimpleTypeName::Struct(fields) => {
-                let converted: BTreeMap<String, ExprType> = fields
-                    .into_iter()
-                    .map(|(name, typ)| {
-                        Ok((
-                            name.node,
-                            ExprType::from_ast(typ, current_module, global_env)?,
-                        ))
-                    })
-                    .collect::<Result<_, SemError>>()?;
+                let mut converted = BTreeMap::new();
+                for (name, typ) in fields {
+                    if let Some(ref mut w) = warnings {
+                        if let Some(suggestion) =
+                            super::string_case::generate_suggestion_for_naming_convention(
+                                &name.node,
+                                super::string_case::NamingConvention::SnakeCase,
+                            )
+                        {
+                            w.push(SemWarning::FieldNamingConvention {
+                                module: current_module.to_string(),
+                                identifier: name.node.clone(),
+                                span: name.span.clone(),
+                                suggestion,
+                            });
+                        }
+                    }
+                    let resolved = ExprType::from_ast(
+                        typ,
+                        current_module,
+                        global_env,
+                        warnings.as_deref_mut(),
+                    )?;
+                    converted.insert(name.node, resolved);
+                }
                 Ok(SimpleType::Struct(converted))
             }
             SimpleTypeName::DatabaseSchema(schema) => Ok(SimpleType::DatabaseSchema(schema)),
@@ -605,15 +626,20 @@ impl ExprType {
         value: crate::ast::Spanned<crate::ast::TypeName>,
         current_module: &str,
         global_env: &GlobalEnv,
+        mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, SemError> {
         if value.node.types.is_empty() {
             panic!("It should not be possible to form 0-length typenames");
         }
         let mut flattened = Vec::with_capacity(value.node.types.len());
         for typ in value.node.types {
-            let inner_typ =
-                SimpleType::from_ast(typ.node.inner.clone(), current_module, global_env)
-                    .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
+            let inner_typ = SimpleType::from_ast(
+                typ.node.inner.clone(),
+                current_module,
+                global_env,
+                warnings.as_deref_mut(),
+            )
+            .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
             let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
             match typ.node.maybe_count {
                 0 => flattened.push(spanned_inner),

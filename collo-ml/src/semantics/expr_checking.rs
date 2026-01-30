@@ -2483,6 +2483,19 @@ impl LocalCheckEnv {
                     }
                     seen_fields.insert(field_name.node.clone(), field_name.span.clone());
 
+                    // Check field naming convention
+                    if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                        &field_name.node,
+                        string_case::NamingConvention::SnakeCase,
+                    ) {
+                        warnings.push(SemWarning::FieldNamingConvention {
+                            module: self.current_module().to_string(),
+                            identifier: field_name.node.clone(),
+                            span: field_name.span.clone(),
+                            suggestion,
+                        });
+                    }
+
                     // Type-check the field expression
                     if let Some(field_type) = self.check_expr(
                         global_env,

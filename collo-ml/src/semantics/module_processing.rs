@@ -170,6 +170,7 @@ impl GlobalEnv {
                             name,
                             underlying,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     crate::ast::Statement::EnumDecl { name, variants, .. } => {
@@ -178,6 +179,7 @@ impl GlobalEnv {
                             name,
                             variants,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     _ => {}
@@ -711,7 +713,7 @@ impl GlobalEnv {
         let mut seen_param_names: HashMap<String, Span> = HashMap::new();
 
         for param in params {
-            match self.resolve_type(&param.typ, current_module) {
+            match self.resolve_type_with_warnings(&param.typ, current_module, warnings) {
                 Err(e) => {
                     errors.push(e);
                     error_in_typs = true;
@@ -756,7 +758,7 @@ impl GlobalEnv {
         }
 
         // Resolve and validate output type
-        let out_typ = match self.resolve_type(output_type, current_module) {
+        let out_typ = match self.resolve_type_with_warnings(output_type, current_module, warnings) {
             Err(e) => {
                 errors.push(e);
                 return;
@@ -858,7 +860,7 @@ impl GlobalEnv {
         let mut seen_param_names: HashMap<String, Span> = HashMap::new();
 
         for param in params {
-            match self.resolve_type(&param.typ, current_module) {
+            match self.resolve_type_with_warnings(&param.typ, current_module, warnings) {
                 Err(e) => {
                     errors.push(e);
                     error_in_typs = true;
@@ -903,7 +905,7 @@ impl GlobalEnv {
         }
 
         // Resolve and validate output type
-        let out_typ = match self.resolve_type(output_type, current_module) {
+        let out_typ = match self.resolve_type_with_warnings(output_type, current_module, warnings) {
             Err(e) => {
                 errors.push(e);
                 return;
@@ -1267,6 +1269,7 @@ impl GlobalEnv {
         name: &Spanned<String>,
         underlying: &Spanned<crate::ast::TypeName>,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Skip if pass 1 failed (type wasn't registered)
         let type_key = (current_module.to_string(), name.node.clone());
@@ -1276,13 +1279,14 @@ impl GlobalEnv {
         };
 
         // Resolve the underlying type using the symbol table
-        let underlying_type = match ExprType::from_ast(underlying.clone(), current_module, self) {
-            Ok(typ) => typ,
-            Err(e) => {
-                errors.push(e);
-                return;
-            }
-        };
+        let underlying_type =
+            match ExprType::from_ast(underlying.clone(), current_module, self, Some(warnings)) {
+                Ok(typ) => typ,
+                Err(e) => {
+                    errors.push(e);
+                    return;
+                }
+            };
 
         // Check for unguarded recursive type (type references itself without being inside a container)
         if self.has_unguarded_reference(&underlying_type, &name.node) {
@@ -1428,6 +1432,7 @@ impl GlobalEnv {
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         use crate::ast::EnumVariantType;
 
@@ -1463,7 +1468,12 @@ impl GlobalEnv {
                     }
                     EnumVariantType::Tuple(types) if types.len() == 1 => {
                         // Single type like Ok(Int) - underlying is just that type
-                        match ExprType::from_ast(types[0].clone(), current_module, self) {
+                        match ExprType::from_ast(
+                            types[0].clone(),
+                            current_module,
+                            self,
+                            Some(warnings),
+                        ) {
                             Ok(typ) => typ,
                             Err(e) => {
                                 errors.push(e);
@@ -1473,35 +1483,67 @@ impl GlobalEnv {
                     }
                     EnumVariantType::Tuple(types) => {
                         // Multiple types like TupleCase(Int, Bool) - underlying is a tuple
-                        let tuple_types: Result<Vec<ExprType>, _> = types
-                            .iter()
-                            .map(|t| ExprType::from_ast(t.clone(), current_module, self))
-                            .collect();
-                        match tuple_types {
-                            Ok(ts) => ExprType::simple(SimpleType::Tuple(ts)),
-                            Err(e) => {
-                                errors.push(e);
-                                continue;
+                        let mut tuple_types = Vec::with_capacity(types.len());
+                        let mut tuple_err = false;
+                        for t in types {
+                            match ExprType::from_ast(
+                                t.clone(),
+                                current_module,
+                                self,
+                                Some(warnings),
+                            ) {
+                                Ok(typ) => tuple_types.push(typ),
+                                Err(e) => {
+                                    errors.push(e);
+                                    tuple_err = true;
+                                    break;
+                                }
                             }
                         }
+                        if tuple_err {
+                            continue;
+                        }
+                        ExprType::simple(SimpleType::Tuple(tuple_types))
                     }
                     EnumVariantType::Struct(fields) => {
                         // Struct variant like StructCase { field: Type }
-                        let struct_fields: Result<std::collections::BTreeMap<String, ExprType>, _> =
-                            fields
-                                .iter()
-                                .map(|(fname, ftype)| {
-                                    ExprType::from_ast(ftype.clone(), current_module, self)
-                                        .map(|t| (fname.node.clone(), t))
-                                })
-                                .collect();
-                        match struct_fields {
-                            Ok(fs) => ExprType::simple(SimpleType::Struct(fs)),
-                            Err(e) => {
-                                errors.push(e);
-                                continue;
+                        let mut converted = BTreeMap::new();
+                        let mut struct_err = false;
+                        for (fname, ftype) in fields {
+                            // Check field naming convention
+                            if let Some(suggestion) =
+                                string_case::generate_suggestion_for_naming_convention(
+                                    &fname.node,
+                                    string_case::NamingConvention::SnakeCase,
+                                )
+                            {
+                                warnings.push(SemWarning::FieldNamingConvention {
+                                    module: current_module.to_string(),
+                                    identifier: fname.node.clone(),
+                                    span: fname.span.clone(),
+                                    suggestion,
+                                });
+                            }
+                            match ExprType::from_ast(
+                                ftype.clone(),
+                                current_module,
+                                self,
+                                Some(warnings),
+                            ) {
+                                Ok(t) => {
+                                    converted.insert(fname.node.clone(), t);
+                                }
+                                Err(e) => {
+                                    errors.push(e);
+                                    struct_err = true;
+                                    break;
+                                }
                             }
                         }
+                        if struct_err {
+                            continue;
+                        }
+                        ExprType::simple(SimpleType::Struct(converted))
                     }
                 },
             };

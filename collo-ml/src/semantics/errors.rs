@@ -320,6 +320,16 @@ pub enum SemWarning {
         span: Span,
         suggestion: String,
     },
+
+    #[error(
+        "Field \"{identifier}\" in module \"{module}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+    )]
+    FieldNamingConvention {
+        module: String,
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
     #[error("Unused identifier \"{identifier}\" in module \"{module}\" at {span:?}")]
     UnusedIdentifier {
         module: String,
