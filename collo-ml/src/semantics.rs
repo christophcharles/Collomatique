@@ -12,6 +12,7 @@
 //! - `module_processing`: Multi-pass module compilation
 //! - `string_case`: Naming convention utilities
 
+pub mod database;
 mod errors;
 mod expr_checking;
 mod global_env;
@@ -25,6 +26,7 @@ mod types;
 mod tests;
 
 // Re-export public types
+pub use database::{DbConversionError, DbType};
 pub use errors::{ArgsType, GlobalEnvError, SemError, SemWarning};
 pub use global_env::{FunctionDesc, GlobalEnv, TypeInfo};
 pub use local_env::LocalEnvCheck;
