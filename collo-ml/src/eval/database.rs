@@ -293,6 +293,8 @@ impl DbValue {
         match (self, variant) {
             (DbValue::Null, SimpleType::None) => Ok(ExprValue::None),
             (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(v)),
+            (DbValue::Int(0), SimpleType::Bool) => Ok(ExprValue::Bool(false)),
+            (DbValue::Int(1), SimpleType::Bool) => Ok(ExprValue::Bool(true)),
             (DbValue::Bool(v), SimpleType::Bool) => Ok(ExprValue::Bool(v)),
             (DbValue::String(v), SimpleType::String) => Ok(ExprValue::String(v)),
             (db_val, SimpleType::Custom(module, root, variant_name)) => {

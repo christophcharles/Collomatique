@@ -94,6 +94,33 @@ fn to_expr_value_int_into_bool_rejected() {
 }
 
 #[test]
+fn to_expr_value_int_zero_to_bool() {
+    let ast = empty_ast();
+    let target = ExprType::simple(SimpleType::Bool);
+    let result: Result<ExprValue<NoObject>, _> =
+        DbValue::Int(0).to_expr_value(&ast.global_env, &target);
+    assert_eq!(result, Ok(ExprValue::Bool(false)));
+}
+
+#[test]
+fn to_expr_value_int_one_to_bool() {
+    let ast = empty_ast();
+    let target = ExprType::simple(SimpleType::Bool);
+    let result: Result<ExprValue<NoObject>, _> =
+        DbValue::Int(1).to_expr_value(&ast.global_env, &target);
+    assert_eq!(result, Ok(ExprValue::Bool(true)));
+}
+
+#[test]
+fn to_expr_value_int_two_into_bool_rejected() {
+    let ast = empty_ast();
+    let target = ExprType::simple(SimpleType::Bool);
+    let result: Result<ExprValue<NoObject>, _> =
+        DbValue::Int(2).to_expr_value(&ast.global_env, &target);
+    assert_eq!(result, Err(DbConversionError));
+}
+
+#[test]
 fn to_expr_value_int_into_string_rejected() {
     let ast = empty_ast();
     let target = ExprType::simple(SimpleType::String);
