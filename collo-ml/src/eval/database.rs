@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use super::values::ExprValue;
 use crate::semantics::database::DbConversionError;
+use crate::semantics::{ExprType, SimpleType};
 use crate::traits::EvalObject;
 
 /// Trait for database connection backends.
@@ -114,6 +115,33 @@ pub enum DbValue {
     Int(i32),
     Bool(bool),
     String(String),
+}
+
+impl DbValue {
+    /// Convert into an [`ExprValue`] guided by the expected `target` type.
+    ///
+    /// Checks whether `target` contains a variant matching this value's
+    /// primitive kind and, if so, produces the corresponding `ExprValue`.
+    ///
+    /// Does **not** deep-resolve `target`: the conversion may fail for
+    /// valid database types whose variants are still unresolved `Custom(…)`
+    /// references, and may succeed for types that are not valid database
+    /// types.
+    pub fn to_expr_value<T: EvalObject>(
+        self,
+        target: &ExprType,
+    ) -> Result<ExprValue<T>, DbConversionError> {
+        let variants = target.get_variants();
+        match self {
+            DbValue::Null if variants.contains(&SimpleType::None) => Ok(ExprValue::None),
+            DbValue::Int(v) if variants.contains(&SimpleType::Int) => Ok(ExprValue::Int(v)),
+            DbValue::Bool(v) if variants.contains(&SimpleType::Bool) => Ok(ExprValue::Bool(v)),
+            DbValue::String(v) if variants.contains(&SimpleType::String) => {
+                Ok(ExprValue::String(v))
+            }
+            _ => Err(DbConversionError),
+        }
+    }
 }
 
 /// Recursively unwraps `ExprValue::Custom` wrappers, then converts the leaf value.

@@ -1,3 +1,4 @@
+use super::global_env::GlobalEnv;
 use super::types::{ExprType, SimpleType};
 use thiserror::Error;
 
@@ -20,12 +21,13 @@ impl DbType {
         }
     }
 
-    /// Convert from a deep-resolved type list (output of `GlobalEnv::resolve_type_deep`).
+    /// Convert an `ExprType` to a `DbType` by deep-resolving through `env`.
     ///
-    /// Valid patterns:
+    /// Valid resolved patterns:
     /// - `[Int]` → `DbType::Int(false)`, `[Bool]` → …, `[String]` → …
-    /// - `[None, Int]` → `DbType::Int(true)`, etc. (order doesn't matter)
-    pub fn try_from_resolved(resolved: &[SimpleType]) -> Result<Self, DbConversionError> {
+    /// - `[None, Int]` → `DbType::Int(true)`, etc.
+    pub fn try_from(env: &GlobalEnv, typ: &ExprType) -> Result<Self, DbConversionError> {
+        let resolved = env.resolve_type_deep(typ).ok_or(DbConversionError)?;
         match resolved.len() {
             1 => Self::from_primitive(&resolved[0]),
             2 => {
@@ -56,21 +58,5 @@ impl DbType {
             DbType::Bool(_) => DbType::Bool(true),
             DbType::String(_) => DbType::String(true),
         }
-    }
-}
-
-/// Convert from an ExprType by examining its variants directly (no deep resolution).
-impl TryFrom<&ExprType> for DbType {
-    type Error = DbConversionError;
-    fn try_from(value: &ExprType) -> Result<Self, Self::Error> {
-        let variants: Vec<_> = value.get_variants().iter().cloned().collect();
-        Self::try_from_resolved(&variants)
-    }
-}
-
-impl TryFrom<ExprType> for DbType {
-    type Error = DbConversionError;
-    fn try_from(value: ExprType) -> Result<Self, Self::Error> {
-        DbType::try_from(&value)
     }
 }

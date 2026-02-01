@@ -981,17 +981,15 @@ impl GlobalEnv {
 
         // Check: non-DB parameters must be SQL-compatible
         for (param_typ, param) in params_typ.iter().skip(1).zip(params.iter().skip(1)) {
-            if let Some(resolved) = self.resolve_type_deep(param_typ) {
-                if DbType::try_from_resolved(&resolved).is_err() {
-                    errors.push(SemError::QueryParamNotSqlCompatible {
-                        module: current_module.to_string(),
-                        query_name: name.node.clone(),
-                        param_name: param.name.node.clone(),
-                        found: param_typ.to_string(),
-                        span: param.typ.span.clone(),
-                    });
-                    error_in_typs = true;
-                }
+            if DbType::try_from(self, param_typ).is_err() {
+                errors.push(SemError::QueryParamNotSqlCompatible {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    param_name: param.name.node.clone(),
+                    found: param_typ.to_string(),
+                    span: param.typ.span.clone(),
+                });
+                error_in_typs = true;
             }
         }
 
@@ -1027,17 +1025,15 @@ impl GlobalEnv {
 
         if let Some(fields) = &output_struct_fields {
             for (field_name, field_typ) in fields {
-                if let Some(resolved_field) = self.resolve_type_deep(field_typ) {
-                    if DbType::try_from_resolved(&resolved_field).is_err() {
-                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
-                            module: current_module.to_string(),
-                            query_name: name.node.clone(),
-                            field_name: field_name.clone(),
-                            found: field_typ.to_string(),
-                            span: output_type.span.clone(),
-                        });
-                        return;
-                    }
+                if DbType::try_from(self, field_typ).is_err() {
+                    errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                        module: current_module.to_string(),
+                        query_name: name.node.clone(),
+                        field_name: field_name.clone(),
+                        found: field_typ.to_string(),
+                        span: output_type.span.clone(),
+                    });
+                    return;
                 }
             }
         }
