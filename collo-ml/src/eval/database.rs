@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use super::values::ExprValue;
 use crate::semantics::database::DbConversionError;
-use crate::semantics::{ExprType, SimpleType};
+use crate::semantics::{ExprType, GlobalEnv, SimpleType};
 use crate::traits::EvalObject;
 
 /// Trait for database connection backends.
@@ -118,26 +118,57 @@ pub enum DbValue {
 }
 
 impl DbValue {
-    /// Convert into an [`ExprValue`] guided by the expected `target` type.
+    /// Convert into an [`ExprValue`] guided by the expected `target` type,
+    /// deep-resolving `Custom` variants through `env`.
     ///
-    /// Checks whether `target` contains a variant matching this value's
-    /// primitive kind and, if so, produces the corresponding `ExprValue`.
-    ///
-    /// Does **not** deep-resolve `target`: the conversion may fail for
-    /// valid database types whose variants are still unresolved `Custom(…)`
-    /// references, and may succeed for types that are not valid database
-    /// types.
+    /// Iterates over `target`'s variants and returns the first successful
+    /// conversion. Primitive variants (Int, Bool, String, None) are matched
+    /// directly. `Custom(…)` variants are unwrapped via the `GlobalEnv` and
+    /// the conversion recurses into the underlying type, wrapping the result
+    /// in `ExprValue::Custom`.
     pub fn to_expr_value<T: EvalObject>(
         self,
+        env: &GlobalEnv,
         target: &ExprType,
     ) -> Result<ExprValue<T>, DbConversionError> {
-        let variants = target.get_variants();
-        match self {
-            DbValue::Null if variants.contains(&SimpleType::None) => Ok(ExprValue::None),
-            DbValue::Int(v) if variants.contains(&SimpleType::Int) => Ok(ExprValue::Int(v)),
-            DbValue::Bool(v) if variants.contains(&SimpleType::Bool) => Ok(ExprValue::Bool(v)),
-            DbValue::String(v) if variants.contains(&SimpleType::String) => {
-                Ok(ExprValue::String(v))
+        for variant in target.get_variants() {
+            if let Ok(v) = self.clone().try_convert_to(env, variant) {
+                return Ok(v);
+            }
+        }
+        Err(DbConversionError)
+    }
+
+    /// Try to convert into an [`ExprValue`] matching a single [`SimpleType`].
+    ///
+    /// For primitives, checks a direct match. For `Custom` types, looks up
+    /// the underlying type in `env` and recurses via `to_expr_value`,
+    /// wrapping the result in [`ExprValue::Custom`].
+    fn try_convert_to<T: EvalObject>(
+        self,
+        env: &GlobalEnv,
+        variant: &SimpleType,
+    ) -> Result<ExprValue<T>, DbConversionError> {
+        match (self, variant) {
+            (DbValue::Null, SimpleType::None) => Ok(ExprValue::None),
+            (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(v)),
+            (DbValue::Bool(v), SimpleType::Bool) => Ok(ExprValue::Bool(v)),
+            (DbValue::String(v), SimpleType::String) => Ok(ExprValue::String(v)),
+            (db_val, SimpleType::Custom(module, root, variant_name)) => {
+                let qualified = match variant_name {
+                    Some(v) => format!("{}::{}", root, v),
+                    None => root.clone(),
+                };
+                let underlying = env
+                    .get_custom_type_underlying(module, &qualified)
+                    .ok_or(DbConversionError)?;
+                let inner = db_val.to_expr_value(env, underlying)?;
+                Ok(ExprValue::Custom(Box::new(super::values::CustomValue {
+                    module: module.clone(),
+                    type_name: root.clone(),
+                    variant: variant_name.clone(),
+                    content: inner,
+                })))
             }
             _ => Err(DbConversionError),
         }
