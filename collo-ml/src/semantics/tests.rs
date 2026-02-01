@@ -10,6 +10,7 @@ mod coercion;
 mod collections;
 mod control_flow;
 mod custom_types;
+mod database;
 mod database_schema;
 mod enums;
 mod folds;
@@ -25,6 +26,18 @@ mod sum_types;
 mod tuples;
 mod type_system;
 mod warnings;
+
+/// Helper function to analyze a CoLLo-ML program and return the GlobalEnv, errors, and warnings
+pub(crate) fn analyze_with_env(input: &str) -> (GlobalEnv, Vec<SemError>, Vec<SemWarning>) {
+    let pairs = ColloMLParser::parse(Rule::file, input).expect("Parse failed");
+    let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
+        .expect("AST conversion failed");
+    let modules = BTreeMap::from([("main", file)]);
+    let (global_env, _type_info, _expr_types, _resolved_types, errors, warnings) =
+        GlobalEnv::new(HashMap::new(), HashMap::new(), &modules)
+            .expect("GlobalEnv creation failed");
+    (global_env, errors, warnings)
+}
 
 /// Helper function to analyze a CoLLo-ML program and return type information, errors, and warnings
 pub(crate) fn analyze(

@@ -10,6 +10,7 @@ mod comparisons;
 mod complex_combinations;
 mod constraints;
 mod custom_types;
+mod database;
 mod enums;
 mod eval_with_variables;
 mod extra_sum_types;
