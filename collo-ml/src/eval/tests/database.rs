@@ -1244,3 +1244,151 @@ async fn typed_query_custom_enum_type() {
     }));
     assert_eq!(result, expected);
 }
+
+// =============================================================================
+// 16. EVAL QUERY CALL — End-to-end through eval_expr
+// =============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_list() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query all_users(db: Db) -> [{id: Int, name: String}]
+        = "SELECT id, name FROM users ORDER BY id";
+    pub let run(db: Db) -> [{id: Int, name: String}] = all_users(db);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input);
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg])
+        .expect("Should evaluate");
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(1)),
+                ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(2)),
+                ("name".to_string(), ExprValue::String("Bob".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_optional_found() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query find_user(db: Db, id: Int) -> ?{id: Int, name: String}
+        = "SELECT id, name FROM users WHERE id = ?";
+    pub let run(db: Db, id: Int) -> ?{id: Int, name: String} = find_user(db, id);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input);
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
+        .expect("Should evaluate");
+
+    let expected = ExprValue::Struct(
+        [
+            ("id".to_string(), ExprValue::Int(1)),
+            ("name".to_string(), ExprValue::String("Alice".to_string())),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    assert_eq!(result, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_optional_not_found() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query find_user(db: Db, id: Int) -> ?{id: Int, name: String}
+        = "SELECT id, name FROM users WHERE id = ?";
+    pub let run(db: Db, id: Int) -> ?{id: Int, name: String} = find_user(db, id);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input);
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_query_failed() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query bad_query(db: Db) -> [{id: Int}]
+        = "SELECT id FROM nonexistent_table";
+    pub let run(db: Db) -> [{id: Int}] = bad_query(db);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input);
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast.quick_eval_fn("main", "run", vec![db_arg]);
+
+    match result {
+        Err(EvalError::Panic(value)) => match *value {
+            ExprValue::String(msg) => {
+                assert!(
+                    msg.contains("nonexistent_table"),
+                    "Error message should mention the table: {msg}"
+                );
+            }
+            other => panic!("Expected String inside Panic, got {:?}", other),
+        },
+        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
+        Err(e) => panic!("Expected Panic error, got {:?}", e),
+    }
+}
