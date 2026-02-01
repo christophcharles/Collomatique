@@ -392,18 +392,23 @@ fn roundtrip_none() {
 // 14. QUERY EXECUTION — INTEGRATION TESTS
 // =============================================================================
 
-async fn test_conn() -> SqliteDatabaseConnection {
-    let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-    SqliteDatabaseConnection::new_sqlite("test", pool)
+async fn test_pool() -> sqlx::SqlitePool {
+    sqlx::SqlitePool::connect(":memory:").await.unwrap()
 }
 
 #[tokio::test]
 async fn query_single_table() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+    sqlx::query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
         .await
         .unwrap();
 
@@ -422,11 +427,17 @@ async fn query_single_table() {
 
 #[tokio::test]
 async fn query_with_bind_param() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+    sqlx::query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
         .await
         .unwrap();
 
@@ -441,25 +452,27 @@ async fn query_with_bind_param() {
 
 #[tokio::test]
 async fn query_join_two_tables() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+    sqlx::query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query(
-        "CREATE TABLE orders (id INTEGER, user_id INTEGER, product TEXT)",
-        vec![],
-    )
-    .await
-    .unwrap();
-    conn.query(
-        "INSERT INTO orders VALUES (1, 1, 'Widget'), (2, 2, 'Gadget')",
-        vec![],
-    )
-    .await
-    .unwrap();
+    sqlx::query("CREATE TABLE orders (id INTEGER, user_id INTEGER, product TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO orders VALUES (1, 1, 'Widget'), (2, 2, 'Gadget')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+        .await
+        .unwrap();
 
     let (rows, cols) = conn
         .query(
@@ -479,11 +492,17 @@ async fn query_join_two_tables() {
 
 #[tokio::test]
 async fn query_duplicate_column_error() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query("INSERT INTO users VALUES (1, 'Alice')", vec![])
+    sqlx::query("INSERT INTO users VALUES (1, 'Alice')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
         .await
         .unwrap();
 
@@ -497,8 +516,13 @@ async fn query_duplicate_column_error() {
 
 #[tokio::test]
 async fn query_empty_result() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
         .await
         .unwrap();
 
@@ -513,11 +537,17 @@ async fn query_empty_result() {
 
 #[tokio::test]
 async fn query_null_values() {
-    let conn = test_conn().await;
-    conn.query("CREATE TABLE data (id INTEGER, val TEXT)", vec![])
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (id INTEGER, val TEXT)")
+        .execute(&pool)
         .await
         .unwrap();
-    conn.query("INSERT INTO data VALUES (1, NULL)", vec![])
+    sqlx::query("INSERT INTO data VALUES (1, NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
         .await
         .unwrap();
 
@@ -530,4 +560,27 @@ async fn query_null_values() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["id"], DbValue::Int(1));
     assert_eq!(rows[0]["val"], DbValue::Null);
+}
+
+#[tokio::test]
+async fn query_write_rejected() {
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+        .await
+        .unwrap();
+
+    let result = conn
+        .query("INSERT INTO users VALUES (1, 'Alice')", vec![])
+        .await;
+
+    assert!(
+        matches!(result, Err(SqlQueryError::QueryFailed(_))),
+        "Expected QueryFailed for write on read-only connection, got: {:?}",
+        result
+    );
 }

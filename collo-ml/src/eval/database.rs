@@ -99,26 +99,43 @@ impl fmt::Display for DatabaseHandle {
 }
 
 /// SQLite database connection implementation.
+///
+/// Holds an open read-only SQLite transaction for snapshot isolation.
+/// `PRAGMA query_only = ON` prevents accidental writes.
 pub struct SqliteDatabaseConnection {
     name: String,
-    pool: sqlx::SqlitePool,
+    tx: tokio::sync::Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
 }
 
 impl SqliteDatabaseConnection {
     /// Create a new SQLite database connection, returning a `DatabaseHandle`.
-    pub fn new(name: impl Into<String>, pool: sqlx::SqlitePool) -> DatabaseHandle {
-        DatabaseHandle::new(Self {
-            name: name.into(),
-            pool,
-        })
+    pub async fn new(
+        name: impl Into<String>,
+        pool: &sqlx::SqlitePool,
+    ) -> Result<DatabaseHandle, SqlQueryError> {
+        let conn = Self::new_sqlite(name, pool).await?;
+        Ok(DatabaseHandle::new(conn))
     }
 
     /// Create a new SQLite database connection, returning the concrete type.
-    pub fn new_sqlite(name: impl Into<String>, pool: sqlx::SqlitePool) -> Self {
-        Self {
+    ///
+    /// Opens a read-only transaction on the pool with `PRAGMA query_only = ON`.
+    pub async fn new_sqlite(
+        name: impl Into<String>,
+        pool: &sqlx::SqlitePool,
+    ) -> Result<Self, SqlQueryError> {
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+        sqlx::query("PRAGMA query_only = ON")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+        Ok(Self {
             name: name.into(),
-            pool,
-        }
+            tx: tokio::sync::Mutex::new(tx),
+        })
     }
 
     /// Execute a SQL query with bound parameters and return rows as maps.
@@ -133,6 +150,8 @@ impl SqliteDatabaseConnection {
         use sqlx::Column;
         use sqlx::TypeInfo;
 
+        let mut tx = self.tx.lock().await;
+
         let mut query = sqlx::query(sql);
         for param in params {
             query = match param {
@@ -144,7 +163,7 @@ impl SqliteDatabaseConnection {
         }
 
         let rows = query
-            .fetch_all(&self.pool)
+            .fetch_all(&mut **tx)
             .await
             .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
 
