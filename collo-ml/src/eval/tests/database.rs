@@ -1108,3 +1108,139 @@ async fn typed_query_invalid_output_type() {
         result
     );
 }
+
+#[tokio::test]
+async fn typed_query_custom_list_type() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type MyList = [{id: Int, name: String}];");
+
+    // MyList (which is [{id: Int, name: String}])
+    let out_type = ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "MyList".to_string(),
+        None,
+    ));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyList".to_string(),
+        variant: None,
+        content: ExprValue::List(vec![
+            ExprValue::Struct(
+                [
+                    ("id".to_string(), ExprValue::Int(1)),
+                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            ExprValue::Struct(
+                [
+                    ("id".to_string(), ExprValue::Int(2)),
+                    ("name".to_string(), ExprValue::String("Bob".to_string())),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        ]),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_custom_optional_type() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type MyOption = None | {id: Int, name: String};");
+
+    // MyOption (which is None | {id: Int, name: String})
+    let out_type = ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "MyOption".to_string(),
+        None,
+    ));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyOption".to_string(),
+        variant: None,
+        content: ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(1)),
+                ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_custom_enum_type() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("enum MyEnum = None | Element {id: Int, name: String};");
+
+    // MyEnum (enum with None and Element variants)
+    let out_type = ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "MyEnum".to_string(),
+        None,
+    ));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    // Double-wrapped: outer Custom is the enum root, inner Custom is the Element variant
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyEnum".to_string(),
+        variant: None,
+        content: ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "MyEnum".to_string(),
+            variant: Some("Element".to_string()),
+            content: ExprValue::Struct(
+                [
+                    ("id".to_string(), ExprValue::Int(1)),
+                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        })),
+    }));
+    assert_eq!(result, expected);
+}
