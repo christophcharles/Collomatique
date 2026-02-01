@@ -185,6 +185,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     .contains_key(&(custom.module.clone(), key))
                     && self.validate_value(&custom.content)
             }
+            ExprValue::Database(_) => true,
         }
     }
 

@@ -6,6 +6,7 @@
 //! - `NoObject`: A placeholder object type for tests without objects
 //! - `NoObjectEnv`: Environment for NoObject
 
+use super::database::DatabaseHandle;
 use super::variables::{ConstraintWithOrigin, IlpVar, Origin};
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use crate::traits::{EvalObject, FieldConversionError};
@@ -25,6 +26,7 @@ pub enum ExprValue<T: EvalObject> {
     Tuple(Vec<ExprValue<T>>),
     Struct(BTreeMap<String, ExprValue<T>>),
     Custom(Box<CustomValue<T>>),
+    Database(DatabaseHandle),
 }
 
 /// Data for custom type values (boxed to keep ExprValue enum small)
@@ -91,6 +93,7 @@ impl<T: EvalObject> std::fmt::Display for ExprValue<T> {
                     custom.module, custom.type_name, v, custom.content
                 ),
             },
+            ExprValue::Database(db) => write!(f, "{}", db),
         }
     }
 }
@@ -251,6 +254,13 @@ impl<T: EvalObject> ExprValue<T> {
                 }
                 false
             }
+            Self::Database(db) => target.get_variants().iter().any(|v| {
+                if let SimpleType::DatabaseSchema(declared_schema) = v {
+                    db.matches_schema(declared_schema)
+                } else {
+                    false
+                }
+            }),
             // Custom values only fit in Custom types with the same name
             // Also handles subtype relationship: Custom(Root, Some(Variant)) fits in Custom(Root, None)
             Self::Custom(custom) => {
@@ -364,6 +374,10 @@ impl<T: EvalObject> ExprValue<T> {
                         })
                         .unwrap_or(false)
                 })
+            }
+            // Database can convert to DatabaseSchema if schema matches
+            (Self::Database(db), SimpleType::DatabaseSchema(declared_schema)) => {
+                db.matches_schema(declared_schema)
             }
             // Everything else forbidden
             _ => false,

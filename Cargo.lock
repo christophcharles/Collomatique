@@ -377,6 +377,7 @@ dependencies = [
  "pest_derive",
  "regex",
  "sha2",
+ "sqlx",
  "thiserror 1.0.69",
 ]
 
