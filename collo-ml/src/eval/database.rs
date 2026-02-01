@@ -5,13 +5,31 @@
 //! - `DatabaseHandle`: Type-erased wrapper stored in `ExprValue`
 //! - `SqliteDatabaseConnection`: SQLite implementation
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+
+use sqlx::{Row, ValueRef};
+use thiserror::Error;
 
 use super::values::ExprValue;
 use crate::semantics::database::DbConversionError;
 use crate::semantics::{ExprType, GlobalEnv, SimpleType};
 use crate::traits::EvalObject;
+
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum SqlQueryError {
+    #[error("SQL query failed: {0}")]
+    QueryFailed(String),
+    #[error("Duplicate column name in result: {0}")]
+    DuplicateColumnName(String),
+    #[error("Unsupported column type in row {row}, column \"{column}\": {type_name}")]
+    UnsupportedColumnType {
+        row: usize,
+        column: String,
+        type_name: String,
+    },
+}
 
 /// Trait for database connection backends.
 ///
@@ -83,7 +101,6 @@ impl fmt::Display for DatabaseHandle {
 /// SQLite database connection implementation.
 pub struct SqliteDatabaseConnection {
     name: String,
-    #[allow(dead_code)]
     pool: sqlx::SqlitePool,
 }
 
@@ -94,6 +111,111 @@ impl SqliteDatabaseConnection {
             name: name.into(),
             pool,
         })
+    }
+
+    /// Create a new SQLite database connection, returning the concrete type.
+    pub fn new_sqlite(name: impl Into<String>, pool: sqlx::SqlitePool) -> Self {
+        Self {
+            name: name.into(),
+            pool,
+        }
+    }
+
+    /// Execute a SQL query with bound parameters and return rows as maps.
+    ///
+    /// Returns `(rows, column_names)` where each row is a `BTreeMap<String, DbValue>`
+    /// and `column_names` preserves the original column order.
+    pub async fn query(
+        &self,
+        sql: &str,
+        params: Vec<DbValue>,
+    ) -> Result<(Vec<BTreeMap<String, DbValue>>, Vec<String>), SqlQueryError> {
+        use sqlx::Column;
+        use sqlx::TypeInfo;
+
+        let mut query = sqlx::query(sql);
+        for param in params {
+            query = match param {
+                DbValue::Null => query.bind(None::<i32>),
+                DbValue::Int(v) => query.bind(v),
+                DbValue::Bool(v) => query.bind(v),
+                DbValue::String(v) => query.bind(v),
+            };
+        }
+
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+
+        if rows.is_empty() {
+            return Ok((vec![], vec![]));
+        }
+
+        // Extract column names from the first row
+        let columns: Vec<String> = rows[0]
+            .columns()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+
+        // Check for duplicate column names
+        {
+            let mut seen = std::collections::HashSet::new();
+            for name in &columns {
+                if !seen.insert(name) {
+                    return Err(SqlQueryError::DuplicateColumnName(name.clone()));
+                }
+            }
+        }
+
+        // Decode rows
+        let mut result = Vec::with_capacity(rows.len());
+        for (row_idx, row) in rows.iter().enumerate() {
+            let mut map = BTreeMap::new();
+            for (col_idx, col_name) in columns.iter().enumerate() {
+                let raw = row
+                    .try_get_raw(col_idx)
+                    .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                let type_name = raw.type_info().name().to_uppercase();
+                let value = if raw.is_null() {
+                    DbValue::Null
+                } else {
+                    match type_name.as_str() {
+                        "INTEGER" | "INT" => {
+                            let v: i32 = row
+                                .try_get(col_idx)
+                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                            DbValue::Int(v)
+                        }
+                        "TEXT" => {
+                            let v: String = row
+                                .try_get(col_idx)
+                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                            DbValue::String(v)
+                        }
+                        "BOOLEAN" | "BOOL" => {
+                            let v: bool = row
+                                .try_get(col_idx)
+                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                            DbValue::Bool(v)
+                        }
+                        "NULL" => DbValue::Null,
+                        _ => {
+                            return Err(SqlQueryError::UnsupportedColumnType {
+                                row: row_idx,
+                                column: col_name.clone(),
+                                type_name,
+                            });
+                        }
+                    }
+                };
+                map.insert(col_name.clone(), value);
+            }
+            result.push(map);
+        }
+
+        Ok((result, columns))
     }
 }
 

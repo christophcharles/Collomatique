@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use super::*;
-use crate::eval::database::DbValue;
+use crate::eval::database::{DbValue, SqlQueryError, SqliteDatabaseConnection};
 use crate::eval::values::{CustomValue, NoObject};
 use crate::semantics::database::DbConversionError;
 
@@ -384,4 +386,148 @@ fn roundtrip_none() {
         .to_expr_value(&ast.global_env, &target)
         .expect("Should convert back");
     assert_eq!(recovered, original);
+}
+
+// =============================================================================
+// 14. QUERY EXECUTION — INTEGRATION TESTS
+// =============================================================================
+
+async fn test_conn() -> SqliteDatabaseConnection {
+    let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+    SqliteDatabaseConnection::new_sqlite("test", pool)
+}
+
+#[tokio::test]
+async fn query_single_table() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+        .await
+        .unwrap();
+
+    let (rows, cols) = conn
+        .query("SELECT id, name FROM users ORDER BY id", vec![])
+        .await
+        .unwrap();
+
+    assert_eq!(cols, vec!["id".to_string(), "name".to_string()]);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["id"], DbValue::Int(1));
+    assert_eq!(rows[0]["name"], DbValue::String("Alice".to_string()));
+    assert_eq!(rows[1]["id"], DbValue::Int(2));
+    assert_eq!(rows[1]["name"], DbValue::String("Bob".to_string()));
+}
+
+#[tokio::test]
+async fn query_with_bind_param() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+        .await
+        .unwrap();
+
+    let (rows, _cols) = conn
+        .query("SELECT name FROM users WHERE id = ?", vec![DbValue::Int(1)])
+        .await
+        .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["name"], DbValue::String("Alice".to_string()));
+}
+
+#[tokio::test]
+async fn query_join_two_tables() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')", vec![])
+        .await
+        .unwrap();
+    conn.query(
+        "CREATE TABLE orders (id INTEGER, user_id INTEGER, product TEXT)",
+        vec![],
+    )
+    .await
+    .unwrap();
+    conn.query(
+        "INSERT INTO orders VALUES (1, 1, 'Widget'), (2, 2, 'Gadget')",
+        vec![],
+    )
+    .await
+    .unwrap();
+
+    let (rows, cols) = conn
+        .query(
+            "SELECT u.name, o.product FROM users u JOIN orders o ON u.id = o.user_id ORDER BY o.id",
+            vec![],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(cols, vec!["name".to_string(), "product".to_string()]);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["name"], DbValue::String("Alice".to_string()));
+    assert_eq!(rows[0]["product"], DbValue::String("Widget".to_string()));
+    assert_eq!(rows[1]["name"], DbValue::String("Bob".to_string()));
+    assert_eq!(rows[1]["product"], DbValue::String("Gadget".to_string()));
+}
+
+#[tokio::test]
+async fn query_duplicate_column_error() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.query("INSERT INTO users VALUES (1, 'Alice')", vec![])
+        .await
+        .unwrap();
+
+    let result = conn.query("SELECT id, id FROM users", vec![]).await;
+
+    assert_eq!(
+        result,
+        Err(SqlQueryError::DuplicateColumnName("id".to_string()))
+    );
+}
+
+#[tokio::test]
+async fn query_empty_result() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE users (id INTEGER, name TEXT)", vec![])
+        .await
+        .unwrap();
+
+    let (rows, cols) = conn
+        .query("SELECT id, name FROM users WHERE id = 999", vec![])
+        .await
+        .unwrap();
+
+    assert_eq!(rows.len(), 0);
+    assert!(cols.is_empty());
+}
+
+#[tokio::test]
+async fn query_null_values() {
+    let conn = test_conn().await;
+    conn.query("CREATE TABLE data (id INTEGER, val TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.query("INSERT INTO data VALUES (1, NULL)", vec![])
+        .await
+        .unwrap();
+
+    let (rows, cols) = conn
+        .query("SELECT id, val FROM data", vec![])
+        .await
+        .unwrap();
+
+    assert_eq!(cols, vec!["id".to_string(), "val".to_string()]);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], DbValue::Int(1));
+    assert_eq!(rows[0]["val"], DbValue::Null);
 }

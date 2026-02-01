@@ -17,3 +17,6 @@ lazy_static = "*"
 derivative = "*"
 ordered-float.workspace = true
 sqlx.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
