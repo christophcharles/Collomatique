@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::eval::database::{DbValue, SqlQueryError, SqliteDatabaseConnection};
+use crate::eval::database::{DatabaseHandle, DbValue, SqlQueryError, SqliteDatabaseConnection};
 use crate::eval::values::{CustomValue, NoObject};
 use crate::semantics::database::DbConversionError;
 
@@ -608,6 +608,503 @@ async fn query_write_rejected() {
     assert!(
         matches!(result, Err(SqlQueryError::QueryFailed(_))),
         "Expected QueryFailed for write on read-only connection, got: {:?}",
+        result
+    );
+}
+
+// =============================================================================
+// 15. TYPED QUERY — DatabaseHandle::query
+// =============================================================================
+
+async fn setup_users_table(pool: &sqlx::SqlitePool) {
+    sqlx::query("CREATE TABLE users (id INTEGER, name TEXT)")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')")
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn test_handle(pool: &sqlx::SqlitePool) -> DatabaseHandle {
+    SqliteDatabaseConnection::new("test", pool).await.unwrap()
+}
+
+#[tokio::test]
+async fn typed_query_list_of_structs() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [{id: Int, name: String}]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [
+            ("id".to_string(), ExprType::simple(SimpleType::Int)),
+            ("name".to_string(), ExprType::simple(SimpleType::String)),
+        ]
+        .into_iter()
+        .collect(),
+    ))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(1)),
+                ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(2)),
+                ("name".to_string(), ExprValue::String("Bob".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_optional_struct_found() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // {id: Int, name: String} | None
+    let out_type = ExprType::from_variants([
+        SimpleType::Struct(
+            [
+                ("id".to_string(), ExprType::simple(SimpleType::Int)),
+                ("name".to_string(), ExprType::simple(SimpleType::String)),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        SimpleType::None,
+    ]);
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::Struct(
+        [
+            ("id".to_string(), ExprValue::Int(1)),
+            ("name".to_string(), ExprValue::String("Alice".to_string())),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_optional_struct_not_found() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // {id: Int, name: String} | None
+    let out_type = ExprType::from_variants([
+        SimpleType::Struct(
+            [
+                ("id".to_string(), ExprType::simple(SimpleType::Int)),
+                ("name".to_string(), ExprType::simple(SimpleType::String)),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        SimpleType::None,
+    ]);
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[tokio::test]
+async fn typed_query_empty_list() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [{id: Int}]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [("id".to_string(), ExprType::simple(SimpleType::Int))]
+            .into_iter()
+            .collect(),
+    ))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::List(vec![]));
+}
+
+#[tokio::test]
+async fn typed_query_custom_wrapped_rows() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type Row = {id: Int, name: String};");
+
+    // [Row] where Row = {id: Int, name: String}
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "Row".to_string(),
+        None,
+    ))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "Row".to_string(),
+            variant: None,
+            content: ExprValue::Struct(
+                [
+                    ("id".to_string(), ExprValue::Int(1)),
+                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        })),
+        ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "Row".to_string(),
+            variant: None,
+            content: ExprValue::Struct(
+                [
+                    ("id".to_string(), ExprValue::Int(2)),
+                    ("name".to_string(), ExprValue::String("Bob".to_string())),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        })),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_custom_wrapped_fields() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type MyInt = Int;");
+
+    // [{id: MyInt, name: String}]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [
+            (
+                "id".to_string(),
+                ExprType::simple(SimpleType::Custom(
+                    "main".to_string(),
+                    "MyInt".to_string(),
+                    None,
+                )),
+            ),
+            ("name".to_string(), ExprType::simple(SimpleType::String)),
+        ]
+        .into_iter()
+        .collect(),
+    ))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Struct(
+            [
+                (
+                    "id".to_string(),
+                    ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "MyInt".to_string(),
+                        variant: None,
+                        content: ExprValue::Int(1),
+                    })),
+                ),
+                ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        ExprValue::Struct(
+            [
+                (
+                    "id".to_string(),
+                    ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "MyInt".to_string(),
+                        variant: None,
+                        content: ExprValue::Int(2),
+                    })),
+                ),
+                ("name".to_string(), ExprValue::String("Bob".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_column_mismatch() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [{id: Int, wrong_col: String}] — wrong_col doesn't exist in SELECT result
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [
+            ("id".to_string(), ExprType::simple(SimpleType::Int)),
+            (
+                "wrong_col".to_string(),
+                ExprType::simple(SimpleType::String),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    ))));
+
+    let result: Result<ExprValue<NoObject>, _> = handle
+        .query(
+            "SELECT id, name FROM users",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await;
+
+    assert!(
+        matches!(result, Err(SqlQueryError::ColumnMismatch(_))),
+        "Expected ColumnMismatch, got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn typed_query_column_count_mismatch() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [{id: Int}] — only 1 field but SELECT returns 2 columns
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [("id".to_string(), ExprType::simple(SimpleType::Int))]
+            .into_iter()
+            .collect(),
+    ))));
+
+    let result: Result<ExprValue<NoObject>, _> = handle
+        .query(
+            "SELECT id, name FROM users",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await;
+
+    assert!(
+        matches!(result, Err(SqlQueryError::ColumnMismatch(_))),
+        "Expected ColumnMismatch, got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn typed_query_param_conversion() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [{id: Int, name: String}]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [
+            ("id".to_string(), ExprType::simple(SimpleType::Int)),
+            ("name".to_string(), ExprType::simple(SimpleType::String)),
+        ]
+        .into_iter()
+        .collect(),
+    ))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users WHERE id = ?",
+            vec![ExprValue::Int(1)],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![ExprValue::Struct(
+        [
+            ("id".to_string(), ExprValue::Int(1)),
+            ("name".to_string(), ExprValue::String("Alice".to_string())),
+        ]
+        .into_iter()
+        .collect(),
+    )]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_tuple_output() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // [(Int, String)]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Tuple(vec![
+        ExprType::simple(SimpleType::Int),
+        ExprType::simple(SimpleType::String),
+    ]))));
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Tuple(vec![
+            ExprValue::Int(1),
+            ExprValue::String("Alice".to_string()),
+        ]),
+        ExprValue::Tuple(vec![
+            ExprValue::Int(2),
+            ExprValue::String("Bob".to_string()),
+        ]),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_optional_takes_first_row() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // {id: Int, name: String} | None — multiple rows, should take first
+    let out_type = ExprType::from_variants([
+        SimpleType::Struct(
+            [
+                ("id".to_string(), ExprType::simple(SimpleType::Int)),
+                ("name".to_string(), ExprType::simple(SimpleType::String)),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        SimpleType::None,
+    ]);
+
+    let result: ExprValue<NoObject> = handle
+        .query(
+            "SELECT id, name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    // Should return first row (Alice), ignoring Bob
+    let expected = ExprValue::Struct(
+        [
+            ("id".to_string(), ExprValue::Int(1)),
+            ("name".to_string(), ExprValue::String("Alice".to_string())),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_invalid_output_type() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast();
+
+    // Int — not a list or optional
+    let out_type = ExprType::simple(SimpleType::Int);
+
+    let result: Result<ExprValue<NoObject>, _> = handle
+        .query("SELECT id FROM users", vec![], out_type, &ast.global_env)
+        .await;
+
+    assert!(
+        matches!(result, Err(SqlQueryError::InvalidOutputType(_))),
+        "Expected InvalidOutputType, got: {:?}",
         result
     );
 }

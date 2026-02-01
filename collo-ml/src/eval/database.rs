@@ -7,6 +7,8 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use sqlx::{Row, ValueRef};
@@ -29,13 +31,32 @@ pub enum SqlQueryError {
         column: String,
         type_name: String,
     },
+    #[error("Invalid output type for query: {0}")]
+    InvalidOutputType(String),
+    #[error("Column mismatch: {0}")]
+    ColumnMismatch(String),
+    #[error("Parameter conversion failed at index {index}")]
+    ParamConversionError { index: usize },
+    #[error("Result conversion failed at row {row}, column \"{column}\"")]
+    ResultConversionError { row: usize, column: String },
 }
 
 /// Trait for database connection backends.
-///
-/// Minimal for now — more methods (schema validation, query execution) will be added later.
 pub trait DatabaseConnection: fmt::Debug + Send + Sync {
     fn name(&self) -> &str;
+
+    fn query<'a>(
+        &'a self,
+        sql: &'a str,
+        params: Vec<DbValue>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<(Vec<BTreeMap<String, DbValue>>, Vec<String>), SqlQueryError>,
+                > + Send
+                + 'a,
+        >,
+    >;
 }
 
 /// Type-erased wrapper around a `DatabaseConnection`.
@@ -137,105 +158,6 @@ impl SqliteDatabaseConnection {
             tx: tokio::sync::Mutex::new(tx),
         })
     }
-
-    /// Execute a SQL query with bound parameters and return rows as maps.
-    ///
-    /// Returns `(rows, column_names)` where each row is a `BTreeMap<String, DbValue>`
-    /// and `column_names` preserves the original column order.
-    pub async fn query(
-        &self,
-        sql: &str,
-        params: Vec<DbValue>,
-    ) -> Result<(Vec<BTreeMap<String, DbValue>>, Vec<String>), SqlQueryError> {
-        use sqlx::Column;
-        use sqlx::TypeInfo;
-
-        let mut tx = self.tx.lock().await;
-
-        let mut query = sqlx::query(sql);
-        for param in params {
-            query = match param {
-                DbValue::Null => query.bind(None::<i32>),
-                DbValue::Int(v) => query.bind(v),
-                DbValue::Bool(v) => query.bind(v),
-                DbValue::String(v) => query.bind(v),
-            };
-        }
-
-        let rows = query
-            .fetch_all(&mut **tx)
-            .await
-            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-
-        if rows.is_empty() {
-            return Ok((vec![], vec![]));
-        }
-
-        // Extract column names from the first row
-        let columns: Vec<String> = rows[0]
-            .columns()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect();
-
-        // Check for duplicate column names
-        {
-            let mut seen = std::collections::HashSet::new();
-            for name in &columns {
-                if !seen.insert(name) {
-                    return Err(SqlQueryError::DuplicateColumnName(name.clone()));
-                }
-            }
-        }
-
-        // Decode rows
-        let mut result = Vec::with_capacity(rows.len());
-        for (row_idx, row) in rows.iter().enumerate() {
-            let mut map = BTreeMap::new();
-            for (col_idx, col_name) in columns.iter().enumerate() {
-                let raw = row
-                    .try_get_raw(col_idx)
-                    .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-                let type_name = raw.type_info().name().to_uppercase();
-                let value = if raw.is_null() {
-                    DbValue::Null
-                } else {
-                    match type_name.as_str() {
-                        "INTEGER" | "INT" => {
-                            let v: i32 = row
-                                .try_get(col_idx)
-                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-                            DbValue::Int(v)
-                        }
-                        "TEXT" => {
-                            let v: String = row
-                                .try_get(col_idx)
-                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-                            DbValue::String(v)
-                        }
-                        "BOOLEAN" | "BOOL" => {
-                            let v: bool = row
-                                .try_get(col_idx)
-                                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-                            DbValue::Bool(v)
-                        }
-                        "NULL" => DbValue::Null,
-                        _ => {
-                            return Err(SqlQueryError::UnsupportedColumnType {
-                                row: row_idx,
-                                column: col_name.clone(),
-                                type_name,
-                            });
-                        }
-                    }
-                };
-                map.insert(col_name.clone(), value);
-            }
-            result.push(map);
-        }
-
-        Ok((result, columns))
-    }
 }
 
 impl fmt::Debug for SqliteDatabaseConnection {
@@ -247,6 +169,110 @@ impl fmt::Debug for SqliteDatabaseConnection {
 impl DatabaseConnection for SqliteDatabaseConnection {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn query<'a>(
+        &'a self,
+        sql: &'a str,
+        params: Vec<DbValue>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<(Vec<BTreeMap<String, DbValue>>, Vec<String>), SqlQueryError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            use sqlx::Column;
+            use sqlx::TypeInfo;
+
+            let mut tx = self.tx.lock().await;
+
+            let mut query = sqlx::query(sql);
+            for param in params {
+                query = match param {
+                    DbValue::Null => query.bind(None::<i32>),
+                    DbValue::Int(v) => query.bind(v),
+                    DbValue::Bool(v) => query.bind(v),
+                    DbValue::String(v) => query.bind(v),
+                };
+            }
+
+            let rows = query
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+
+            if rows.is_empty() {
+                return Ok((vec![], vec![]));
+            }
+
+            // Extract column names from the first row
+            let columns: Vec<String> = rows[0]
+                .columns()
+                .iter()
+                .map(|c| c.name().to_string())
+                .collect();
+
+            // Check for duplicate column names
+            {
+                let mut seen = std::collections::HashSet::new();
+                for name in &columns {
+                    if !seen.insert(name) {
+                        return Err(SqlQueryError::DuplicateColumnName(name.clone()));
+                    }
+                }
+            }
+
+            // Decode rows
+            let mut result = Vec::with_capacity(rows.len());
+            for (row_idx, row) in rows.iter().enumerate() {
+                let mut map = BTreeMap::new();
+                for (col_idx, col_name) in columns.iter().enumerate() {
+                    let raw = row
+                        .try_get_raw(col_idx)
+                        .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                    let type_name = raw.type_info().name().to_uppercase();
+                    let value = if raw.is_null() {
+                        DbValue::Null
+                    } else {
+                        match type_name.as_str() {
+                            "INTEGER" | "INT" => {
+                                let v: i32 = row
+                                    .try_get(col_idx)
+                                    .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                                DbValue::Int(v)
+                            }
+                            "TEXT" => {
+                                let v: String = row
+                                    .try_get(col_idx)
+                                    .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                                DbValue::String(v)
+                            }
+                            "BOOLEAN" | "BOOL" => {
+                                let v: bool = row
+                                    .try_get(col_idx)
+                                    .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+                                DbValue::Bool(v)
+                            }
+                            "NULL" => DbValue::Null,
+                            _ => {
+                                return Err(SqlQueryError::UnsupportedColumnType {
+                                    row: row_idx,
+                                    column: col_name.clone(),
+                                    type_name,
+                                });
+                            }
+                        }
+                    };
+                    map.insert(col_name.clone(), value);
+                }
+                result.push(map);
+            }
+
+            Ok((result, columns))
+        })
     }
 }
 
@@ -329,6 +355,320 @@ impl<T: EvalObject> TryFrom<ExprValue<T>> for DbValue {
             ExprValue::String(v) => Ok(DbValue::String(v)),
             ExprValue::Custom(custom) => DbValue::try_from(custom.content),
             _ => Err(DbConversionError),
+        }
+    }
+}
+
+// =============================================================================
+// Typed query helpers
+// =============================================================================
+
+/// Wrap an `ExprValue` to match a target `ExprType`, adding `Custom` wrappers as needed.
+///
+/// Iterates over the target's variants and returns the first successful wrapping.
+fn wrap_expr_value<T: EvalObject>(
+    value: ExprValue<T>,
+    target: &ExprType,
+    env: &GlobalEnv,
+) -> Result<ExprValue<T>, DbConversionError> {
+    for variant in target.get_variants() {
+        if let Ok(v) = try_wrap_to(value.clone(), variant, env) {
+            return Ok(v);
+        }
+    }
+    Err(DbConversionError)
+}
+
+/// Try to wrap an `ExprValue` to match a single `SimpleType` variant.
+fn try_wrap_to<T: EvalObject>(
+    value: ExprValue<T>,
+    variant: &SimpleType,
+    env: &GlobalEnv,
+) -> Result<ExprValue<T>, DbConversionError> {
+    match variant {
+        SimpleType::None => {
+            if matches!(value, ExprValue::None) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::Struct(_) => {
+            if matches!(value, ExprValue::Struct(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::Tuple(_) => {
+            if matches!(value, ExprValue::Tuple(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::List(_) => {
+            if matches!(value, ExprValue::List(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::Custom(module, root, variant_name) => {
+            let qualified = match variant_name {
+                Some(v) => format!("{}::{}", root, v),
+                None => root.clone(),
+            };
+            let underlying = env
+                .get_custom_type_underlying(module, &qualified)
+                .ok_or(DbConversionError)?;
+            let inner = wrap_expr_value(value, underlying, env)?;
+            Ok(ExprValue::Custom(Box::new(super::values::CustomValue {
+                module: module.clone(),
+                type_name: root.clone(),
+                variant: variant_name.clone(),
+                content: inner,
+            })))
+        }
+        _ => Err(DbConversionError),
+    }
+}
+
+enum OutputMode {
+    List,
+    Optional,
+}
+
+enum ResolvedRowShape {
+    Struct(BTreeMap<String, ExprType>),
+    Tuple(Vec<ExprType>),
+}
+
+fn convert_params<T: EvalObject>(params: Vec<ExprValue<T>>) -> Result<Vec<DbValue>, SqlQueryError> {
+    params
+        .into_iter()
+        .enumerate()
+        .map(|(index, p)| {
+            DbValue::try_from(p).map_err(|_| SqlQueryError::ParamConversionError { index })
+        })
+        .collect()
+}
+
+fn classify_output_type(
+    out_type: &ExprType,
+    env: &GlobalEnv,
+) -> Result<(OutputMode, ResolvedRowShape, ExprType), SqlQueryError> {
+    let resolved = env
+        .resolve_type_deep(out_type)
+        .ok_or_else(|| SqlQueryError::InvalidOutputType("cyclic type".to_string()))?;
+
+    match resolved.len() {
+        // 1 element — must be List(inner)
+        1 => {
+            let variant = &resolved[0];
+            let inner_type = match variant {
+                SimpleType::List(inner) => inner,
+                _ => {
+                    return Err(SqlQueryError::InvalidOutputType(format!(
+                        "expected list or optional type, got single non-list variant"
+                    )));
+                }
+            };
+            // Resolve the inner type to get the row shape
+            let inner_resolved = env.resolve_type_deep(inner_type).ok_or_else(|| {
+                SqlQueryError::InvalidOutputType("cyclic type in list element".to_string())
+            })?;
+            if inner_resolved.len() != 1 {
+                return Err(SqlQueryError::InvalidOutputType(format!(
+                    "list element type must resolve to a single struct or tuple, got {} variants",
+                    inner_resolved.len()
+                )));
+            }
+            let shape = match &inner_resolved[0] {
+                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
+                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
+                _ => {
+                    return Err(SqlQueryError::InvalidOutputType(
+                        "list element must be a struct or tuple".to_string(),
+                    ));
+                }
+            };
+            Ok((OutputMode::List, shape, inner_type.clone()))
+        }
+        // 2 elements — one None, one other (optional)
+        2 => {
+            let non_none: Vec<_> = resolved.iter().filter(|v| !v.is_none()).collect();
+            let none_count = resolved.iter().filter(|v| v.is_none()).count();
+            if none_count != 1 || non_none.len() != 1 {
+                return Err(SqlQueryError::InvalidOutputType(
+                    "expected exactly one None and one non-None variant for optional type"
+                        .to_string(),
+                ));
+            }
+            let shape = match non_none[0] {
+                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
+                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
+                _ => {
+                    return Err(SqlQueryError::InvalidOutputType(
+                        "optional variant must be a struct or tuple".to_string(),
+                    ));
+                }
+            };
+            // Build the row target type from the original out_type's non-None variants
+            let row_target_type = ExprType::from_variants(
+                out_type
+                    .get_variants()
+                    .iter()
+                    .filter(|v| !v.is_none())
+                    .cloned(),
+            );
+            Ok((OutputMode::Optional, shape, row_target_type))
+        }
+        _ => Err(SqlQueryError::InvalidOutputType(format!(
+            "output type must resolve to a list or an optional (None | T), got {} variants",
+            resolved.len()
+        ))),
+    }
+}
+
+fn validate_columns(shape: &ResolvedRowShape, columns: &[String]) -> Result<(), SqlQueryError> {
+    match shape {
+        ResolvedRowShape::Struct(fields) => {
+            if fields.len() != columns.len() {
+                return Err(SqlQueryError::ColumnMismatch(format!(
+                    "expected {} columns, got {}",
+                    fields.len(),
+                    columns.len()
+                )));
+            }
+            for col in columns {
+                if !fields.contains_key(col) {
+                    return Err(SqlQueryError::ColumnMismatch(format!(
+                        "column \"{}\" not found in struct fields",
+                        col
+                    )));
+                }
+            }
+            Ok(())
+        }
+        ResolvedRowShape::Tuple(elements) => {
+            if elements.len() != columns.len() {
+                return Err(SqlQueryError::ColumnMismatch(format!(
+                    "expected {} columns for tuple, got {}",
+                    elements.len(),
+                    columns.len()
+                )));
+            }
+            Ok(())
+        }
+    }
+}
+
+fn convert_row<T: EvalObject>(
+    row: &BTreeMap<String, DbValue>,
+    columns: &[String],
+    shape: &ResolvedRowShape,
+    row_idx: usize,
+    env: &GlobalEnv,
+) -> Result<ExprValue<T>, SqlQueryError> {
+    match shape {
+        ResolvedRowShape::Struct(fields) => {
+            let mut struct_fields = BTreeMap::new();
+            for (col_name, db_val) in row {
+                let field_type = &fields[col_name];
+                let val = db_val.clone().to_expr_value(env, field_type).map_err(|_| {
+                    SqlQueryError::ResultConversionError {
+                        row: row_idx,
+                        column: col_name.clone(),
+                    }
+                })?;
+                struct_fields.insert(col_name.clone(), val);
+            }
+            Ok(ExprValue::Struct(struct_fields))
+        }
+        ResolvedRowShape::Tuple(elements) => {
+            let mut values = Vec::with_capacity(columns.len());
+            for (i, col_name) in columns.iter().enumerate() {
+                let db_val = &row[col_name];
+                let elem_type = &elements[i];
+                let val = db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
+                    SqlQueryError::ResultConversionError {
+                        row: row_idx,
+                        column: col_name.clone(),
+                    }
+                })?;
+                values.push(val);
+            }
+            Ok(ExprValue::Tuple(values))
+        }
+    }
+}
+
+fn build_empty_result<T: EvalObject>(
+    mode: &OutputMode,
+    out_type: &ExprType,
+    env: &GlobalEnv,
+) -> Result<ExprValue<T>, SqlQueryError> {
+    let raw = match mode {
+        OutputMode::Optional => ExprValue::None,
+        OutputMode::List => ExprValue::List(vec![]),
+    };
+    wrap_expr_value(raw, out_type, env)
+        .map_err(|_| SqlQueryError::InvalidOutputType("cannot wrap empty result".to_string()))
+}
+
+// =============================================================================
+// DatabaseHandle::query
+// =============================================================================
+
+impl DatabaseHandle {
+    pub async fn query<T: EvalObject>(
+        &self,
+        sql: &str,
+        params: Vec<ExprValue<T>>,
+        out_type: ExprType,
+        global_env: &GlobalEnv,
+    ) -> Result<ExprValue<T>, SqlQueryError> {
+        // 1. Convert params
+        let db_params = convert_params(params)?;
+
+        // 2. Classify output type
+        let (mode, shape, row_target_type) = classify_output_type(&out_type, global_env)?;
+
+        // 3. Execute raw query
+        let (rows, columns) = self.inner.query(sql, db_params).await?;
+
+        // 4. Empty result shortcut
+        if rows.is_empty() {
+            return build_empty_result(&mode, &out_type, global_env);
+        }
+
+        // 5. Validate columns
+        validate_columns(&shape, &columns)?;
+
+        // 6. Convert rows
+        match mode {
+            OutputMode::Optional => {
+                let row_val = convert_row(&rows[0], &columns, &shape, 0, global_env)?;
+                wrap_expr_value(row_val, &out_type, global_env).map_err(|_| {
+                    SqlQueryError::InvalidOutputType("cannot wrap optional result".to_string())
+                })
+            }
+            OutputMode::List => {
+                let mut list = Vec::with_capacity(rows.len());
+                for (i, row) in rows.iter().enumerate() {
+                    let row_val = convert_row(row, &columns, &shape, i, global_env)?;
+                    let wrapped =
+                        wrap_expr_value(row_val, &row_target_type, global_env).map_err(|_| {
+                            SqlQueryError::InvalidOutputType("cannot wrap list row".to_string())
+                        })?;
+                    list.push(wrapped);
+                }
+                let list_val = ExprValue::List(list);
+                wrap_expr_value(list_val, &out_type, global_env).map_err(|_| {
+                    SqlQueryError::InvalidOutputType("cannot wrap list result".to_string())
+                })
+            }
         }
     }
 }
