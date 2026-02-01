@@ -1,47 +1,76 @@
-use super::types::SimpleType;
+use super::types::{ExprType, SimpleType};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[error("Cannot convert to database type: not representable")]
 pub struct DbConversionError;
 
+/// A database-level type. Each variant carries a `bool` indicating nullability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DbType {
-    Int,
-    Bool,
-    String,
+    Int(bool),
+    Bool(bool),
+    String(bool),
 }
 
 impl DbType {
-    pub fn as_simple_type(&self) -> SimpleType {
+    pub fn is_nullable(&self) -> bool {
         match self {
-            DbType::Int => SimpleType::Int,
-            DbType::Bool => SimpleType::Bool,
-            DbType::String => SimpleType::String,
+            DbType::Int(n) | DbType::Bool(n) | DbType::String(n) => *n,
+        }
+    }
+
+    /// Convert from a deep-resolved type list (output of `GlobalEnv::resolve_type_deep`).
+    ///
+    /// Valid patterns:
+    /// - `[Int]` → `DbType::Int(false)`, `[Bool]` → …, `[String]` → …
+    /// - `[None, Int]` → `DbType::Int(true)`, etc. (order doesn't matter)
+    pub fn try_from_resolved(resolved: &[SimpleType]) -> Result<Self, DbConversionError> {
+        match resolved.len() {
+            1 => Self::from_primitive(&resolved[0]),
+            2 => {
+                let nones = resolved.iter().filter(|v| v.is_none()).count();
+                if nones != 1 {
+                    return Err(DbConversionError);
+                }
+                let non_none = resolved.iter().find(|v| !v.is_none()).unwrap();
+                Self::from_primitive(non_none).map(|db| db.as_nullable())
+            }
+            _ => Err(DbConversionError),
+        }
+    }
+
+    /// Map a single primitive SimpleType to a non-nullable DbType.
+    fn from_primitive(value: &SimpleType) -> Result<Self, DbConversionError> {
+        match value {
+            SimpleType::Int => Ok(DbType::Int(false)),
+            SimpleType::Bool => Ok(DbType::Bool(false)),
+            SimpleType::String => Ok(DbType::String(false)),
+            _ => Err(DbConversionError),
+        }
+    }
+
+    fn as_nullable(self) -> Self {
+        match self {
+            DbType::Int(_) => DbType::Int(true),
+            DbType::Bool(_) => DbType::Bool(true),
+            DbType::String(_) => DbType::String(true),
         }
     }
 }
 
-impl TryFrom<SimpleType> for DbType {
+/// Convert from an ExprType by examining its variants directly (no deep resolution).
+impl TryFrom<&ExprType> for DbType {
     type Error = DbConversionError;
-    fn try_from(value: SimpleType) -> Result<Self, Self::Error> {
-        match value {
-            SimpleType::Int => Ok(DbType::Int),
-            SimpleType::Bool => Ok(DbType::Bool),
-            SimpleType::String => Ok(DbType::String),
-            _ => Err(DbConversionError),
-        }
+    fn try_from(value: &ExprType) -> Result<Self, Self::Error> {
+        let variants: Vec<_> = value.get_variants().iter().cloned().collect();
+        Self::try_from_resolved(&variants)
     }
 }
 
-impl TryFrom<&SimpleType> for DbType {
+impl TryFrom<ExprType> for DbType {
     type Error = DbConversionError;
-    fn try_from(value: &SimpleType) -> Result<Self, Self::Error> {
-        match value {
-            SimpleType::Int => Ok(DbType::Int),
-            SimpleType::Bool => Ok(DbType::Bool),
-            SimpleType::String => Ok(DbType::String),
-            _ => Err(DbConversionError),
-        }
+    fn try_from(value: ExprType) -> Result<Self, Self::Error> {
+        DbType::try_from(&value)
     }
 }

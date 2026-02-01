@@ -9,7 +9,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::values::ExprValue;
-use crate::semantics::database::{DbConversionError, DbType};
+use crate::semantics::database::DbConversionError;
 use crate::traits::EvalObject;
 
 /// Trait for database connection backends.
@@ -110,44 +110,22 @@ impl DatabaseConnection for SqliteDatabaseConnection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DbValue {
+    Null,
     Int(i32),
     Bool(bool),
     String(String),
 }
 
-impl DbValue {
-    pub fn db_type(&self) -> DbType {
-        match self {
-            DbValue::Int(_) => DbType::Int,
-            DbValue::Bool(_) => DbType::Bool,
-            DbValue::String(_) => DbType::String,
-        }
-    }
-
-    pub fn as_expr_value<T: EvalObject>(&self) -> ExprValue<T> {
-        match self {
-            DbValue::Int(v) => ExprValue::Int(*v),
-            DbValue::Bool(v) => ExprValue::Bool(*v),
-            DbValue::String(v) => ExprValue::String(v.clone()),
-        }
-    }
-
-    pub fn to_expr_value<T: EvalObject>(self) -> ExprValue<T> {
-        match self {
-            DbValue::Int(v) => ExprValue::Int(v),
-            DbValue::Bool(v) => ExprValue::Bool(v),
-            DbValue::String(v) => ExprValue::String(v),
-        }
-    }
-}
-
+/// Recursively unwraps `ExprValue::Custom` wrappers, then converts the leaf value.
 impl<T: EvalObject> TryFrom<ExprValue<T>> for DbValue {
     type Error = DbConversionError;
     fn try_from(value: ExprValue<T>) -> Result<Self, Self::Error> {
         match value {
+            ExprValue::None => Ok(DbValue::Null),
             ExprValue::Int(v) => Ok(DbValue::Int(v)),
             ExprValue::Bool(v) => Ok(DbValue::Bool(v)),
             ExprValue::String(v) => Ok(DbValue::String(v)),
+            ExprValue::Custom(custom) => DbValue::try_from(custom.content),
             _ => Err(DbConversionError),
         }
     }

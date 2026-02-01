@@ -4,6 +4,7 @@
 //! including type declarations, enum declarations, function signatures,
 //! reify statements, and function body validation.
 
+use super::database::DbType;
 use super::errors::{ArgsType, FunctionType, GlobalEnvError, SemError, SemWarning};
 use super::global_env::{GlobalEnv, ObjectFields, Symbol, SymbolPath, TypeDesc, TypeInfo};
 use super::local_env::LocalCheckEnv;
@@ -12,23 +13,6 @@ use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
 use std::collections::{BTreeMap, HashMap};
-
-/// Check if a deep-resolved type is SQL-compatible.
-/// Valid: Int, Bool, String, ?Int, ?Bool, ?String (after deep resolution).
-fn is_sql_compatible_resolved(resolved: &[SimpleType]) -> bool {
-    fn is_sql_primitive(t: &SimpleType) -> bool {
-        matches!(t, SimpleType::Int | SimpleType::Bool | SimpleType::String)
-    }
-    match resolved.len() {
-        1 => is_sql_primitive(&resolved[0]),
-        2 => {
-            let nones = resolved.iter().filter(|v| v.is_none()).count();
-            let prims = resolved.iter().filter(|v| is_sql_primitive(v)).count();
-            nones == 1 && prims == 1
-        }
-        _ => false,
-    }
-}
 
 impl GlobalEnv {
     /// Create a GlobalEnv from modules
@@ -998,7 +982,7 @@ impl GlobalEnv {
         // Check: non-DB parameters must be SQL-compatible
         for (param_typ, param) in params_typ.iter().skip(1).zip(params.iter().skip(1)) {
             if let Some(resolved) = self.resolve_type_deep(param_typ) {
-                if !is_sql_compatible_resolved(&resolved) {
+                if DbType::try_from_resolved(&resolved).is_err() {
                     errors.push(SemError::QueryParamNotSqlCompatible {
                         module: current_module.to_string(),
                         query_name: name.node.clone(),
@@ -1044,7 +1028,7 @@ impl GlobalEnv {
         if let Some(fields) = &output_struct_fields {
             for (field_name, field_typ) in fields {
                 if let Some(resolved_field) = self.resolve_type_deep(field_typ) {
-                    if !is_sql_compatible_resolved(&resolved_field) {
+                    if DbType::try_from_resolved(&resolved_field).is_err() {
                         errors.push(SemError::QueryOutputFieldNotSqlCompatible {
                             module: current_module.to_string(),
                             query_name: name.node.clone(),
