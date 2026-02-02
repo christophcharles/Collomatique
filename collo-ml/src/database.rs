@@ -81,29 +81,6 @@ pub struct SqliteDatabaseConnection {
     tx: tokio::sync::Mutex<sqlx::Transaction<'static, sqlx::Sqlite>>,
 }
 
-impl SqliteDatabaseConnection {
-    /// Create a new SQLite database connection, returning the concrete type.
-    ///
-    /// Opens a read-only transaction on the pool with `PRAGMA query_only = ON`.
-    pub async fn new_sqlite(
-        name: impl Into<String>,
-        pool: &sqlx::SqlitePool,
-    ) -> Result<Self, SqlQueryError> {
-        let mut tx = pool
-            .begin()
-            .await
-            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-        sqlx::query("PRAGMA query_only = ON")
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-        Ok(Self {
-            name: name.into(),
-            tx: tokio::sync::Mutex::new(tx),
-        })
-    }
-}
-
 impl fmt::Debug for SqliteDatabaseConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SqliteDatabaseConnection({})", self.name)
@@ -226,6 +203,29 @@ impl DatabaseConnection for SqliteDatabaseConnection {
 /// then opens a read-only connection via `SqliteDatabaseConnection`.
 pub struct SqliteDatabaseDriver;
 
+impl SqliteDatabaseDriver {
+    /// Create a new SQLite database connection from an existing pool.
+    ///
+    /// Opens a read-only transaction on the pool with `PRAGMA query_only = ON`.
+    pub async fn new_connection(
+        name: impl Into<String>,
+        pool: &sqlx::SqlitePool,
+    ) -> Result<SqliteDatabaseConnection, SqlQueryError> {
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+        sqlx::query("PRAGMA query_only = ON")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+        Ok(SqliteDatabaseConnection {
+            name: name.into(),
+            tx: tokio::sync::Mutex::new(tx),
+        })
+    }
+}
+
 impl DatabaseDriver for SqliteDatabaseDriver {
     type Connection = SqliteDatabaseConnection;
 
@@ -241,7 +241,7 @@ impl DatabaseDriver for SqliteDatabaseDriver {
                 .execute(&pool)
                 .await
                 .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
-            SqliteDatabaseConnection::new_sqlite(name, &pool).await
+            Self::new_connection(name, &pool).await
         })
     }
 }

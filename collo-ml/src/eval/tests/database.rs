@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::database::{DbValue, SqlQueryError, SqliteDatabaseConnection};
+use crate::database::{DbValue, SqlQueryError, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use crate::eval::database::DatabaseHandle;
 use crate::eval::values::{CustomValue, NoObject};
 use crate::semantics::database::DbConversionError;
@@ -441,7 +441,7 @@ async fn query_single_table() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -470,7 +470,7 @@ async fn query_with_bind_param() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -503,7 +503,7 @@ async fn query_join_two_tables() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -535,7 +535,7 @@ async fn query_duplicate_column_error() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -555,7 +555,7 @@ async fn query_empty_result() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -580,7 +580,7 @@ async fn query_null_values() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -603,7 +603,7 @@ async fn query_write_rejected() {
         .await
         .unwrap();
 
-    let conn = SqliteDatabaseConnection::new_sqlite("test", &pool)
+    let conn = SqliteDatabaseDriver::new_connection("test", &pool)
         .await
         .unwrap();
 
@@ -635,7 +635,7 @@ async fn setup_users_table(pool: &sqlx::SqlitePool) {
 
 async fn test_handle(pool: &sqlx::SqlitePool) -> DatabaseHandle<SqliteDatabaseConnection> {
     DatabaseHandle::new(
-        SqliteDatabaseConnection::new_sqlite("test", pool)
+        SqliteDatabaseDriver::new_connection("test", pool)
             .await
             .unwrap(),
     )
