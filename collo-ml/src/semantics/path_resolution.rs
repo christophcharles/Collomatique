@@ -3,6 +3,7 @@ use super::global_env::{GlobalEnv, Symbol, SymbolPath};
 use super::local_env::LocalEnvCheck;
 use super::types::SimpleType;
 use crate::ast::{Span, Spanned};
+use crate::database::DatabaseDriver;
 
 /// What kind of entity a namespace path refers to
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,10 +65,10 @@ impl PathResolutionError {
 /// 4. Local variables (from LocalEnv) - checked last for defensive programming
 ///
 /// Paths can be single-segment (`foo`) or multi-segment (`Result::Ok`, `mod::func`).
-pub fn resolve_path(
+pub fn resolve_path<D: DatabaseDriver>(
     path: &Spanned<crate::ast::NamespacePath>,
     current_module: &str,
-    global_env: &GlobalEnv,
+    global_env: &GlobalEnv<D>,
     local_env: Option<&dyn LocalEnvCheck>,
 ) -> Result<ResolvedPathKind, PathResolutionError> {
     let segments: Vec<&str> = path.node.segments.iter().map(|s| s.node.as_str()).collect();

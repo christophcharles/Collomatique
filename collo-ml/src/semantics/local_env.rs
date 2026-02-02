@@ -2,6 +2,7 @@ use super::errors::{SemError, SemWarning};
 use super::global_env::{ident_can_be_shadowed, GlobalEnv, TypeInfo};
 use super::types::ExprType;
 use crate::ast::Span;
+use crate::database::DatabaseDriver;
 use std::collections::HashMap;
 
 /// Trait for checking if an identifier exists in a local environment.
@@ -80,9 +81,9 @@ impl LocalCheckEnv {
         self.pending_scope.clear();
     }
 
-    pub(crate) fn register_identifier(
+    pub(crate) fn register_identifier<D: DatabaseDriver>(
         &mut self,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         ident: &str,
         span: Span,
         typ: ExprType,

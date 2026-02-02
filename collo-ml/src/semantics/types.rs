@@ -1,16 +1,17 @@
 use super::errors::SemWarning;
 use super::{GlobalEnv, ResolvedPathKind, SemError};
 
+use crate::database::DatabaseDriver;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
 };
 
 /// Helper to resolve a type path using the symbol table
-fn resolve_type_path(
+fn resolve_type_path<D: DatabaseDriver>(
     segments: Vec<String>,
     current_module: &str,
-    global_env: &GlobalEnv,
+    global_env: &GlobalEnv<D>,
 ) -> Option<SimpleType> {
     // Construct a fake Spanned<NamespacePath> for resolve_path
     let dummy_span = crate::ast::Span { start: 0, end: 0 };
@@ -551,10 +552,10 @@ impl From<SimpleType> for ExprType {
 impl SimpleType {
     /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
     /// using resolve_path for consistent symbol table lookup.
-    pub fn from_ast(
+    pub fn from_ast<D: DatabaseDriver>(
         value: crate::ast::SimpleTypeName,
         current_module: &str,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
@@ -622,10 +623,10 @@ impl SimpleType {
 impl ExprType {
     /// Convert an AST TypeName to an ExprType, resolving named types
     /// using resolve_path for consistent symbol table lookup.
-    pub fn from_ast(
+    pub fn from_ast<D: DatabaseDriver>(
         value: crate::ast::Spanned<crate::ast::TypeName>,
         current_module: &str,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, SemError> {
         if value.node.types.is_empty() {

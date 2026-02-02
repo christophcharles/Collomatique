@@ -28,7 +28,7 @@ pub(crate) use crate::database::DatabaseConnection;
 #[cfg(test)]
 pub(crate) use crate::eval::ExternVar;
 #[cfg(test)]
-pub(crate) use crate::eval::SqliteDatabaseConnection;
+pub(crate) use crate::eval::SqliteDatabaseDriver;
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]

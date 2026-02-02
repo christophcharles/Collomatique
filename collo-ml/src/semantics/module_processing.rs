@@ -12,9 +12,10 @@ use super::path_resolution::{resolve_path, ResolvedPathKind};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
+use crate::database::DatabaseDriver;
 use std::collections::{BTreeMap, HashMap};
 
-impl GlobalEnv {
+impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
     pub fn new(
         object_types: HashMap<String, ObjectFields>,
@@ -44,6 +45,7 @@ impl GlobalEnv {
             internal_variables: HashMap::new(),
             variable_lists: HashMap::new(),
             symbols: HashMap::new(),
+            _phantom: std::marker::PhantomData,
         };
 
         for (object_type, field_desc) in &temp_env.object_types {

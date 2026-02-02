@@ -10,7 +10,9 @@ use derivative::Derivative;
 
 use super::history::{EvalHistory, VariableDefinitions};
 use super::values::{ExprValue, NoObject, NoObjectEnv};
-use crate::database::{DatabaseConnection, SqliteDatabaseConnection};
+use crate::database::{
+    DatabaseConnection, DatabaseDriver, SqliteDatabaseConnection, SqliteDatabaseDriver,
+};
 use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,
@@ -26,13 +28,13 @@ use thiserror::Error;
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
-pub struct CheckedAST<T: EvalObject, D: DatabaseConnection> {
-    pub(crate) global_env: GlobalEnv,
+pub struct CheckedAST<T: EvalObject, D: DatabaseDriver> {
+    pub(crate) global_env: GlobalEnv<D>,
     pub(crate) type_info: TypeInfo,
     pub(crate) expr_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) resolved_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) warnings: Vec<SemWarning>,
-    pub(crate) _phantom: std::marker::PhantomData<(T, D)>,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -87,7 +89,7 @@ pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
     Panic(Box<ExprValue<T, D>>),
 }
 
-impl CheckedAST<NoObject, SqliteDatabaseConnection> {
+impl CheckedAST<NoObject, SqliteDatabaseDriver> {
     pub fn quick_eval_fn(
         &self,
         module: &str,
@@ -102,7 +104,7 @@ impl CheckedAST<NoObject, SqliteDatabaseConnection> {
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
+impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
     /// Create a CheckedAST from source modules
     pub fn new(
         inputs: &BTreeMap<&str, &str>,
@@ -140,7 +142,7 @@ impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
         })
     }
 
-    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T, D>> {
+    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T, D::Connection>> {
         for (typ, _fields) in self.global_env.get_types() {
             let objects = T::objects_with_typ(env, typ.as_str());
 
@@ -223,7 +225,7 @@ impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
     pub fn start_eval_history<'a>(
         &'a self,
         env: &'a T::Env,
-    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D>> {
+    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D::Connection>> {
         let cache = T::Cache::default();
         EvalHistory::new(self, env, cache)
     }
@@ -232,7 +234,7 @@ impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
         &'a self,
         env: &'a T::Env,
         cache: T::Cache,
-    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D>> {
+    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D::Connection>> {
         EvalHistory::new(self, env, cache)
     }
 
@@ -241,8 +243,8 @@ impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
         env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D>>,
-    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
+        args: Vec<ExprValue<T, D::Connection>>,
+    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
         let mut eval_history = self.start_eval_history(env)?;
         Ok(eval_history.eval_fn(module, fn_name, args)?.0)
     }
@@ -252,8 +254,14 @@ impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
         env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D>>,
-    ) -> Result<(ExprValue<T, D>, VariableDefinitions<T, D>), EvalError<T, D>> {
+        args: Vec<ExprValue<T, D::Connection>>,
+    ) -> Result<
+        (
+            ExprValue<T, D::Connection>,
+            VariableDefinitions<T, D::Connection>,
+        ),
+        EvalError<T, D::Connection>,
+    > {
         let mut eval_history = self.start_eval_history(env)?;
         let (r, _o) = eval_history.eval_fn(module, fn_name, args)?;
         Ok((r, eval_history.into_var_def()))

@@ -1,7 +1,7 @@
 use super::*;
 
 /// Helper to compile multiple modules
-fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseConnection> {
+fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
     let inputs: BTreeMap<&str, &str> = modules.iter().copied().collect();
     CheckedAST::new(&inputs, HashMap::new()).expect("Should compile")
 }

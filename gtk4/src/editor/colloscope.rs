@@ -20,7 +20,7 @@ use collomatique_binding_colloscopes::scripts::SimpleProblemError;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collomatique_binding_colloscopes::views::ObjectId,
-    collo_ml::SqliteDatabaseConnection,
+    collo_ml::SqliteDatabaseDriver,
     collomatique_binding_colloscopes::vars::Var,
 >;
 

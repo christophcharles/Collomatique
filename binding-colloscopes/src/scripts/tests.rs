@@ -6,7 +6,7 @@ use super::*;
 fn modules_should_compile() {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", get_default_main_module());
-    let _builder = ProblemBuilder::<ObjectId, SqliteDatabaseConnection, Var>::new(&modules)
+    let _builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("Should compile modules");
 }
 
@@ -14,7 +14,7 @@ fn modules_should_compile() {
 fn modules_should_compile_without_warnings() {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", get_default_main_module());
-    let builder = ProblemBuilder::<ObjectId, SqliteDatabaseConnection, Var>::new(&modules)
+    let builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("Should compile modules");
 
     let warnings = builder.get_warnings();

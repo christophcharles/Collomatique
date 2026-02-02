@@ -66,7 +66,7 @@ fn simple_objective_selects_solution() {
             pub let maximize_v() -> LinExpr = $V();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -171,7 +171,7 @@ fn objective_direction_changes_solution() {
             pub let minimize_v() -> LinExpr = $V();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

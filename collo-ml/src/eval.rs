@@ -22,7 +22,8 @@ mod tests;
 // Re-export public types
 pub use checked_ast::{CheckedAST, CompileError, EnvError, EvalError};
 pub use database::{
-    DatabaseConnection, DatabaseHandle, DbValue, SqlQueryError, SqliteDatabaseConnection,
+    DatabaseConnection, DatabaseDriver, DatabaseHandle, DbValue, SqlQueryError,
+    SqliteDatabaseConnection, SqliteDatabaseDriver,
 };
 pub use history::{EvalHistory, VariableDefinitions};
 pub use values::{CustomValue, ExprValue, NoObject, NoObjectEnv};

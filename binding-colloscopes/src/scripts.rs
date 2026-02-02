@@ -1,7 +1,7 @@
 use super::{vars::Var, views::ObjectId};
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::SqliteDatabaseConnection;
+use collo_ml::SqliteDatabaseDriver;
 use collo_ml::{SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
@@ -94,11 +94,11 @@ mod tests;
 
 pub fn default_problem_builder(
     main_module: &str,
-) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseConnection, Var>, SimpleProblemError> {
+) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseDriver, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::<ObjectId, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
         .map_err(|e| {
             // Filter ProblemError into SimpleProblemError
             match e {

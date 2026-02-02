@@ -66,7 +66,7 @@ fn constraints_and_objectives_same_call() {
             pub let objective() -> LinExpr = $V();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

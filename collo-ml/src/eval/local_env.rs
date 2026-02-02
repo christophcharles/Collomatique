@@ -8,26 +8,26 @@ use super::history::EvalHistory;
 use super::values::{CustomValue, ExprValue};
 use super::variables::{ExternVar, IlpVar, ScriptVar};
 use crate::ast::{Span, Spanned};
-use crate::database::DatabaseConnection;
+use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::semantics::{resolve_path, LocalEnvCheck, ResolvedPathKind, SimpleType};
 use crate::traits::EvalObject;
 use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseConnection> {
-    scopes: Vec<HashMap<String, ExprValue<T, D>>>,
-    pending_scope: HashMap<String, ExprValue<T, D>>,
+pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseDriver> {
+    scopes: Vec<HashMap<String, ExprValue<T, D::Connection>>>,
+    pending_scope: HashMap<String, ExprValue<T, D::Connection>>,
     current_module: String,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> LocalEnvCheck for LocalEvalEnv<T, D> {
+impl<T: EvalObject, D: DatabaseDriver> LocalEnvCheck for LocalEvalEnv<T, D> {
     fn has_ident(&self, ident: &str) -> bool {
         self.lookup_ident(ident).is_some()
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
+impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     pub(crate) fn new(current_module: &str) -> Self {
         LocalEvalEnv {
             scopes: vec![],
@@ -40,7 +40,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         &self.current_module
     }
 
-    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T, D>> {
+    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T, D::Connection>> {
         // We don't look in pending scope as these variables are not yet accessible
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(ident) {
@@ -64,7 +64,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         self.pending_scope.clear();
     }
 
-    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D>) {
+    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D::Connection>) {
         assert!(!self.pending_scope.contains_key(ident));
 
         self.pending_scope.insert(ident.to_string(), value);
@@ -74,7 +74,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         &mut self,
         eval_history: &mut EvalHistory<'_, T, D>,
         expr: &Spanned<crate::ast::Expr>,
-    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
+    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
         use crate::ast::Expr;
         Ok(match &expr.node {
             Expr::None => ExprValue::None,
@@ -151,7 +151,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
                             match unwrapped {
                                 ExprValue::Object(obj) => {
                                     current_value = obj
-                                        .field_access::<D>(
+                                        .field_access::<D::Connection>(
                                             &eval_history.env,
                                             &mut eval_history.cache,
                                             field_name,
@@ -1179,7 +1179,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
                     .map(|(name, expr)| {
                         Ok((name.node.clone(), self.eval_expr(eval_history, expr)?))
                     })
-                    .collect::<Result<_, EvalError<T, D>>>()?;
+                    .collect::<Result<_, EvalError<T, D::Connection>>>()?;
 
                 ExprValue::Struct(field_values)
             }
@@ -1194,7 +1194,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         module: &str,
         name: &str,
         args: &[Spanned<crate::ast::Expr>],
-    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
+    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
         use crate::database::SqlQueryError;
 
         let query_desc = eval_history
@@ -1206,7 +1206,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         let sql = query_desc.query_string.node.clone();
         let out_type = query_desc.typ.output.clone();
 
-        let evaluated_args: Vec<ExprValue<T, D>> = args
+        let evaluated_args: Vec<ExprValue<T, D::Connection>> = args
             .iter()
             .map(|x| self.eval_expr(eval_history, x))
             .collect::<Result<_, _>>()?;
@@ -1222,7 +1222,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
             }
         };
 
-        let params: Vec<ExprValue<T, D>> = evaluated_args[1..].to_vec();
+        let params: Vec<ExprValue<T, D::Connection>> = evaluated_args[1..].to_vec();
 
         let global_env = &eval_history.ast.global_env;
 
@@ -1248,7 +1248,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         eval_history: &mut EvalHistory<'_, T, D>,
         simple_type: &SimpleType,
         args: &Vec<Spanned<crate::ast::Expr>>,
-    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
+    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
         match simple_type {
             // Built-in type casts: Int(x), Bool(x), String(x), etc.
             SimpleType::Int
@@ -1303,7 +1303,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
                     }
                 } else if is_tuple {
                     // Tuple variant - evaluate all args
-                    let values: Vec<ExprValue<T, D>> = args
+                    let values: Vec<ExprValue<T, D::Connection>> = args
                         .iter()
                         .map(|x| self.eval_expr(eval_history, &x))
                         .collect::<Result<_, _>>()?;
@@ -1332,7 +1332,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         body: &Spanned<crate::ast::Expr>,
         vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
         filter: Option<&Spanned<crate::ast::Expr>>,
-    ) -> Result<Vec<ExprValue<T, D>>, EvalError<T, D>> {
+    ) -> Result<Vec<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
         if vars_and_collections.is_empty() {
             let cond = match filter {
                 None => true,

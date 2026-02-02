@@ -6,7 +6,7 @@
 
 use super::solution::Problem;
 use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
-use crate::database::DatabaseConnection;
+use crate::database::DatabaseDriver;
 use crate::eval::{CheckedAST, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
 use crate::semantics::ArgsType;
 use crate::traits::{EvalObject, FieldConversionError, VarConversionError};
@@ -25,8 +25,8 @@ use std::collections::{BTreeMap, HashMap};
 )]
 pub struct ProblemBuilder<
     T: EvalObject,
-    D: DatabaseConnection,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D>, Error = VarConversionError>,
+    D: DatabaseDriver,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     /// Compiled AST (all modules compiled together)
     pub(crate) ast: CheckedAST<T, D>,
@@ -38,14 +38,14 @@ pub struct ProblemBuilder<
 
     /// Pending constraint function calls (validated but not yet evaluated)
     /// Format: (module, fn_name, args)
-    pending_constraints: Vec<(String, String, Vec<ExprValue<T, D>>)>,
+    pending_constraints: Vec<(String, String, Vec<ExprValue<T, D::Connection>>)>,
 
     /// Pending objective function calls (validated but not yet evaluated)
     /// Format: (module, fn_name, args, coefficient, sense)
     pending_objectives: Vec<(
         String,
         String,
-        Vec<ExprValue<T, D>>,
+        Vec<ExprValue<T, D::Connection>>,
         ordered_float::OrderedFloat<f64>,
         ObjectiveSense,
     )>,
@@ -56,8 +56,8 @@ pub struct ProblemBuilder<
 pub(crate) struct EvalData<
     'a,
     T: EvalObject,
-    D: DatabaseConnection,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D>, Error = VarConversionError>,
+    D: DatabaseDriver,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     pub(crate) builder: ProblemBuilder<T, D, V>,
 
@@ -65,10 +65,13 @@ pub(crate) struct EvalData<
     pub(crate) env: &'a T::Env,
 
     /// List of constraints incrementally built (populated during build())
-    pub(crate) constraints: Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)>,
+    pub(crate) constraints: Vec<(
+        Constraint<ProblemVar<T, D::Connection, V>>,
+        ConstraintDesc<T, D::Connection>,
+    )>,
 
     /// Objective function (populated during build())
-    pub(crate) objective: Objective<ProblemVar<T, D, V>>,
+    pub(crate) objective: Objective<ProblemVar<T, D::Connection, V>>,
 
     /// Internal ID.
     ///
@@ -82,7 +85,7 @@ pub(crate) struct EvalData<
     /// This starts with the variables from V.
     /// Then reified variables as well as
     /// helpers variables are added as needed.
-    pub(crate) vars_desc: BTreeMap<ProblemVar<T, D, V>, Variable>,
+    pub(crate) vars_desc: BTreeMap<ProblemVar<T, D::Connection, V>, Variable>,
 
     /// base variables list
     pub(crate) original_var_list: BTreeMap<V, Variable>,
@@ -90,11 +93,11 @@ pub(crate) struct EvalData<
 
 impl<
         T: EvalObject,
-        D: DatabaseConnection,
-        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D>, Error = VarConversionError>,
+        D: DatabaseDriver,
+        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
     > ProblemBuilder<T, D, V>
 {
-    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T, D>> {
+    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T, D::Connection>> {
         V::field_schema()
             .into_iter()
             .map(|(name, typ)| {
@@ -118,9 +121,9 @@ impl<
         &self,
         module: &str,
         fn_name: &str,
-        args: &[ExprValue<T, D>],
+        args: &[ExprValue<T, D::Connection>],
         expected_return: &ExprType,
-    ) -> Result<(), ProblemError<T, D>> {
+    ) -> Result<(), ProblemError<T, D::Connection>> {
         let functions = self.ast.get_functions();
         let key = (module.to_string(), fn_name.to_string());
 
@@ -151,7 +154,7 @@ impl<
         Ok(())
     }
 
-    pub fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T, D>> {
+    pub fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T, D::Connection>> {
         let base_vars = Self::build_vars()?;
 
         // Compile all modules upfront
@@ -179,8 +182,8 @@ impl<
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D>>,
-    ) -> Result<(), ProblemError<T, D>> {
+        args: Vec<ExprValue<T, D::Connection>>,
+    ) -> Result<(), ProblemError<T, D::Connection>> {
         // Validate function exists and has correct signature
         // Constraints can return Constraint or [Constraint]
         let constraint_type = ExprType::from_variants([
@@ -204,10 +207,10 @@ impl<
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D>>,
+        args: Vec<ExprValue<T, D::Connection>>,
         coefficient: f64,
         sense: ObjectiveSense,
-    ) -> Result<(), ProblemError<T, D>> {
+    ) -> Result<(), ProblemError<T, D::Connection>> {
         // Validate function exists and has correct signature
         // Objectives can return LinExpr or Constraint or a list of those
         let obj_types = ExprType::from_variants([
@@ -232,7 +235,10 @@ impl<
         Ok(())
     }
 
-    pub fn build(self, env: &T::Env) -> Result<Problem<T, D, V>, ProblemError<T, D>> {
+    pub fn build(
+        self,
+        env: &T::Env,
+    ) -> Result<Problem<T, D::Connection, V>, ProblemError<T, D::Connection>> {
         // Evaluate all pending constraints and objectives
         let mut eval_data = EvalData::new(self, env)?;
 
@@ -312,11 +318,11 @@ impl<
 impl<
         'a,
         T: EvalObject,
-        D: DatabaseConnection,
-        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D>, Error = VarConversionError>,
+        D: DatabaseDriver,
+        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
     > EvalData<'a, T, D, V>
 {
-    fn generate_helper_var(&mut self) -> ProblemVar<T, D, V> {
+    fn generate_helper_var(&mut self) -> ProblemVar<T, D::Connection, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::binary());
@@ -324,7 +330,7 @@ impl<
         new_var
     }
 
-    fn generate_helper_continuous_var(&mut self) -> ProblemVar<T, D, V> {
+    fn generate_helper_continuous_var(&mut self) -> ProblemVar<T, D::Connection, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::continuous());
@@ -332,7 +338,7 @@ impl<
         new_var
     }
 
-    fn get_variable_type(&self, v: &ProblemVar<T, D, V>) -> Variable {
+    fn get_variable_type(&self, v: &ProblemVar<T, D::Connection, V>) -> Variable {
         match v {
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
@@ -352,12 +358,15 @@ impl<
     }
 
     fn objectify_single_constraint(
-        constraint: &Constraint<ProblemVar<T, D, V>>,
-        origin: ConstraintDesc<T, D>,
-        var: ProblemVar<T, D, V>,
+        constraint: &Constraint<ProblemVar<T, D::Connection, V>>,
+        origin: ConstraintDesc<T, D::Connection>,
+        var: ProblemVar<T, D::Connection, V>,
     ) -> (
-        Objective<ProblemVar<T, D, V>>,
-        Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)>,
+        Objective<ProblemVar<T, D::Connection, V>>,
+        Vec<(
+            Constraint<ProblemVar<T, D::Connection, V>>,
+            ConstraintDesc<T, D::Connection>,
+        )>,
     ) {
         match constraint.get_symbol() {
             EqSymbol::LessThan => {
@@ -386,15 +395,18 @@ impl<
     /// necessary constraints to enforce define the helper variables.
     fn objectify_constraints<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D, V>>>,
-        origin: ConstraintDesc<T, D>,
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D::Connection, V>>>,
+        origin: ConstraintDesc<T, D::Connection>,
     ) -> (
-        Objective<ProblemVar<T, D, V>>,
-        Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)>,
+        Objective<ProblemVar<T, D::Connection, V>>,
+        Vec<(
+            Constraint<ProblemVar<T, D::Connection, V>>,
+            ConstraintDesc<T, D::Connection>,
+        )>,
     )
     where
         T: 'b,
-        D: 'b,
+        D::Connection: 'b,
         V: 'b,
     {
         // If there is no constraints, we can have a trivial linear expression
@@ -429,10 +441,13 @@ impl<
 
     fn reify_single_constraint(
         &mut self,
-        constraint: &Constraint<ProblemVar<T, D, V>>,
-        origin: ConstraintDesc<T, D>,
-        var: ProblemVar<T, D, V>,
-    ) -> Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)> {
+        constraint: &Constraint<ProblemVar<T, D::Connection, V>>,
+        origin: ConstraintDesc<T, D::Connection>,
+        var: ProblemVar<T, D::Connection, V>,
+    ) -> Vec<(
+        Constraint<ProblemVar<T, D::Connection, V>>,
+        ConstraintDesc<T, D::Connection>,
+    )> {
         let vars = constraint.get_lhs().variables();
         // Handle special cases with 0 or 1 variable in the lin_expr.
         match vars.len() {
@@ -536,13 +551,16 @@ impl<
     /// to enforce this.
     fn reify_constraint<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D, V>>>,
-        origin: ConstraintDesc<T, D>,
-        var: ProblemVar<T, D, V>,
-    ) -> Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)>
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D::Connection, V>>>,
+        origin: ConstraintDesc<T, D::Connection>,
+        var: ProblemVar<T, D::Connection, V>,
+    ) -> Vec<(
+        Constraint<ProblemVar<T, D::Connection, V>>,
+        ConstraintDesc<T, D::Connection>,
+    )>
     where
         T: 'b,
-        D: 'b,
+        D::Connection: 'b,
         V: 'b,
     {
         // If there is no constraints, they are always satisfied
@@ -582,7 +600,7 @@ impl<
         output
     }
 
-    fn clean_var(&self, var: &IlpVar<T, D>) -> ProblemVar<T, D, V> {
+    fn clean_var(&self, var: &IlpVar<T, D::Connection>) -> ProblemVar<T, D::Connection, V> {
         match var {
             IlpVar::Base(extern_var) => {
                 if self.builder.base_vars.contains_key(&extern_var.name) {
@@ -629,16 +647,21 @@ impl<
 
     fn clean_constraint(
         &self,
-        constraint: &Constraint<IlpVar<T, D>>,
-    ) -> Constraint<ProblemVar<T, D, V>> {
+        constraint: &Constraint<IlpVar<T, D::Connection>>,
+    ) -> Constraint<ProblemVar<T, D::Connection, V>> {
         constraint.transmute(|v| self.clean_var(v))
     }
 
-    fn clean_lin_expr(&self, lin_expr: &LinExpr<IlpVar<T, D>>) -> LinExpr<ProblemVar<T, D, V>> {
+    fn clean_lin_expr(
+        &self,
+        lin_expr: &LinExpr<IlpVar<T, D::Connection>>,
+    ) -> LinExpr<ProblemVar<T, D::Connection, V>> {
         lin_expr.transmute(|v| self.clean_var(v))
     }
 
-    fn update_origin(origin: Option<crate::eval::Origin<T, D>>) -> ConstraintDesc<T, D> {
+    fn update_origin(
+        origin: Option<crate::eval::Origin<T, D::Connection>>,
+    ) -> ConstraintDesc<T, D::Connection> {
         let origin = origin.expect("All constraints should have an origin");
         ConstraintDesc::InScript { origin }
     }
@@ -646,7 +669,7 @@ impl<
     pub(crate) fn new(
         builder: ProblemBuilder<T, D, V>,
         env: &'a T::Env,
-    ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D>> {
+    ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D::Connection>> {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
         let (constraint_results, objective_results, var_def) = {
@@ -671,7 +694,7 @@ impl<
                         })?;
                     Ok((module.clone(), fn_name.clone(), result))
                 })
-                .collect::<Result<Vec<_>, ProblemError<T, D>>>()?;
+                .collect::<Result<Vec<_>, ProblemError<T, D::Connection>>>()?;
 
             // Evaluate objectives
             let objective_results = builder
@@ -692,7 +715,7 @@ impl<
                         obj_sense.clone(),
                     ))
                 })
-                .collect::<Result<Vec<_>, ProblemError<T, D>>>()?;
+                .collect::<Result<Vec<_>, ProblemError<T, D::Connection>>>()?;
 
             let var_def = eval_history.into_var_def();
             (constraint_results, objective_results, var_def)
@@ -799,17 +822,17 @@ impl<
 
         // Phase 4: Process reified variables
         let mut constraints_to_reify = BTreeMap::<
-            ProblemVar<T, D, V>,
+            ProblemVar<T, D::Connection, V>,
             (
-                Vec<Constraint<ProblemVar<T, D, V>>>,
-                crate::eval::Origin<T, D>,
+                Vec<Constraint<ProblemVar<T, D::Connection, V>>>,
+                crate::eval::Origin<T, D::Connection>,
             ),
         >::new();
 
         for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c: Constraint<IlpVar<T, D>>| eval_data.clean_constraint(&c))
+                .map(|c: Constraint<IlpVar<T, D::Connection>>| eval_data.clean_constraint(&c))
                 .collect();
 
             let reified_var = ReifiedVar {

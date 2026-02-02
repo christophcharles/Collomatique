@@ -97,7 +97,7 @@ fn two_objectives_same_script() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -266,7 +266,7 @@ fn two_objectives_different_scripts() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -422,7 +422,7 @@ fn objectives_with_different_senses() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

@@ -87,7 +87,7 @@ fn internal_reification() {
                 $R1() + $R2() + $R3() === 1 and $R2() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -210,7 +210,7 @@ fn private_reification_does_not_leak() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -344,7 +344,7 @@ fn three_module_chain_define_reify_use() {
         ),
     ]);
 
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

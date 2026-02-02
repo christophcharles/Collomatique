@@ -78,7 +78,7 @@ fn test_fix_forces_variable_values() {
             pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

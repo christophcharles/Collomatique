@@ -9,12 +9,13 @@ use super::path_resolution::{resolve_path, ResolvedPathKind};
 use super::string_case;
 use super::types::{ConcreteType, ExprType, SimpleType};
 use crate::ast::{Expr, Span, Spanned};
+use crate::database::DatabaseDriver;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 impl LocalCheckEnv {
-    pub(crate) fn check_expr(
+    pub(crate) fn check_expr<D: DatabaseDriver>(
         &mut self,
-        global_env: &mut GlobalEnv,
+        global_env: &mut GlobalEnv<D>,
         expr: &Expr,
         span: &Span,
         type_info: &mut TypeInfo,
@@ -40,9 +41,9 @@ impl LocalCheckEnv {
     }
 
     /// Check if a type can be converted considering custom type wrapping/unwrapping
-    fn can_convert_with_custom_types(
+    fn can_convert_with_custom_types<D: DatabaseDriver>(
         &self,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         from: &ExprType,
         to: &ConcreteType,
     ) -> bool {
@@ -94,14 +95,18 @@ impl LocalCheckEnv {
     /// Resolve all variants of an ExprType, unwrapping any Custom types to their leaf types.
     /// For Custom types, recursively resolves through the underlying ExprType (which may be a union).
     /// Returns all the leaf SimpleTypes after resolving custom types.
-    fn resolve_type_for_access(&self, global_env: &GlobalEnv, typ: &ExprType) -> Vec<SimpleType> {
+    fn resolve_type_for_access<D: DatabaseDriver>(
+        &self,
+        global_env: &GlobalEnv<D>,
+        typ: &ExprType,
+    ) -> Vec<SimpleType> {
         let mut visited = HashSet::new();
         self.resolve_type_for_access_impl(global_env, typ, &mut visited)
     }
 
-    fn resolve_type_for_access_impl(
+    fn resolve_type_for_access_impl<D: DatabaseDriver>(
         &self,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         typ: &ExprType,
         visited: &mut HashSet<String>,
     ) -> Vec<SimpleType> {
@@ -113,9 +118,9 @@ impl LocalCheckEnv {
     }
 
     /// Resolve a single SimpleType, unwrapping Custom types recursively.
-    fn resolve_simple_type_for_access_impl(
+    fn resolve_simple_type_for_access_impl<D: DatabaseDriver>(
         &self,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         typ: &SimpleType,
         visited: &mut HashSet<String>,
     ) -> Vec<SimpleType> {
@@ -148,9 +153,9 @@ impl LocalCheckEnv {
         }
     }
 
-    fn check_expr_internal(
+    fn check_expr_internal<D: DatabaseDriver>(
         &mut self,
-        global_env: &mut GlobalEnv,
+        global_env: &mut GlobalEnv<D>,
         expr: &Expr,
         global_span: &Span,
         type_info: &mut TypeInfo,
@@ -2799,9 +2804,9 @@ impl LocalCheckEnv {
     }
 
     /// Handle type casts in GenericCall expressions: BuiltinType(x), CustomType(x), Enum::Variant(x)
-    fn check_generic_call_type_cast(
+    fn check_generic_call_type_cast<D: DatabaseDriver>(
         &mut self,
-        global_env: &mut GlobalEnv,
+        global_env: &mut GlobalEnv<D>,
         simple_type: &SimpleType,
         args: &Vec<Spanned<Expr>>,
         span: &Span,
@@ -3009,9 +3014,9 @@ impl LocalCheckEnv {
     }
 
     /// Handle struct-style type casts: Type { field: value }
-    fn check_struct_call_type(
+    fn check_struct_call_type<D: DatabaseDriver>(
         &mut self,
-        global_env: &mut GlobalEnv,
+        global_env: &mut GlobalEnv<D>,
         simple_type: &SimpleType,
         fields: &Vec<(Spanned<String>, Spanned<Expr>)>,
         span: &Span,
@@ -3143,9 +3148,9 @@ impl LocalCheckEnv {
         }
     }
 
-    fn check_ident_path(
+    fn check_ident_path<D: DatabaseDriver>(
         &mut self,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
         path: &Spanned<crate::ast::NamespacePath>,
         _type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -3289,9 +3294,9 @@ impl LocalCheckEnv {
         }
     }
 
-    fn check_path(
+    fn check_path<D: DatabaseDriver>(
         &mut self,
-        global_env: &mut GlobalEnv,
+        global_env: &mut GlobalEnv<D>,
         object: &Spanned<Expr>,
         segments: &Vec<Spanned<crate::ast::PathSegment>>,
         type_info: &mut TypeInfo,

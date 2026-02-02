@@ -1,6 +1,9 @@
+use derivative::Derivative;
+
 use super::errors::{ArgsType, FunctionType, SemError};
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Span, Spanned};
+use crate::database::DatabaseDriver;
 use std::collections::{HashMap, HashSet};
 
 pub type ObjectFields = HashMap<String, ExprType>;
@@ -74,8 +77,14 @@ impl Symbol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GlobalEnv {
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct GlobalEnv<D: DatabaseDriver> {
     pub module_names: Vec<String>,
     pub(crate) object_types: HashMap<String, ObjectFields>, // external, no module
     pub(crate) custom_types: HashMap<(String, String), TypeDesc>, // (module, name) → desc
@@ -85,6 +94,7 @@ pub struct GlobalEnv {
     pub(crate) internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     pub(crate) variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     pub(crate) symbols: HashMap<String, SymbolMap>,         // module → symbol table
+    pub(crate) _phantom: std::marker::PhantomData<D>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -130,7 +140,7 @@ impl std::fmt::Display for GenericType {
     }
 }
 
-impl GlobalEnv {
+impl<D: DatabaseDriver> GlobalEnv<D> {
     pub fn validate_object_type(&self, obj_name: &str) -> bool {
         self.object_types.contains_key(obj_name)
     }

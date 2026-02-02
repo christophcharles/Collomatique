@@ -1,5 +1,6 @@
 use crate::eval::{
     CheckedAST, DatabaseConnection, EvalObject, ExprValue, SqliteDatabaseConnection,
+    SqliteDatabaseDriver,
 };
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
@@ -106,8 +107,11 @@ fn eval_with_simple_objects(
 ) -> ExprValue<SimpleObject, SqliteDatabaseConnection> {
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::<SimpleObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        vars,
+    )
+    .expect("Should compile");
     let env = SimpleEnv {};
 
     checked_ast

@@ -11,11 +11,11 @@ use crate::semantics::database::DbConversionError;
 // =============================================================================
 
 /// Build a CheckedAST (and therefore a GlobalEnv) from DSL source.
-fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseConnection> {
+fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
     CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new()).expect("Should compile")
 }
 
-fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseConnection> {
+fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
     checked("")
 }
 

@@ -62,7 +62,7 @@ fn constraint_list_return_type() {
         "list_constraints",
         r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

@@ -1,4 +1,5 @@
 use super::analyze_with_env;
+use crate::database::SqliteDatabaseDriver;
 use crate::semantics::database::{DbConversionError, DbType};
 use crate::semantics::types::{ExprType, SimpleType};
 
@@ -7,14 +8,14 @@ use crate::semantics::types::{ExprType, SimpleType};
 // =============================================================================
 
 /// Build a GlobalEnv from DSL source (module "main"), assert no errors.
-fn env(input: &str) -> crate::semantics::GlobalEnv {
+fn env(input: &str) -> crate::semantics::GlobalEnv<SqliteDatabaseDriver> {
     let (env, errors, _warnings) = analyze_with_env(input);
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     env
 }
 
 /// Shorthand: empty environment (no custom types).
-fn empty_env() -> crate::semantics::GlobalEnv {
+fn empty_env() -> crate::semantics::GlobalEnv<SqliteDatabaseDriver> {
     env("")
 }
 

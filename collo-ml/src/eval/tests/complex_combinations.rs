@@ -734,7 +734,7 @@ fn aggregation_with_filtering() {
         }
     }
 
-    let checked_ast: CheckedAST<_, SqliteDatabaseConnection> =
+    let checked_ast: CheckedAST<_, SqliteDatabaseDriver> =
         CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let students = ExprValue::List(Vec::from([

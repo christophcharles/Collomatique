@@ -83,7 +83,7 @@ fn list_constraint_reification() {
             pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -200,7 +200,7 @@ fn list_constraint_reification_exact_count_with_param() {
             pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

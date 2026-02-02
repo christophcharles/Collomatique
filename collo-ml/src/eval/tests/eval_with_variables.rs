@@ -11,7 +11,8 @@ fn eval_with_variables_simple_reified_var() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -67,11 +68,9 @@ fn eval_with_variables_multiple_calls_same_var() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseConnection>::new(
-        &BTreeMap::from([("main", input)]),
-        vars,
-    )
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -140,7 +139,8 @@ fn eval_with_variables_in_forall() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -212,7 +212,8 @@ fn eval_with_variables_multiple_vars() {
     ]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -291,7 +292,8 @@ fn eval_with_variables_var_with_multiple_params() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -350,7 +352,8 @@ fn eval_with_variables_simple_var_list() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -434,7 +437,8 @@ fn eval_with_variables_var_list_in_nested_forall() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(Vec::from([
@@ -514,7 +518,8 @@ fn eval_with_variables_with_let_expr() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -565,7 +570,8 @@ fn eval_with_variables_no_reified_vars() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast

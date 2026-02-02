@@ -94,11 +94,11 @@ impl DbValue {
     /// directly. `Custom(…)` variants are unwrapped via the `GlobalEnv` and
     /// the conversion recurses into the underlying type, wrapping the result
     /// in `ExprValue::Custom`.
-    pub fn to_expr_value<T: EvalObject, D: DatabaseConnection>(
+    pub fn to_expr_value<T: EvalObject, D: DatabaseDriver>(
         self,
-        env: &GlobalEnv,
+        env: &GlobalEnv<D>,
         target: &ExprType,
-    ) -> Result<ExprValue<T, D>, DbConversionError> {
+    ) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
         for variant in target.get_variants() {
             if let Ok(v) = self.clone().try_convert_to(env, variant) {
                 return Ok(v);
@@ -112,11 +112,11 @@ impl DbValue {
     /// For primitives, checks a direct match. For `Custom` types, looks up
     /// the underlying type in `env` and recurses via `to_expr_value`,
     /// wrapping the result in [`ExprValue::Custom`].
-    fn try_convert_to<T: EvalObject, D: DatabaseConnection>(
+    fn try_convert_to<T: EvalObject, D: DatabaseDriver>(
         self,
-        env: &GlobalEnv,
+        env: &GlobalEnv<D>,
         variant: &SimpleType,
-    ) -> Result<ExprValue<T, D>, DbConversionError> {
+    ) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
         match (self, variant) {
             (DbValue::Null, SimpleType::None) => Ok(ExprValue::None),
             (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(v)),
@@ -167,11 +167,11 @@ impl<T: EvalObject, D: DatabaseConnection> TryFrom<ExprValue<T, D>> for DbValue 
 /// Wrap an `ExprValue` to match a target `ExprType`, adding `Custom` wrappers as needed.
 ///
 /// Iterates over the target's variants and returns the first successful wrapping.
-fn wrap_expr_value<T: EvalObject, D: DatabaseConnection>(
-    value: ExprValue<T, D>,
+fn wrap_expr_value<T: EvalObject, D: DatabaseDriver>(
+    value: ExprValue<T, D::Connection>,
     target: &ExprType,
-    env: &GlobalEnv,
-) -> Result<ExprValue<T, D>, DbConversionError> {
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
     for variant in target.get_variants() {
         if let Ok(v) = try_wrap_to(value.clone(), variant, env) {
             return Ok(v);
@@ -181,11 +181,11 @@ fn wrap_expr_value<T: EvalObject, D: DatabaseConnection>(
 }
 
 /// Try to wrap an `ExprValue` to match a single `SimpleType` variant.
-fn try_wrap_to<T: EvalObject, D: DatabaseConnection>(
-    value: ExprValue<T, D>,
+fn try_wrap_to<T: EvalObject, D: DatabaseDriver>(
+    value: ExprValue<T, D::Connection>,
     variant: &SimpleType,
-    env: &GlobalEnv,
-) -> Result<ExprValue<T, D>, DbConversionError> {
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
     match variant {
         SimpleType::None => {
             if matches!(value, ExprValue::None) {
@@ -257,9 +257,9 @@ fn convert_params<T: EvalObject, D: DatabaseConnection>(
         .collect()
 }
 
-fn classify_output_type(
+fn classify_output_type<D: DatabaseDriver>(
     out_type: &ExprType,
-    env: &GlobalEnv,
+    env: &GlobalEnv<D>,
 ) -> Result<(OutputMode, ResolvedRowShape, ExprType), SqlQueryError> {
     let resolved = env
         .resolve_type_deep(out_type)
@@ -367,13 +367,13 @@ fn validate_columns(shape: &ResolvedRowShape, columns: &[String]) -> Result<(), 
     }
 }
 
-fn convert_row<T: EvalObject, D: DatabaseConnection>(
+fn convert_row<T: EvalObject, D: DatabaseDriver>(
     row: &BTreeMap<String, DbValue>,
     columns: &[String],
     shape: &ResolvedRowShape,
     row_idx: usize,
-    env: &GlobalEnv,
-) -> Result<ExprValue<T, D>, SqlQueryError> {
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
     match shape {
         ResolvedRowShape::Struct(fields) => {
             let mut struct_fields = BTreeMap::new();
@@ -407,11 +407,11 @@ fn convert_row<T: EvalObject, D: DatabaseConnection>(
     }
 }
 
-fn build_empty_result<T: EvalObject, D: DatabaseConnection>(
+fn build_empty_result<T: EvalObject, D: DatabaseDriver>(
     mode: &OutputMode,
     out_type: &ExprType,
-    env: &GlobalEnv,
-) -> Result<ExprValue<T, D>, SqlQueryError> {
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
     let raw = match mode {
         OutputMode::Optional => ExprValue::None,
         OutputMode::List => ExprValue::List(vec![]),
@@ -424,14 +424,14 @@ fn build_empty_result<T: EvalObject, D: DatabaseConnection>(
 // DatabaseHandle::query
 // =============================================================================
 
-impl<D: DatabaseConnection> DatabaseHandle<D> {
-    pub async fn query<T: EvalObject>(
+impl<C: DatabaseConnection> DatabaseHandle<C> {
+    pub async fn query<T: EvalObject, D: DatabaseDriver<Connection = C>>(
         &self,
         sql: &str,
-        params: Vec<ExprValue<T, D>>,
+        params: Vec<ExprValue<T, C>>,
         out_type: ExprType,
-        global_env: &GlobalEnv,
-    ) -> Result<ExprValue<T, D>, SqlQueryError> {
+        global_env: &GlobalEnv<D>,
+    ) -> Result<ExprValue<T, C>, SqlQueryError> {
         // 1. Convert params
         let db_params = convert_params(params)?;
 

@@ -1,5 +1,6 @@
 use super::global_env::GlobalEnv;
 use super::types::{ExprType, SimpleType};
+use crate::database::DatabaseDriver;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -26,7 +27,10 @@ impl DbType {
     /// Valid resolved patterns:
     /// - `[Int]` → `DbType::Int(false)`, `[Bool]` → …, `[String]` → …
     /// - `[None, Int]` → `DbType::Int(true)`, etc.
-    pub fn try_from(env: &GlobalEnv, typ: &ExprType) -> Result<Self, DbConversionError> {
+    pub fn try_from<D: DatabaseDriver>(
+        env: &GlobalEnv<D>,
+        typ: &ExprType,
+    ) -> Result<Self, DbConversionError> {
         let resolved = env.resolve_type_deep(typ).ok_or(DbConversionError)?;
         match resolved.len() {
             1 => Self::from_primitive(&resolved[0]),
