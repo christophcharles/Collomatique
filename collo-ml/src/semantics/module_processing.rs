@@ -14,6 +14,7 @@ use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
 use crate::database::DatabaseDriver;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
@@ -1064,19 +1065,18 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
     fn check_docstring_expressions(
         &mut self,
         docstring: &Vec<DocstringLine>,
-        local_env: &mut LocalCheckEnv,
+        local_env: &Arc<LocalCheckEnv>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) {
         for line in docstring {
             for part in line {
                 if let Some(expr) = &part.expr {
                     // Check the expression - it's already wrapped in String(...)
                     // so it should type-check if the inner expression can convert to String
-                    local_env.check_expr(
+                    Arc::clone(local_env).check_expr(
                         self,
                         &expr.node,
                         &expr.span,
@@ -1084,7 +1084,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
                 }
             }
@@ -1111,29 +1110,27 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         };
 
         // Build LocalCheckEnv with parameters
-        let mut local_env = LocalCheckEnv::new(current_module);
+        let root_env = LocalCheckEnv::new(current_module);
+        let mut builder = LocalCheckEnv::start_subscope(root_env);
         for (param_name, param_typ) in fn_desc.arg_names.iter().zip(fn_desc.typ.args.iter()) {
             // We don't need to check for duplicate params here - already done in pass 1
             // Just register them in the local environment
-            local_env.register_identifier_no_check(param_name, param_typ.clone());
+            builder.register_identifier_no_check(param_name, param_typ.clone());
         }
-
-        // Validate body and docstring expressions (parameters available in same scope)
-        local_env.push_scope();
+        let local_env = builder.build_subscope();
 
         // Check docstring expressions first
         self.check_docstring_expressions(
             &fn_desc.docstring,
-            &mut local_env,
+            &local_env,
             type_info,
             expr_types,
             resolved_types,
             errors,
-            warnings,
         );
 
         // Then validate body
-        let body_type_opt = local_env.check_expr(
+        let body_type_opt = Arc::clone(&local_env).check_expr(
             self,
             &body.node,
             &body.span,
@@ -1141,9 +1138,8 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             expr_types,
             resolved_types,
             errors,
-            warnings,
         );
-        local_env.pop_scope(warnings);
+        warnings.extend(local_env.to_warnings());
 
         // Check body type matches declared return type
         if let Some(body_type) = body_type_opt {

@@ -11,10 +11,11 @@ use super::types::{ConcreteType, ExprType, SimpleType};
 use crate::ast::{Expr, Span, Spanned};
 use crate::database::DatabaseDriver;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 
 impl LocalCheckEnv {
     pub(crate) fn check_expr<D: DatabaseDriver>(
-        &mut self,
+        self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
         expr: &Expr,
         span: &Span,
@@ -22,9 +23,8 @@ impl LocalCheckEnv {
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
-        let result = self.check_expr_internal(
+        let result = Arc::clone(&self).check_expr_internal(
             global_env,
             expr,
             span,
@@ -32,7 +32,6 @@ impl LocalCheckEnv {
             expr_types,
             resolved_types,
             errors,
-            warnings,
         );
         if let Some(typ) = &result {
             expr_types.insert(span.clone(), typ.clone());
@@ -154,7 +153,7 @@ impl LocalCheckEnv {
     }
 
     fn check_expr_internal<D: DatabaseDriver>(
-        &mut self,
+        self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
         expr: &Expr,
         global_span: &Span,
@@ -162,7 +161,6 @@ impl LocalCheckEnv {
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         match expr {
             // ========== Literals ==========
@@ -172,7 +170,7 @@ impl LocalCheckEnv {
             Expr::StringLiteral(_) => Some(SimpleType::String.into()),
 
             Expr::IdentPath(path) => self
-                .check_ident_path(global_env, path, type_info, errors, warnings)
+                .check_ident_path(global_env, path, type_info, errors)
                 .map(|x| x.into()),
             Expr::Path { object, segments } => self
                 .check_path(
@@ -183,14 +181,13 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 )
                 .map(|x| x.into()),
 
             // ========== As construct ==========
             Expr::ExplicitType { expr, typ } => {
                 // Check the inner expression
-                let expr_type = self.check_expr(
+                let expr_type = Arc::clone(&self).check_expr(
                     global_env,
                     &expr.node,
                     &expr.span,
@@ -198,7 +195,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Convert the declared type
@@ -242,7 +238,7 @@ impl LocalCheckEnv {
             // cast? narrows a type, returns None if the value doesn't fit
             Expr::CastFallible { expr, typ } => {
                 // Check the inner expression
-                let expr_type = self.check_expr(
+                let expr_type = Arc::clone(&self).check_expr(
                     global_env,
                     &expr.node,
                     &expr.span,
@@ -250,7 +246,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Convert the declared type
@@ -293,7 +288,7 @@ impl LocalCheckEnv {
             // cast! narrows a type, panics if the value doesn't fit
             Expr::CastPanic { expr, typ } => {
                 // Check the inner expression
-                let expr_type = self.check_expr(
+                let expr_type = Arc::clone(&self).check_expr(
                     global_env,
                     &expr.node,
                     &expr.span,
@@ -301,7 +296,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Convert the declared type
@@ -346,7 +340,7 @@ impl LocalCheckEnv {
                 // Check all args
                 let mut arg_types = Vec::new();
                 for arg in args {
-                    let arg_type = self.check_expr(
+                    let arg_type = Arc::clone(&self).check_expr(
                         global_env,
                         &arg.node,
                         &arg.span,
@@ -354,7 +348,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
                     arg_types.push((arg, arg_type));
                 }
@@ -422,7 +415,7 @@ impl LocalCheckEnv {
             // [Type] + [Type] -> [Type]
             // String + String -> String
             Expr::Add(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -430,9 +423,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -440,7 +432,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (&left_type, &right_type) {
@@ -527,7 +518,7 @@ impl LocalCheckEnv {
             // LinExpr - LinExpr -> LinExpr
             // [Type1] - [Type2] -> [Type1] if Type1 and Type2 overlap
             Expr::Sub(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -535,9 +526,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -545,7 +535,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (&left_type, &right_type) {
@@ -643,7 +632,7 @@ impl LocalCheckEnv {
             }
             // Unary negation - for LinExpr and Int
             Expr::Neg(term) => {
-                let term_type = self.check_expr(
+                let term_type = Arc::clone(&self).check_expr(
                     global_env,
                     &term.node,
                     &term.span,
@@ -651,7 +640,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match term_type.clone() {
@@ -672,7 +660,7 @@ impl LocalCheckEnv {
             // Multiplication: Int * Int -> Int, Int * LinExpr -> LinExpr, LinExpr * Int -> LinExpr
             // But NOT LinExpr * LinExpr (non-linear!)
             Expr::Mul(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -680,9 +668,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -690,7 +677,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (&left_type, &right_type) {
@@ -758,7 +744,7 @@ impl LocalCheckEnv {
             // Division and modulo: Int // Int -> Int, Int % Int -> Int
             // These are NOT allowed on LinExpr
             Expr::Div(left, right) | Expr::Mod(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -766,9 +752,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -776,7 +761,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (left_type, right_type) {
@@ -842,7 +826,7 @@ impl LocalCheckEnv {
             Expr::ConstraintEq(left, right)
             | Expr::ConstraintLe(left, right)
             | Expr::ConstraintGe(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -850,9 +834,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -860,7 +843,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let (Some(l), Some(r)) = (left_type, right_type) {
@@ -894,7 +876,7 @@ impl LocalCheckEnv {
 
             // ========== Comparison Operations ==========
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -902,9 +884,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -912,7 +893,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let (Some(l), Some(r)) = (left_type, right_type) {
@@ -934,7 +914,7 @@ impl LocalCheckEnv {
             | Expr::Ge(left, right)
             | Expr::Lt(left, right)
             | Expr::Gt(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -942,9 +922,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -952,7 +931,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let (Some(l), Some(r)) = (left_type, right_type) {
@@ -983,7 +961,7 @@ impl LocalCheckEnv {
             // ========== Boolean Operations ==========
             // Bool and Bool -> Bool, Constraint and Constraint -> Constraint
             Expr::And(left, right) | Expr::Or(left, right) => {
-                let left_type = self.check_expr(
+                let left_type = Arc::clone(&self).check_expr(
                     global_env,
                     &left.node,
                     &left.span,
@@ -991,9 +969,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let right_type = self.check_expr(
+                let right_type = Arc::clone(&self).check_expr(
                     global_env,
                     &right.node,
                     &right.span,
@@ -1001,7 +978,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (&left_type, &right_type) {
@@ -1065,7 +1041,7 @@ impl LocalCheckEnv {
             }
 
             Expr::Not(expr) => {
-                let expr_type = self.check_expr(
+                let expr_type = Arc::clone(&self).check_expr(
                     global_env,
                     &expr.node,
                     &expr.span,
@@ -1073,7 +1049,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match expr_type {
@@ -1094,7 +1069,7 @@ impl LocalCheckEnv {
             // ========== Null Coalescing ==========
             // x ?? default -> (typeof x - None) | typeof default
             Expr::NullCoalesce(lhs, rhs) => {
-                let lhs_type = self.check_expr(
+                let lhs_type = Arc::clone(&self).check_expr(
                     global_env,
                     &lhs.node,
                     &lhs.span,
@@ -1102,9 +1077,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let rhs_type = self.check_expr(
+                let rhs_type = Arc::clone(&self).check_expr(
                     global_env,
                     &rhs.node,
                     &rhs.span,
@@ -1112,7 +1086,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (lhs_type, rhs_type) {
@@ -1150,7 +1123,7 @@ impl LocalCheckEnv {
             // panic! expr -> Never (always diverges)
             Expr::Panic(inner_expr) => {
                 // Type-check the inner expression (any type is allowed)
-                let _ = self.check_expr(
+                let _ = Arc::clone(&self).check_expr(
                     global_env,
                     &inner_expr.node,
                     &inner_expr.span,
@@ -1158,7 +1131,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Panic always returns Never type
@@ -1168,7 +1140,7 @@ impl LocalCheckEnv {
             // ========== Membership Test ==========
             // x in collection -> Bool
             Expr::In { item, collection } => {
-                let item_type = self.check_expr(
+                let item_type = Arc::clone(&self).check_expr(
                     global_env,
                     &item.node,
                     &item.span,
@@ -1176,9 +1148,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let coll_type = self.check_expr(
+                let coll_type = Arc::clone(&self).check_expr(
                     global_env,
                     &collection.node,
                     &collection.span,
@@ -1186,7 +1157,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match coll_type {
@@ -1232,7 +1202,7 @@ impl LocalCheckEnv {
                 filter,
                 body,
             } => {
-                let coll_type = self.check_expr(
+                let coll_type = Arc::clone(&self).check_expr(
                     global_env,
                     &collection.node,
                     &collection.span,
@@ -1240,7 +1210,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Check naming convention
@@ -1248,7 +1217,7 @@ impl LocalCheckEnv {
                     &var.node,
                     string_case::NamingConvention::SnakeCase,
                 ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
+                    self.push_warning(SemWarning::ParameterNamingConvention {
                         module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
@@ -1257,7 +1226,7 @@ impl LocalCheckEnv {
                 }
 
                 // Extract element type from collection
-                match coll_type {
+                let body_type = match coll_type {
                     Some(a) if a.is_empty_list() => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
@@ -1272,17 +1241,53 @@ impl LocalCheckEnv {
                             .get_inner_list_type()
                             .expect("The list should not be empty at this point");
                         // Register the loop variable with the element type
-                        if let Err(e) = self.register_identifier(
+                        let mut builder = Self::start_subscope(Arc::clone(&self));
+                        if let Err(e) = builder.register_identifier(
                             global_env,
                             &var.node,
                             var.span.clone(),
                             elem_t,
                             type_info,
-                            warnings,
                         ) {
                             errors.push(e);
                             return None;
                         }
+                        let subscope = builder.build_subscope();
+
+                        // Check filter (must be Bool)
+                        if let Some(filter_expr) = filter {
+                            let filter_type = Arc::clone(&subscope).check_expr(
+                                global_env,
+                                &filter_expr.node,
+                                &filter_expr.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
+                            );
+
+                            if let Some(typ) = filter_type {
+                                if !typ.is_bool() {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: filter_expr.span.clone(),
+                                        expected: SimpleType::Bool.into(),
+                                        found: typ,
+                                        context: "forall filter must be Bool".to_string(),
+                                    });
+                                }
+                            }
+                        }
+
+                        // Check body (must be Constraint or Bool)
+                        subscope.check_expr(
+                            global_env,
+                            &body.node,
+                            &body.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
+                        )
                     }
 
                     Some(t) => {
@@ -1295,48 +1300,7 @@ impl LocalCheckEnv {
                         return None; // Return early
                     }
                     None => return None, // Return early
-                }
-
-                self.push_scope();
-
-                // Check filter (must be Bool)
-                if let Some(filter_expr) = filter {
-                    let filter_type = self.check_expr(
-                        global_env,
-                        &filter_expr.node,
-                        &filter_expr.span,
-                        type_info,
-                        expr_types,
-                        resolved_types,
-                        errors,
-                        warnings,
-                    );
-
-                    if let Some(typ) = filter_type {
-                        if !typ.is_bool() {
-                            errors.push(SemError::TypeMismatch {
-                                span: filter_expr.span.clone(),
-                                expected: SimpleType::Bool.into(),
-                                found: typ,
-                                context: "forall filter must be Bool".to_string(),
-                            });
-                        }
-                    }
-                }
-
-                // Check body (must be Constraint or Bool)
-                let body_type = self.check_expr(
-                    global_env,
-                    &body.node,
-                    &body.span,
-                    type_info,
-                    expr_types,
-                    resolved_types,
-                    errors,
-                    warnings,
-                );
-
-                self.pop_scope(warnings);
+                };
 
                 match body_type {
                     Some(typ) if typ.is_constraint() => Some(SimpleType::Constraint.into()),
@@ -1360,7 +1324,7 @@ impl LocalCheckEnv {
                 filter,
                 body,
             } => {
-                let coll_type = self.check_expr(
+                let coll_type = Arc::clone(&self).check_expr(
                     global_env,
                     &collection.node,
                     &collection.span,
@@ -1368,7 +1332,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Check naming convention
@@ -1376,7 +1339,7 @@ impl LocalCheckEnv {
                     &var.node,
                     string_case::NamingConvention::SnakeCase,
                 ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
+                    self.push_warning(SemWarning::ParameterNamingConvention {
                         module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
@@ -1385,7 +1348,7 @@ impl LocalCheckEnv {
                 }
 
                 // Extract element type from collection
-                match coll_type {
+                let body_type = match coll_type {
                     Some(a) if a.is_empty_list() => {
                         errors.push(SemError::TypeMismatch {
                             span: collection.span.clone(),
@@ -1402,17 +1365,53 @@ impl LocalCheckEnv {
                             .get_inner_list_type()
                             .expect("List should not be empty at this point");
                         // Register the loop variable with the element type
-                        if let Err(e) = self.register_identifier(
+                        let mut builder = Self::start_subscope(Arc::clone(&self));
+                        if let Err(e) = builder.register_identifier(
                             global_env,
                             &var.node,
                             var.span.clone(),
                             elem_t,
                             type_info,
-                            warnings,
                         ) {
                             errors.push(e);
                             return None;
                         }
+                        let subscope = builder.build_subscope();
+
+                        // Check filter (must be Bool)
+                        if let Some(filter_expr) = filter {
+                            let filter_type = Arc::clone(&subscope).check_expr(
+                                global_env,
+                                &filter_expr.node,
+                                &filter_expr.span,
+                                type_info,
+                                expr_types,
+                                resolved_types,
+                                errors,
+                            );
+
+                            if let Some(typ) = filter_type {
+                                if !typ.is_bool() {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: filter_expr.span.clone(),
+                                        expected: SimpleType::Bool.into(),
+                                        found: typ,
+                                        context: "sum filter must be Bool".to_string(),
+                                    });
+                                }
+                            }
+                        }
+
+                        // Check body (must be arithmetic: Int or LinExpr)
+                        subscope.check_expr(
+                            global_env,
+                            &body.node,
+                            &body.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
+                        )
                     }
                     Some(t) => {
                         errors.push(SemError::TypeMismatch {
@@ -1424,48 +1423,7 @@ impl LocalCheckEnv {
                         return None; // Return early
                     }
                     None => return None, // Return early
-                }
-
-                self.push_scope();
-
-                // Check filter (must be Bool)
-                if let Some(filter_expr) = filter {
-                    let filter_type = self.check_expr(
-                        global_env,
-                        &filter_expr.node,
-                        &filter_expr.span,
-                        type_info,
-                        expr_types,
-                        resolved_types,
-                        errors,
-                        warnings,
-                    );
-
-                    if let Some(typ) = filter_type {
-                        if !typ.is_bool() {
-                            errors.push(SemError::TypeMismatch {
-                                span: filter_expr.span.clone(),
-                                expected: SimpleType::Bool.into(),
-                                found: typ,
-                                context: "sum filter must be Bool".to_string(),
-                            });
-                        }
-                    }
-                }
-
-                // Check body (must be arithmetic: Int or LinExpr)
-                let body_type = self.check_expr(
-                    global_env,
-                    &body.node,
-                    &body.span,
-                    type_info,
-                    expr_types,
-                    resolved_types,
-                    errors,
-                    warnings,
-                );
-
-                self.pop_scope(warnings);
+                };
 
                 match body_type {
                     Some(typ) if typ.is_arithmetic() || typ.is_list() || typ.is_string() => {
@@ -1493,7 +1451,7 @@ impl LocalCheckEnv {
                 body,
                 reversed: _,
             } => {
-                let coll_type = self.check_expr(
+                let coll_type = Arc::clone(&self).check_expr(
                     global_env,
                     &collection.node,
                     &collection.span,
@@ -1501,10 +1459,9 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
-                let acc_type = self.check_expr(
+                let acc_type = Arc::clone(&self).check_expr(
                     global_env,
                     &init_value.node,
                     &init_value.span,
@@ -1512,7 +1469,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Check naming conventions
@@ -1520,7 +1476,7 @@ impl LocalCheckEnv {
                     &var.node,
                     string_case::NamingConvention::SnakeCase,
                 ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
+                    self.push_warning(SemWarning::ParameterNamingConvention {
                         module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
@@ -1532,7 +1488,7 @@ impl LocalCheckEnv {
                     &accumulator.node,
                     string_case::NamingConvention::SnakeCase,
                 ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
+                    self.push_warning(SemWarning::ParameterNamingConvention {
                         module: self.current_module().to_string(),
                         identifier: accumulator.node.clone(),
                         span: accumulator.span.clone(),
@@ -1572,35 +1528,33 @@ impl LocalCheckEnv {
                 };
                 let mut has_to_iterate = true;
                 while has_to_iterate {
-                    // Register the loop variable with the element type
-                    if let Err(e) = self.register_identifier(
+                    // Register the loop variable and accumulator
+                    let mut builder = Self::start_subscope(Arc::clone(&self));
+                    if let Err(e) = builder.register_identifier(
                         global_env,
                         &var.node,
                         var.span.clone(),
                         elem_t.clone(),
                         type_info,
-                        warnings,
                     ) {
                         errors.push(e);
                     }
 
-                    // Register the accumulator variable with the current computed type
-                    if let Err(e) = self.register_identifier(
+                    if let Err(e) = builder.register_identifier(
                         global_env,
                         &accumulator.node,
                         accumulator.span.clone(),
                         current_acc_type.clone(),
                         type_info,
-                        warnings,
                     ) {
                         errors.push(e);
                     }
 
-                    self.push_scope();
+                    let subscope = builder.build_subscope();
 
                     // Check filter (must be Bool)
                     if let Some(filter_expr) = filter {
-                        let filter_type = self.check_expr(
+                        let filter_type = Arc::clone(&subscope).check_expr(
                             global_env,
                             &filter_expr.node,
                             &filter_expr.span,
@@ -1608,7 +1562,6 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         );
 
                         if let Some(typ) = filter_type {
@@ -1624,7 +1577,7 @@ impl LocalCheckEnv {
                     }
 
                     // Check body (must match accumulator)
-                    let body_type = self.check_expr(
+                    let body_type = subscope.check_expr(
                         global_env,
                         &body.node,
                         &body.span,
@@ -1632,10 +1585,7 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
-
-                    self.pop_scope(warnings);
 
                     match body_type {
                         Some(typ) => {
@@ -1661,7 +1611,7 @@ impl LocalCheckEnv {
                 then_expr,
                 else_expr,
             } => {
-                let cond_type = self.check_expr(
+                let cond_type = Arc::clone(&self).check_expr(
                     global_env,
                     &condition.node,
                     &condition.span,
@@ -1669,7 +1619,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let Some(typ) = cond_type {
@@ -1683,7 +1632,7 @@ impl LocalCheckEnv {
                     }
                 }
 
-                let then_type = self.check_expr(
+                let then_type = Arc::clone(&self).check_expr(
                     global_env,
                     &then_expr.node,
                     &then_expr.span,
@@ -1691,9 +1640,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let else_type = self.check_expr(
+                let else_type = Arc::clone(&self).check_expr(
                     global_env,
                     &else_expr.node,
                     &else_expr.span,
@@ -1701,7 +1649,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 match (then_type, else_type) {
@@ -1714,7 +1661,7 @@ impl LocalCheckEnv {
                 match_expr,
                 branches,
             } => {
-                let Some(expr_type) = self.check_expr(
+                let Some(expr_type) = Arc::clone(&self).check_expr(
                     global_env,
                     &match_expr.node,
                     &match_expr.span,
@@ -1722,7 +1669,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 ) else {
                     // Cannot type check anything, propagate underspecified type
                     return None;
@@ -1781,21 +1727,21 @@ impl LocalCheckEnv {
                     };
 
                     if let Some(actual_branch_typ) = actual_branch_typ_opt {
-                        if let Err(e) = self.register_identifier(
+                        let mut builder = Self::start_subscope(Arc::clone(&self));
+                        if let Err(e) = builder.register_identifier(
                             global_env,
                             &branch.ident.node,
                             branch.ident.span.clone(),
                             actual_branch_typ.clone(),
                             type_info,
-                            warnings,
                         ) {
                             panic!("There should be no other identifier in the current scope. But got: {:?}", e);
                         }
 
-                        self.push_scope();
+                        let subscope = builder.build_subscope();
 
                         if let Some(filter_expr) = &branch.filter {
-                            let filter_type = self.check_expr(
+                            let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
                                 &filter_expr.node,
                                 &filter_expr.span,
@@ -1803,7 +1749,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
 
                             if let Some(typ) = filter_type {
@@ -1818,7 +1763,7 @@ impl LocalCheckEnv {
                             }
                         }
 
-                        let body_typ = self.check_expr(
+                        let body_typ = subscope.check_expr(
                             global_env,
                             &branch.body.node,
                             &branch.body.span,
@@ -1826,10 +1771,7 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         );
-
-                        self.pop_scope(warnings);
 
                         // Update output type
                         if let Some(typ) = body_typ {
@@ -1915,7 +1857,7 @@ impl LocalCheckEnv {
                         for (i, (arg, expected_type)) in
                             args.iter().zip(var_args.iter()).enumerate()
                         {
-                            let arg_type = self.check_expr(
+                            let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
                                 &arg.node,
                                 &arg.span,
@@ -1923,7 +1865,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
 
                             if let Some(found_type) = arg_type {
@@ -1967,7 +1908,7 @@ impl LocalCheckEnv {
                         for (i, (arg, expected_type)) in
                             args.iter().zip(var_args.iter()).enumerate()
                         {
-                            let arg_type = self.check_expr(
+                            let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
                                 &arg.node,
                                 &arg.span,
@@ -1975,7 +1916,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
 
                             if let Some(found_type) = arg_type {
@@ -2062,7 +2002,7 @@ impl LocalCheckEnv {
                         for (i, (arg, expected_type)) in
                             args.iter().zip(var_args.iter()).enumerate()
                         {
-                            let arg_type = self.check_expr(
+                            let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
                                 &arg.node,
                                 &arg.span,
@@ -2070,7 +2010,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
 
                             if let Some(found_type) = arg_type {
@@ -2107,7 +2046,7 @@ impl LocalCheckEnv {
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to
                 let resolved =
-                    match resolve_path(path, self.current_module(), global_env, Some(self)) {
+                    match resolve_path(path, self.current_module(), global_env, Some(&*self)) {
                         Ok(r) => r,
                         Err(e) => {
                             errors.push(e.into_sem_error(self.current_module()));
@@ -2156,7 +2095,7 @@ impl LocalCheckEnv {
                                 for (i, (arg, expected_type)) in
                                     args.iter().zip(fn_type.args.iter()).enumerate()
                                 {
-                                    let arg_type = self.check_expr(
+                                    let arg_type = Arc::clone(&self).check_expr(
                                         global_env,
                                         &arg.node,
                                         &arg.span,
@@ -2164,7 +2103,6 @@ impl LocalCheckEnv {
                                         expr_types,
                                         resolved_types,
                                         errors,
-                                        warnings,
                                     );
 
                                     if let Some(found_type) = arg_type {
@@ -2189,7 +2127,7 @@ impl LocalCheckEnv {
                     }
                     ResolvedPathKind::Type(simple_type) => {
                         // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
-                        self.check_generic_call_type_cast(
+                        Arc::clone(&self).check_generic_call_type_cast(
                             global_env,
                             &simple_type,
                             args,
@@ -2198,7 +2136,6 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         )
                     }
                     ResolvedPathKind::Query { module, name } => {
@@ -2232,7 +2169,7 @@ impl LocalCheckEnv {
                                 for (i, (arg, expected_type)) in
                                     args.iter().zip(query_type.args.iter()).enumerate()
                                 {
-                                    let arg_type = self.check_expr(
+                                    let arg_type = Arc::clone(&self).check_expr(
                                         global_env,
                                         &arg.node,
                                         &arg.span,
@@ -2240,7 +2177,6 @@ impl LocalCheckEnv {
                                         expr_types,
                                         resolved_types,
                                         errors,
-                                        warnings,
                                     );
 
                                     if let Some(found_type) = arg_type {
@@ -2290,7 +2226,7 @@ impl LocalCheckEnv {
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
                 let resolved =
-                    match resolve_path(path, self.current_module(), global_env, Some(self)) {
+                    match resolve_path(path, self.current_module(), global_env, Some(&*self)) {
                         Ok(r) => r,
                         Err(e) => {
                             errors.push(e.into_sem_error(self.current_module()));
@@ -2326,17 +2262,17 @@ impl LocalCheckEnv {
                         });
                         None
                     }
-                    ResolvedPathKind::Type(simple_type) => self.check_struct_call_type(
-                        global_env,
-                        &simple_type,
-                        fields,
-                        &path.span,
-                        type_info,
-                        expr_types,
-                        resolved_types,
-                        errors,
-                        warnings,
-                    ),
+                    ResolvedPathKind::Type(simple_type) => Arc::clone(&self)
+                        .check_struct_call_type(
+                            global_env,
+                            &simple_type,
+                            fields,
+                            &path.span,
+                            type_info,
+                            expr_types,
+                            resolved_types,
+                            errors,
+                        ),
                     ResolvedPathKind::Module(name) => {
                         // Cannot use struct syntax with modules
                         errors.push(SemError::UnknownType {
@@ -2395,7 +2331,7 @@ impl LocalCheckEnv {
                 }
 
                 // Check all elements and unify their types
-                let mut unified_type = self.check_expr(
+                let mut unified_type = Arc::clone(&self).check_expr(
                     global_env,
                     &elements[0].node,
                     &elements[0].span,
@@ -2403,11 +2339,10 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 for item in &elements[1..] {
-                    let item_type = self.check_expr(
+                    let item_type = Arc::clone(&self).check_expr(
                         global_env,
                         &item.node,
                         &item.span,
@@ -2415,7 +2350,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
 
                     match (unified_type.clone(), item_type) {
@@ -2448,7 +2382,7 @@ impl LocalCheckEnv {
                 let element_types: Vec<_> = elements
                     .iter()
                     .filter_map(|elem| {
-                        self.check_expr(
+                        Arc::clone(&self).check_expr(
                             global_env,
                             &elem.node,
                             &elem.span,
@@ -2456,7 +2390,6 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         )
                     })
                     .collect();
@@ -2493,7 +2426,7 @@ impl LocalCheckEnv {
                         &field_name.node,
                         string_case::NamingConvention::SnakeCase,
                     ) {
-                        warnings.push(SemWarning::FieldNamingConvention {
+                        self.push_warning(SemWarning::FieldNamingConvention {
                             module: self.current_module().to_string(),
                             identifier: field_name.node.clone(),
                             span: field_name.span.clone(),
@@ -2502,7 +2435,7 @@ impl LocalCheckEnv {
                     }
 
                     // Type-check the field expression
-                    if let Some(field_type) = self.check_expr(
+                    if let Some(field_type) = Arc::clone(&self).check_expr(
                         global_env,
                         &field_expr.node,
                         &field_expr.span,
@@ -2510,7 +2443,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     ) {
                         field_types.insert(field_name.node.clone(), field_type);
                     } else {
@@ -2527,7 +2459,7 @@ impl LocalCheckEnv {
             }
 
             Expr::ListRange { start, end } => {
-                let start_type = self.check_expr(
+                let start_type = Arc::clone(&self).check_expr(
                     global_env,
                     &start.node,
                     &start.span,
@@ -2535,9 +2467,8 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-                let end_type = self.check_expr(
+                let end_type = Arc::clone(&self).check_expr(
                     global_env,
                     &end.node,
                     &end.span,
@@ -2545,7 +2476,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let (Some(s), Some(e)) = (start_type, end_type) {
@@ -2579,10 +2509,10 @@ impl LocalCheckEnv {
                 vars_and_collections,
                 filter,
             } => {
-                for (i, (var, collection)) in vars_and_collections.iter().enumerate() {
-                    let mut typ_error = false;
+                let mut current = Arc::clone(&self);
 
-                    let coll_type = self.check_expr(
+                for (var, collection) in vars_and_collections.iter() {
+                    let coll_type = Arc::clone(&current).check_expr(
                         global_env,
                         &collection.node,
                         &collection.span,
@@ -2590,7 +2520,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
 
                     // Check naming convention
@@ -2598,7 +2527,7 @@ impl LocalCheckEnv {
                         &var.node,
                         string_case::NamingConvention::SnakeCase,
                     ) {
-                        warnings.push(SemWarning::ParameterNamingConvention {
+                        self.push_warning(SemWarning::ParameterNamingConvention {
                             module: self.current_module().to_string(),
                             identifier: var.node.clone(),
                             span: var.span.clone(),
@@ -2615,24 +2544,25 @@ impl LocalCheckEnv {
                                 found: a.clone(),
                                 context: "list comprehension collection inner type must be known (use 'as' for explicit typing)".to_string(),
                             });
-                            typ_error = true;
+                            return None;
                         }
                         Some(a) if a.is_list() => {
                             let elem_t = a
                                 .get_inner_list_type()
                                 .expect("List should not be empty at this point");
                             // Register the loop variable with the element type
-                            if let Err(e) = self.register_identifier(
+                            let mut builder = Self::start_subscope(Arc::clone(&current));
+                            if let Err(e) = builder.register_identifier(
                                 global_env,
                                 &var.node,
                                 var.span.clone(),
                                 elem_t,
                                 type_info,
-                                warnings,
                             ) {
                                 errors.push(e);
-                                typ_error = true;
+                                return None;
                             }
+                            current = builder.build_subscope();
                         }
                         Some(t) => {
                             errors.push(SemError::TypeMismatch {
@@ -2641,25 +2571,15 @@ impl LocalCheckEnv {
                                 found: t,
                                 context: "list comprehension collection must be a list".to_string(),
                             });
-                            typ_error = true;
+                            return None;
                         }
-                        None => typ_error = true,
+                        None => return None,
                     }
-
-                    if typ_error {
-                        for _j in 0..i {
-                            let mut ignored_warnings = vec![];
-                            self.pop_scope(&mut ignored_warnings);
-                        }
-                        return None;
-                    }
-
-                    self.push_scope();
                 }
 
                 // Check filter (must be Bool)
                 if let Some(filter_expr) = filter {
-                    let filter_type = self.check_expr(
+                    let filter_type = Arc::clone(&current).check_expr(
                         global_env,
                         &filter_expr.node,
                         &filter_expr.span,
@@ -2667,7 +2587,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
 
                     if let Some(typ) = filter_type {
@@ -2683,7 +2602,7 @@ impl LocalCheckEnv {
                 }
 
                 // Check the output expression - this determines the result element type
-                let elem_type = self.check_expr(
+                let elem_type = current.check_expr(
                     global_env,
                     &expr.node,
                     &expr.span,
@@ -2691,12 +2610,7 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-
-                for (_var, _collection) in vars_and_collections {
-                    self.pop_scope(warnings);
-                }
 
                 match elem_type {
                     Some(t) => Some(SimpleType::List(t).into()),
@@ -2706,7 +2620,7 @@ impl LocalCheckEnv {
 
             // ========== Cardinality ==========
             Expr::Cardinality(collection) => {
-                let elem_t = self.check_expr(
+                let elem_t = Arc::clone(&self).check_expr(
                     global_env,
                     &collection.node,
                     &collection.span,
@@ -2714,7 +2628,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
                 match elem_t {
                     Some(t) if t.is_list() => (),
@@ -2733,7 +2646,7 @@ impl LocalCheckEnv {
 
             // ========== Let construct ==========
             Expr::Let { var, value, body } => {
-                let value_type = self.check_expr(
+                let value_type = Arc::clone(&self).check_expr(
                     global_env,
                     &value.node,
                     &value.span,
@@ -2741,7 +2654,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 // Check naming convention
@@ -2749,7 +2661,7 @@ impl LocalCheckEnv {
                     &var.node,
                     string_case::NamingConvention::SnakeCase,
                 ) {
-                    warnings.push(SemWarning::ParameterNamingConvention {
+                    self.push_warning(SemWarning::ParameterNamingConvention {
                         module: self.current_module().to_string(),
                         identifier: var.node.clone(),
                         span: var.span.clone(),
@@ -2759,15 +2671,15 @@ impl LocalCheckEnv {
 
                 // Extract element type from collection
                 // Track if registration succeeded to determine return value
+                let mut builder = Self::start_subscope(Arc::clone(&self));
                 let registration_failed = match value_type {
                     Some(typ) => {
-                        if let Err(e) = self.register_identifier(
+                        if let Err(e) = builder.register_identifier(
                             global_env,
                             &var.node,
                             var.span.clone(),
                             typ,
                             type_info,
-                            warnings,
                         ) {
                             errors.push(e);
                             true
@@ -2778,9 +2690,9 @@ impl LocalCheckEnv {
                     None => true,
                 };
 
-                self.push_scope();
+                let subscope = builder.build_subscope();
 
-                let body_type = self.check_expr(
+                let body_type = subscope.check_expr(
                     global_env,
                     &body.node,
                     &body.span,
@@ -2788,10 +2700,7 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
-
-                self.pop_scope(warnings);
 
                 // Return None if registration failed, otherwise return body type
                 if registration_failed {
@@ -2805,7 +2714,7 @@ impl LocalCheckEnv {
 
     /// Handle type casts in GenericCall expressions: BuiltinType(x), CustomType(x), Enum::Variant(x)
     fn check_generic_call_type_cast<D: DatabaseDriver>(
-        &mut self,
+        self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
         simple_type: &SimpleType,
         args: &Vec<Spanned<Expr>>,
@@ -2814,7 +2723,6 @@ impl LocalCheckEnv {
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         match simple_type {
             // Built-in type casts: Int(x), Bool(x), String(x), etc.
@@ -2840,7 +2748,7 @@ impl LocalCheckEnv {
 
                 // Check the argument type and validate conversion
                 let arg = &args[0];
-                let arg_type = self.check_expr(
+                let arg_type = Arc::clone(&self).check_expr(
                     global_env,
                     &arg.node,
                     &arg.span,
@@ -2848,7 +2756,6 @@ impl LocalCheckEnv {
                     expr_types,
                     resolved_types,
                     errors,
-                    warnings,
                 );
 
                 if let Some(inferred) = arg_type {
@@ -2912,7 +2819,7 @@ impl LocalCheckEnv {
                         });
                     }
                     if let Some(arg) = args.first() {
-                        let arg_type = self.check_expr(
+                        let arg_type = Arc::clone(&self).check_expr(
                             global_env,
                             &arg.node,
                             &arg.span,
@@ -2920,7 +2827,6 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         );
                         if let Some(inferred) = arg_type {
                             if !inferred.is_none() {
@@ -2947,7 +2853,7 @@ impl LocalCheckEnv {
                             });
                         }
                         for arg in args {
-                            self.check_expr(
+                            Arc::clone(&self).check_expr(
                                 global_env,
                                 &arg.node,
                                 &arg.span,
@@ -2955,7 +2861,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
                         }
                     }
@@ -2973,7 +2878,7 @@ impl LocalCheckEnv {
                     if let (Some(arg), Some(underlying)) =
                         (args.first(), underlying_simple.as_ref())
                     {
-                        let arg_type = self.check_expr(
+                        let arg_type = Arc::clone(&self).check_expr(
                             global_env,
                             &arg.node,
                             &arg.span,
@@ -2981,7 +2886,6 @@ impl LocalCheckEnv {
                             expr_types,
                             resolved_types,
                             errors,
-                            warnings,
                         );
 
                         if let Some(inferred) = arg_type {
@@ -3015,7 +2919,7 @@ impl LocalCheckEnv {
 
     /// Handle struct-style type casts: Type { field: value }
     fn check_struct_call_type<D: DatabaseDriver>(
-        &mut self,
+        self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
         simple_type: &SimpleType,
         fields: &Vec<(Spanned<String>, Spanned<Expr>)>,
@@ -3024,7 +2928,6 @@ impl LocalCheckEnv {
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         let (module, type_name, variant_name, qualified_name) = match simple_type {
             SimpleType::Custom(module, root, variant) => (
@@ -3103,7 +3006,7 @@ impl LocalCheckEnv {
                             });
                         }
                         Some(exp_typ) => {
-                            let inferred = self.check_expr(
+                            let inferred = Arc::clone(&self).check_expr(
                                 global_env,
                                 &field_expr.node,
                                 &field_expr.span,
@@ -3111,7 +3014,6 @@ impl LocalCheckEnv {
                                 expr_types,
                                 resolved_types,
                                 errors,
-                                warnings,
                             );
 
                             if let Some(inf) = inferred {
@@ -3149,15 +3051,14 @@ impl LocalCheckEnv {
     }
 
     fn check_ident_path<D: DatabaseDriver>(
-        &mut self,
+        &self,
         global_env: &GlobalEnv<D>,
         path: &Spanned<crate::ast::NamespacePath>,
         _type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
-        _warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         // Use resolve_path to determine what this path refers to
-        let resolved = match resolve_path(path, self.current_module(), global_env, Some(self)) {
+        let resolved = match resolve_path(path, self.current_module(), global_env, Some(&*self)) {
             Ok(r) => r,
             Err(e) => {
                 errors.push(e.into_sem_error(self.current_module()));
@@ -3295,7 +3196,7 @@ impl LocalCheckEnv {
     }
 
     fn check_path<D: DatabaseDriver>(
-        &mut self,
+        self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
         object: &Spanned<Expr>,
         segments: &Vec<Spanned<crate::ast::PathSegment>>,
@@ -3303,13 +3204,12 @@ impl LocalCheckEnv {
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) -> Option<ExprType> {
         use crate::ast::PathSegment;
         assert!(!segments.is_empty(), "Path must have at least one segment");
 
         // First segment can be an expression
-        let mut current_type = self.check_expr(
+        let mut current_type = Arc::clone(&self).check_expr(
             global_env,
             &object.node,
             &object.span,
@@ -3317,7 +3217,6 @@ impl LocalCheckEnv {
             expr_types,
             resolved_types,
             errors,
-            warnings,
         )?;
 
         // Follow the path through fields or tuple indices
@@ -3430,7 +3329,7 @@ impl LocalCheckEnv {
                 PathSegment::ListIndexFallible(index_expr)
                 | PathSegment::ListIndexPanic(index_expr) => {
                     // 1. Check index expression is Int
-                    let index_type = self.check_expr(
+                    let index_type = Arc::clone(&self).check_expr(
                         global_env,
                         &index_expr.node,
                         &index_expr.span,
@@ -3438,7 +3337,6 @@ impl LocalCheckEnv {
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     )?;
 
                     if !index_type.is_int() {
