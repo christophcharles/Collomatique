@@ -6,7 +6,7 @@
 
 use super::solution::Problem;
 use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
-use crate::eval::database::DatabaseConnection;
+use crate::database::DatabaseConnection;
 use crate::eval::{CheckedAST, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
 use crate::semantics::ArgsType;
 use crate::traits::{EvalObject, FieldConversionError, VarConversionError};

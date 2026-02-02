@@ -7,7 +7,7 @@
 //! - `ExtraDesc`: Extended description for reification problems
 //! - `ProblemError`: Errors that can occur during problem construction
 
-use crate::eval::database::DatabaseConnection;
+use crate::database::DatabaseConnection;
 use crate::eval::{ExprValue, Origin};
 use crate::traits::EvalObject;
 use crate::{EvalVar, ExprType};

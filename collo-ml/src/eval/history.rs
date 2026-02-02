@@ -5,11 +5,11 @@
 //! - `VariableDefinitions`: The result of evaluation, containing variable constraints
 
 use super::checked_ast::{CheckedAST, EvalError};
-use super::database::DatabaseConnection;
 use super::local_env::LocalEvalEnv;
 use super::values::ExprValue;
 use super::variables::{IlpVar, Origin};
 use crate::ast::Spanned;
+use crate::database::DatabaseConnection;
 use crate::semantics::FunctionDesc;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;

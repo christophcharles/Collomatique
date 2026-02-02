@@ -6,7 +6,7 @@
 //! - `FeasableSolution`: A verified feasible solution
 
 use super::types::{ConstraintDesc, ExtraDesc, ProblemVar};
-use crate::eval::database::DatabaseConnection;
+use crate::database::DatabaseConnection;
 use crate::traits::EvalObject;
 use crate::EvalVar;
 use collomatique_ilp::solvers::Solver;

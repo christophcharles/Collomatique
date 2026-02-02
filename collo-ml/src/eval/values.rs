@@ -8,8 +8,9 @@
 
 use derivative::Derivative;
 
-use super::database::{DatabaseConnection, DatabaseHandle};
+use super::database::DatabaseHandle;
 use super::variables::{ConstraintWithOrigin, IlpVar, Origin};
+use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use crate::traits::{EvalObject, FieldConversionError};
 use collomatique_ilp::{Constraint, LinExpr};

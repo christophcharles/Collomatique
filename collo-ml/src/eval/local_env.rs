@@ -4,11 +4,11 @@
 //! - `LocalEvalEnv`: Manages local variable scopes during expression evaluation
 
 use super::checked_ast::EvalError;
-use super::database::DatabaseConnection;
 use super::history::EvalHistory;
 use super::values::{CustomValue, ExprValue};
 use super::variables::{ExternVar, IlpVar, ScriptVar};
 use crate::ast::{Span, Spanned};
+use crate::database::DatabaseConnection;
 use crate::semantics::{resolve_path, LocalEnvCheck, ResolvedPathKind, SimpleType};
 use crate::traits::EvalObject;
 use collomatique_ilp::LinExpr;
@@ -1195,7 +1195,7 @@ impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
         name: &str,
         args: &[Spanned<crate::ast::Expr>],
     ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
-        use super::database::SqlQueryError;
+        use crate::database::SqlQueryError;
 
         let query_desc = eval_history
             .ast

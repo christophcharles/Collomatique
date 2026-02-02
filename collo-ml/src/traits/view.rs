@@ -1,5 +1,5 @@
 use super::{EvalObject, FieldType};
-use crate::eval::database::DatabaseConnection;
+use crate::database::DatabaseConnection;
 use crate::eval::ExprValue;
 use std::collections::{BTreeSet, HashMap};
 

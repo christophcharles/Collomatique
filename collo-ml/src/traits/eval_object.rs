@@ -1,5 +1,5 @@
 use super::FieldConversionError;
-use crate::eval::database::DatabaseConnection;
+use crate::database::DatabaseConnection;
 use crate::eval::ExprValue;
 use crate::semantics::ExprType;
 use collomatique_ilp::UsableData;

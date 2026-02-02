@@ -7,9 +7,9 @@
 //! - `Origin`: Tracks where a constraint originated from
 //! - `ConstraintWithOrigin`: A constraint paired with its origin
 
-use super::database::DatabaseConnection;
 use super::values::ExprValue;
 use crate::ast::Spanned;
+use crate::database::DatabaseConnection;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;

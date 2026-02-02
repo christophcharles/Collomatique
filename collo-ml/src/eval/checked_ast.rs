@@ -8,9 +8,9 @@
 
 use derivative::Derivative;
 
-use super::database::{DatabaseConnection, SqliteDatabaseConnection};
 use super::history::{EvalHistory, VariableDefinitions};
 use super::values::{ExprValue, NoObject, NoObjectEnv};
+use crate::database::{DatabaseConnection, SqliteDatabaseConnection};
 use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,

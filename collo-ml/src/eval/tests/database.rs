@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::eval::database::{DatabaseHandle, DbValue, SqlQueryError, SqliteDatabaseConnection};
+use crate::database::{DbValue, SqlQueryError, SqliteDatabaseConnection};
+use crate::eval::database::DatabaseHandle;
 use crate::eval::values::{CustomValue, NoObject};
 use crate::semantics::database::DbConversionError;
 
@@ -633,7 +634,11 @@ async fn setup_users_table(pool: &sqlx::SqlitePool) {
 }
 
 async fn test_handle(pool: &sqlx::SqlitePool) -> DatabaseHandle<SqliteDatabaseConnection> {
-    SqliteDatabaseConnection::new("test", pool).await.unwrap()
+    DatabaseHandle::new(
+        SqliteDatabaseConnection::new_sqlite("test", pool)
+            .await
+            .unwrap(),
+    )
 }
 
 #[tokio::test]
