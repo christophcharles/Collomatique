@@ -54,7 +54,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
     async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        local_env: &LocalEvalEnv<'_, T, D>,
+        local_env: &Arc<LocalEvalEnv<T, D>>,
     ) -> Result<Vec<String>, EvalError<T, D::Connection>> {
         let mut lines = Vec::new();
         for line in &fn_desc.docstring {
@@ -62,7 +62,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             for part in line {
                 result.push_str(&part.prefix);
                 if let Some(expr) = &part.expr {
-                    match Box::pin(local_env.eval_expr(self, expr)).await? {
+                    match Box::pin(Arc::clone(local_env).eval_expr(self, expr)).await? {
                         ExprValue::String(s) => result.push_str(&s),
                         // Expression is wrapped in String(...) at parse time,
                         // so this should never happen - logic bug if it does
@@ -108,7 +108,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         }
 
         let root_env = LocalEvalEnv::new(module);
-        let mut builder = root_env.start_subscope();
+        let mut builder = LocalEvalEnv::start_subscope(root_env);
         for (param, ((arg, arg_typ), arg_name)) in args
             .iter()
             .zip(fn_desc.typ.args.iter())
@@ -133,7 +133,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         }
 
         let local_env = builder.build_subscope();
-        let naked_result = Box::pin(local_env.eval_expr(self, &fn_desc.body)).await;
+        let naked_result = Box::pin(Arc::clone(&local_env).eval_expr(self, &fn_desc.body)).await;
         let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
         let naked_result = naked_result?;
 
