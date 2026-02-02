@@ -54,7 +54,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
     async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        local_env: &mut LocalEvalEnv<T, D>,
+        local_env: &LocalEvalEnv<'_, T, D>,
     ) -> Result<Vec<String>, EvalError<T, D::Connection>> {
         let mut lines = Vec::new();
         for line in &fn_desc.docstring {
@@ -107,7 +107,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             });
         }
 
-        let mut local_env = LocalEvalEnv::new(module);
+        let root_env = LocalEvalEnv::new(module);
+        let mut builder = root_env.start_subscope();
         for (param, ((arg, arg_typ), arg_name)) in args
             .iter()
             .zip(fn_desc.typ.args.iter())
@@ -121,7 +122,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                     found: arg.clone(),
                 });
             }
-            local_env.register_identifier(arg_name, arg.clone());
+            builder.register_identifier(arg_name, arg.clone());
         }
 
         if let Some(r) = self
@@ -131,11 +132,9 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             return Ok(r.clone());
         }
 
-        local_env.push_scope();
+        let local_env = builder.build_subscope();
         let naked_result = Box::pin(local_env.eval_expr(self, &fn_desc.body)).await;
-        // Evaluate docstring expressions BEFORE popping scope (parameters still available)
-        let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &mut local_env)).await?;
-        local_env.pop_scope();
+        let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
         let naked_result = naked_result?;
 
         let origin = Origin {

@@ -13,26 +13,47 @@ use crate::semantics::{resolve_path, LocalEnvCheck, ResolvedPathKind, SimpleType
 use crate::traits::EvalObject;
 use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseDriver> {
-    scopes: Vec<HashMap<String, ExprValue<T, D::Connection>>>,
-    pending_scope: HashMap<String, ExprValue<T, D::Connection>>,
-    current_module: String,
+#[derive(Debug)]
+pub(crate) struct LocalEvalEnv<'a, T: EvalObject, D: DatabaseDriver> {
+    scope: HashMap<String, ExprValue<T, D::Connection>>,
+    parent: Option<&'a LocalEvalEnv<'a, T, D>>,
+    current_module: Arc<str>,
 }
 
-impl<T: EvalObject, D: DatabaseDriver> LocalEnvCheck for LocalEvalEnv<T, D> {
+pub(crate) struct SubscopeBuilder<'a, T: EvalObject, D: DatabaseDriver> {
+    identifiers: HashMap<String, ExprValue<T, D::Connection>>,
+    parent: &'a LocalEvalEnv<'a, T, D>,
+}
+
+impl<'a, T: EvalObject, D: DatabaseDriver> SubscopeBuilder<'a, T, D> {
+    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D::Connection>) {
+        assert!(!self.identifiers.contains_key(ident));
+        self.identifiers.insert(ident.to_string(), value);
+    }
+
+    pub(crate) fn build_subscope(self) -> LocalEvalEnv<'a, T, D> {
+        LocalEvalEnv {
+            scope: self.identifiers,
+            parent: Some(self.parent),
+            current_module: Arc::clone(&self.parent.current_module),
+        }
+    }
+}
+
+impl<'a, T: EvalObject, D: DatabaseDriver> LocalEnvCheck for LocalEvalEnv<'a, T, D> {
     fn has_ident(&self, ident: &str) -> bool {
         self.lookup_ident(ident).is_some()
     }
 }
 
-impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
+impl<'a, T: EvalObject, D: DatabaseDriver> LocalEvalEnv<'a, T, D> {
     pub(crate) fn new(current_module: &str) -> Self {
         LocalEvalEnv {
-            scopes: vec![],
-            pending_scope: HashMap::new(),
-            current_module: current_module.to_string(),
+            scope: HashMap::new(),
+            parent: None,
+            current_module: Arc::from(current_module),
         }
     }
 
@@ -41,37 +62,21 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     }
 
     fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T, D::Connection>> {
-        // We don't look in pending scope as these variables are not yet accessible
-        for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.get(ident) {
-                return Some(value.clone());
-            };
+        if let Some(value) = self.scope.get(ident) {
+            return Some(value.clone());
         }
-        None
+        self.parent.and_then(|p| p.lookup_ident(ident))
     }
 
-    pub(crate) fn push_scope(&mut self) {
-        let mut old_scope = HashMap::new();
-        std::mem::swap(&mut old_scope, &mut self.pending_scope);
-
-        self.scopes.push(old_scope);
-    }
-
-    pub(crate) fn pop_scope(&mut self) {
-        assert!(!self.scopes.is_empty());
-
-        self.pending_scope = self.scopes.pop().unwrap();
-        self.pending_scope.clear();
-    }
-
-    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D::Connection>) {
-        assert!(!self.pending_scope.contains_key(ident));
-
-        self.pending_scope.insert(ident.to_string(), value);
+    pub(crate) fn start_subscope(&self) -> SubscopeBuilder<'_, T, D> {
+        SubscopeBuilder {
+            identifiers: HashMap::new(),
+            parent: self,
+        }
     }
 
     pub(crate) async fn eval_expr(
-        &mut self,
+        &self,
         eval_history: &mut EvalHistory<'_, T, D>,
         expr: &Spanned<crate::ast::Expr>,
     ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
@@ -815,22 +820,17 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         continue;
                     }
 
-                    // Let's add the identifier to the scope
-                    self.register_identifier(&branch.ident.node, value.clone());
-                    self.push_scope();
+                    // Let's add the identifier to a subscope
+                    let mut builder = self.start_subscope();
+                    builder.register_identifier(&branch.ident.node, value.clone());
+                    let subscope = builder.build_subscope();
 
                     // Now we check the where clause
                     let where_clause_passes = match &branch.filter {
                         None => true,
                         Some(filter_expr) => {
                             let cond_value =
-                                match Box::pin(self.eval_expr(eval_history, &filter_expr)).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        self.pop_scope();
-                                        return Err(e);
-                                    }
-                                };
+                                Box::pin(subscope.eval_expr(eval_history, &filter_expr)).await?;
                             let ExprValue::Bool(cond) = cond_value else {
                                 panic!("Expected Bool for where clause");
                             };
@@ -839,14 +839,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if !where_clause_passes {
-                        // Where clause failed, we remove the scope and move to the next branch
-                        self.pop_scope();
+                        // Where clause failed, subscope is dropped, move to the next branch
                         continue;
                     }
 
-                    let output = Box::pin(self.eval_expr(eval_history, &branch.body)).await;
-
-                    self.pop_scope();
+                    let output = Box::pin(subscope.eval_expr(eval_history, &branch.body)).await;
                     return output;
                 }
 
@@ -878,20 +875,15 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 };
 
                 for elem in list {
-                    self.register_identifier(&var.node, elem);
-                    self.push_scope();
+                    let mut builder = self.start_subscope();
+                    builder.register_identifier(&var.node, elem);
+                    let subscope = builder.build_subscope();
 
                     let cond = match filter {
                         None => true,
                         Some(f) => {
                             let filter_value =
-                                match Box::pin(self.eval_expr(eval_history, &f)).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        self.pop_scope();
-                                        return Err(e);
-                                    }
-                                };
+                                Box::pin(subscope.eval_expr(eval_history, &f)).await?;
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -900,13 +892,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = match Box::pin(self.eval_expr(eval_history, &body)).await {
-                            Ok(v) => v,
-                            Err(e) => {
-                                self.pop_scope();
-                                return Err(e);
-                            }
-                        };
+                        let new_value = Box::pin(subscope.eval_expr(eval_history, &body)).await?;
                         output = match (output, new_value) {
                             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                             (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
@@ -931,8 +917,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             ),
                         };
                     }
-
-                    self.pop_scope();
                 }
 
                 output
@@ -957,21 +941,16 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let mut output = Box::pin(self.eval_expr(eval_history, &init_value)).await?;
 
                 for elem in list {
-                    self.register_identifier(&var.node, elem);
-                    self.register_identifier(&accumulator.node, output.clone());
-                    self.push_scope();
+                    let mut builder = self.start_subscope();
+                    builder.register_identifier(&var.node, elem);
+                    builder.register_identifier(&accumulator.node, output.clone());
+                    let subscope = builder.build_subscope();
 
                     let cond = match filter {
                         None => true,
                         Some(f) => {
                             let filter_value =
-                                match Box::pin(self.eval_expr(eval_history, &f)).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        self.pop_scope();
-                                        return Err(e);
-                                    }
-                                };
+                                Box::pin(subscope.eval_expr(eval_history, &f)).await?;
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -980,16 +959,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        output = match Box::pin(self.eval_expr(eval_history, &body)).await {
-                            Ok(v) => v,
-                            Err(e) => {
-                                self.pop_scope();
-                                return Err(e);
-                            }
-                        };
+                        output = Box::pin(subscope.eval_expr(eval_history, &body)).await?;
                     }
-
-                    self.pop_scope();
                 }
 
                 output
@@ -1018,20 +989,15 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 };
 
                 for elem in list {
-                    self.register_identifier(&var.node, elem);
-                    self.push_scope();
+                    let mut builder = self.start_subscope();
+                    builder.register_identifier(&var.node, elem);
+                    let subscope = builder.build_subscope();
 
                     let cond = match filter {
                         None => true,
                         Some(f) => {
                             let filter_value =
-                                match Box::pin(self.eval_expr(eval_history, &f)).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        self.pop_scope();
-                                        return Err(e);
-                                    }
-                                };
+                                Box::pin(subscope.eval_expr(eval_history, &f)).await?;
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1040,13 +1006,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = match Box::pin(self.eval_expr(eval_history, &body)).await {
-                            Ok(v) => v,
-                            Err(e) => {
-                                self.pop_scope();
-                                return Err(e);
-                            }
-                        };
+                        let new_value = Box::pin(subscope.eval_expr(eval_history, &body)).await?;
                         output = match (output, new_value) {
                             (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
                             (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
@@ -1060,8 +1020,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             ),
                         };
                     }
-
-                    self.pop_scope();
                 }
 
                 output
@@ -1166,12 +1124,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             Expr::Let { var, value, body } => {
                 let value_value = Box::pin(self.eval_expr(eval_history, &value)).await?;
 
-                self.register_identifier(&var.node, value_value);
-                self.push_scope();
+                let mut builder = self.start_subscope();
+                builder.register_identifier(&var.node, value_value);
+                let subscope = builder.build_subscope();
 
-                let body_value = Box::pin(self.eval_expr(eval_history, &body)).await;
-
-                self.pop_scope();
+                let body_value = Box::pin(subscope.eval_expr(eval_history, &body)).await;
 
                 body_value?
             }
@@ -1201,7 +1158,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     /// Execute a query call by evaluating args, extracting the database handle,
     /// and calling `DatabaseHandle::query`.
     async fn eval_query_call(
-        &mut self,
+        &self,
         eval_history: &mut EvalHistory<'_, T, D>,
         module: &str,
         name: &str,
@@ -1253,7 +1210,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
     /// Helper for evaluating type casts in GenericCall expressions
     async fn eval_generic_call_type_cast(
-        &mut self,
+        &self,
         eval_history: &mut EvalHistory<'_, T, D>,
         simple_type: &SimpleType,
         args: &Vec<Spanned<crate::ast::Expr>>,
@@ -1336,7 +1293,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     }
 
     async fn build_naked_list_for_list_comprehension(
-        &mut self,
+        &self,
         eval_history: &mut EvalHistory<'_, T, D>,
         body: &Spanned<crate::ast::Expr>,
         vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
@@ -1372,20 +1329,19 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         let mut output = Vec::new();
 
         for elem in list {
-            self.register_identifier(&var.node, elem);
-            self.push_scope();
+            let mut builder = self.start_subscope();
+            builder.register_identifier(&var.node, elem);
+            let subscope = builder.build_subscope();
 
-            let extension = Box::pin(self.build_naked_list_for_list_comprehension(
+            let extension = Box::pin(subscope.build_naked_list_for_list_comprehension(
                 eval_history,
                 body,
                 remaining_v_and_c,
                 filter,
             ))
-            .await;
+            .await?;
 
-            self.pop_scope();
-
-            output.extend(extension?);
+            output.extend(extension);
         }
 
         Ok(output)
