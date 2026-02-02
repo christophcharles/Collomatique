@@ -36,6 +36,16 @@ pub enum SqlQueryError {
     ResultConversionError { row: usize, column: String },
 }
 
+/// Trait for database drivers that can build a fresh in-memory database from a schema.
+pub trait DatabaseDriver {
+    type Connection: DatabaseConnection;
+
+    fn build_with_schema<'a>(
+        name: &'a str,
+        schema: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Connection, SqlQueryError>> + Send + 'a>>;
+}
+
 /// Trait for database connection backends.
 pub trait DatabaseConnection: fmt::Debug + Send + Sync + 'static {
     fn name(&self) -> &str;
@@ -206,6 +216,32 @@ impl DatabaseConnection for SqliteDatabaseConnection {
             }
 
             Ok((result, columns))
+        })
+    }
+}
+
+/// SQLite database driver.
+///
+/// Builds an in-memory SQLite database, applies the provided schema,
+/// then opens a read-only connection via `SqliteDatabaseConnection`.
+pub struct SqliteDatabaseDriver;
+
+impl DatabaseDriver for SqliteDatabaseDriver {
+    type Connection = SqliteDatabaseConnection;
+
+    fn build_with_schema<'a>(
+        name: &'a str,
+        schema: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Connection, SqlQueryError>> + Send + 'a>> {
+        Box::pin(async move {
+            let pool = sqlx::SqlitePool::connect(":memory:")
+                .await
+                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+            sqlx::raw_sql(schema)
+                .execute(&pool)
+                .await
+                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+            SqliteDatabaseConnection::new_sqlite(name, &pool).await
         })
     }
 }

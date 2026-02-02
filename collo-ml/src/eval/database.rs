@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-pub use crate::database::{DatabaseConnection, DbValue, SqlQueryError, SqliteDatabaseConnection};
+pub use crate::database::{
+    DatabaseConnection, DatabaseDriver, DbValue, SqlQueryError, SqliteDatabaseConnection,
+    SqliteDatabaseDriver,
+};
 use crate::semantics::database::DbConversionError;
 use crate::semantics::{ExprType, GlobalEnv, SimpleType};
 use crate::traits::EvalObject;
