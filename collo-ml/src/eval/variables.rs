@@ -7,6 +7,7 @@
 //! - `Origin`: Tracks where a constraint originated from
 //! - `ConstraintWithOrigin`: A constraint paired with its origin
 
+use super::database::DatabaseConnection;
 use super::values::ExprValue;
 use crate::ast::Spanned;
 use crate::traits::EvalObject;
@@ -15,26 +16,33 @@ use derivative::Derivative;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Derivative)]
-#[derivative(PartialOrd, Ord, PartialEq, Eq)]
-pub struct ScriptVar<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject"),
+    Ord(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject")
+)]
+pub struct ScriptVar<T: EvalObject, D: DatabaseConnection> {
     pub module: String,
     pub name: String,
     pub from_list: Option<usize>,
-    pub params: Vec<ExprValue<T>>,
+    pub params: Vec<ExprValue<T, D>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
     params_str: Arc<str>,
 }
 
-impl<T: EvalObject> ScriptVar<T> {
+impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
+        var_str_cache: &mut BTreeMap<Vec<ExprValue<T, D>>, Arc<str>>,
         module: String,
         name: String,
         from_list: Option<usize>,
-        params: Vec<ExprValue<T>>,
+        params: Vec<ExprValue<T, D>>,
     ) -> Self {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
@@ -60,7 +68,7 @@ impl<T: EvalObject> ScriptVar<T> {
         module: String,
         name: String,
         from_list: Option<usize>,
-        params: Vec<ExprValue<T>>,
+        params: Vec<ExprValue<T, D>>,
     ) -> Self {
         let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
         ScriptVar {
@@ -73,7 +81,7 @@ impl<T: EvalObject> ScriptVar<T> {
     }
 }
 
-impl<T: EvalObject> std::fmt::Display for ScriptVar<T> {
+impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.from_list {
             Some(i) => {
@@ -86,22 +94,29 @@ impl<T: EvalObject> std::fmt::Display for ScriptVar<T> {
     }
 }
 
-#[derive(Debug, Clone, Derivative)]
-#[derivative(PartialOrd, Ord, PartialEq, Eq)]
-pub struct ExternVar<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject"),
+    Ord(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject")
+)]
+pub struct ExternVar<T: EvalObject, D: DatabaseConnection> {
     pub name: String,
-    pub params: Vec<ExprValue<T>>,
+    pub params: Vec<ExprValue<T, D>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
     params_str: Arc<str>,
 }
 
-impl<T: EvalObject> ExternVar<T> {
+impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
+        var_str_cache: &mut BTreeMap<Vec<ExprValue<T, D>>, Arc<str>>,
         name: String,
-        params: Vec<ExprValue<T>>,
+        params: Vec<ExprValue<T, D>>,
     ) -> Self {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
@@ -121,7 +136,7 @@ impl<T: EvalObject> ExternVar<T> {
         }
     }
 
-    pub fn new_no_env(name: String, params: Vec<ExprValue<T>>) -> Self {
+    pub fn new_no_env(name: String, params: Vec<ExprValue<T, D>>) -> Self {
         let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
         ExternVar {
             name,
@@ -131,19 +146,27 @@ impl<T: EvalObject> ExternVar<T> {
     }
 }
 
-impl<T: EvalObject> std::fmt::Display for ExternVar<T> {
+impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExternVar<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "${}({})", self.name, self.params_str)
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum IlpVar<T: EvalObject> {
-    Base(ExternVar<T>),
-    Script(ScriptVar<T>),
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
+    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+)]
+pub enum IlpVar<T: EvalObject, D: DatabaseConnection> {
+    Base(ExternVar<T, D>),
+    Script(ScriptVar<T, D>),
 }
 
-impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
+impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for IlpVar<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IlpVar::Base(b) => write!(f, "{}", b),
@@ -152,15 +175,23 @@ impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Origin<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject"),
+    Ord(bound = "T: EvalObject")
+)]
+pub struct Origin<T: EvalObject, D: DatabaseConnection> {
     pub module: String,
     pub fn_name: Spanned<String>,
-    pub args: Vec<ExprValue<T>>,
+    pub args: Vec<ExprValue<T, D>>,
     pub pretty_docstring: Vec<String>,
 }
 
-impl<T: EvalObject> std::fmt::Display for Origin<T> {
+impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for Origin<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.pretty_docstring.is_empty() {
             let args_str: Vec<_> = self.args.iter().map(|x| x.to_string()).collect();
@@ -178,14 +209,24 @@ impl<T: EvalObject> std::fmt::Display for Origin<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ConstraintWithOrigin<T: EvalObject> {
-    pub constraint: Constraint<IlpVar<T>>,
-    pub origin: Option<Origin<T>>,
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject"),
+    Ord(bound = "T: EvalObject")
+)]
+pub struct ConstraintWithOrigin<T: EvalObject, D: DatabaseConnection> {
+    pub constraint: Constraint<IlpVar<T, D>>,
+    pub origin: Option<Origin<T, D>>,
 }
 
-impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
-    fn from(value: Constraint<IlpVar<T>>) -> Self {
+impl<T: EvalObject, D: DatabaseConnection> From<Constraint<IlpVar<T, D>>>
+    for ConstraintWithOrigin<T, D>
+{
+    fn from(value: Constraint<IlpVar<T, D>>) -> Self {
         ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -193,8 +234,8 @@ impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     }
 }
 
-pub fn strip_origins<T: EvalObject>(
-    set: &Vec<ConstraintWithOrigin<T>>,
-) -> Vec<Constraint<IlpVar<T>>> {
+pub fn strip_origins<T: EvalObject, D: DatabaseConnection>(
+    set: &Vec<ConstraintWithOrigin<T, D>>,
+) -> Vec<Constraint<IlpVar<T, D>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }

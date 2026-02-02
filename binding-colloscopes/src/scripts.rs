@@ -1,6 +1,7 @@
 use super::{vars::Var, views::ObjectId};
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
+use collo_ml::SqliteDatabaseConnection;
 use collo_ml::{SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
@@ -93,25 +94,26 @@ mod tests;
 
 pub fn default_problem_builder(
     main_module: &str,
-) -> Result<ProblemBuilder<ObjectId, Var>, SimpleProblemError> {
+) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseConnection, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&modules).map_err(|e| {
-        // Filter ProblemError into SimpleProblemError
-        match e {
-            ProblemError::CompileError(compile_error) => match compile_error {
-                CompileError::ParsingError(parse_err) => {
-                    SimpleProblemError::ParsingError(parse_err)
-                }
-                CompileError::SemanticsError { errors, warnings } => {
-                    SimpleProblemError::SemanticErrors { errors, warnings }
-                }
+    let mut builder = ProblemBuilder::<ObjectId, SqliteDatabaseConnection, Var>::new(&modules)
+        .map_err(|e| {
+            // Filter ProblemError into SimpleProblemError
+            match e {
+                ProblemError::CompileError(compile_error) => match compile_error {
+                    CompileError::ParsingError(parse_err) => {
+                        SimpleProblemError::ParsingError(parse_err)
+                    }
+                    CompileError::SemanticsError { errors, warnings } => {
+                        SimpleProblemError::SemanticErrors { errors, warnings }
+                    }
+                    other => SimpleProblemError::UnexpectedError(format!("{}", other)),
+                },
                 other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-            },
-            other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-        }
-    })?;
+            }
+        })?;
 
     builder
         .add_constraint("main", "constraint", vec![])

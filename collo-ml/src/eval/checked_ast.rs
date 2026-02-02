@@ -6,6 +6,9 @@
 //! - `EnvError`: Errors related to the evaluation environment
 //! - `EvalError`: Errors that can occur during evaluation
 
+use derivative::Derivative;
+
+use super::database::{DatabaseConnection, SqliteDatabaseConnection};
 use super::history::{EvalHistory, VariableDefinitions};
 use super::values::{ExprValue, NoObject, NoObjectEnv};
 use crate::parser::Rule;
@@ -16,14 +19,20 @@ use crate::traits::EvalObject;
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CheckedAST<T: EvalObject = NoObject> {
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct CheckedAST<T: EvalObject, D: DatabaseConnection> {
     pub(crate) global_env: GlobalEnv,
     pub(crate) type_info: TypeInfo,
     pub(crate) expr_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) resolved_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) warnings: Vec<SemWarning>,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
+    pub(crate) _phantom: std::marker::PhantomData<(T, D)>,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -47,8 +56,9 @@ pub enum EnvError<T: EvalObject> {
     BadTypeName { typ_name: String, obj: T },
 }
 
-#[derive(Clone, Debug, Error)]
-pub enum EvalError<T: EvalObject> {
+#[derive(Derivative, Error)]
+#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
+pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
     #[error("Object of type {0} returns its type as being {1}")]
     ObjectWithBadTypeName(String, String),
     #[error("Object {object} of type {typ} does not have field {field}")]
@@ -63,7 +73,7 @@ pub enum EvalError<T: EvalObject> {
     TypeMismatch {
         param: usize,
         expected: ExprType,
-        found: ExprValue<T>,
+        found: ExprValue<T, D>,
     },
     #[error("Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}")]
     ArgumentCountMismatch {
@@ -74,27 +84,30 @@ pub enum EvalError<T: EvalObject> {
     #[error("Param {param} is an inconsistent ExprValue")]
     InvalidExprValue { param: usize },
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T>>),
+    Panic(Box<ExprValue<T, D>>),
 }
 
-impl CheckedAST<NoObject> {
+impl CheckedAST<NoObject, SqliteDatabaseConnection> {
     pub fn quick_eval_fn(
         &self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<NoObject>>,
-    ) -> Result<ExprValue<NoObject>, EvalError<NoObject>> {
+        args: Vec<ExprValue<NoObject, SqliteDatabaseConnection>>,
+    ) -> Result<
+        ExprValue<NoObject, SqliteDatabaseConnection>,
+        EvalError<NoObject, SqliteDatabaseConnection>,
+    > {
         let env = NoObjectEnv {};
         self.eval_fn(&env, module, fn_name, args)
     }
 }
 
-impl<T: EvalObject> CheckedAST<T> {
+impl<T: EvalObject, D: DatabaseConnection> CheckedAST<T, D> {
     /// Create a CheckedAST from source modules
     pub fn new(
         inputs: &BTreeMap<&str, &str>,
         vars: HashMap<String, ArgsType>,
-    ) -> Result<CheckedAST<T>, CompileError> {
+    ) -> Result<CheckedAST<T, D>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
@@ -127,7 +140,7 @@ impl<T: EvalObject> CheckedAST<T> {
         })
     }
 
-    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T>> {
+    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T, D>> {
         for (typ, _fields) in self.global_env.get_types() {
             let objects = T::objects_with_typ(env, typ.as_str());
 
@@ -210,7 +223,7 @@ impl<T: EvalObject> CheckedAST<T> {
     pub fn start_eval_history<'a>(
         &'a self,
         env: &'a T::Env,
-    ) -> Result<EvalHistory<'a, T>, EvalError<T>> {
+    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D>> {
         let cache = T::Cache::default();
         EvalHistory::new(self, env, cache)
     }
@@ -219,7 +232,7 @@ impl<T: EvalObject> CheckedAST<T> {
         &'a self,
         env: &'a T::Env,
         cache: T::Cache,
-    ) -> Result<EvalHistory<'a, T>, EvalError<T>> {
+    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D>> {
         EvalHistory::new(self, env, cache)
     }
 
@@ -228,8 +241,8 @@ impl<T: EvalObject> CheckedAST<T> {
         env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<ExprValue<T>, EvalError<T>> {
+        args: Vec<ExprValue<T, D>>,
+    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
         let mut eval_history = self.start_eval_history(env)?;
         Ok(eval_history.eval_fn(module, fn_name, args)?.0)
     }
@@ -239,8 +252,8 @@ impl<T: EvalObject> CheckedAST<T> {
         env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<(ExprValue<T>, VariableDefinitions<T>), EvalError<T>> {
+        args: Vec<ExprValue<T, D>>,
+    ) -> Result<(ExprValue<T, D>, VariableDefinitions<T, D>), EvalError<T, D>> {
         let mut eval_history = self.start_eval_history(env)?;
         let (r, _o) = eval_history.eval_fn(module, fn_name, args)?;
         Ok((r, eval_history.into_var_def()))

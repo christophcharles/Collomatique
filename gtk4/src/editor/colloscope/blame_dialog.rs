@@ -10,7 +10,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
-    warnings: Option<Result<Vec<Origin<ObjectId>>, String>>,
+    warnings: Option<Result<Vec<Origin<ObjectId, collo_ml::SqliteDatabaseConnection>>, String>>,
     messages: FactoryVecDeque<Entry>,
 }
 
@@ -18,7 +18,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show,
     Close,
-    Update(Option<Result<Vec<Origin<ObjectId>>, String>>),
+    Update(Option<Result<Vec<Origin<ObjectId, collo_ml::SqliteDatabaseConnection>>, String>>),
 }
 
 #[relm4::component(pub)]

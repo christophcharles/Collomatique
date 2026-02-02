@@ -27,9 +27,9 @@ fn single_constraint_problem() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -48,7 +48,7 @@ fn single_constraint_problem() {
 
     let env = NoObjectEnv {};
     let modules = BTreeMap::from([("main", "pub let f() -> Constraint = $V() === 1;")]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -108,9 +108,9 @@ fn multiple_constraints_in_script() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -155,7 +155,7 @@ fn multiple_constraints_in_script() {
                 $V() === 1 and $W() === 0 and $X() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -219,9 +219,9 @@ fn multiple_function_calls() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -256,7 +256,7 @@ fn multiple_function_calls() {
             pub let c2() -> Constraint = $W() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -319,9 +319,9 @@ fn constraints_from_different_modules() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -364,7 +364,7 @@ fn constraints_from_different_modules() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

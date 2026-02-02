@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprValue, SimpleType, ViewBuilder, ViewObject};
+use collo_ml::{
+    EvalObject, ExprValue, SimpleType, SqliteDatabaseConnection, ViewBuilder, ViewObject,
+};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -179,7 +181,7 @@ fn test_option_field_access_some() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let student = OptionObjectId::Student(StudentId(1));
-    let mentor_field = student.field_access(&env, &mut cache, "mentor");
+    let mentor_field = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
 
     // Should be Some(Object(Student(2)))
     if let Some(ExprValue::Object(OptionObjectId::Student(StudentId(id)))) = mentor_field {
@@ -208,7 +210,7 @@ fn test_option_field_access_none() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let student = OptionObjectId::Student(StudentId(1));
-    let mentor_field = student.field_access(&env, &mut cache, "mentor");
+    let mentor_field = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
 
     // Should be None value
     if let Some(ExprValue::None) = mentor_field {
@@ -248,7 +250,8 @@ fn test_multiple_optional_fields() {
     let course = OptionObjectId::Course(CourseId(100));
 
     // Check instructor (Some)
-    let instructor_field = course.field_access(&env, &mut cache, "instructor");
+    let instructor_field =
+        course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "instructor");
     if let Some(ExprValue::Object(OptionObjectId::Student(StudentId(id)))) = instructor_field {
         assert_eq!(id, 1);
     } else {
@@ -256,7 +259,7 @@ fn test_multiple_optional_fields() {
     }
 
     // Check TA (None)
-    let ta_field = course.field_access(&env, &mut cache, "ta");
+    let ta_field = course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "ta");
     if let Some(ExprValue::None) = ta_field {
         // Success
     } else {
@@ -323,7 +326,8 @@ fn test_list_of_options_field_access_mixed() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let members_field = project.field_access(&env, &mut cache, "members");
+    let members_field =
+        project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
 
     // Should be a List with 3 elements: Some, None, Some
     if let Some(ExprValue::List(values)) = members_field {
@@ -368,7 +372,8 @@ fn test_list_of_options_all_none() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let members_field = project.field_access(&env, &mut cache, "members");
+    let members_field =
+        project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
 
     // Should be a List with 3 None values
     if let Some(ExprValue::List(values)) = members_field {
@@ -422,7 +427,8 @@ fn test_list_of_options_all_some() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let members_field = project.field_access(&env, &mut cache, "members");
+    let members_field =
+        project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
 
     // Should be a List with 3 Student objects
     if let Some(ExprValue::List(values)) = members_field {
@@ -453,7 +459,8 @@ fn test_empty_list_of_options() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let members_field = project.field_access(&env, &mut cache, "members");
+    let members_field =
+        project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
 
     // Should be an empty List
     if let Some(ExprValue::List(values)) = members_field {
@@ -584,7 +591,7 @@ fn test_option_of_vec_field_access_some() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let teams_field = project.field_access(&env, &mut cache, "teams");
+    let teams_field = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "teams");
 
     // Should be Some(List([Student(1), Student(2), Student(3)]))
     if let Some(ExprValue::List(values)) = teams_field {
@@ -626,7 +633,7 @@ fn test_option_of_vec_field_access_none() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let teams_field = project.field_access(&env, &mut cache, "teams");
+    let teams_field = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "teams");
 
     // Should be None
     if let Some(ExprValue::None) = teams_field {
@@ -656,7 +663,7 @@ fn test_option_of_vec_empty_list() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let project = OptionObjectId::Project(ProjectId(100));
-    let teams_field = project.field_access(&env, &mut cache, "teams");
+    let teams_field = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "teams");
 
     // Should be Some(List([])) - empty list, not None
     if let Some(ExprValue::List(values)) = teams_field {
@@ -732,14 +739,14 @@ fn test_combined_optional_patterns() {
     let project = OptionObjectId::Project(ProjectId(100));
 
     // Check leader (Option<T>)
-    let leader = project.field_access(&env, &mut cache, "leader");
+    let leader = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "leader");
     assert!(matches!(
         leader,
         Some(ExprValue::Object(OptionObjectId::Student(StudentId(1))))
     ));
 
     // Check members (Vec<Option<T>>)
-    let members = project.field_access(&env, &mut cache, "members");
+    let members = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
     if let Some(ExprValue::List(values)) = members {
         assert_eq!(values.len(), 3);
         assert!(matches!(values[0], ExprValue::Object(_)));
@@ -750,7 +757,7 @@ fn test_combined_optional_patterns() {
     }
 
     // Check teams (Option<Vec<T>>)
-    let teams = project.field_access(&env, &mut cache, "teams");
+    let teams = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "teams");
     if let Some(ExprValue::List(values)) = teams {
         assert_eq!(values.len(), 3);
         assert!(values.iter().all(|v| matches!(v, ExprValue::Object(_))));
@@ -783,7 +790,7 @@ fn test_option_field_with_nonexistent_reference() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let student = OptionObjectId::Student(StudentId(1));
-    let mentor_field = student.field_access(&env, &mut cache, "mentor");
+    let mentor_field = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
 
     // This might return None or might panic depending on implementation
     // The important thing is it handles the error gracefully
@@ -827,20 +834,21 @@ fn test_option_in_multiple_objects() {
 
     // Student 1 has mentor
     let student1 = OptionObjectId::Student(StudentId(1));
-    let mentor1 = student1.field_access(&env, &mut cache, "mentor");
+    let mentor1 = student1.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
     assert!(matches!(mentor1, Some(ExprValue::Object(_))));
 
     // Student 2 has no mentor
     let student2 = OptionObjectId::Student(StudentId(2));
-    let mentor2 = student2.field_access(&env, &mut cache, "mentor");
+    let mentor2 = student2.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
     assert!(matches!(mentor2, Some(ExprValue::None)));
 
     // Course has both instructor and TA
     let course = OptionObjectId::Course(CourseId(100));
-    let instructor = course.field_access(&env, &mut cache, "instructor");
+    let instructor =
+        course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "instructor");
     assert!(matches!(instructor, Some(ExprValue::Object(_))));
 
-    let ta = course.field_access(&env, &mut cache, "ta");
+    let ta = course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "ta");
     assert!(matches!(ta, Some(ExprValue::Object(_))));
 }
 
@@ -864,7 +872,7 @@ fn test_option_self_reference() {
     let mut cache = <OptionObjectId as EvalObject>::Cache::default();
 
     let student = OptionObjectId::Student(StudentId(1));
-    let mentor_field = student.field_access(&env, &mut cache, "mentor");
+    let mentor_field = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
 
     // Should successfully return self
     if let Some(ExprValue::Object(OptionObjectId::Student(StudentId(id)))) = mentor_field {
@@ -909,7 +917,7 @@ fn test_option_chain() {
 
     // Check Student 1's mentor
     let student1 = OptionObjectId::Student(StudentId(1));
-    let mentor1 = student1.field_access(&env, &mut cache, "mentor");
+    let mentor1 = student1.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
     assert!(matches!(
         mentor1,
         Some(ExprValue::Object(OptionObjectId::Student(StudentId(2))))
@@ -917,7 +925,7 @@ fn test_option_chain() {
 
     // Check Student 2's mentor
     let student2 = OptionObjectId::Student(StudentId(2));
-    let mentor2 = student2.field_access(&env, &mut cache, "mentor");
+    let mentor2 = student2.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
     assert!(matches!(
         mentor2,
         Some(ExprValue::Object(OptionObjectId::Student(StudentId(3))))
@@ -925,6 +933,6 @@ fn test_option_chain() {
 
     // Check Student 3's mentor
     let student3 = OptionObjectId::Student(StudentId(3));
-    let mentor3 = student3.field_access(&env, &mut cache, "mentor");
+    let mentor3 = student3.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "mentor");
     assert!(matches!(mentor3, Some(ExprValue::None)));
 }

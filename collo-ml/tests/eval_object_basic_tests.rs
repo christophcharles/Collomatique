@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprValue, SimpleType, ViewBuilder, ViewObject};
+use collo_ml::{
+    EvalObject, ExprValue, SimpleType, SqliteDatabaseConnection, ViewBuilder, ViewObject,
+};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -224,24 +226,27 @@ fn test_field_access() {
 
     // Access age field
     assert_eq!(
-        student.field_access(&env, &mut cache, "age"),
+        student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age"),
         Some(ExprValue::Int(20))
     );
 
     // Access enrolled field
     assert_eq!(
-        student.field_access(&env, &mut cache, "enrolled"),
+        student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "enrolled"),
         Some(ExprValue::Bool(true))
     );
 
     // Access room field (should be converted to ObjectId)
     assert_eq!(
-        student.field_access(&env, &mut cache, "room"),
+        student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "room"),
         Some(ExprValue::Object(ObjectId::Room(RoomId(101))))
     );
 
     // Non-existent field
-    assert_eq!(student.field_access(&env, &mut cache, "nonexistent"), None);
+    assert_eq!(
+        student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "nonexistent"),
+        None
+    );
 }
 
 #[test]
@@ -256,5 +261,8 @@ fn test_field_access_with_nonexistent_object() {
     let student = ObjectId::Student(StudentId(999));
 
     // Should return None because the object can't be built
-    assert_eq!(student.field_access(&env, &mut cache, "age"), None);
+    assert_eq!(
+        student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age"),
+        None
+    );
 }

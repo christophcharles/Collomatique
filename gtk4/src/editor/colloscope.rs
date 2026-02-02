@@ -20,6 +20,7 @@ use collomatique_binding_colloscopes::scripts::SimpleProblemError;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collomatique_binding_colloscopes::views::ObjectId,
+    collo_ml::SqliteDatabaseConnection,
     collomatique_binding_colloscopes::vars::Var,
 >;
 
@@ -63,6 +64,7 @@ pub struct IlpProblem {
     env: collomatique_binding_colloscopes::views::Env,
     problem: collo_ml::problem::Problem<
         collomatique_binding_colloscopes::views::ObjectId,
+        collo_ml::SqliteDatabaseConnection,
         collomatique_binding_colloscopes::vars::Var,
     >,
 }
@@ -71,7 +73,7 @@ pub struct IlpProblem {
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<Origin<ObjectId>>,
+    warnings: Vec<Origin<ObjectId, collo_ml::SqliteDatabaseConnection>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

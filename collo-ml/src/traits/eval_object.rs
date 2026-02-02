@@ -1,4 +1,5 @@
 use super::FieldConversionError;
+use crate::eval::database::DatabaseConnection;
 use crate::eval::ExprValue;
 use crate::semantics::ExprType;
 use collomatique_ilp::UsableData;
@@ -120,12 +121,12 @@ pub trait EvalObject: UsableData {
     /// # Returns
     ///
     /// `Some(ExprValue)` if the object and field exist, `None` otherwise.
-    fn field_access(
+    fn field_access<D: DatabaseConnection>(
         &self,
         env: &Self::Env,
         cache: &mut Self::Cache,
         field: &str,
-    ) -> Option<ExprValue<Self>>;
+    ) -> Option<ExprValue<Self, D>>;
 
     /// Returns the schema for all object types in the DSL.
     ///

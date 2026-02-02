@@ -1,4 +1,4 @@
-use collo_ml::{EvalObject, EvalVar, ViewBuilder, ViewObject};
+use collo_ml::{EvalObject, EvalVar, SqliteDatabaseConnection, ViewBuilder, ViewObject};
 use std::collections::{BTreeSet, HashMap};
 
 // ============================================================================
@@ -258,7 +258,7 @@ fn test_try_from_extern_var() {
     use collo_ml::eval::{ExprValue, ExternVar};
 
     // Test successful conversion for StudentTakesSubject
-    let extern_var = ExternVar::new_no_env(
+    let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
         vec![
             ExprValue::Object(ObjectId::Student(StudentId(0))),
@@ -274,8 +274,10 @@ fn test_try_from_extern_var() {
     );
 
     // Test successful conversion for WeekUsed
-    let extern_var =
-        ExternVar::new_no_env("WeekUsed".to_string(), vec![ExprValue::<ObjectId>::Int(2)]);
+    let extern_var = ExternVar::new_no_env(
+        "WeekUsed".to_string(),
+        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(2)],
+    );
 
     let var: Result<SimpleVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -288,7 +290,7 @@ fn test_try_from_wrong_param_count() {
     use collo_ml::traits::VarConversionError;
 
     // Wrong number of parameters
-    let extern_var = ExternVar::new_no_env(
+    let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
         vec![ExprValue::Object(ObjectId::Student(StudentId(0)))], // Only 1, need 2
     );
@@ -311,7 +313,7 @@ fn test_try_from_wrong_param_type() {
     use collo_ml::traits::VarConversionError;
 
     // Wrong parameter type (Int instead of Object)
-    let extern_var = ExternVar::new_no_env(
+    let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
         vec![
             ExprValue::Int(42), // Wrong type!
@@ -332,7 +334,10 @@ fn test_try_from_unknown_variant() {
     use collo_ml::eval::ExternVar;
     use collo_ml::traits::VarConversionError;
 
-    let extern_var = ExternVar::<ObjectId>::new_no_env("NonExistentVariant".to_string(), vec![]);
+    let extern_var = ExternVar::<ObjectId, SqliteDatabaseConnection>::new_no_env(
+        "NonExistentVariant".to_string(),
+        vec![],
+    );
 
     let var: Result<SimpleVar, _> = (&extern_var).try_into();
     assert!(var.is_err());

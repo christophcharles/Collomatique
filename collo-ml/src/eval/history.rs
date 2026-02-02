@@ -5,6 +5,7 @@
 //! - `VariableDefinitions`: The result of evaluation, containing variable constraints
 
 use super::checked_ast::{CheckedAST, EvalError};
+use super::database::DatabaseConnection;
 use super::local_env::LocalEvalEnv;
 use super::values::ExprValue;
 use super::variables::{IlpVar, Origin};
@@ -12,26 +13,28 @@ use crate::ast::Spanned;
 use crate::semantics::FunctionDesc;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
+use derivative::Derivative;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct EvalHistory<'a, T: EvalObject> {
-    pub(crate) ast: &'a CheckedAST<T>,
+pub struct EvalHistory<'a, T: EvalObject, D: DatabaseConnection> {
+    pub(crate) ast: &'a CheckedAST<T, D>,
     pub(crate) env: &'a T::Env,
     pub(crate) cache: T::Cache,
-    pub(crate) funcs: BTreeMap<(String, String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
-    pub(crate) vars: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
-    pub(crate) var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
-    pub(crate) var_str_cache: BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
+    pub(crate) funcs:
+        BTreeMap<(String, String, Vec<ExprValue<T, D>>), (ExprValue<T, D>, Origin<T, D>)>,
+    pub(crate) vars: BTreeMap<(String, String, Vec<ExprValue<T, D>>), (String, String)>,
+    pub(crate) var_lists: BTreeMap<(String, String, Vec<ExprValue<T, D>>), (String, String)>,
+    pub(crate) var_str_cache: BTreeMap<Vec<ExprValue<T, D>>, Arc<str>>,
 }
 
-impl<'a, T: EvalObject> EvalHistory<'a, T> {
+impl<'a, T: EvalObject, D: DatabaseConnection> EvalHistory<'a, T, D> {
     pub(crate) fn new(
-        ast: &'a CheckedAST<T>,
+        ast: &'a CheckedAST<T, D>,
         env: &'a T::Env,
         cache: T::Cache,
-    ) -> Result<Self, EvalError<T>> {
+    ) -> Result<Self, EvalError<T, D>> {
         ast.check_env(env)?;
 
         Ok(EvalHistory {
@@ -48,8 +51,8 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
     fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        local_env: &mut LocalEvalEnv<T>,
-    ) -> Result<Vec<String>, EvalError<T>> {
+        local_env: &mut LocalEvalEnv<T, D>,
+    ) -> Result<Vec<String>, EvalError<T, D>> {
         fn_desc
             .docstring
             .iter()
@@ -78,9 +81,9 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
+        args: Vec<ExprValue<T, D>>,
         allow_private: bool,
-    ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
+    ) -> Result<(ExprValue<T, D>, Origin<T, D>), EvalError<T, D>> {
         let fn_desc = self
             .ast
             .global_env
@@ -150,8 +153,8 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
     }
 }
 
-impl<'a, T: EvalObject> EvalHistory<'a, T> {
-    pub fn validate_value(&self, val: &ExprValue<T>) -> bool {
+impl<'a, T: EvalObject, D: DatabaseConnection> EvalHistory<'a, T, D> {
+    pub fn validate_value(&self, val: &ExprValue<T, D>) -> bool {
         match val {
             ExprValue::None => true,
             ExprValue::Int(_) => true,
@@ -193,8 +196,8 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
+        args: Vec<ExprValue<T, D>>,
+    ) -> Result<(ExprValue<T, D>, Origin<T, D>), EvalError<T, D>> {
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -206,7 +209,7 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)
     }
 
-    pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T>, T::Cache) {
+    pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T, D>, T::Cache) {
         let mut var_def = VariableDefinitions {
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
@@ -266,15 +269,20 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
         (var_def, self.cache)
     }
 
-    pub fn into_var_def(self) -> VariableDefinitions<T> {
+    pub fn into_var_def(self) -> VariableDefinitions<T, D> {
         self.into_var_def_and_cache().0
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct VariableDefinitions<T: EvalObject> {
-    pub vars:
-        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Constraint<IlpVar<T>>>, Origin<T>)>,
-    pub var_lists:
-        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Vec<Constraint<IlpVar<T>>>>, Origin<T>)>,
+#[derive(Derivative)]
+#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
+pub struct VariableDefinitions<T: EvalObject, D: DatabaseConnection> {
+    pub vars: BTreeMap<
+        (String, String, Vec<ExprValue<T, D>>),
+        (Vec<Constraint<IlpVar<T, D>>>, Origin<T, D>),
+    >,
+    pub var_lists: BTreeMap<
+        (String, String, Vec<ExprValue<T, D>>),
+        (Vec<Vec<Constraint<IlpVar<T, D>>>>, Origin<T, D>),
+    >,
 }

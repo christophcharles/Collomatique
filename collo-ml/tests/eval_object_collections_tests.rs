@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ExprValue, SimpleType, ViewBuilder, ViewObject};
+use collo_ml::{
+    EvalObject, ExprValue, SimpleType, SqliteDatabaseConnection, ViewBuilder, ViewObject,
+};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -160,7 +162,8 @@ fn test_collection_field_access() {
     let mut cache = <CollectionObjectId as EvalObject>::Cache::default();
 
     let teacher = CollectionObjectId::Teacher(TeacherId(10));
-    let students_field = teacher.field_access(&env, &mut cache, "students");
+    let students_field =
+        teacher.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "students");
 
     // Should be a List of Objects
     if let Some(ExprValue::List(values)) = students_field {
@@ -199,7 +202,8 @@ fn test_empty_collection_field_access() {
     let mut cache = <CollectionObjectId as EvalObject>::Cache::default();
 
     let teacher = CollectionObjectId::Teacher(TeacherId(10));
-    let students_field = teacher.field_access(&env, &mut cache, "students");
+    let students_field =
+        teacher.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "students");
 
     // Should be an empty List with correct type
     if let Some(ExprValue::List(values)) = students_field {
@@ -251,7 +255,8 @@ fn test_nested_collection_field_access() {
     let mut cache = <CollectionObjectId as EvalObject>::Cache::default();
 
     let course = CollectionObjectId::Course(CourseId(100));
-    let groups_field = course.field_access(&env, &mut cache, "student_groups");
+    let groups_field =
+        course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "student_groups");
 
     // Should be a List of Lists
     if let Some(ExprValue::List(outer_values)) = groups_field {
@@ -310,7 +315,8 @@ fn test_empty_nested_collection() {
     let mut cache = <CollectionObjectId as EvalObject>::Cache::default();
 
     let course = CollectionObjectId::Course(CourseId(100));
-    let groups_field = course.field_access(&env, &mut cache, "student_groups");
+    let groups_field =
+        course.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "student_groups");
 
     // Should be an empty List with correct nested type
     if let Some(ExprValue::List(values)) = groups_field {

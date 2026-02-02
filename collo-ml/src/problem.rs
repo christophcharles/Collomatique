@@ -24,7 +24,11 @@ pub use crate::eval::CompileError;
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]
+pub(crate) use crate::eval::database::DatabaseConnection;
+#[cfg(test)]
 pub(crate) use crate::eval::ExternVar;
+#[cfg(test)]
+pub(crate) use crate::eval::SqliteDatabaseConnection;
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]

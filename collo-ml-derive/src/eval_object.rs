@@ -283,7 +283,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn field_access(&self, env: &Self::Env, cache: &mut Self::Cache, field: &str) -> Option<::collo_ml::ExprValue<Self>> {
+            fn field_access<D: ::collo_ml::DatabaseConnection>(&self, env: &Self::Env, cache: &mut Self::Cache, field: &str) -> Option<::collo_ml::ExprValue<Self, D>> {
                 match self {
                     #(#field_access_arms,)*
                 }
@@ -368,7 +368,7 @@ fn generate_uncached_field_access_arms(
         quote! {
             #enum_name::#variant_name(id) => {
                 let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
-                Some(obj.get_field(field)?)
+                Some(obj.get_field::<D>(field)?)
             }
         }
     }).collect()
@@ -392,14 +392,14 @@ fn generate_cached_field_access_arms(
             #enum_name::#variant_name(id) => {
                 // Check cache first
                 if let Some(cached_obj) = cache.#cache_field.get(id) {
-                    return Some(cached_obj.get_field(field)?);
+                    return Some(cached_obj.get_field::<D>(field)?);
                 }
 
                 // Not in cache, build it
                 let obj = <#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::build(env, id)?;
 
                 // Get field value before moving obj into cache
-                let field_value = obj.get_field(field)?;
+                let field_value = obj.get_field::<D>(field)?;
 
                 // Store in cache (requires Clone)
                 cache.#cache_field.insert(id.clone(), obj.clone());

@@ -714,12 +714,12 @@ fn aggregation_with_filtering() {
         fn typ_name(&self, _env: &Self::Env) -> String {
             "Student".into()
         }
-        fn field_access(
+        fn field_access<D: DatabaseConnection>(
             &self,
             _env: &Self::Env,
             _cache: &mut Self::Cache,
             field: &str,
-        ) -> Option<ExprValue<Self>> {
+        ) -> Option<ExprValue<Self, D>> {
             assert_eq!(field, "score");
             Some(match self {
                 Student::Student1 => ExprValue::Int(45),
@@ -734,7 +734,7 @@ fn aggregation_with_filtering() {
         }
     }
 
-    let checked_ast =
+    let checked_ast: CheckedAST<_, SqliteDatabaseConnection> =
         CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
 
     let students = ExprValue::List(Vec::from([

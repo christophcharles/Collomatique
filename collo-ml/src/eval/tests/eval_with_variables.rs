@@ -15,7 +15,12 @@ fn eval_with_variables_simple_reified_var() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(
+            &env,
+            "main",
+            "f",
+            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+        )
         .expect("Should evaluate");
 
     // Check result is a constraint
@@ -62,8 +67,11 @@ fn eval_with_variables_multiple_calls_same_var() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::<NoObject>::new(&BTreeMap::from([("main", input)]), vars)
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseConnection>::new(
+        &BTreeMap::from([("main", input)]),
+        vars,
+    )
+    .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
@@ -136,7 +144,12 @@ fn eval_with_variables_in_forall() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(3)])
+        .eval_fn_with_variables(
+            &env,
+            "main",
+            "f",
+            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3)],
+        )
         .expect("Should evaluate");
 
     // Check result has 3 constraints (for i=0,1,2)
@@ -207,7 +220,10 @@ fn eval_with_variables_multiple_vars() {
             &env,
             "main",
             "f",
-            vec![ExprValue::<NoObject>::Int(5), ExprValue::Int(10)],
+            vec![
+                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5),
+                ExprValue::Int(10),
+            ],
         )
         .expect("Should evaluate");
 
@@ -283,7 +299,10 @@ fn eval_with_variables_var_with_multiple_params() {
             &env,
             "main",
             "f",
-            vec![ExprValue::<NoObject>::Int(3), ExprValue::Int(7)],
+            vec![
+                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3),
+                ExprValue::Int(7),
+            ],
         )
         .expect("Should evaluate");
 
@@ -339,7 +358,10 @@ fn eval_with_variables_simple_var_list() {
             &env,
             "main",
             "f",
-            vec![ExprValue::<NoObject>::Int(3), ExprValue::Int(7)],
+            vec![
+                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3),
+                ExprValue::Int(7),
+            ],
         )
         .expect("Should evaluate");
 
@@ -416,11 +438,11 @@ fn eval_with_variables_var_list_in_nested_forall() {
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::<NoObject>::Int(1),
+        ExprValue::<NoObject, SqliteDatabaseConnection>::Int(1),
         ExprValue::Int(2),
     ]));
     let ys = ExprValue::List(Vec::from([
-        ExprValue::<NoObject>::Int(10),
+        ExprValue::<NoObject, SqliteDatabaseConnection>::Int(10),
         ExprValue::Int(20),
     ]));
 
@@ -496,7 +518,12 @@ fn eval_with_variables_with_let_expr() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(
+            &env,
+            "main",
+            "f",
+            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+        )
         .expect("Should evaluate");
 
     // Check result
@@ -542,7 +569,12 @@ fn eval_with_variables_no_reified_vars() {
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![ExprValue::<NoObject>::Int(5)])
+        .eval_fn_with_variables(
+            &env,
+            "main",
+            "f",
+            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+        )
         .expect("Should evaluate");
 
     // Check result

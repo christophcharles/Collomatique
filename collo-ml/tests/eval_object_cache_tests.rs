@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 
-use collo_ml::{EvalObject, ViewBuilder, ViewObject};
+use collo_ml::{EvalObject, SqliteDatabaseConnection, ViewBuilder, ViewObject};
 
 // ============================================================================
 // Setup: Define our environment and ID types
@@ -90,17 +90,17 @@ fn test_cache_reduces_build_calls() {
     let student = CachedObjectId::Student(StudentId(1));
 
     // First access - should call build()
-    let age1 = student.field_access(&env, &mut cache, "age");
+    let age1 = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(age1, Some(collo_ml::ExprValue::Int(20)));
     assert_eq!(env.build_count.get(), 1, "First access should call build()");
 
     // Second access to same field - should use cache
-    let age2 = student.field_access(&env, &mut cache, "age");
+    let age2 = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(age2, Some(collo_ml::ExprValue::Int(20)));
     assert_eq!(env.build_count.get(), 1, "Second access should use cache");
 
     // Third access to different field - should still use cache
-    let age3 = student.field_access(&env, &mut cache, "age");
+    let age3 = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(age3, Some(collo_ml::ExprValue::Int(20)));
     assert_eq!(env.build_count.get(), 1, "Third access should use cache");
 }
@@ -134,19 +134,19 @@ fn test_cache_stores_different_objects_separately() {
     let student2 = CachedObjectId::Student(StudentId(2));
 
     // Access student 1
-    student1.field_access(&env, &mut cache, "age");
+    student1.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(env.build_count.get(), 1);
 
     // Access student 2 - should build a new object
-    student2.field_access(&env, &mut cache, "age");
+    student2.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(env.build_count.get(), 2);
 
     // Access student 1 again - should use cache
-    student1.field_access(&env, &mut cache, "age");
+    student1.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(env.build_count.get(), 2, "Should reuse cached student 1");
 
     // Access student 2 again - should use cache
-    student2.field_access(&env, &mut cache, "age");
+    student2.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(env.build_count.get(), 2, "Should reuse cached student 2");
 }
 
@@ -200,7 +200,7 @@ fn test_cache_shared_between_field_access_and_pretty_print() {
     let student = CachedObjectId::Student(StudentId(1));
 
     // Access field first
-    student.field_access(&env, &mut cache, "age");
+    student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(env.build_count.get(), 1);
 
     // Then pretty_print - should use the same cache
@@ -229,15 +229,15 @@ fn test_different_cache_instances_are_independent() {
     let student = CachedObjectId::Student(StudentId(1));
 
     // Use cache1
-    student.field_access(&env, &mut cache1, "age");
+    student.field_access::<SqliteDatabaseConnection>(&env, &mut cache1, "age");
     assert_eq!(env.build_count.get(), 1);
 
     // Use cache2 - should build again since it's a different cache
-    student.field_access(&env, &mut cache2, "age");
+    student.field_access::<SqliteDatabaseConnection>(&env, &mut cache2, "age");
     assert_eq!(env.build_count.get(), 2, "Different cache should rebuild");
 
     // Use cache1 again - should use its cache
-    student.field_access(&env, &mut cache1, "age");
+    student.field_access::<SqliteDatabaseConnection>(&env, &mut cache1, "age");
     assert_eq!(env.build_count.get(), 2, "Original cache still valid");
 }
 
@@ -287,6 +287,6 @@ fn test_custom_cache_name() {
     let mut cache = MyCustomCache::default(); // Using custom name
     let student = CustomObjectId::Student(StudentId(1));
 
-    let result = student.field_access(&env, &mut cache, "age");
+    let result = student.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "age");
     assert_eq!(result, Some(collo_ml::ExprValue::Int(20)));
 }

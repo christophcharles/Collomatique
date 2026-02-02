@@ -70,7 +70,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 schema
             }
 
-            fn get_field(&self, field: &str) -> Option<::collo_ml::ExprValue<Self::EvalObject>> {
+            fn get_field<D: ::collo_ml::DatabaseConnection>(&self, field: &str) -> Option<::collo_ml::ExprValue<Self::EvalObject, D>> {
                 match field {
                     #(#field_access_arms)*
                     _ => None,

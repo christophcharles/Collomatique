@@ -34,9 +34,9 @@ fn list_constraint_reification() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -83,7 +83,7 @@ fn list_constraint_reification() {
             pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -161,9 +161,9 @@ fn list_constraint_reification_exact_count_with_param() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "X" => {
                     if value.params.len() != 1 {
@@ -200,7 +200,7 @@ fn list_constraint_reification_exact_count_with_param() {
             pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

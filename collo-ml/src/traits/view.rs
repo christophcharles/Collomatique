@@ -1,4 +1,5 @@
 use super::{EvalObject, FieldType};
+use crate::eval::database::DatabaseConnection;
 use crate::eval::ExprValue;
 use std::collections::{BTreeSet, HashMap};
 
@@ -72,7 +73,10 @@ pub trait ViewObject {
     ///
     /// `Some(ExprValue)` if the field exists, `None` otherwise.
     /// Fields marked with `#[hidden]` return `None` when accessed.
-    fn get_field(&self, field: &str) -> Option<ExprValue<Self::EvalObject>>;
+    fn get_field<D: DatabaseConnection>(
+        &self,
+        field: &str,
+    ) -> Option<ExprValue<Self::EvalObject, D>>;
 
     /// Returns a human-readable string representation of this view object.
     ///

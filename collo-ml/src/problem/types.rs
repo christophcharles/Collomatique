@@ -7,43 +7,85 @@
 //! - `ExtraDesc`: Extended description for reification problems
 //! - `ProblemError`: Errors that can occur during problem construction
 
+use crate::eval::database::DatabaseConnection;
 use crate::eval::{ExprValue, Origin};
 use crate::traits::EvalObject;
 use crate::{EvalVar, ExprType};
+use derivative::Derivative;
 use thiserror::Error;
 
 use super::CompileError;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ReifiedVar<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject"),
+    Ord(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject")
+)]
+pub struct ReifiedVar<T: EvalObject, D: DatabaseConnection> {
     pub(crate) module: String,
     pub(crate) name: String,
     pub(crate) from_list: Option<usize>,
-    pub(crate) params: Vec<ExprValue<T>>,
+    pub(crate) params: Vec<ExprValue<T, D>>,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum ProblemVar<T: EvalObject, V: EvalVar<T>> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
+    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
+    Clone(bound = "T: EvalObject")
+)]
+pub enum ProblemVar<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
     Base(V),
-    Reified(ReifiedVar<T>),
+    Reified(ReifiedVar<T, D>),
     Helper(u64),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ConstraintDesc<T: EvalObject> {
-    Reified { var_name: String, origin: Origin<T> },
-    InScript { origin: Origin<T> },
-    Objectify { origin: Origin<T> },
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = "T: EvalObject"),
+    Debug(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
+    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+)]
+pub enum ConstraintDesc<T: EvalObject, D: DatabaseConnection> {
+    Reified {
+        var_name: String,
+        origin: Origin<T, D>,
+    },
+    InScript {
+        origin: Origin<T, D>,
+    },
+    Objectify {
+        origin: Origin<T, D>,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ExtraDesc<T: EvalObject, V: EvalVar<T>> {
-    Orig(ConstraintDesc<T>),
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = "T: EvalObject"),
+    Clone(bound = "T: EvalObject"),
+    PartialEq(bound = "T: EvalObject"),
+    Eq(bound = "T: EvalObject"),
+    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
+    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+)]
+pub enum ExtraDesc<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+    Orig(ConstraintDesc<T, D>),
     InitCond(V),
 }
 
-#[derive(Clone, Debug, Error)]
-pub enum ProblemError<T: EvalObject> {
+#[derive(Derivative, Error)]
+#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
+pub enum ProblemError<T: EvalObject, D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
     #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
@@ -65,5 +107,5 @@ pub enum ProblemError<T: EvalObject> {
         expected: ExprType,
     },
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T>>),
+    Panic(Box<ExprValue<T, D>>),
 }

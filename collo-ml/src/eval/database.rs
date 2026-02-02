@@ -2,7 +2,7 @@
 //!
 //! This module defines:
 //! - `DatabaseConnection`: Trait for database backends
-//! - `DatabaseHandle`: Type-erased wrapper stored in `ExprValue`
+//! - `DatabaseHandle`: Generic wrapper stored in `ExprValue`
 //! - `SqliteDatabaseConnection`: SQLite implementation
 
 use std::collections::BTreeMap;
@@ -42,7 +42,7 @@ pub enum SqlQueryError {
 }
 
 /// Trait for database connection backends.
-pub trait DatabaseConnection: fmt::Debug + Send + Sync {
+pub trait DatabaseConnection: fmt::Debug + Send + Sync + 'static {
     fn name(&self) -> &str;
 
     fn query<'a>(
@@ -59,16 +59,15 @@ pub trait DatabaseConnection: fmt::Debug + Send + Sync {
     >;
 }
 
-/// Type-erased wrapper around a `DatabaseConnection`.
+/// Generic wrapper around a `DatabaseConnection`.
 ///
 /// Stored inside `ExprValue::Database`. Uses `Arc` for cheap cloning.
-#[derive(Clone)]
-pub struct DatabaseHandle {
-    inner: Arc<dyn DatabaseConnection>,
+pub struct DatabaseHandle<D: DatabaseConnection> {
+    inner: Arc<D>,
 }
 
-impl DatabaseHandle {
-    pub fn new(inner: impl DatabaseConnection + 'static) -> Self {
+impl<D: DatabaseConnection> DatabaseHandle<D> {
+    pub fn new(inner: D) -> Self {
         Self {
             inner: Arc::new(inner),
         }
@@ -85,21 +84,29 @@ impl DatabaseHandle {
     }
 }
 
-impl PartialEq for DatabaseHandle {
+impl<D: DatabaseConnection> Clone for DatabaseHandle<D> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl<D: DatabaseConnection> PartialEq for DatabaseHandle<D> {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
 }
 
-impl Eq for DatabaseHandle {}
+impl<D: DatabaseConnection> Eq for DatabaseHandle<D> {}
 
-impl PartialOrd for DatabaseHandle {
+impl<D: DatabaseConnection> PartialOrd for DatabaseHandle<D> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for DatabaseHandle {
+impl<D: DatabaseConnection> Ord for DatabaseHandle<D> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let self_ptr = Arc::as_ptr(&self.inner) as *const () as usize;
         let other_ptr = Arc::as_ptr(&other.inner) as *const () as usize;
@@ -107,13 +114,13 @@ impl Ord for DatabaseHandle {
     }
 }
 
-impl fmt::Debug for DatabaseHandle {
+impl<D: DatabaseConnection> fmt::Debug for DatabaseHandle<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DatabaseHandle({})", self.name())
     }
 }
 
-impl fmt::Display for DatabaseHandle {
+impl<D: DatabaseConnection> fmt::Display for DatabaseHandle<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
@@ -133,7 +140,7 @@ impl SqliteDatabaseConnection {
     pub async fn new(
         name: impl Into<String>,
         pool: &sqlx::SqlitePool,
-    ) -> Result<DatabaseHandle, SqlQueryError> {
+    ) -> Result<DatabaseHandle<SqliteDatabaseConnection>, SqlQueryError> {
         let conn = Self::new_sqlite(name, pool).await?;
         Ok(DatabaseHandle::new(conn))
     }
@@ -293,11 +300,11 @@ impl DbValue {
     /// directly. `Custom(…)` variants are unwrapped via the `GlobalEnv` and
     /// the conversion recurses into the underlying type, wrapping the result
     /// in `ExprValue::Custom`.
-    pub fn to_expr_value<T: EvalObject>(
+    pub fn to_expr_value<T: EvalObject, D: DatabaseConnection>(
         self,
         env: &GlobalEnv,
         target: &ExprType,
-    ) -> Result<ExprValue<T>, DbConversionError> {
+    ) -> Result<ExprValue<T, D>, DbConversionError> {
         for variant in target.get_variants() {
             if let Ok(v) = self.clone().try_convert_to(env, variant) {
                 return Ok(v);
@@ -311,11 +318,11 @@ impl DbValue {
     /// For primitives, checks a direct match. For `Custom` types, looks up
     /// the underlying type in `env` and recurses via `to_expr_value`,
     /// wrapping the result in [`ExprValue::Custom`].
-    fn try_convert_to<T: EvalObject>(
+    fn try_convert_to<T: EvalObject, D: DatabaseConnection>(
         self,
         env: &GlobalEnv,
         variant: &SimpleType,
-    ) -> Result<ExprValue<T>, DbConversionError> {
+    ) -> Result<ExprValue<T, D>, DbConversionError> {
         match (self, variant) {
             (DbValue::Null, SimpleType::None) => Ok(ExprValue::None),
             (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(v)),
@@ -345,9 +352,9 @@ impl DbValue {
 }
 
 /// Recursively unwraps `ExprValue::Custom` wrappers, then converts the leaf value.
-impl<T: EvalObject> TryFrom<ExprValue<T>> for DbValue {
+impl<T: EvalObject, D: DatabaseConnection> TryFrom<ExprValue<T, D>> for DbValue {
     type Error = DbConversionError;
-    fn try_from(value: ExprValue<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: ExprValue<T, D>) -> Result<Self, Self::Error> {
         match value {
             ExprValue::None => Ok(DbValue::Null),
             ExprValue::Int(v) => Ok(DbValue::Int(v)),
@@ -366,11 +373,11 @@ impl<T: EvalObject> TryFrom<ExprValue<T>> for DbValue {
 /// Wrap an `ExprValue` to match a target `ExprType`, adding `Custom` wrappers as needed.
 ///
 /// Iterates over the target's variants and returns the first successful wrapping.
-fn wrap_expr_value<T: EvalObject>(
-    value: ExprValue<T>,
+fn wrap_expr_value<T: EvalObject, D: DatabaseConnection>(
+    value: ExprValue<T, D>,
     target: &ExprType,
     env: &GlobalEnv,
-) -> Result<ExprValue<T>, DbConversionError> {
+) -> Result<ExprValue<T, D>, DbConversionError> {
     for variant in target.get_variants() {
         if let Ok(v) = try_wrap_to(value.clone(), variant, env) {
             return Ok(v);
@@ -380,11 +387,11 @@ fn wrap_expr_value<T: EvalObject>(
 }
 
 /// Try to wrap an `ExprValue` to match a single `SimpleType` variant.
-fn try_wrap_to<T: EvalObject>(
-    value: ExprValue<T>,
+fn try_wrap_to<T: EvalObject, D: DatabaseConnection>(
+    value: ExprValue<T, D>,
     variant: &SimpleType,
     env: &GlobalEnv,
-) -> Result<ExprValue<T>, DbConversionError> {
+) -> Result<ExprValue<T, D>, DbConversionError> {
     match variant {
         SimpleType::None => {
             if matches!(value, ExprValue::None) {
@@ -444,7 +451,9 @@ enum ResolvedRowShape {
     Tuple(Vec<ExprType>),
 }
 
-fn convert_params<T: EvalObject>(params: Vec<ExprValue<T>>) -> Result<Vec<DbValue>, SqlQueryError> {
+fn convert_params<T: EvalObject, D: DatabaseConnection>(
+    params: Vec<ExprValue<T, D>>,
+) -> Result<Vec<DbValue>, SqlQueryError> {
     params
         .into_iter()
         .enumerate()
@@ -564,13 +573,13 @@ fn validate_columns(shape: &ResolvedRowShape, columns: &[String]) -> Result<(), 
     }
 }
 
-fn convert_row<T: EvalObject>(
+fn convert_row<T: EvalObject, D: DatabaseConnection>(
     row: &BTreeMap<String, DbValue>,
     columns: &[String],
     shape: &ResolvedRowShape,
     row_idx: usize,
     env: &GlobalEnv,
-) -> Result<ExprValue<T>, SqlQueryError> {
+) -> Result<ExprValue<T, D>, SqlQueryError> {
     match shape {
         ResolvedRowShape::Struct(fields) => {
             let mut struct_fields = BTreeMap::new();
@@ -604,11 +613,11 @@ fn convert_row<T: EvalObject>(
     }
 }
 
-fn build_empty_result<T: EvalObject>(
+fn build_empty_result<T: EvalObject, D: DatabaseConnection>(
     mode: &OutputMode,
     out_type: &ExprType,
     env: &GlobalEnv,
-) -> Result<ExprValue<T>, SqlQueryError> {
+) -> Result<ExprValue<T, D>, SqlQueryError> {
     let raw = match mode {
         OutputMode::Optional => ExprValue::None,
         OutputMode::List => ExprValue::List(vec![]),
@@ -621,14 +630,14 @@ fn build_empty_result<T: EvalObject>(
 // DatabaseHandle::query
 // =============================================================================
 
-impl DatabaseHandle {
+impl<D: DatabaseConnection> DatabaseHandle<D> {
     pub async fn query<T: EvalObject>(
         &self,
         sql: &str,
-        params: Vec<ExprValue<T>>,
+        params: Vec<ExprValue<T, D>>,
         out_type: ExprType,
         global_env: &GlobalEnv,
-    ) -> Result<ExprValue<T>, SqlQueryError> {
+    ) -> Result<ExprValue<T, D>, SqlQueryError> {
         // 1. Convert params
         let db_params = convert_params(params)?;
 

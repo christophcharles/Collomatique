@@ -16,6 +16,7 @@ use collomatique_state_colloscopes::Data;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collomatique_binding_colloscopes::views::ObjectId,
+    collo_ml::SqliteDatabaseConnection,
     collomatique_binding_colloscopes::vars::Var,
 >;
 

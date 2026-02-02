@@ -786,12 +786,12 @@ fn generate_try_from_impl(
     };
 
     quote! {
-        impl<__T: ::collo_ml::EvalObject> TryFrom<&::collo_ml::eval::ExternVar<__T>> for #enum_name
+        impl<__T: ::collo_ml::EvalObject, __D: ::collo_ml::DatabaseConnection> TryFrom<&::collo_ml::eval::ExternVar<__T, __D>> for #enum_name
             #where_text
         {
             type Error = ::collo_ml::traits::VarConversionError;
 
-            fn try_from(value: &::collo_ml::eval::ExternVar<__T>) -> Result<Self, Self::Error> {
+            fn try_from(value: &::collo_ml::eval::ExternVar<__T, __D>) -> Result<Self, Self::Error> {
                 match value.name.as_str() {
                     #(#match_arms,)*
                     _ => Err(::collo_ml::traits::VarConversionError::Unknown(value.name.clone())),

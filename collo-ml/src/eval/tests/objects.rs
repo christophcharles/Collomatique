@@ -1,4 +1,6 @@
-use crate::eval::{CheckedAST, EvalObject, ExprValue};
+use crate::eval::{
+    CheckedAST, DatabaseConnection, EvalObject, ExprValue, SqliteDatabaseConnection,
+};
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
 use crate::ExprType;
@@ -37,12 +39,12 @@ impl EvalObject for SimpleObject {
         panic!("Not implemented for the test")
     }
 
-    fn field_access(
+    fn field_access<D: DatabaseConnection>(
         &self,
         _env: &Self::Env,
         _cache: &mut Self::Cache,
         field: &str,
-    ) -> Option<ExprValue<Self>> {
+    ) -> Option<ExprValue<Self, D>> {
         match self {
             SimpleObject::Student1 => match field {
                 "age" => Some(ExprValue::Int(18)),
@@ -100,8 +102,8 @@ impl EvalObject for SimpleObject {
 fn eval_with_simple_objects(
     input: &str,
     fn_name: &str,
-    args: Vec<ExprValue<SimpleObject>>,
-) -> ExprValue<SimpleObject> {
+    args: Vec<ExprValue<SimpleObject, SqliteDatabaseConnection>>,
+) -> ExprValue<SimpleObject, SqliteDatabaseConnection> {
     let vars = HashMap::new();
 
     let checked_ast =

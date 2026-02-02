@@ -27,9 +27,9 @@ fn error_unknown_function() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -47,7 +47,7 @@ fn error_unknown_function() {
     }
 
     let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -93,9 +93,9 @@ fn error_wrong_return_type_for_constraint() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -113,7 +113,7 @@ fn error_wrong_return_type_for_constraint() {
     }
 
     let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(

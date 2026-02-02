@@ -4,6 +4,7 @@
 //! - `LocalEvalEnv`: Manages local variable scopes during expression evaluation
 
 use super::checked_ast::EvalError;
+use super::database::DatabaseConnection;
 use super::history::EvalHistory;
 use super::values::{CustomValue, ExprValue};
 use super::variables::{ExternVar, IlpVar, ScriptVar};
@@ -14,19 +15,19 @@ use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LocalEvalEnv<T: EvalObject> {
-    scopes: Vec<HashMap<String, ExprValue<T>>>,
-    pending_scope: HashMap<String, ExprValue<T>>,
+pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseConnection> {
+    scopes: Vec<HashMap<String, ExprValue<T, D>>>,
+    pending_scope: HashMap<String, ExprValue<T, D>>,
     current_module: String,
 }
 
-impl<T: EvalObject> LocalEnvCheck for LocalEvalEnv<T> {
+impl<T: EvalObject, D: DatabaseConnection> LocalEnvCheck for LocalEvalEnv<T, D> {
     fn has_ident(&self, ident: &str) -> bool {
         self.lookup_ident(ident).is_some()
     }
 }
 
-impl<T: EvalObject> LocalEvalEnv<T> {
+impl<T: EvalObject, D: DatabaseConnection> LocalEvalEnv<T, D> {
     pub(crate) fn new(current_module: &str) -> Self {
         LocalEvalEnv {
             scopes: vec![],
@@ -39,7 +40,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
         &self.current_module
     }
 
-    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T>> {
+    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T, D>> {
         // We don't look in pending scope as these variables are not yet accessible
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.get(ident) {
@@ -63,7 +64,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
         self.pending_scope.clear();
     }
 
-    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T>) {
+    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D>) {
         assert!(!self.pending_scope.contains_key(ident));
 
         self.pending_scope.insert(ident.to_string(), value);
@@ -71,9 +72,9 @@ impl<T: EvalObject> LocalEvalEnv<T> {
 
     pub(crate) fn eval_expr(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T>,
+        eval_history: &mut EvalHistory<'_, T, D>,
         expr: &Spanned<crate::ast::Expr>,
-    ) -> Result<ExprValue<T>, EvalError<T>> {
+    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
         use crate::ast::Expr;
         Ok(match &expr.node {
             Expr::None => ExprValue::None,
@@ -133,7 +134,9 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                 let mut current_value = self.eval_expr(eval_history, &object)?;
 
                 // Helper to unwrap Custom values for field/index access
-                fn unwrap_custom<T: EvalObject>(value: ExprValue<T>) -> ExprValue<T> {
+                fn unwrap_custom<T: EvalObject, D: DatabaseConnection>(
+                    value: ExprValue<T, D>,
+                ) -> ExprValue<T, D> {
                     match value {
                         ExprValue::Custom(custom) => unwrap_custom(custom.content),
                         other => other,
@@ -148,7 +151,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                             match unwrapped {
                                 ExprValue::Object(obj) => {
                                     current_value = obj
-                                        .field_access(
+                                        .field_access::<D>(
                                             &eval_history.env,
                                             &mut eval_history.cache,
                                             field_name,
@@ -1176,7 +1179,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                     .map(|(name, expr)| {
                         Ok((name.node.clone(), self.eval_expr(eval_history, expr)?))
                     })
-                    .collect::<Result<_, EvalError<T>>>()?;
+                    .collect::<Result<_, EvalError<T, D>>>()?;
 
                 ExprValue::Struct(field_values)
             }
@@ -1187,11 +1190,11 @@ impl<T: EvalObject> LocalEvalEnv<T> {
     /// and calling `DatabaseHandle::query` via `block_in_place`.
     fn eval_query_call(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T>,
+        eval_history: &mut EvalHistory<'_, T, D>,
         module: &str,
         name: &str,
         args: &[Spanned<crate::ast::Expr>],
-    ) -> Result<ExprValue<T>, EvalError<T>> {
+    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
         use super::database::SqlQueryError;
 
         let query_desc = eval_history
@@ -1203,7 +1206,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
         let sql = query_desc.query_string.node.clone();
         let out_type = query_desc.typ.output.clone();
 
-        let evaluated_args: Vec<ExprValue<T>> = args
+        let evaluated_args: Vec<ExprValue<T, D>> = args
             .iter()
             .map(|x| self.eval_expr(eval_history, x))
             .collect::<Result<_, _>>()?;
@@ -1219,7 +1222,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
             }
         };
 
-        let params: Vec<ExprValue<T>> = evaluated_args[1..].to_vec();
+        let params: Vec<ExprValue<T, D>> = evaluated_args[1..].to_vec();
 
         let global_env = &eval_history.ast.global_env;
 
@@ -1242,10 +1245,10 @@ impl<T: EvalObject> LocalEvalEnv<T> {
     /// Helper for evaluating type casts in GenericCall expressions
     fn eval_generic_call_type_cast(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T>,
+        eval_history: &mut EvalHistory<'_, T, D>,
         simple_type: &SimpleType,
         args: &Vec<Spanned<crate::ast::Expr>>,
-    ) -> Result<ExprValue<T>, EvalError<T>> {
+    ) -> Result<ExprValue<T, D>, EvalError<T, D>> {
         match simple_type {
             // Built-in type casts: Int(x), Bool(x), String(x), etc.
             SimpleType::Int
@@ -1300,7 +1303,7 @@ impl<T: EvalObject> LocalEvalEnv<T> {
                     }
                 } else if is_tuple {
                     // Tuple variant - evaluate all args
-                    let values: Vec<ExprValue<T>> = args
+                    let values: Vec<ExprValue<T, D>> = args
                         .iter()
                         .map(|x| self.eval_expr(eval_history, &x))
                         .collect::<Result<_, _>>()?;
@@ -1325,11 +1328,11 @@ impl<T: EvalObject> LocalEvalEnv<T> {
 
     fn build_naked_list_for_list_comprehension(
         &mut self,
-        eval_history: &mut EvalHistory<'_, T>,
+        eval_history: &mut EvalHistory<'_, T, D>,
         body: &Spanned<crate::ast::Expr>,
         vars_and_collections: &[(Spanned<String>, Spanned<crate::ast::Expr>)],
         filter: Option<&Spanned<crate::ast::Expr>>,
-    ) -> Result<Vec<ExprValue<T>>, EvalError<T>> {
+    ) -> Result<Vec<ExprValue<T, D>>, EvalError<T, D>> {
         if vars_and_collections.is_empty() {
             let cond = match filter {
                 None => true,

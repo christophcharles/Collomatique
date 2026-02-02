@@ -2,7 +2,9 @@ use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
 
 use collo_ml::traits::{FieldConversionError, SimpleFieldType};
-use collo_ml::{EvalObject, ExprType, ExprValue, ViewObject};
+use collo_ml::{
+    DatabaseConnection, EvalObject, ExprType, ExprValue, SqliteDatabaseConnection, ViewObject,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -12,12 +14,12 @@ impl EvalObject for TestObjectId {
     type Env = ();
     type Cache = ();
 
-    fn field_access(
+    fn field_access<D: DatabaseConnection>(
         &self,
         _env: &Self::Env,
         _cache: &mut Self::Cache,
         _field: &str,
-    ) -> Option<ExprValue<Self>> {
+    ) -> Option<ExprValue<Self, D>> {
         None
     }
     fn type_id_to_name(_field_typ: std::any::TypeId) -> Result<String, FieldConversionError> {
@@ -77,9 +79,18 @@ fn test_get_field() {
         enrolled: true,
     };
 
-    assert_eq!(student.get_field("age"), Some(ExprValue::Int(20)));
-    assert_eq!(student.get_field("enrolled"), Some(ExprValue::Bool(true)));
-    assert_eq!(student.get_field("nonexistent"), None);
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("age"),
+        Some(ExprValue::Int(20))
+    );
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("enrolled"),
+        Some(ExprValue::Bool(true))
+    );
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("nonexistent"),
+        None
+    );
 }
 
 // Test 2: Hidden fields
@@ -104,9 +115,15 @@ fn test_hidden_fields() {
     };
 
     // Can still access the visible field
-    assert_eq!(student.get_field("age"), Some(ExprValue::Int(25)));
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("age"),
+        Some(ExprValue::Int(25))
+    );
     // Cannot access hidden field through get_field
-    assert_eq!(student.get_field("secret"), None);
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("secret"),
+        None
+    );
     // But the field still exists in the struct for other purposes
     assert_eq!(student.secret, "hidden data");
 }
@@ -134,9 +151,12 @@ fn test_object_references() {
         room: RoomId(42),
     };
 
-    assert_eq!(student.get_field("age"), Some(ExprValue::Int(20)));
     assert_eq!(
-        student.get_field("room"),
+        student.get_field::<SqliteDatabaseConnection>("age"),
+        Some(ExprValue::Int(20))
+    );
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("room"),
         Some(ExprValue::Object(TestObjectId))
     );
 }
@@ -168,7 +188,7 @@ fn test_collections_of_ints() {
         grades: grades.clone(),
     };
 
-    if let Some(ExprValue::List(values)) = student.get_field("grades") {
+    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("grades") {
         assert_eq!(values.len(), 3);
         assert!(values.contains(&ExprValue::Int(85)));
         assert!(values.contains(&ExprValue::Int(90)));
@@ -198,7 +218,7 @@ fn test_collections_of_bools() {
 
     let student = StudentWithFlags { flags };
 
-    if let Some(ExprValue::List(values)) = student.get_field("flags") {
+    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("flags") {
         assert_eq!(values.len(), 2);
         assert!(values.contains(&ExprValue::Bool(true)));
         assert!(values.contains(&ExprValue::Bool(false)));
@@ -232,7 +252,8 @@ fn test_collections_of_objects() {
 
     let student = StudentWithCourses { age: 20, courses };
 
-    if let Some(ExprValue::List(values)) = student.get_field("courses") {
+    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("courses")
+    {
         assert_eq!(values.len(), 2);
         assert_eq!(values[0], ExprValue::Object(TestObjectId));
         assert_eq!(values[1], ExprValue::Object(TestObjectId));
@@ -355,7 +376,10 @@ fn test_empty_struct() {
     assert_eq!(schema.len(), 0);
 
     let student = EmptyStudent {};
-    assert_eq!(student.get_field("anything"), None);
+    assert_eq!(
+        student.get_field::<SqliteDatabaseConnection>("anything"),
+        None
+    );
 }
 
 // Test 11: Pretty printing with same field multiple times
@@ -467,7 +491,8 @@ fn test_get_field_for_recursive_vecs() {
 
     let student = ComplexStudent { ages, courses };
 
-    if let Some(ExprValue::List(values)) = student.get_field("courses") {
+    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("courses")
+    {
         assert_eq!(values.len(), 2);
         assert_eq!(
             values[0],

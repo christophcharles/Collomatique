@@ -38,9 +38,9 @@ fn two_objectives_same_script() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -97,7 +97,7 @@ fn two_objectives_same_script() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -194,9 +194,9 @@ fn two_objectives_different_scripts() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -266,7 +266,7 @@ fn two_objectives_different_scripts() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -363,9 +363,9 @@ fn objectives_with_different_senses() {
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -422,7 +422,7 @@ fn objectives_with_different_senses() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseConnection, Var>::new(&modules)
         .expect("NoObject and Var should be compatible");
 
     assert!(
