@@ -2,8 +2,8 @@ use crate::eval::{NoObject, NoObjectEnv};
 
 use super::*;
 
-#[test]
-fn constraint_list_return_type() {
+#[tokio::test]
+async fn constraint_list_return_type() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -63,6 +63,7 @@ fn constraint_list_return_type() {
         r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -75,7 +76,7 @@ fn constraint_list_return_type() {
         .add_constraint("list_constraints", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

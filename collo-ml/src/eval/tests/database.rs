@@ -11,48 +11,50 @@ use crate::semantics::database::DbConversionError;
 // =============================================================================
 
 /// Build a CheckedAST (and therefore a GlobalEnv) from DSL source.
-fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
-    CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new()).expect("Should compile")
+async fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
+    CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
+        .await
+        .expect("Should compile")
 }
 
-fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
-    checked("")
+async fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
+    checked("").await
 }
 
 // =============================================================================
 // 5. to_expr_value — PRIMITIVE CONVERSIONS
 // =============================================================================
 
-#[test]
-fn to_expr_value_int() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Int(42)));
 }
 
-#[test]
-fn to_expr_value_bool() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_bool() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Bool(true).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(true)));
 }
 
-#[test]
-fn to_expr_value_string() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_string() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::String);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::String("hi".to_string()).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::String("hi".to_string())));
 }
 
-#[test]
-fn to_expr_value_null_to_none() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_null_to_none() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::None);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
@@ -63,18 +65,18 @@ fn to_expr_value_null_to_none() {
 // 6. to_expr_value — NULLABLE TARGETS
 // =============================================================================
 
-#[test]
-fn to_expr_value_null_into_nullable_int() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_null_into_nullable_int() {
+    let ast = empty_ast().await;
     let target = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::None));
 }
 
-#[test]
-fn to_expr_value_int_into_nullable_int() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_into_nullable_int() {
+    let ast = empty_ast().await;
     let target = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
@@ -85,63 +87,63 @@ fn to_expr_value_int_into_nullable_int() {
 // 7. to_expr_value — TYPE MISMATCH REJECTIONS
 // =============================================================================
 
-#[test]
-fn to_expr_value_int_into_bool_rejected() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_into_bool_rejected() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
 
-#[test]
-fn to_expr_value_int_zero_to_bool() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_zero_to_bool() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(0).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(false)));
 }
 
-#[test]
-fn to_expr_value_int_one_to_bool() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_one_to_bool() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(1).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(true)));
 }
 
-#[test]
-fn to_expr_value_int_two_into_bool_rejected() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_two_into_bool_rejected() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(2).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
 
-#[test]
-fn to_expr_value_int_into_string_rejected() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_int_into_string_rejected() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::String);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
 
-#[test]
-fn to_expr_value_null_into_int_rejected() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_null_into_int_rejected() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
 
-#[test]
-fn to_expr_value_bool_into_int_rejected() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn to_expr_value_bool_into_int_rejected() {
+    let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
     let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
         DbValue::Bool(true).to_expr_value(&ast.global_env, &target);
@@ -152,9 +154,9 @@ fn to_expr_value_bool_into_int_rejected() {
 // 8. to_expr_value — CUSTOM TYPE WRAPPING
 // =============================================================================
 
-#[test]
-fn to_expr_value_custom_type_wraps_int() {
-    let ast = checked("type MyInt = Int;");
+#[tokio::test]
+async fn to_expr_value_custom_type_wraps_int() {
+    let ast = checked("type MyInt = Int;").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "MyInt".to_string(),
@@ -173,9 +175,9 @@ fn to_expr_value_custom_type_wraps_int() {
     );
 }
 
-#[test]
-fn to_expr_value_custom_type_null_into_non_nullable_rejected() {
-    let ast = checked("type MyInt = Int;");
+#[tokio::test]
+async fn to_expr_value_custom_type_null_into_non_nullable_rejected() {
+    let ast = checked("type MyInt = Int;").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "MyInt".to_string(),
@@ -186,9 +188,9 @@ fn to_expr_value_custom_type_null_into_non_nullable_rejected() {
     assert_eq!(result, Err(DbConversionError));
 }
 
-#[test]
-fn to_expr_value_custom_nullable_int() {
-    let ast = checked("type MaybeInt = Int | None;");
+#[tokio::test]
+async fn to_expr_value_custom_nullable_int() {
+    let ast = checked("type MaybeInt = Int | None;").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "MaybeInt".to_string(),
@@ -207,9 +209,9 @@ fn to_expr_value_custom_nullable_int() {
     );
 }
 
-#[test]
-fn to_expr_value_custom_nullable_null() {
-    let ast = checked("type MaybeInt = Int | None;");
+#[tokio::test]
+async fn to_expr_value_custom_nullable_null() {
+    let ast = checked("type MaybeInt = Int | None;").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "MaybeInt".to_string(),
@@ -232,9 +234,9 @@ fn to_expr_value_custom_nullable_null() {
 // 9. to_expr_value — NESTED CUSTOM TYPES
 // =============================================================================
 
-#[test]
-fn to_expr_value_nested_custom_types() {
-    let ast = checked("type MyInt = Int; type Deep = MyInt;");
+#[tokio::test]
+async fn to_expr_value_nested_custom_types() {
+    let ast = checked("type MyInt = Int; type Deep = MyInt;").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "Deep".to_string(),
@@ -262,9 +264,9 @@ fn to_expr_value_nested_custom_types() {
 // 10. to_expr_value — ENUM VARIANT
 // =============================================================================
 
-#[test]
-fn to_expr_value_enum_variant() {
-    let ast = checked("enum Wrapper = A(Int);");
+#[tokio::test]
+async fn to_expr_value_enum_variant() {
+    let ast = checked("enum Wrapper = A(Int);").await;
     let target = ExprType::simple(SimpleType::Custom(
         "main".to_string(),
         "Wrapper".to_string(),
@@ -287,20 +289,20 @@ fn to_expr_value_enum_variant() {
 // 11. TryFrom<ExprValue> for DbValue — SUCCESS CASES
 // =============================================================================
 
-#[test]
-fn try_from_expr_value_int() {
+#[tokio::test]
+async fn try_from_expr_value_int() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Int(42);
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Int(42)));
 }
 
-#[test]
-fn try_from_expr_value_bool() {
+#[tokio::test]
+async fn try_from_expr_value_bool() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Bool(true);
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Bool(true)));
 }
 
-#[test]
-fn try_from_expr_value_string() {
+#[tokio::test]
+async fn try_from_expr_value_string() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::String("hi".to_string());
     assert_eq!(
         DbValue::try_from(val),
@@ -308,14 +310,14 @@ fn try_from_expr_value_string() {
     );
 }
 
-#[test]
-fn try_from_expr_value_none() {
+#[tokio::test]
+async fn try_from_expr_value_none() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::None;
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Null));
 }
 
-#[test]
-fn try_from_expr_value_custom_unwraps() {
+#[tokio::test]
+async fn try_from_expr_value_custom_unwraps() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::Custom(Box::new(CustomValue {
             module: "main".to_string(),
@@ -326,8 +328,8 @@ fn try_from_expr_value_custom_unwraps() {
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Int(42)));
 }
 
-#[test]
-fn try_from_expr_value_nested_custom_unwraps() {
+#[tokio::test]
+async fn try_from_expr_value_nested_custom_unwraps() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::Custom(Box::new(CustomValue {
             module: "main".to_string(),
@@ -347,22 +349,22 @@ fn try_from_expr_value_nested_custom_unwraps() {
 // 12. TryFrom<ExprValue> for DbValue — REJECTION CASES
 // =============================================================================
 
-#[test]
-fn try_from_expr_value_list_rejected() {
+#[tokio::test]
+async fn try_from_expr_value_list_rejected() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::List(vec![ExprValue::Int(1)]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
-#[test]
-fn try_from_expr_value_tuple_rejected() {
+#[tokio::test]
+async fn try_from_expr_value_tuple_rejected() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::Tuple(vec![ExprValue::Int(1)]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
-#[test]
-fn try_from_expr_value_struct_rejected() {
+#[tokio::test]
+async fn try_from_expr_value_struct_rejected() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::Struct([("x".to_string(), ExprValue::Int(1))].into_iter().collect());
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
@@ -372,9 +374,9 @@ fn try_from_expr_value_struct_rejected() {
 // 13. ROUNDTRIP: ExprValue → DbValue → to_expr_value
 // =============================================================================
 
-#[test]
-fn roundtrip_int() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn roundtrip_int() {
+    let ast = empty_ast().await;
     let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Int(7);
     let target = ExprType::simple(SimpleType::Int);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
@@ -384,9 +386,9 @@ fn roundtrip_int() {
     assert_eq!(recovered, original);
 }
 
-#[test]
-fn roundtrip_bool() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn roundtrip_bool() {
+    let ast = empty_ast().await;
     let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Bool(true);
     let target = ExprType::simple(SimpleType::Bool);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
@@ -396,9 +398,9 @@ fn roundtrip_bool() {
     assert_eq!(recovered, original);
 }
 
-#[test]
-fn roundtrip_string() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn roundtrip_string() {
+    let ast = empty_ast().await;
     let original: ExprValue<NoObject, SqliteDatabaseConnection> =
         ExprValue::String("hello".to_string());
     let target = ExprType::simple(SimpleType::String);
@@ -409,9 +411,9 @@ fn roundtrip_string() {
     assert_eq!(recovered, original);
 }
 
-#[test]
-fn roundtrip_none() {
-    let ast = empty_ast();
+#[tokio::test]
+async fn roundtrip_none() {
+    let ast = empty_ast().await;
     let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::None;
     let target = ExprType::simple(SimpleType::None);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
@@ -646,7 +648,7 @@ async fn typed_query_list_of_structs() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [{id: Int, name: String}]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -694,7 +696,7 @@ async fn typed_query_optional_struct_found() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // {id: Int, name: String} | None
     let out_type = ExprType::from_variants([
@@ -735,7 +737,7 @@ async fn typed_query_optional_struct_not_found() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // {id: Int, name: String} | None
     let out_type = ExprType::from_variants([
@@ -768,7 +770,7 @@ async fn typed_query_empty_list() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [{id: Int}]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -795,7 +797,7 @@ async fn typed_query_custom_wrapped_rows() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = checked("type Row = {id: Int, name: String};");
+    let ast = checked("type Row = {id: Int, name: String};").await;
 
     // [Row] where Row = {id: Int, name: String}
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Custom(
@@ -850,7 +852,7 @@ async fn typed_query_custom_wrapped_fields() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = checked("type MyInt = Int;");
+    let ast = checked("type MyInt = Int;").await;
 
     // [{id: MyInt, name: String}]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -921,7 +923,7 @@ async fn typed_query_column_mismatch() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [{id: Int, wrong_col: String}] — wrong_col doesn't exist in SELECT result
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -957,7 +959,7 @@ async fn typed_query_column_count_mismatch() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [{id: Int}] — only 1 field but SELECT returns 2 columns
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -987,7 +989,7 @@ async fn typed_query_param_conversion() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [{id: Int, name: String}]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
@@ -1025,7 +1027,7 @@ async fn typed_query_tuple_output() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // [(Int, String)]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Tuple(vec![
@@ -1061,7 +1063,7 @@ async fn typed_query_optional_takes_first_row() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // {id: Int, name: String} | None — multiple rows, should take first
     let out_type = ExprType::from_variants([
@@ -1103,7 +1105,7 @@ async fn typed_query_invalid_output_type() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = empty_ast();
+    let ast = empty_ast().await;
 
     // Int — not a list or optional
     let out_type = ExprType::simple(SimpleType::Int);
@@ -1124,7 +1126,7 @@ async fn typed_query_custom_list_type() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = checked("type MyList = [{id: Int, name: String}];");
+    let ast = checked("type MyList = [{id: Int, name: String}];").await;
 
     // MyList (which is [{id: Int, name: String}])
     let out_type = ExprType::simple(SimpleType::Custom(
@@ -1174,7 +1176,7 @@ async fn typed_query_custom_optional_type() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = checked("type MyOption = None | {id: Int, name: String};");
+    let ast = checked("type MyOption = None | {id: Int, name: String};").await;
 
     // MyOption (which is None | {id: Int, name: String})
     let out_type = ExprType::simple(SimpleType::Custom(
@@ -1214,7 +1216,7 @@ async fn typed_query_custom_enum_type() {
     let pool = test_pool().await;
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
-    let ast = checked("enum MyEnum = None | Element {id: Int, name: String};");
+    let ast = checked("enum MyEnum = None | Element {id: Int, name: String};").await;
 
     // MyEnum (enum with None and Element variants)
     let out_type = ExprType::simple(SimpleType::Custom(
@@ -1272,7 +1274,7 @@ async fn eval_query_call_list() {
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
 
-    let ast = checked(input);
+    let ast = checked(input).await;
     let db_arg = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
@@ -1281,6 +1283,7 @@ async fn eval_query_call_list() {
     }));
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
+        .await
         .expect("Should evaluate");
 
     let expected = ExprValue::List(vec![
@@ -1317,7 +1320,7 @@ async fn eval_query_call_optional_found() {
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
 
-    let ast = checked(input);
+    let ast = checked(input).await;
     let db_arg = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
@@ -1326,6 +1329,7 @@ async fn eval_query_call_optional_found() {
     }));
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
+        .await
         .expect("Should evaluate");
 
     let expected = ExprValue::Struct(
@@ -1352,7 +1356,7 @@ async fn eval_query_call_optional_not_found() {
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
 
-    let ast = checked(input);
+    let ast = checked(input).await;
     let db_arg = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
@@ -1361,6 +1365,7 @@ async fn eval_query_call_optional_not_found() {
     }));
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::None);
@@ -1379,14 +1384,14 @@ async fn eval_query_call_query_failed() {
     setup_users_table(&pool).await;
     let handle = test_handle(&pool).await;
 
-    let ast = checked(input);
+    let ast = checked(input).await;
     let db_arg = ExprValue::Custom(Box::new(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
         content: ExprValue::Database(handle),
     }));
-    let result = ast.quick_eval_fn("main", "run", vec![db_arg]);
+    let result = ast.quick_eval_fn("main", "run", vec![db_arg]).await;
 
     match result {
         Err(EvalError::Panic(value)) => match *value {

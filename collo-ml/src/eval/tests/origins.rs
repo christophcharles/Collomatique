@@ -2,19 +2,21 @@ use super::*;
 use std::collections::HashMap;
 
 /// Test that a simple constraint gets an origin when returned from a function
-#[test]
-fn simple_constraint_gets_origin() {
+#[tokio::test]
+async fn simple_constraint_gets_origin() {
     let input = r#"
     pub let make_constraint(x: Int) -> Constraint = $V(x) === 1;
     "#;
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "make_constraint", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -40,8 +42,8 @@ fn simple_constraint_gets_origin() {
 
 /// Test that nested function calls preserve the INNER function's origin
 /// The origin should track the innermost function that creates the constraint
-#[test]
-fn nested_function_origin_is_inner() {
+#[tokio::test]
+async fn nested_function_origin_is_inner() {
     let input = r#"
     let inner(x: Int) -> Constraint = $V(x) === 0;
     pub let outer(y: Int) -> Constraint = inner(y + 1);
@@ -49,11 +51,13 @@ fn nested_function_origin_is_inner() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "outer", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -77,8 +81,8 @@ fn nested_function_origin_is_inner() {
 }
 
 /// Test that multiple constraints from the same function have the same origin
-#[test]
-fn multiple_constraints_same_origin() {
+#[tokio::test]
+async fn multiple_constraints_same_origin() {
     let input = r#"
     pub let make_two(x: Int) -> Constraint = 
         ($V(x) === 1) and ($V(x + 1) === 2);
@@ -86,11 +90,13 @@ fn multiple_constraints_same_origin() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "make_two", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -111,8 +117,8 @@ fn multiple_constraints_same_origin() {
 }
 
 /// Test origin with multiple parameters
-#[test]
-fn origin_with_multiple_params() {
+#[tokio::test]
+async fn origin_with_multiple_params() {
     let input = r#"
     pub let complex(x: Int, y: Int, z: Int) -> Constraint = 
         $V(x) === y + z;
@@ -120,8 +126,9 @@ fn origin_with_multiple_params() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn(
@@ -129,6 +136,7 @@ fn origin_with_multiple_params() {
             "complex",
             vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)],
         )
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -149,8 +157,8 @@ fn origin_with_multiple_params() {
     }
 }
 
-#[test]
-fn reified_constraint_origin() {
+#[tokio::test]
+async fn reified_constraint_origin() {
     let input = r#"
     let base(x: Int) -> Constraint = $V(x) === 0;
     reify base as $BaseVar;
@@ -159,11 +167,13 @@ fn reified_constraint_origin() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "use_reified", vec![ExprValue::Int(7)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -190,8 +200,8 @@ fn reified_constraint_origin() {
 }
 
 /// Test origin tracking with forall expressions
-#[test]
-fn forall_constraint_origin() {
+#[tokio::test]
+async fn forall_constraint_origin() {
     let input = r#"
     pub let forall_constraints(n: Int) -> Constraint = 
         forall i in [0..n] { $V(i) === 1 };
@@ -199,11 +209,13 @@ fn forall_constraint_origin() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "forall_constraints", vec![ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -225,8 +237,8 @@ fn forall_constraint_origin() {
 }
 
 /// Test that combining constraints from multiple sources preserves each origin
-#[test]
-fn combined_constraints_preserve_separate_origins() {
+#[tokio::test]
+async fn combined_constraints_preserve_separate_origins() {
     let input = r#"
     let c1(x: Int) -> Constraint = $V(x) === 0;
     let c2(x: Int) -> Constraint = $V(x) === 1;
@@ -235,11 +247,13 @@ fn combined_constraints_preserve_separate_origins() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "combined", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -276,8 +290,8 @@ fn combined_constraints_preserve_separate_origins() {
 }
 
 /// Test origin with list parameters - using Vec for List
-#[test]
-fn origin_with_list_param() {
+#[tokio::test]
+async fn origin_with_list_param() {
     let input = r#"
     pub let list_constraint(items: [Int]) -> Constraint = 
         forall x in items { $V(x) === 1 };
@@ -285,8 +299,9 @@ fn origin_with_list_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let mut list_items = Vec::new();
     list_items.push(ExprValue::Int(1));
@@ -297,6 +312,7 @@ fn origin_with_list_param() {
 
     let result = checked_ast
         .quick_eval_fn("main", "list_constraint", vec![list_arg.clone()])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -316,8 +332,8 @@ fn origin_with_list_param() {
 }
 
 /// Test that inner function origin is preserved, not the wrapper's
-#[test]
-fn inner_function_origin_preserved() {
+#[tokio::test]
+async fn inner_function_origin_preserved() {
     let input = r#"
     let helper(x: Int) -> Constraint = $V(x) === 0;
     pub let wrapper(y: Int) -> Constraint = helper(y * 2);
@@ -325,11 +341,13 @@ fn inner_function_origin_preserved() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "wrapper", vec![ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -354,8 +372,8 @@ fn inner_function_origin_preserved() {
 }
 
 /// Test deeply nested function calls - origin should be the deepest function
-#[test]
-fn deeply_nested_function_origin() {
+#[tokio::test]
+async fn deeply_nested_function_origin() {
     let input = r#"
     let innermost(x: Int) -> Constraint = $V(x) === 42;
     let middle(x: Int) -> Constraint = innermost(x + 10);
@@ -364,11 +382,13 @@ fn deeply_nested_function_origin() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "outer", vec![ExprValue::Int(1)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -391,8 +411,8 @@ fn deeply_nested_function_origin() {
 }
 
 /// Test that docstrings are correctly substituted with actual argument values
-#[test]
-fn docstring_substitution_with_args() {
+#[tokio::test]
+async fn docstring_substitution_with_args() {
     let input = r#"
     /// `x` must be smaller than 1.
     let h(x: Int) -> Constraint = x <== 1;
@@ -401,11 +421,13 @@ fn docstring_substitution_with_args() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -440,8 +462,8 @@ fn docstring_substitution_with_args() {
 }
 
 /// Test docstring substitution with multiple parameters and multi-line docstrings
-#[test]
-fn multiline_docstring_multiple_params() {
+#[tokio::test]
+async fn multiline_docstring_multiple_params() {
     let input = r#"
     /// Constraint on `x` and `y`:
     /// - `x` must be less than `y`
@@ -453,11 +475,13 @@ fn multiline_docstring_multiple_params() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "test", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -482,8 +506,8 @@ fn multiline_docstring_multiple_params() {
 }
 
 /// Test that the same parameter can be substituted multiple times in one line
-#[test]
-fn repeated_parameter_substitution() {
+#[tokio::test]
+async fn repeated_parameter_substitution() {
     let input = r#"
     /// The value `val` is compared to itself: `val` === `val`
     let self_compare(val: Int) -> Constraint = val === val;
@@ -492,11 +516,13 @@ fn repeated_parameter_substitution() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "test", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -515,8 +541,8 @@ fn repeated_parameter_substitution() {
 }
 
 /// Test that arbitrary expressions work in docstrings (not just parameter names)
-#[test]
-fn docstring_expression_evaluation() {
+#[tokio::test]
+async fn docstring_expression_evaluation() {
     let input = r#"
     /// Index `i + 1` of `total` items.
     let describe_index(i: Int, total: Int) -> Constraint = i <== total;
@@ -525,11 +551,13 @@ fn docstring_expression_evaluation() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "test", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -548,8 +576,8 @@ fn docstring_expression_evaluation() {
 }
 
 /// Test double backticks for expressions containing single backticks
-#[test]
-fn docstring_double_backticks() {
+#[tokio::test]
+async fn docstring_double_backticks() {
     let input = r#"
     /// Value is ``x``.
     let show(x: Int) -> Constraint = x >== 0;
@@ -558,11 +586,13 @@ fn docstring_double_backticks() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "test", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {

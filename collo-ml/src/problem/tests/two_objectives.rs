@@ -3,8 +3,8 @@ use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
-#[test]
-fn two_objectives_same_script() {
+#[tokio::test]
+async fn two_objectives_same_script() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -98,6 +98,7 @@ fn two_objectives_same_script() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -126,7 +127,7 @@ fn two_objectives_same_script() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -159,8 +160,8 @@ fn two_objectives_same_script() {
     );
 }
 
-#[test]
-fn two_objectives_different_scripts() {
+#[tokio::test]
+async fn two_objectives_different_scripts() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -267,6 +268,7 @@ fn two_objectives_different_scripts() {
         ),
     ]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -295,7 +297,7 @@ fn two_objectives_different_scripts() {
         .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add second objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -328,8 +330,8 @@ fn two_objectives_different_scripts() {
     );
 }
 
-#[test]
-fn objectives_with_different_senses() {
+#[tokio::test]
+async fn objectives_with_different_senses() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -423,6 +425,7 @@ fn objectives_with_different_senses() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -458,7 +461,7 @@ fn objectives_with_different_senses() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

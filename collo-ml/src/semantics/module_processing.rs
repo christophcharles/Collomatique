@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 
 impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
-    pub fn new(
+    pub async fn new(
         object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
         modules: &BTreeMap<&str, crate::ast::File>,

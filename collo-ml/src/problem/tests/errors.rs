@@ -2,8 +2,8 @@ use crate::eval::NoObject;
 
 use super::*;
 
-#[test]
-fn error_unknown_function() {
+#[tokio::test]
+async fn error_unknown_function() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -48,6 +48,7 @@ fn error_unknown_function() {
 
     let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -68,8 +69,8 @@ fn error_unknown_function() {
     }
 }
 
-#[test]
-fn error_wrong_return_type_for_constraint() {
+#[tokio::test]
+async fn error_wrong_return_type_for_constraint() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -114,6 +115,7 @@ fn error_wrong_return_type_for_constraint() {
 
     let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(

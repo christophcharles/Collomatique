@@ -11,3 +11,6 @@ collomatique-ilp = { path = "../ilp" }
 collomatique-time = { path = "../time" }
 pest.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

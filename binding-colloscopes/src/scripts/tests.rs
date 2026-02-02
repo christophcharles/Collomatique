@@ -2,19 +2,21 @@ use std::collections::BTreeMap;
 
 use super::*;
 
-#[test]
-fn modules_should_compile() {
+#[tokio::test]
+async fn modules_should_compile() {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", get_default_main_module());
     let _builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("Should compile modules");
 }
 
-#[test]
-fn modules_should_compile_without_warnings() {
+#[tokio::test]
+async fn modules_should_compile_without_warnings() {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", get_default_main_module());
     let builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("Should compile modules");
 
     let warnings = builder.get_warnings();

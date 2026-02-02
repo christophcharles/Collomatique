@@ -2,8 +2,8 @@ use crate::eval::{NoObject, NoObjectEnv};
 
 use super::*;
 
-#[test]
-fn complete_interrogations_scheduling() {
+#[tokio::test]
+async fn complete_interrogations_scheduling() {
     // Colles scheduling problem:
     // - 11 students
     // - 3 subjects (each with 4 teachers, so 12 teachers total)
@@ -164,6 +164,7 @@ fn complete_interrogations_scheduling() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -182,7 +183,7 @@ fn complete_interrogations_scheduling() {
         .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

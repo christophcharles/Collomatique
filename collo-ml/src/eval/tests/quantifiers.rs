@@ -2,125 +2,140 @@ use super::*;
 
 // ========== SUM with Int Tests ==========
 
-#[test]
-fn sum_simple_range() {
+#[tokio::test]
+async fn sum_simple_range() {
     let input = "pub let f() -> Int = sum x in [1..4] { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 1 + 2 + 3 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn sum_empty_list() {
+#[tokio::test]
+async fn sum_empty_list() {
     let input = "pub let f() -> Int = sum x in [] as [Int] { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(0));
 }
 
-#[test]
-fn sum_with_constant_body() {
+#[tokio::test]
+async fn sum_with_constant_body() {
     let input = "pub let f() -> Int = sum x in [1..5] { 10 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 4 iterations * 10 = 40
     assert_eq!(result, ExprValue::Int(40));
 }
 
-#[test]
-fn sum_with_arithmetic_body() {
+#[tokio::test]
+async fn sum_with_arithmetic_body() {
     let input = "pub let f() -> Int = sum x in [1..5] { x * 2 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // (1*2) + (2*2) + (3*2) + (4*2) = 2 + 4 + 6 + 8 = 20
     assert_eq!(result, ExprValue::Int(20));
 }
 
-#[test]
-fn sum_with_filter() {
+#[tokio::test]
+async fn sum_with_filter() {
     let input = "pub let f() -> Int = sum x in [1..6] where x % 2 == 0 { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Only even numbers: 2 + 4 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn sum_with_filter_no_matches() {
+#[tokio::test]
+async fn sum_with_filter_no_matches() {
     let input = "pub let f() -> Int = sum x in [1..5] where x > 10 { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // No elements pass the filter
     assert_eq!(result, ExprValue::Int(0));
 }
 
-#[test]
-fn sum_with_complex_filter() {
+#[tokio::test]
+async fn sum_with_complex_filter() {
     let input = "pub let f() -> Int = sum x in [1..10] where x > 3 and x < 7 { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Elements 4, 5, 6: 4 + 5 + 6 = 15
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn sum_with_param_list() {
+#[tokio::test]
+async fn sum_with_param_list() {
     let input = "pub let f(list: [Int]) -> Int = sum x in list { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(10),
@@ -130,53 +145,60 @@ fn sum_with_param_list() {
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(60));
 }
 
-#[test]
-fn sum_with_param_in_body() {
+#[tokio::test]
+async fn sum_with_param_in_body() {
     let input = "pub let f(multiplier: Int) -> Int = sum x in [1..4] { x * multiplier };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     // (1*5) + (2*5) + (3*5) = 5 + 10 + 15 = 30
     assert_eq!(result, ExprValue::Int(30));
 }
 
-#[test]
-fn sum_with_param_in_filter() {
+#[tokio::test]
+async fn sum_with_param_in_filter() {
     let input = "pub let f(threshold: Int) -> Int = sum x in [1..10] where x > threshold { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     // Elements > 5: 6 + 7 + 8 + 9 = 30
     assert_eq!(result, ExprValue::Int(30));
 }
 
-#[test]
-fn sum_nested_arithmetic() {
+#[tokio::test]
+async fn sum_nested_arithmetic() {
     let input = "pub let f() -> Int = sum x in [1..3] { sum y in [1..3] { x * y } };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // x=1: (1*1)+(1*2) = 3
     // x=2: (2*1)+(2*2) = 6
@@ -184,34 +206,38 @@ fn sum_nested_arithmetic() {
     assert_eq!(result, ExprValue::Int(9));
 }
 
-#[test]
-fn sum_with_explicit_list() {
+#[tokio::test]
+async fn sum_with_explicit_list() {
     let input = "pub let f() -> Int = sum x in [5, 10, 15] { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(30));
 }
 
 // ========== SUM with LinExpr Tests ==========
 
-#[test]
-fn sum_linexpr_simple() {
+#[tokio::test]
+async fn sum_linexpr_simple() {
     let input = "pub let f() -> LinExpr = sum x in [1..3] { $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -230,17 +256,19 @@ fn sum_linexpr_simple() {
     }
 }
 
-#[test]
-fn sum_linexpr_empty_list() {
+#[tokio::test]
+async fn sum_linexpr_empty_list() {
     let input = "pub let f() -> LinExpr = sum x in [] as [Int] { $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -252,17 +280,19 @@ fn sum_linexpr_empty_list() {
     }
 }
 
-#[test]
-fn sum_linexpr_with_coefficient() {
+#[tokio::test]
+async fn sum_linexpr_with_coefficient() {
     let input = "pub let f() -> LinExpr = sum x in [1..3] { x * $V() };";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -276,17 +306,19 @@ fn sum_linexpr_with_coefficient() {
     }
 }
 
-#[test]
-fn sum_linexpr_with_constant() {
+#[tokio::test]
+async fn sum_linexpr_with_constant() {
     let input = "pub let f() -> LinExpr = sum x in [1..4] { $V(x) + 10 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -308,17 +340,19 @@ fn sum_linexpr_with_constant() {
     }
 }
 
-#[test]
-fn sum_linexpr_with_filter() {
+#[tokio::test]
+async fn sum_linexpr_with_filter() {
     let input = "pub let f() -> LinExpr = sum x in [1..5] where x % 2 == 1 { $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -337,8 +371,8 @@ fn sum_linexpr_with_filter() {
     }
 }
 
-#[test]
-fn sum_linexpr_multiple_vars() {
+#[tokio::test]
+async fn sum_linexpr_multiple_vars() {
     let input = "pub let f() -> LinExpr = sum x in [1..3] { $V1(x) + $V2(x) };";
 
     let vars = HashMap::from([
@@ -346,11 +380,13 @@ fn sum_linexpr_multiple_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -374,17 +410,19 @@ fn sum_linexpr_multiple_vars() {
     }
 }
 
-#[test]
-fn sum_linexpr_with_param() {
+#[tokio::test]
+async fn sum_linexpr_with_param() {
     let input = "pub let f(coef: Int) -> LinExpr = sum x in [1..3] { coef * $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -405,110 +443,123 @@ fn sum_linexpr_with_param() {
 
 // ========== FORALL with Bool Tests ==========
 
-#[test]
-fn forall_bool_all_true() {
+#[tokio::test]
+async fn forall_bool_all_true() {
     let input = "pub let f() -> Bool = forall x in [1..4] { x > 0 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn forall_bool_one_false() {
+#[tokio::test]
+async fn forall_bool_one_false() {
     let input = "pub let f() -> Bool = forall x in [1..5] { x < 3 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Not all elements are < 3
     assert_eq!(result, ExprValue::Bool(false));
 }
 
-#[test]
-fn forall_bool_empty_list() {
+#[tokio::test]
+async fn forall_bool_empty_list() {
     let input = "pub let f() -> Bool = forall x in [] as [Int] { x > 10 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Vacuously true for empty list
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn forall_bool_with_filter() {
+#[tokio::test]
+async fn forall_bool_with_filter() {
     let input = "pub let f() -> Bool = forall x in [1..10] where x % 2 == 0 { x < 8 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Even numbers: 2, 4, 6, 8
     // Not all are < 8 (8 fails)
     assert_eq!(result, ExprValue::Bool(false));
 }
 
-#[test]
-fn forall_bool_with_filter_all_pass() {
+#[tokio::test]
+async fn forall_bool_with_filter_all_pass() {
     let input = "pub let f() -> Bool = forall x in [1..10] where x % 2 == 1 { x < 10 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Odd numbers: 1, 3, 5, 7, 9 - all < 10
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn forall_bool_with_filter_no_matches() {
+#[tokio::test]
+async fn forall_bool_with_filter_no_matches() {
     let input = "pub let f() -> Bool = forall x in [1..5] where x > 10 { x < 0 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // No elements pass the filter, vacuously true
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn forall_bool_with_param_list() {
+#[tokio::test]
+async fn forall_bool_with_param_list() {
     let input = "pub let f(list: [Int]) -> Bool = forall x in list { x > 0 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let all_positive = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -517,6 +568,7 @@ fn forall_bool_with_param_list() {
     ]));
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![all_positive])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
@@ -527,73 +579,83 @@ fn forall_bool_with_param_list() {
     ]));
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![has_negative])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
 
-#[test]
-fn forall_bool_with_param_in_body() {
+#[tokio::test]
+async fn forall_bool_with_param_in_body() {
     let input = "pub let f(threshold: Int) -> Bool = forall x in [1..5] { x < threshold };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
 }
 
-#[test]
-fn forall_bool_nested() {
+#[tokio::test]
+async fn forall_bool_nested() {
     let input = "pub let f() -> Bool = forall x in [1..3] { forall y in [1..3] { x + y > 0 } };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn forall_bool_with_complex_condition() {
+#[tokio::test]
+async fn forall_bool_with_complex_condition() {
     let input = "pub let f() -> Bool = forall x in [1..10] { x > 0 and x < 11 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
 
 // ========== FORALL with Constraint Tests ==========
 
-#[test]
-fn forall_constraint_simple() {
+#[tokio::test]
+async fn forall_constraint_simple() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) === 1 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -623,17 +685,19 @@ fn forall_constraint_simple() {
     }
 }
 
-#[test]
-fn forall_constraint_empty_list() {
+#[tokio::test]
+async fn forall_constraint_empty_list() {
     let input = "pub let f() -> Constraint = forall x in [] as [Int] { $V(x) === 1 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -645,17 +709,19 @@ fn forall_constraint_empty_list() {
     }
 }
 
-#[test]
-fn forall_constraint_with_inequality() {
+#[tokio::test]
+async fn forall_constraint_with_inequality() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) <== 10 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -682,17 +748,19 @@ fn forall_constraint_with_inequality() {
     }
 }
 
-#[test]
-fn forall_constraint_with_filter() {
+#[tokio::test]
+async fn forall_constraint_with_filter() {
     let input = "pub let f() -> Constraint = forall x in [1..6] where x % 2 == 0 { $V(x) === 1 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -719,17 +787,19 @@ fn forall_constraint_with_filter() {
     }
 }
 
-#[test]
-fn forall_constraint_with_filter_no_matches() {
+#[tokio::test]
+async fn forall_constraint_with_filter_no_matches() {
     let input = "pub let f() -> Constraint = forall x in [1..5] where x > 10 { $V(x) === 1 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -741,17 +811,19 @@ fn forall_constraint_with_filter_no_matches() {
     }
 }
 
-#[test]
-fn forall_constraint_with_arithmetic() {
+#[tokio::test]
+async fn forall_constraint_with_arithmetic() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { 2 * $V(x) + 5 === 15 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -778,8 +850,8 @@ fn forall_constraint_with_arithmetic() {
     }
 }
 
-#[test]
-fn forall_constraint_multiple_vars() {
+#[tokio::test]
+async fn forall_constraint_multiple_vars() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V1(x) + $V2(x) === 10 };";
 
     let vars = HashMap::from([
@@ -787,11 +859,13 @@ fn forall_constraint_multiple_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -823,17 +897,19 @@ fn forall_constraint_multiple_vars() {
     }
 }
 
-#[test]
-fn forall_constraint_with_param() {
+#[tokio::test]
+async fn forall_constraint_with_param() {
     let input = "pub let f(value: Int) -> Constraint = forall x in [1..3] { $V(x) === value };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -860,17 +936,19 @@ fn forall_constraint_with_param() {
     }
 }
 
-#[test]
-fn forall_constraint_mixed_types() {
+#[tokio::test]
+async fn forall_constraint_mixed_types() {
     let input = "pub let f() -> Constraint = forall x in [1..3] { $V(x) === 1 and $V(x) <== 10 };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -882,8 +960,8 @@ fn forall_constraint_mixed_types() {
     }
 }
 
-#[test]
-fn forall_constraint_nested() {
+#[tokio::test]
+async fn forall_constraint_nested() {
     let input =
         "pub let f() -> Constraint = forall x in [1..2] { forall y in [1..2] { $V(x, y) === 1 } };";
 
@@ -892,11 +970,13 @@ fn forall_constraint_nested() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -910,8 +990,8 @@ fn forall_constraint_nested() {
 
 // ========== Combined Quantifier Tests ==========
 
-#[test]
-fn sum_inside_forall() {
+#[tokio::test]
+async fn sum_inside_forall() {
     let input =
         "pub let f() -> Constraint = forall x in [1..3] { sum y in [1..3] { $V(x, y) } === 10 };";
 
@@ -920,11 +1000,13 @@ fn sum_inside_forall() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -936,69 +1018,78 @@ fn sum_inside_forall() {
     }
 }
 
-#[test]
-fn forall_inside_sum() {
+#[tokio::test]
+async fn forall_inside_sum() {
     let input = "pub let f() -> Int = sum x in [1..3] { if forall y in [1..3] { y > 0 } { x } else { 0 } };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // forall is always true, so sum is 1 + 2 = 3
     assert_eq!(result, ExprValue::Int(3));
 }
 
-#[test]
-fn quantifiers_with_collection_ops() {
+#[tokio::test]
+async fn quantifiers_with_collection_ops() {
     let input = "pub let f() -> Int = sum x in ([1, 2, 3] + [4, 5]) { x };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn forall_with_collection_ops() {
+#[tokio::test]
+async fn forall_with_collection_ops() {
     let input = "pub let f() -> Bool = forall x in ([1..5] + [3..7]) { x >= 3 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Intersection is [1..7], 1 and 2 are less than 3
     assert_eq!(result, ExprValue::Bool(false));
 }
 
-#[test]
-fn quantifiers_with_if() {
+#[tokio::test]
+async fn quantifiers_with_if() {
     let input = "pub let f(x: Int) -> Int = if x > 0 { sum y in [1..4] { y } } else { 0 };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(6));
 
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
 }

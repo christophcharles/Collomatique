@@ -401,6 +401,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-time",
  "pest",
+ "tokio",
 ]
 
 [[package]]
@@ -494,6 +495,7 @@ dependencies = [
  "collomatique-python",
  "collomatique-rpc",
  "collomatique-state-colloscopes",
+ "tokio",
 ]
 
 [[package]]

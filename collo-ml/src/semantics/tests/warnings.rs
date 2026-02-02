@@ -2,10 +2,10 @@ use super::*;
 
 // ========== Naming Convention Warnings ==========
 
-#[test]
-fn function_naming_convention_pascal_case() {
+#[tokio::test]
+async fn function_naming_convention_pascal_case() {
     let input = "pub let MyFunction() -> Int = 5;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -16,10 +16,10 @@ fn function_naming_convention_pascal_case() {
     );
 }
 
-#[test]
-fn function_naming_convention_correct() {
+#[tokio::test]
+async fn function_naming_convention_correct() {
     let input = "pub let my_function() -> Int = 5;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -30,10 +30,10 @@ fn function_naming_convention_correct() {
     );
 }
 
-#[test]
-fn parameter_naming_convention_pascal_case() {
+#[tokio::test]
+async fn parameter_naming_convention_pascal_case() {
     let input = "pub let f(MyParam: Int) -> Int = MyParam;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -44,10 +44,10 @@ fn parameter_naming_convention_pascal_case() {
     );
 }
 
-#[test]
-fn parameter_naming_convention_correct() {
+#[tokio::test]
+async fn parameter_naming_convention_correct() {
     let input = "pub let f(my_param: Int) -> Int = my_param;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -58,13 +58,13 @@ fn parameter_naming_convention_correct() {
     );
 }
 
-#[test]
-fn variable_naming_convention_snake_case() {
+#[tokio::test]
+async fn variable_naming_convention_snake_case() {
     let input = r#"
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $my_var;
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -75,13 +75,13 @@ fn variable_naming_convention_snake_case() {
     );
 }
 
-#[test]
-fn variable_naming_convention_correct() {
+#[tokio::test]
+async fn variable_naming_convention_correct() {
     let input = r#"
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $MyVar;
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -94,10 +94,10 @@ fn variable_naming_convention_correct() {
 
 // ========== Unused Parameter Warnings ==========
 
-#[test]
-fn unused_parameter_warning() {
+#[tokio::test]
+async fn unused_parameter_warning() {
     let input = "pub let f(x: Int, y: Int) -> Int = x;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -115,10 +115,10 @@ fn unused_parameter_warning() {
     }
 }
 
-#[test]
-fn all_parameters_unused_warning() {
+#[tokio::test]
+async fn all_parameters_unused_warning() {
     let input = "pub let f(x: Int, y: Int) -> Int = 42;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     let unused_count = warnings
         .iter()
@@ -128,10 +128,10 @@ fn all_parameters_unused_warning() {
     assert_eq!(unused_count, 2, "Should warn about both unused parameters");
 }
 
-#[test]
-fn no_warning_when_parameter_used() {
+#[tokio::test]
+async fn no_warning_when_parameter_used() {
     let input = "pub let f(x: Int, y: Int) -> Int = x + y;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -142,13 +142,13 @@ fn no_warning_when_parameter_used() {
     );
 }
 
-#[test]
-fn parameter_used_in_nested_expression() {
+#[tokio::test]
+async fn parameter_used_in_nested_expression() {
     let input = r#"
         pub let f(x: Int, flag: Bool) -> Int = 
             if flag { x } else { 0 };
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -161,11 +161,11 @@ fn parameter_used_in_nested_expression() {
 
 // ========== Unused Forall Variable Warnings ==========
 
-#[test]
-fn unused_forall_variable() {
+#[tokio::test]
+async fn unused_forall_variable() {
     let types = simple_object("Student");
     let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };";
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         warnings
@@ -176,13 +176,13 @@ fn unused_forall_variable() {
     );
 }
 
-#[test]
-fn no_warning_when_forall_variable_used() {
+#[tokio::test]
+async fn no_warning_when_forall_variable_used() {
     let types = simple_object("Student");
     let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };";
-    let (_, _, warnings) = analyze(input, types, vars);
+    let (_, _, warnings) = analyze(input, types, vars).await;
 
     assert!(
         !warnings
@@ -193,14 +193,14 @@ fn no_warning_when_forall_variable_used() {
     );
 }
 
-#[test]
-fn forall_variable_used_in_where_clause() {
+#[tokio::test]
+async fn forall_variable_used_in_where_clause() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> Constraint = 
             forall s in @[Student] where s.age > 18 { 0 <== 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         !warnings
@@ -213,11 +213,11 @@ fn forall_variable_used_in_where_clause() {
 
 // ========== Unused Sum Variable Warnings ==========
 
-#[test]
-fn unused_sum_variable() {
+#[tokio::test]
+async fn unused_sum_variable() {
     let types = simple_object("Student");
     let input = "pub let f() -> Int = sum s in @[Student] { 5 };";
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         warnings
@@ -228,13 +228,13 @@ fn unused_sum_variable() {
     );
 }
 
-#[test]
-fn no_warning_when_sum_variable_used() {
+#[tokio::test]
+async fn no_warning_when_sum_variable_used() {
     let types = simple_object("Student");
     let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
 
     let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };";
-    let (_, _, warnings) = analyze(input, types, vars);
+    let (_, _, warnings) = analyze(input, types, vars).await;
 
     assert!(
         !warnings
@@ -245,14 +245,14 @@ fn no_warning_when_sum_variable_used() {
     );
 }
 
-#[test]
-fn sum_variable_used_in_where_clause() {
+#[tokio::test]
+async fn sum_variable_used_in_where_clause() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f() -> LinExpr = 
             sum s in @[Student] where s.age > 18 { 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         !warnings
@@ -265,10 +265,10 @@ fn sum_variable_used_in_where_clause() {
 
 // ========== Unused List Comprehension Variable Warnings ==========
 
-#[test]
-fn unused_list_comprehension_variable() {
+#[tokio::test]
+async fn unused_list_comprehension_variable() {
     let input = "pub let f() -> [Int] = [5 for x in [1, 2, 3]];";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -279,10 +279,10 @@ fn unused_list_comprehension_variable() {
     );
 }
 
-#[test]
-fn no_warning_when_comprehension_variable_used() {
+#[tokio::test]
+async fn no_warning_when_comprehension_variable_used() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3]];";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -293,10 +293,10 @@ fn no_warning_when_comprehension_variable_used() {
     );
 }
 
-#[test]
-fn comprehension_variable_used_in_where_clause() {
+#[tokio::test]
+async fn comprehension_variable_used_in_where_clause() {
     let input = "pub let f() -> [Int] = [1 for x in [1, 2, 3, 4, 5] where x > 2];";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -309,10 +309,10 @@ fn comprehension_variable_used_in_where_clause() {
 
 // ========== Unused Function Warnings ==========
 
-#[test]
-fn unused_private_function_warning() {
+#[tokio::test]
+async fn unused_private_function_warning() {
     let input = "let foo(x: Int) -> Int = x;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -323,13 +323,13 @@ fn unused_private_function_warning() {
     );
 }
 
-#[test]
-fn multiple_unused_functions() {
+#[tokio::test]
+async fn multiple_unused_functions() {
     let input = r#"
         let f(x: Int) -> Int = x;
         let g(y: Int) -> Int = y;
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     let unused_count = warnings
         .iter()
@@ -339,10 +339,10 @@ fn multiple_unused_functions() {
     assert_eq!(unused_count, 2, "Should warn about both unused functions");
 }
 
-#[test]
-fn no_warning_for_public_function() {
+#[tokio::test]
+async fn no_warning_for_public_function() {
     let input = "pub let foo(x: Int) -> Int = x;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -353,13 +353,13 @@ fn no_warning_for_public_function() {
     );
 }
 
-#[test]
-fn no_warning_when_private_function_called() {
+#[tokio::test]
+async fn no_warning_when_private_function_called() {
     let input = r#"
         let helper(x: Int) -> Int = x;
         pub let main() -> Int = helper(5);
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -370,13 +370,13 @@ fn no_warning_when_private_function_called() {
     );
 }
 
-#[test]
-fn function_used_in_reify() {
+#[tokio::test]
+async fn function_used_in_reify() {
     let input = r#"
         let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $MyVar;
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -389,14 +389,14 @@ fn function_used_in_reify() {
 
 // ========== Shadowing Warnings ==========
 
-#[test]
-fn shadowing_parameter_with_forall() {
+#[tokio::test]
+async fn shadowing_parameter_with_forall() {
     let types = simple_object("Student");
     let input = r#"
         pub let f(s: Student) -> Constraint = 
             forall s in @[Student] { 0 <== 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         warnings
@@ -407,12 +407,12 @@ fn shadowing_parameter_with_forall() {
     );
 }
 
-#[test]
-fn shadowing_parameter_with_sum() {
+#[tokio::test]
+async fn shadowing_parameter_with_sum() {
     let input = r#"
         pub let f(x: Int) -> Int = sum x in [1, 2, 3] { x };
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -423,8 +423,8 @@ fn shadowing_parameter_with_sum() {
     );
 }
 
-#[test]
-fn shadowing_in_nested_forall() {
+#[tokio::test]
+async fn shadowing_in_nested_forall() {
     let types = simple_object("Student");
     let input = r#"
         pub let f() -> Constraint = 
@@ -432,7 +432,7 @@ fn shadowing_in_nested_forall() {
                 forall s in @[Student] { 0 <== 1 } 
             };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new());
+    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         warnings
@@ -445,8 +445,8 @@ fn shadowing_in_nested_forall() {
 
 // ========== No Warnings in Valid Cases ==========
 
-#[test]
-fn no_warnings_for_well_written_code() {
+#[tokio::test]
+async fn no_warnings_for_well_written_code() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let vars = var_with_args(
         "StudentVar",
@@ -457,7 +457,7 @@ fn no_warnings_for_well_written_code() {
         pub let compute_total(students: [Student]) -> LinExpr =
             sum s in students where s.age > 18 { $StudentVar(s) };
     "#;
-    let (_, _, warnings) = analyze(input, types, vars);
+    let (_, _, warnings) = analyze(input, types, vars).await;
 
     assert!(
         warnings.is_empty(),
@@ -468,10 +468,10 @@ fn no_warnings_for_well_written_code() {
 
 // ========== Type Naming Convention Warnings ==========
 
-#[test]
-fn type_naming_convention_warning() {
+#[tokio::test]
+async fn type_naming_convention_warning() {
     let input = "type my_type = Int;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -482,10 +482,10 @@ fn type_naming_convention_warning() {
     );
 }
 
-#[test]
-fn type_correct_naming_no_warning() {
+#[tokio::test]
+async fn type_correct_naming_no_warning() {
     let input = "type MyType = Int;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -496,10 +496,10 @@ fn type_correct_naming_no_warning() {
     );
 }
 
-#[test]
-fn enum_root_naming_convention_warning() {
+#[tokio::test]
+async fn enum_root_naming_convention_warning() {
     let input = "enum my_enum = Good;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -510,10 +510,10 @@ fn enum_root_naming_convention_warning() {
     );
 }
 
-#[test]
-fn enum_variant_naming_convention_warning() {
+#[tokio::test]
+async fn enum_variant_naming_convention_warning() {
     let input = "enum MyEnum = bad_variant;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -524,10 +524,10 @@ fn enum_variant_naming_convention_warning() {
     );
 }
 
-#[test]
-fn enum_correct_naming_no_warning() {
+#[tokio::test]
+async fn enum_correct_naming_no_warning() {
     let input = "enum MyEnum = GoodVariant(Int) | AnotherGood;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -540,10 +540,10 @@ fn enum_correct_naming_no_warning() {
 
 // ========== Field Naming Convention Warnings ==========
 
-#[test]
-fn field_naming_convention_warning_struct_literal() {
+#[tokio::test]
+async fn field_naming_convention_warning_struct_literal() {
     let input = r#"pub let f() -> { bad_field: Int } = { BadField: 5 };"#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         warnings.iter().any(|w| matches!(w,
             SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
@@ -552,10 +552,10 @@ fn field_naming_convention_warning_struct_literal() {
     );
 }
 
-#[test]
-fn field_naming_convention_warning_enum_struct_variant() {
+#[tokio::test]
+async fn field_naming_convention_warning_enum_struct_variant() {
     let input = "enum MyEnum = Variant { BadField: Int };";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         warnings.iter().any(|w| matches!(w,
             SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
@@ -564,10 +564,10 @@ fn field_naming_convention_warning_enum_struct_variant() {
     );
 }
 
-#[test]
-fn field_naming_convention_warning_type_alias() {
+#[tokio::test]
+async fn field_naming_convention_warning_type_alias() {
     let input = "type MyType = { BadField: Int };";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         warnings.iter().any(|w| matches!(w,
             SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
@@ -576,10 +576,10 @@ fn field_naming_convention_warning_type_alias() {
     );
 }
 
-#[test]
-fn field_naming_convention_warning_param_type() {
+#[tokio::test]
+async fn field_naming_convention_warning_param_type() {
     let input = "pub let f(x: { BadField: Int }) -> Int = 42;";
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         warnings.iter().any(|w| matches!(w,
             SemWarning::FieldNamingConvention { identifier, .. } if identifier == "BadField")),
@@ -588,10 +588,10 @@ fn field_naming_convention_warning_param_type() {
     );
 }
 
-#[test]
-fn field_naming_convention_warning_return_type() {
+#[tokio::test]
+async fn field_naming_convention_warning_return_type() {
     let input = r#"pub let f() -> { BadField: Int } = { BadField: 5 };"#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     // Warns twice: once for return type annotation, once for struct literal
     let count = warnings
         .iter()
@@ -607,14 +607,14 @@ fn field_naming_convention_warning_return_type() {
     );
 }
 
-#[test]
-fn field_correct_naming_no_warning() {
+#[tokio::test]
+async fn field_correct_naming_no_warning() {
     let input = r#"
         type MyType = { good_field: Int };
         enum MyEnum = Variant { good_field: Int };
         pub let f() -> { good_field: Int } = { good_field: 5 };
     "#;
-    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !warnings
             .iter()

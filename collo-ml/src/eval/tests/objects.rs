@@ -100,7 +100,7 @@ impl EvalObject for SimpleObject {
     }
 }
 
-fn eval_with_simple_objects(
+async fn eval_with_simple_objects(
     input: &str,
     fn_name: &str,
     args: Vec<ExprValue<SimpleObject, SqliteDatabaseConnection>>,
@@ -111,63 +111,65 @@ fn eval_with_simple_objects(
         &BTreeMap::from([("main", input)]),
         vars,
     )
+    .await
     .expect("Should compile");
     let env = SimpleEnv {};
 
     checked_ast
         .eval_fn(&env, "main", fn_name, args)
+        .await
         .expect("Should evaluate")
 }
 
-#[test]
-fn simple_object() {
+#[tokio::test]
+async fn simple_object() {
     let input = "pub let f(s: Student) -> Student = s;";
 
     let args = vec![ExprValue::Object(SimpleObject::Student1)];
 
-    let result = eval_with_simple_objects(input, "f", args);
+    let result = eval_with_simple_objects(input, "f", args).await;
 
     assert_eq!(result, ExprValue::Object(SimpleObject::Student1));
 }
 
-#[test]
-fn simple_field_access() {
+#[tokio::test]
+async fn simple_field_access() {
     let input = "pub let f(s: Student) -> Int = s.age;";
 
     let args = vec![ExprValue::Object(SimpleObject::Student1)];
 
-    let result = eval_with_simple_objects(input, "f", args);
+    let result = eval_with_simple_objects(input, "f", args).await;
 
     assert_eq!(result, ExprValue::Int(18));
 }
 
-#[test]
-fn nested_field_access() {
+#[tokio::test]
+async fn nested_field_access() {
     let input = "pub let f(r: Room) -> Bool = r.first_student.enrolled;";
 
     let args = vec![ExprValue::Object(SimpleObject::Room1)];
 
-    let result = eval_with_simple_objects(input, "f", args);
+    let result = eval_with_simple_objects(input, "f", args).await;
 
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn nested_field_access2() {
+#[tokio::test]
+async fn nested_field_access2() {
     let input = "pub let f(r: Room) -> Int = r.first_student.age;";
 
     let args = vec![ExprValue::Object(SimpleObject::Room2)];
 
-    let result = eval_with_simple_objects(input, "f", args);
+    let result = eval_with_simple_objects(input, "f", args).await;
 
     assert_eq!(result, ExprValue::Int(20));
 }
 
-#[test]
-fn global_list() {
+#[tokio::test]
+async fn global_list() {
     let input = "pub let f() -> [Student] = @[Student];";
 
-    let result = eval_with_simple_objects(input, "f", vec![]);
+    let result = eval_with_simple_objects(input, "f", vec![]).await;
 
     assert_eq!(
         result,

@@ -3,8 +3,8 @@ use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
-#[test]
-fn constraints_and_objectives_same_call() {
+#[tokio::test]
+async fn constraints_and_objectives_same_call() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -67,6 +67,7 @@ fn constraints_and_objectives_same_call() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -91,7 +92,7 @@ fn constraints_and_objectives_same_call() {
         )
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

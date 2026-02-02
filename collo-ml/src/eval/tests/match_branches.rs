@@ -2,23 +2,25 @@ use super::*;
 
 // ========== Basic Match Expression Tests ==========
 
-#[test]
-fn match_simple_int() {
+#[tokio::test]
+async fn match_simple_int() {
     let input = "pub let f(x: Int) -> Int = match x { y as Int { y + 10 } };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn match_with_two_branches() {
+#[tokio::test]
+async fn match_with_two_branches() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i } 
@@ -28,22 +30,25 @@ fn match_with_two_branches() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Int(0));
 }
 
-#[test]
-fn match_with_catchall() {
+#[tokio::test]
+async fn match_with_catchall() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int { i } 
@@ -53,42 +58,48 @@ fn match_with_catchall() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Int(0));
 
     let result_none = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_none, ExprValue::Int(0));
 }
 
-#[test]
-fn match_only_catchall() {
+#[tokio::test]
+async fn match_only_catchall() {
     let input = "pub let f(x: Int) -> Int = match x { y { y * 2 } };";
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(21)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
 
-#[test]
-fn match_binding_uses_refined_type() {
+#[tokio::test]
+async fn match_binding_uses_refined_type() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i * 2 } 
@@ -98,17 +109,19 @@ fn match_binding_uses_refined_type() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(20));
 }
 
-#[test]
-fn match_multiple_int_branches() {
+#[tokio::test]
+async fn match_multiple_int_branches() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int { 1 } 
@@ -119,21 +132,25 @@ fn match_multiple_int_branches() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(0)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(1));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Int(2));
 
     let result_none = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_none, ExprValue::Int(3));
 }
@@ -142,8 +159,8 @@ fn match_multiple_int_branches() {
 // Note: The `into` keyword was removed from match branches.
 // Type conversions should be done explicitly in the body using C-like syntax: LinExpr(x)
 
-#[test]
-fn match_int_to_linexpr_conversion() {
+#[tokio::test]
+async fn match_int_to_linexpr_conversion() {
     // Conversion is now done in the body using LinExpr(i)
     let input = r#"
         pub let f(x: Int) -> LinExpr = match x {
@@ -153,11 +170,13 @@ fn match_int_to_linexpr_conversion() {
 
     let vars = HashMap::from([("V".to_string(), vec![SimpleType::LinExpr.into()])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -173,8 +192,8 @@ fn match_int_to_linexpr_conversion() {
     }
 }
 
-#[test]
-fn match_int_branch_with_conversion_in_body() {
+#[tokio::test]
+async fn match_int_branch_with_conversion_in_body() {
     // The `into` in match branches was removed - conversion is done in the body
     let input = r#"
         pub let f(x: Int | Bool) -> LinExpr | Bool = match x {
@@ -185,16 +204,19 @@ fn match_int_branch_with_conversion_in_body() {
 
     let vars = HashMap::from([("V".to_string(), vec![SimpleType::LinExpr.into()])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Bool(true));
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result_int {
@@ -209,8 +231,8 @@ fn match_int_branch_with_conversion_in_body() {
     }
 }
 
-#[test]
-fn match_emptylist_to_list_conversion() {
+#[tokio::test]
+async fn match_emptylist_to_list_conversion() {
     // Note: The `into` in match branches was removed
     // Using `as []` to match empty list, conversion in body
     let input = r#"
@@ -222,16 +244,19 @@ fn match_emptylist_to_list_conversion() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 
     let result_list = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::List(vec![])])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result_list,
@@ -245,8 +270,8 @@ fn match_emptylist_to_list_conversion() {
 
 // ========== Where Filter Tests ==========
 
-#[test]
-fn match_with_where_filter() {
+#[tokio::test]
+async fn match_with_where_filter() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i > 0 { i * 2 } 
@@ -256,27 +281,31 @@ fn match_with_where_filter() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Int(10));
 
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Int(0));
 
     let result_zero = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(0)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_zero, ExprValue::Int(0));
 }
 
-#[test]
-fn match_multiple_filtered_branches() {
+#[tokio::test]
+async fn match_multiple_filtered_branches() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i > 10 { 100 } 
@@ -287,27 +316,31 @@ fn match_multiple_filtered_branches() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_large = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(15)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_large, ExprValue::Int(100));
 
     let result_medium = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_medium, ExprValue::Int(10));
 
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Int(0));
 }
 
-#[test]
-fn match_where_with_original_variable() {
+#[tokio::test]
+async fn match_where_with_original_variable() {
     let input = r#"
         pub let f(x: Int) -> LinExpr = match x {
             i as Int where x > 0 { $V(LinExpr(i)) }
@@ -320,11 +353,13 @@ fn match_where_with_original_variable() {
         ("V2".to_string(), vec![]),
     ]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result_positive {
@@ -340,6 +375,7 @@ fn match_where_with_original_variable() {
 
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
 
     match result_negative {
@@ -353,8 +389,8 @@ fn match_where_with_original_variable() {
 
 // ========== List Matching Tests ==========
 
-#[test]
-fn match_list_vs_int() {
+#[tokio::test]
+async fn match_list_vs_int() {
     let input = r#"
         pub let f(x: [Int] | Int) -> Int = match x { 
             lst as [Int] { |lst| } 
@@ -364,8 +400,9 @@ fn match_list_vs_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_list = checked_ast
         .quick_eval_fn(
@@ -377,17 +414,19 @@ fn match_list_vs_int() {
                 ExprValue::Int(3),
             ])],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result_list, ExprValue::Int(3));
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 }
 
-#[test]
-fn match_emptylist_separately() {
+#[tokio::test]
+async fn match_emptylist_separately() {
     let input = r#"
         pub let f(x: [Int]) -> Int = match x { 
             empty as [] { 0 } 
@@ -397,11 +436,13 @@ fn match_emptylist_separately() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_empty = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::List(vec![])])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
 
@@ -411,12 +452,13 @@ fn match_emptylist_separately() {
             "f",
             vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result_nonempty, ExprValue::Int(2));
 }
 
-#[test]
-fn match_list_with_filter() {
+#[tokio::test]
+async fn match_list_with_filter() {
     let input = r#"
         pub let f(items: [Int] | Int) -> Int = match items { 
             lst as [Int] where |lst| > 0 { |lst| } 
@@ -427,8 +469,9 @@ fn match_list_with_filter() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_nonempty = checked_ast
         .quick_eval_fn(
@@ -436,24 +479,27 @@ fn match_list_with_filter() {
             "f",
             vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result_nonempty, ExprValue::Int(2));
 
     let result_empty = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::List(vec![])])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 }
 
 // ========== Nested Match Tests ==========
 
-#[test]
-fn match_nested() {
+#[tokio::test]
+async fn match_nested() {
     let input = r#"
         pub let f(x: Int | Bool, y: Int | Bool) -> Int = match x { 
             i as Int { 
@@ -468,27 +514,31 @@ fn match_nested() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5), ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int_int, ExprValue::Int(8));
 
     let result_int_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5), ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int_bool, ExprValue::Int(5));
 
     let result_bool_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true), ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool_int, ExprValue::Int(0));
 }
 
-#[test]
-fn match_in_branch_body() {
+#[tokio::test]
+async fn match_in_branch_body() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i } 
@@ -498,19 +548,21 @@ fn match_in_branch_body() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(10));
 }
 
 // ========== Match with Other Expressions ==========
 
-#[test]
-fn match_with_if_in_branch() {
+#[tokio::test]
+async fn match_with_if_in_branch() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { if i > 0 { i } else { 0 } } 
@@ -520,27 +572,31 @@ fn match_with_if_in_branch() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Int(5));
 
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Int(0));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Int(1));
 }
 
-#[test]
-fn match_with_sum_in_branch() {
+#[tokio::test]
+async fn match_with_sum_in_branch() {
     let input = r#"
         pub let f(x: [Int] | Int) -> Int = match x { 
             lst as [Int] { sum i in lst { i } } 
@@ -550,8 +606,9 @@ fn match_with_sum_in_branch() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_list = checked_ast
         .quick_eval_fn(
@@ -563,17 +620,19 @@ fn match_with_sum_in_branch() {
                 ExprValue::Int(3),
             ])],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result_list, ExprValue::Int(6));
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(10));
 }
 
-#[test]
-fn match_with_list_comprehension_in_branch() {
+#[tokio::test]
+async fn match_with_list_comprehension_in_branch() {
     let input = r#"
         pub let f(x: [Int] | Int) -> [Int] = match x { 
             lst as [Int] { [i * 2 for i in lst] } 
@@ -583,8 +642,9 @@ fn match_with_list_comprehension_in_branch() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_list = checked_ast
         .quick_eval_fn(
@@ -596,6 +656,7 @@ fn match_with_list_comprehension_in_branch() {
                 ExprValue::Int(3),
             ])],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result_list,
@@ -608,14 +669,15 @@ fn match_with_list_comprehension_in_branch() {
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::List(vec![ExprValue::Int(10)]));
 }
 
 // ========== Match with LinExpr and Constraints ==========
 
-#[test]
-fn match_returning_linexpr() {
+#[tokio::test]
+async fn match_returning_linexpr() {
     let input = r#"
         pub let f(x: Int | Bool) -> LinExpr = match x {
             i as Int { $V(LinExpr(i)) }
@@ -628,11 +690,13 @@ fn match_returning_linexpr() {
         ("V2".to_string(), vec![]),
     ]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result_int {
@@ -648,6 +712,7 @@ fn match_returning_linexpr() {
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
 
     match result_bool {
@@ -659,8 +724,8 @@ fn match_returning_linexpr() {
     }
 }
 
-#[test]
-fn match_returning_constraint() {
+#[tokio::test]
+async fn match_returning_constraint() {
     let input = r#"
         pub let f(x: Int | Bool) -> Constraint = match x {
             i as Int { $V(LinExpr(i)) === 0 }
@@ -670,11 +735,13 @@ fn match_returning_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![SimpleType::LinExpr.into()])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result_int {
@@ -693,6 +760,7 @@ fn match_returning_constraint() {
 
     let result_bool_true = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
 
     match result_bool_true {
@@ -708,8 +776,8 @@ fn match_returning_constraint() {
 
 // ========== Complex Real-World Examples ==========
 
-#[test]
-fn match_complex_type_dispatch() {
+#[tokio::test]
+async fn match_complex_type_dispatch() {
     let input = r#"
         pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
             i as Int { $V(LinExpr(i)) === 0 }
@@ -720,11 +788,13 @@ fn match_complex_type_dispatch() {
 
     let vars = HashMap::from([("V".to_string(), vec![SimpleType::LinExpr.into()])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result_int {
@@ -744,6 +814,7 @@ fn match_complex_type_dispatch() {
                 ExprValue::Int(5),
             ])],
         )
+        .await
         .expect("Should evaluate");
 
     match result_list {
@@ -754,8 +825,8 @@ fn match_complex_type_dispatch() {
     }
 }
 
-#[test]
-fn match_in_arithmetic() {
+#[tokio::test]
+async fn match_in_arithmetic() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = 
             (match x { i as Int { i } b as Bool { 0 } }) + 5;
@@ -763,22 +834,25 @@ fn match_in_arithmetic() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(15));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Int(5));
 }
 
-#[test]
-fn match_optional_handling() {
+#[tokio::test]
+async fn match_optional_handling() {
     let input = r#"
         pub let f(x: Int | None) -> Int = match x { 
             i as Int { i } 
@@ -788,22 +862,25 @@ fn match_optional_handling() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_int, ExprValue::Int(42));
 
     let result_none = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::None])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_none, ExprValue::Int(0));
 }
 
-#[test]
-fn match_returning_list() {
+#[tokio::test]
+async fn match_returning_list() {
     let input = r#"
         pub let f(x: Int | Bool) -> [Int] = match x { 
             i as Int { [i, i * 2, i * 3] } 
@@ -813,11 +890,13 @@ fn match_returning_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_int = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result_int,
@@ -830,12 +909,13 @@ fn match_returning_list() {
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::List(vec![]));
 }
 
-#[test]
-fn match_with_boolean_result() {
+#[tokio::test]
+async fn match_with_boolean_result() {
     let input = r#"
         pub let f(x: Int | Bool) -> Bool = match x { 
             i as Int { i > 0 } 
@@ -845,21 +925,25 @@ fn match_with_boolean_result() {
 
     let vars = HashMap::new();
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Bool(true));
 
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(-5)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Bool(false));
 
     let result_bool = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_bool, ExprValue::Bool(true));
 }

@@ -154,11 +154,13 @@ impl<
         Ok(())
     }
 
-    pub fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<T, D::Connection>> {
+    pub async fn new(
+        modules: &BTreeMap<&str, &str>,
+    ) -> Result<Self, ProblemError<T, D::Connection>> {
         let base_vars = Self::build_vars()?;
 
         // Compile all modules upfront
-        let ast = CheckedAST::new(modules, base_vars.clone())?;
+        let ast = CheckedAST::new(modules, base_vars.clone()).await?;
 
         Ok(ProblemBuilder {
             ast,
@@ -235,12 +237,12 @@ impl<
         Ok(())
     }
 
-    pub fn build(
+    pub async fn build(
         self,
         env: &T::Env,
     ) -> Result<Problem<T, D::Connection, V>, ProblemError<T, D::Connection>> {
         // Evaluate all pending constraints and objectives
-        let mut eval_data = EvalData::new(self, env)?;
+        let mut eval_data = EvalData::new(self, env).await?;
 
         for (constraint, _desc) in eval_data.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
@@ -666,7 +668,7 @@ impl<
         ConstraintDesc::InScript { origin }
     }
 
-    pub(crate) fn new(
+    pub(crate) async fn new(
         builder: ProblemBuilder<T, D, V>,
         env: &'a T::Env,
     ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D::Connection>> {
@@ -679,43 +681,39 @@ impl<
                 .expect("Environment should be compatible with AST");
 
             // Evaluate constraints
-            let constraint_results = builder
-                .pending_constraints
-                .iter()
-                .map(|(module, fn_name, args)| {
-                    let result = eval_history
-                        .eval_fn(module, fn_name, args.clone())
-                        .map_err(|e| match e {
-                            EvalError::Panic(v) => ProblemError::Panic(v),
-                            _ => panic!(
-                                "Evaluation should succeed (function was validated): {:?}",
-                                e
-                            ),
-                        })?;
-                    Ok((module.clone(), fn_name.clone(), result))
-                })
-                .collect::<Result<Vec<_>, ProblemError<T, D::Connection>>>()?;
+            let mut constraint_results = Vec::new();
+            for (module, fn_name, args) in builder.pending_constraints.iter() {
+                let result = eval_history
+                    .eval_fn(module, fn_name, args.clone())
+                    .await
+                    .map_err(|e| match e {
+                        EvalError::Panic(v) => ProblemError::Panic(v),
+                        _ => panic!(
+                            "Evaluation should succeed (function was validated): {:?}",
+                            e
+                        ),
+                    })?;
+                constraint_results.push((module.clone(), fn_name.clone(), result));
+            }
 
             // Evaluate objectives
-            let objective_results = builder
-                .pending_objectives
-                .iter()
-                .map(|(module, fn_name, args, coef, obj_sense)| {
-                    let result = eval_history
-                        .eval_fn(module, fn_name, args.clone())
-                        .map_err(|e| match e {
-                            EvalError::Panic(v) => ProblemError::Panic(v),
-                            _ => panic!("Evaluation should succeed (function was validated)"),
-                        })?;
-                    Ok((
-                        module.clone(),
-                        fn_name.clone(),
-                        result,
-                        *coef,
-                        obj_sense.clone(),
-                    ))
-                })
-                .collect::<Result<Vec<_>, ProblemError<T, D::Connection>>>()?;
+            let mut objective_results = Vec::new();
+            for (module, fn_name, args, coef, obj_sense) in builder.pending_objectives.iter() {
+                let result = eval_history
+                    .eval_fn(module, fn_name, args.clone())
+                    .await
+                    .map_err(|e| match e {
+                        EvalError::Panic(v) => ProblemError::Panic(v),
+                        _ => panic!("Evaluation should succeed (function was validated)"),
+                    })?;
+                objective_results.push((
+                    module.clone(),
+                    fn_name.clone(),
+                    result,
+                    *coef,
+                    obj_sense.clone(),
+                ));
+            }
 
             let var_def = eval_history.into_var_def();
             (constraint_results, objective_results, var_def)

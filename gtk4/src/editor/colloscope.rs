@@ -632,7 +632,11 @@ impl Colloscope {
 
         sender.spawn_oneshot_command(move || {
             let env = collomatique_binding_colloscopes::views::Env::from(params);
-            match builder.build(&env).map_err(|e| format!("{}", e)) {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            match rt
+                .block_on(builder.build(&env))
+                .map_err(|e| format!("{}", e))
+            {
                 Ok(problem) => {
                     ColloscopeCommandOutput::IlpProblemComputed(Ok(IlpProblem { env, problem }))
                 }

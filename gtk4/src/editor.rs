@@ -1134,7 +1134,8 @@ impl EditorPanel {
                 .as_deref()
                 .unwrap_or_else(|| get_default_main_module());
 
-            let result = default_problem_builder(main_module);
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result = rt.block_on(default_problem_builder(main_module));
 
             EditorCommandOutput::MainScriptCompiled { source, result }
         });

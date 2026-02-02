@@ -90,7 +90,7 @@ pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
 }
 
 impl CheckedAST<NoObject, SqliteDatabaseDriver> {
-    pub fn quick_eval_fn(
+    pub async fn quick_eval_fn(
         &self,
         module: &str,
         fn_name: &str,
@@ -100,13 +100,13 @@ impl CheckedAST<NoObject, SqliteDatabaseDriver> {
         EvalError<NoObject, SqliteDatabaseConnection>,
     > {
         let env = NoObjectEnv {};
-        self.eval_fn(&env, module, fn_name, args)
+        self.eval_fn(&env, module, fn_name, args).await
     }
 }
 
 impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
     /// Create a CheckedAST from source modules
-    pub fn new(
+    pub async fn new(
         inputs: &BTreeMap<&str, &str>,
         vars: HashMap<String, ArgsType>,
     ) -> Result<CheckedAST<T, D>, CompileError> {
@@ -126,7 +126,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         }
 
         let (global_env, type_info, expr_types, resolved_types, errors, warnings) =
-            GlobalEnv::new(T::type_schemas(), vars, &modules)?;
+            GlobalEnv::new(T::type_schemas(), vars, &modules).await?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
@@ -238,7 +238,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         EvalHistory::new(self, env, cache)
     }
 
-    pub fn eval_fn(
+    pub async fn eval_fn(
         &self,
         env: &T::Env,
         module: &str,
@@ -246,10 +246,10 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         args: Vec<ExprValue<T, D::Connection>>,
     ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
         let mut eval_history = self.start_eval_history(env)?;
-        Ok(eval_history.eval_fn(module, fn_name, args)?.0)
+        Ok(eval_history.eval_fn(module, fn_name, args).await?.0)
     }
 
-    pub fn eval_fn_with_variables(
+    pub async fn eval_fn_with_variables(
         &self,
         env: &T::Env,
         module: &str,
@@ -263,7 +263,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         EvalError<T, D::Connection>,
     > {
         let mut eval_history = self.start_eval_history(env)?;
-        let (r, _o) = eval_history.eval_fn(module, fn_name, args)?;
+        let (r, _o) = eval_history.eval_fn(module, fn_name, args).await?;
         Ok((r, eval_history.into_var_def()))
     }
 }

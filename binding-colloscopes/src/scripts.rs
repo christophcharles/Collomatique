@@ -92,13 +92,14 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 #[cfg(test)]
 mod tests;
 
-pub fn default_problem_builder(
+pub async fn default_problem_builder(
     main_module: &str,
 ) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseDriver, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
     let mut builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .map_err(|e| {
             // Filter ProblemError into SimpleProblemError
             match e {

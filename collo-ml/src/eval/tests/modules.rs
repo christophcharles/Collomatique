@@ -1,20 +1,23 @@
 use super::*;
 
 /// Helper to compile multiple modules
-fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
+async fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
     let inputs: BTreeMap<&str, &str> = modules.iter().copied().collect();
-    CheckedAST::new(&inputs, HashMap::new()).expect("Should compile")
+    CheckedAST::new(&inputs, HashMap::new())
+        .await
+        .expect("Should compile")
 }
 
-#[test]
-fn eval_functions_in_separate_modules() {
+#[tokio::test]
+async fn eval_functions_in_separate_modules() {
     let mod_a = r#"pub let add(x: Int, y: Int) -> Int = x + y;"#;
     let mod_b = r#"pub let multiply(x: Int, y: Int) -> Int = x * y;"#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result_a = checked_ast
         .quick_eval_fn("mod_a", "add", vec![ExprValue::Int(2), ExprValue::Int(3)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_a, ExprValue::Int(5));
 
@@ -24,19 +27,20 @@ fn eval_functions_in_separate_modules() {
             "multiply",
             vec![ExprValue::Int(2), ExprValue::Int(3)],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result_b, ExprValue::Int(6));
 }
 
-#[test]
-fn eval_cross_module_function_call() {
+#[tokio::test]
+async fn eval_cross_module_function_call() {
     let mod_a = r#"pub let add(x: Int, y: Int) -> Int = x + y;"#;
     let mod_b = r#"
         import "mod_a" as a;
         pub let add_three(x: Int, y: Int, z: Int) -> Int = a::add(a::add(x, y), z);
     "#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
         .quick_eval_fn(
@@ -44,22 +48,24 @@ fn eval_cross_module_function_call() {
             "add_three",
             vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn eval_cross_module_struct_creation() {
+#[tokio::test]
+async fn eval_cross_module_struct_creation() {
     let mod_a = r#"pub type Point = { x: Int, y: Int };"#;
     let mod_b = r#"
         import "mod_a" as a;
         pub let origin() -> a::Point = a::Point { x: 0, y: 0 };
     "#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
         .quick_eval_fn("mod_b", "origin", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -78,18 +84,19 @@ fn eval_cross_module_struct_creation() {
     }
 }
 
-#[test]
-fn eval_cross_module_enum_variant() {
+#[tokio::test]
+async fn eval_cross_module_enum_variant() {
     let mod_a = r#"pub enum Option = Some { value: Int } | None;"#;
     let mod_b = r#"
         import "mod_a" as a;
         pub let make_some(x: Int) -> a::Option = a::Option::Some { value: x };
     "#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
         .quick_eval_fn("mod_b", "make_some", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -107,8 +114,8 @@ fn eval_cross_module_enum_variant() {
     }
 }
 
-#[test]
-fn eval_cross_module_reified_variable() {
+#[tokio::test]
+async fn eval_cross_module_reified_variable() {
     let mod_a = r#"
         pub let check(x: Int) -> Constraint = x >== 0;
         pub reify check as $Check;
@@ -118,10 +125,11 @@ fn eval_cross_module_reified_variable() {
         pub let use_check(x: Int) -> LinExpr = a::$Check(x);
     "#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
         .quick_eval_fn("mod_b", "use_check", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -130,8 +138,8 @@ fn eval_cross_module_reified_variable() {
     }
 }
 
-#[test]
-fn eval_cross_module_reified_variable_list() {
+#[tokio::test]
+async fn eval_cross_module_reified_variable_list() {
     let mod_a = r#"
         pub let checks(x: Int) -> [Constraint] = [x >== 0, x <== 10];
         pub reify checks as $[CheckList];
@@ -141,10 +149,11 @@ fn eval_cross_module_reified_variable_list() {
         pub let use_check_list(x: Int) -> [LinExpr] = a::$[CheckList](x);
     "#;
 
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]);
+    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
         .quick_eval_fn("mod_b", "use_check_list", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {

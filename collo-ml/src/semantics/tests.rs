@@ -29,7 +29,7 @@ mod type_system;
 mod warnings;
 
 /// Helper function to analyze a CoLLo-ML program and return the GlobalEnv, errors, and warnings
-pub(crate) fn analyze_with_env(
+pub(crate) async fn analyze_with_env(
     input: &str,
 ) -> (
     GlobalEnv<SqliteDatabaseDriver>,
@@ -42,12 +42,13 @@ pub(crate) fn analyze_with_env(
     let modules = BTreeMap::from([("main", file)]);
     let (global_env, _type_info, _expr_types, _resolved_types, errors, warnings) =
         GlobalEnv::<SqliteDatabaseDriver>::new(HashMap::new(), HashMap::new(), &modules)
+            .await
             .expect("GlobalEnv creation failed");
     (global_env, errors, warnings)
 }
 
 /// Helper function to analyze a CoLLo-ML program and return type information, errors, and warnings
-pub(crate) fn analyze(
+pub(crate) async fn analyze(
     input: &str,
     types: HashMap<String, ObjectFields>,
     vars: HashMap<String, ArgsType>,
@@ -59,6 +60,7 @@ pub(crate) fn analyze(
     let modules = BTreeMap::from([("main", file)]);
     let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
         GlobalEnv::<SqliteDatabaseDriver>::new(types, vars, &modules)
+            .await
             .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
@@ -98,7 +100,7 @@ pub(crate) fn var_with_args(name: &str, args: Vec<SimpleType>) -> HashMap<String
 }
 
 /// Helper function to analyze a multi-module CoLLo-ML program
-pub(crate) fn analyze_multi(
+pub(crate) async fn analyze_multi(
     module_sources: &[(&str, &str)], // (module_name, source_code)
     types: HashMap<String, ObjectFields>,
     vars: HashMap<String, ArgsType>,
@@ -115,6 +117,7 @@ pub(crate) fn analyze_multi(
 
     let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
         GlobalEnv::<SqliteDatabaseDriver>::new(types, vars, &modules)
+            .await
             .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)

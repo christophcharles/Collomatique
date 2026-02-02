@@ -2,13 +2,13 @@ use super::*;
 
 // ========== Reify Statement Tests ==========
 
-#[test]
-fn reify_constraint_function() {
+#[tokio::test]
+async fn reify_constraint_function() {
     let input = r#"
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -17,13 +17,13 @@ fn reify_constraint_function() {
     );
 }
 
-#[test]
-fn reify_constraint_list() {
+#[tokio::test]
+async fn reify_constraint_list() {
     let input = r#"
         pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
         reify my_constraints as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -32,14 +32,14 @@ fn reify_constraint_list() {
     );
 }
 
-#[test]
-fn reify_function_with_parameters() {
+#[tokio::test]
+async fn reify_function_with_parameters() {
     let types = simple_object("Student");
     let input = r#"
         pub let constraint(s: Student) -> Constraint = 0 === 1;
         reify constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -48,13 +48,13 @@ fn reify_function_with_parameters() {
     );
 }
 
-#[test]
-fn reify_function_with_parameters_into_var_list() {
+#[tokio::test]
+async fn reify_function_with_parameters_into_var_list() {
     let input = r#"
         pub let constraints(s: Int) -> [Constraint] = [0 === 1, 0 <== s];
         reify constraints as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -63,13 +63,13 @@ fn reify_function_with_parameters_into_var_list() {
     );
 }
 
-#[test]
-fn disallow_reify_constraint_list_into_simple_var() {
+#[tokio::test]
+async fn disallow_reify_constraint_list_into_simple_var() {
     let input = r#"
         pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
         reify my_constraints as $MyVars;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -78,13 +78,13 @@ fn disallow_reify_constraint_list_into_simple_var() {
     );
 }
 
-#[test]
-fn disallow_reify_constraint_into_var_list() {
+#[tokio::test]
+async fn disallow_reify_constraint_into_var_list() {
     let input = r#"
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -93,10 +93,10 @@ fn disallow_reify_constraint_into_var_list() {
     );
 }
 
-#[test]
-fn reify_undefined_function() {
+#[tokio::test]
+async fn reify_undefined_function() {
     let input = "reify undefined_func as $MyVar;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -107,13 +107,13 @@ fn reify_undefined_function() {
         .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
 }
 
-#[test]
-fn reify_non_constraint_function() {
+#[tokio::test]
+async fn reify_non_constraint_function() {
     let input = r#"
         pub let not_constraint() -> Int = 42;
         reify not_constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -124,27 +124,27 @@ fn reify_non_constraint_function() {
         .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
 }
 
-#[test]
-fn reify_linexpr_coerces_to_constraint() {
+#[tokio::test]
+async fn reify_linexpr_coerces_to_constraint() {
     let input = r#"
         pub let linexpr_func() -> LinExpr = 5;
         reify linexpr_func as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     // LinExpr should not coerce to Constraint in reify
     assert!(!errors.is_empty(), "LinExpr should not be reifiable");
 }
 
-#[test]
-fn duplicate_variable_name() {
+#[tokio::test]
+async fn duplicate_variable_name() {
     let input = r#"
         pub let c1() -> Constraint = 0 === 1;
         pub let c2() -> Constraint = 0 === 2;
         reify c1 as $MyVar;
         reify c2 as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -155,15 +155,15 @@ fn duplicate_variable_name() {
         .any(|e| matches!(e, SemError::VariableAlreadyDefined { .. })));
 }
 
-#[test]
-fn multiple_valid_reify_statements() {
+#[tokio::test]
+async fn multiple_valid_reify_statements() {
     let input = r#"
         pub let c1() -> Constraint = 0 === 1;
         pub let c2() -> Constraint = 0 === 2;
         reify c1 as $Var1;
         reify c2 as $Var2;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -174,14 +174,14 @@ fn multiple_valid_reify_statements() {
 
 // ========== Using Reified Variables ==========
 
-#[test]
-fn using_reified_variable_in_constraint() {
+#[tokio::test]
+async fn using_reified_variable_in_constraint() {
     let input = r#"
         pub let base(x: Int) -> Constraint = x === 1;
         reify base as $BaseVar;
         pub let use_var(x: Int) -> Constraint = $BaseVar(x) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -190,10 +190,10 @@ fn using_reified_variable_in_constraint() {
     );
 }
 
-#[test]
-fn using_undefined_variable() {
+#[tokio::test]
+async fn using_undefined_variable() {
     let input = "pub let f(x: Int) -> Constraint = $UndefinedVar(x) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on undefined variable");
     assert!(errors
@@ -201,14 +201,14 @@ fn using_undefined_variable() {
         .any(|e| matches!(e, SemError::UnknownVariable { .. })));
 }
 
-#[test]
-fn variable_call_with_wrong_arguments() {
+#[tokio::test]
+async fn variable_call_with_wrong_arguments() {
     let input = r#"
         pub let base(x: Int, y: Int) -> Constraint = x === y;
         reify base as $BaseVar;
         pub let use_var(x: Int) -> Constraint = $BaseVar(x) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
     assert!(errors
@@ -216,14 +216,14 @@ fn variable_call_with_wrong_arguments() {
         .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
 }
 
-#[test]
-fn variable_call_with_wrong_types() {
+#[tokio::test]
+async fn variable_call_with_wrong_types() {
     let input = r#"
         pub let base(x: Int) -> Constraint = x === 0;
         reify base as $BaseVar;
         pub let use_var() -> Constraint = $BaseVar(true) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
     assert!(errors
@@ -233,11 +233,11 @@ fn variable_call_with_wrong_types() {
 
 // ========== Pre-defined Variables ==========
 
-#[test]
-fn using_predefined_variable() {
+#[tokio::test]
+async fn using_predefined_variable() {
     let vars = var_with_args("PredefinedVar", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $PredefinedVar(x) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -246,8 +246,8 @@ fn using_predefined_variable() {
     );
 }
 
-#[test]
-fn predefined_variable_with_object_type() {
+#[tokio::test]
+async fn predefined_variable_with_object_type() {
     let types = simple_object("Student");
     let vars = var_with_args(
         "StudentVar",
@@ -255,7 +255,7 @@ fn predefined_variable_with_object_type() {
     );
 
     let input = "pub let f(s: Student) -> Constraint = $StudentVar(s) === 0;";
-    let (_, errors, _) = analyze(input, types, vars);
+    let (_, errors, _) = analyze(input, types, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -264,8 +264,8 @@ fn predefined_variable_with_object_type() {
     );
 }
 
-#[test]
-fn predefined_variable_with_multiple_args() {
+#[tokio::test]
+async fn predefined_variable_with_multiple_args() {
     let types = simple_object("Student");
     let vars = var_with_args(
         "MultiVar",
@@ -273,7 +273,7 @@ fn predefined_variable_with_multiple_args() {
     );
 
     let input = "pub let f(s: Student, x: Int) -> Constraint = $MultiVar(s, x) === 0;";
-    let (_, errors, _) = analyze(input, types, vars);
+    let (_, errors, _) = analyze(input, types, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -284,11 +284,11 @@ fn predefined_variable_with_multiple_args() {
 
 // ========== Variable Returns LinExpr ==========
 
-#[test]
-fn variable_call_returns_linexpr() {
+#[tokio::test]
+async fn variable_call_returns_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x);";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -297,11 +297,11 @@ fn variable_call_returns_linexpr() {
     );
 }
 
-#[test]
-fn variable_call_in_arithmetic() {
+#[tokio::test]
+async fn variable_call_in_arithmetic() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x) + 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -310,11 +310,11 @@ fn variable_call_in_arithmetic() {
     );
 }
 
-#[test]
-fn variable_call_in_constraint() {
+#[tokio::test]
+async fn variable_call_in_constraint() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -325,13 +325,13 @@ fn variable_call_in_constraint() {
 
 // ========== Let Statement Variations ==========
 
-#[test]
-fn let_with_docstring() {
+#[tokio::test]
+async fn let_with_docstring() {
     let input = r#"
         /// This is a docstring
         pub let f() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -340,15 +340,15 @@ fn let_with_docstring() {
     );
 }
 
-#[test]
-fn let_with_multiple_docstrings() {
+#[tokio::test]
+async fn let_with_multiple_docstrings() {
     let input = r#"
         /// First line
         /// Second line
         /// Third line
         pub let f() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -357,14 +357,14 @@ fn let_with_multiple_docstrings() {
     );
 }
 
-#[test]
-fn reify_with_docstring() {
+#[tokio::test]
+async fn reify_with_docstring() {
     let input = r#"
         pub let c() -> Constraint = 0 === 1;
         /// Docstring for reify
         reify c as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -375,8 +375,8 @@ fn reify_with_docstring() {
 
 // ========== Complex Statement Sequences ==========
 
-#[test]
-fn multiple_lets_and_reifies() {
+#[tokio::test]
+async fn multiple_lets_and_reifies() {
     let input = r#"
         pub let helper(x: Int) -> Int = x;
         pub let c1(x: Int) -> Constraint = helper(x) === 0;
@@ -385,7 +385,7 @@ fn multiple_lets_and_reifies() {
         reify c2 as $Var2;
         pub let combined(x: Int) -> Constraint = $Var1(x) <== 1 and $Var2(x) >== 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -394,14 +394,14 @@ fn multiple_lets_and_reifies() {
     );
 }
 
-#[test]
-fn forward_declaration_now_allowed() {
+#[tokio::test]
+async fn forward_declaration_now_allowed() {
     // Forward references to functions are now allowed
     let input = r#"
         pub let use_func() -> Int = helper(5);
         pub let helper(x: Int) -> Int = x;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -412,12 +412,12 @@ fn forward_declaration_now_allowed() {
 
 // ========== Query Statement Tests ==========
 
-#[test]
-fn query_with_db_param_and_option_struct_return() {
+#[tokio::test]
+async fn query_with_db_param_and_option_struct_return() {
     let input = r#"
         pub query get_student(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -426,12 +426,12 @@ fn query_with_db_param_and_option_struct_return() {
     );
 }
 
-#[test]
-fn query_with_db_param_and_list_struct_return() {
+#[tokio::test]
+async fn query_with_db_param_and_list_struct_return() {
     let input = r#"
         pub query all_students(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -440,14 +440,14 @@ fn query_with_db_param_and_list_struct_return() {
     );
 }
 
-#[test]
-fn query_callable_from_function() {
+#[tokio::test]
+async fn query_callable_from_function() {
     let input = r#"
         type MyDb = #{"CREATE TABLE students(id INTEGER, name TEXT)"};
         pub query get_student(db: MyDb, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
         pub let wrapper(db: MyDb, id: Int) -> ?{name: String} = get_student(db, id);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -456,14 +456,14 @@ fn query_callable_from_function() {
     );
 }
 
-#[test]
-fn query_wrong_argument_count() {
+#[tokio::test]
+async fn query_wrong_argument_count() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
     assert!(errors
@@ -471,14 +471,14 @@ fn query_wrong_argument_count() {
         .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
 }
 
-#[test]
-fn query_wrong_argument_type() {
+#[tokio::test]
+async fn query_wrong_argument_type() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db, "not an int");
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
     assert!(errors
@@ -486,14 +486,14 @@ fn query_wrong_argument_type() {
         .any(|e| matches!(e, SemError::TypeMismatch { .. })));
 }
 
-#[test]
-fn query_duplicate_name_with_query() {
+#[tokio::test]
+async fn query_duplicate_name_with_query() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -504,13 +504,13 @@ fn query_duplicate_name_with_query() {
         .any(|e| matches!(e, SemError::QueryAlreadyDefined { .. })));
 }
 
-#[test]
-fn unused_private_query_warning() {
+#[tokio::test]
+async fn unused_private_query_warning() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         query unused_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
     assert!(
@@ -522,13 +522,13 @@ fn unused_private_query_warning() {
         .any(|w| matches!(w, SemWarning::UnusedQuery { .. })));
 }
 
-#[test]
-fn public_query_not_warned_as_unused() {
+#[tokio::test]
+async fn public_query_not_warned_as_unused() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query public_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
     assert!(
@@ -540,13 +540,13 @@ fn public_query_not_warned_as_unused() {
 
 // ========== Symbol Conflict Tests ==========
 
-#[test]
-fn function_conflicts_with_type() {
+#[tokio::test]
+async fn function_conflicts_with_type() {
     let input = r#"
         type my_name = Int;
         pub let my_name() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with type");
     assert!(errors
@@ -554,14 +554,14 @@ fn function_conflicts_with_type() {
         .any(|e| matches!(e, SemError::SymbolConflict { .. })));
 }
 
-#[test]
-fn query_conflicts_with_type() {
+#[tokio::test]
+async fn query_conflicts_with_type() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         type my_name = Int;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with type");
     assert!(errors
@@ -569,14 +569,14 @@ fn query_conflicts_with_type() {
         .any(|e| matches!(e, SemError::SymbolConflict { .. })));
 }
 
-#[test]
-fn query_conflicts_with_function() {
+#[tokio::test]
+async fn query_conflicts_with_function() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub let my_name() -> Int = 42;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with function");
     assert!(errors
@@ -584,14 +584,14 @@ fn query_conflicts_with_function() {
         .any(|e| matches!(e, SemError::SymbolConflict { .. })));
 }
 
-#[test]
-fn function_conflicts_with_query() {
+#[tokio::test]
+async fn function_conflicts_with_query() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         pub let my_name() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with query");
     assert!(errors
@@ -603,12 +603,12 @@ fn function_conflicts_with_query() {
 
 // --- Valid output types ---
 
-#[test]
-fn query_output_list_struct_direct() {
+#[tokio::test]
+async fn query_output_list_struct_direct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{name: String}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct list of struct should be valid: {:?}",
@@ -616,12 +616,12 @@ fn query_output_list_struct_direct() {
     );
 }
 
-#[test]
-fn query_output_optional_struct_direct() {
+#[tokio::test]
+async fn query_output_optional_struct_direct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct optional struct should be valid: {:?}",
@@ -629,13 +629,13 @@ fn query_output_optional_struct_direct() {
     );
 }
 
-#[test]
-fn query_output_custom_alias_in_list() {
+#[tokio::test]
+async fn query_output_custom_alias_in_list() {
     let input = r#"
         type T = {name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [T] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Custom alias inside list should be valid: {:?}",
@@ -643,13 +643,13 @@ fn query_output_custom_alias_in_list() {
     );
 }
 
-#[test]
-fn query_output_custom_alias_optional() {
+#[tokio::test]
+async fn query_output_custom_alias_optional() {
     let input = r#"
         type T = {name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?T = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Custom alias in optional should be valid: {:?}",
@@ -657,13 +657,13 @@ fn query_output_custom_alias_optional() {
     );
 }
 
-#[test]
-fn query_output_alias_wrapping_optional() {
+#[tokio::test]
+async fn query_output_alias_wrapping_optional() {
     let input = r#"
         type T = ?{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias wrapping optional struct should be valid: {:?}",
@@ -671,13 +671,13 @@ fn query_output_alias_wrapping_optional() {
     );
 }
 
-#[test]
-fn query_output_alias_wrapping_list() {
+#[tokio::test]
+async fn query_output_alias_wrapping_list() {
     let input = r#"
         type T = [{name: String}];
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias wrapping list of struct should be valid: {:?}",
@@ -685,14 +685,14 @@ fn query_output_alias_wrapping_list() {
     );
 }
 
-#[test]
-fn query_output_none_union_alias() {
+#[tokio::test]
+async fn query_output_none_union_alias() {
     let input = r#"
         type T = {name: String};
         type U = None | T;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Union through alias (None | Struct) should be valid: {:?}",
@@ -700,14 +700,14 @@ fn query_output_none_union_alias() {
     );
 }
 
-#[test]
-fn query_output_nested_alias() {
+#[tokio::test]
+async fn query_output_nested_alias() {
     let input = r#"
         type T = {name: String};
         type U = ?T;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Chained alias (?T where T is struct) should be valid: {:?}",
@@ -715,13 +715,13 @@ fn query_output_nested_alias() {
     );
 }
 
-#[test]
-fn query_output_enum_none_struct_variant() {
+#[tokio::test]
+async fn query_output_enum_none_struct_variant() {
     let input = r#"
         enum E = None | V{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum with None + struct variant should be valid: {:?}",
@@ -729,15 +729,15 @@ fn query_output_enum_none_struct_variant() {
     );
 }
 
-#[test]
-fn query_output_alias_chain_none() {
+#[tokio::test]
+async fn query_output_alias_chain_none() {
     let input = r#"
         type MyNone = None;
         type T = {name: String};
         type U = MyNone | T;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to None in union should be valid: {:?}",
@@ -747,24 +747,24 @@ fn query_output_alias_chain_none() {
 
 // --- Invalid output types ---
 
-#[test]
-fn query_output_int_rejected() {
+#[tokio::test]
+async fn query_output_int_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> Int = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Int output type should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
-#[test]
-fn query_output_list_int_rejected() {
+#[tokio::test]
+async fn query_output_list_int_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [Int] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "List of Int output type should be rejected"
@@ -774,12 +774,12 @@ fn query_output_list_int_rejected() {
         .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
-#[test]
-fn query_output_optional_int_rejected() {
+#[tokio::test]
+async fn query_output_optional_int_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?Int = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Optional Int output type should be rejected"
@@ -789,12 +789,12 @@ fn query_output_optional_int_rejected() {
         .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
-#[test]
-fn query_output_bare_struct_rejected() {
+#[tokio::test]
+async fn query_output_bare_struct_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> {name: String} = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Bare struct output type should be rejected"
@@ -804,13 +804,13 @@ fn query_output_bare_struct_rejected() {
         .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
-#[test]
-fn query_output_enum_multi_unit_rejected() {
+#[tokio::test]
+async fn query_output_enum_multi_unit_rejected() {
     let input = r#"
         enum E = A | B | S{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Enum with 2 unit + 1 struct variant should be rejected (3 resolved variants)"
@@ -824,12 +824,12 @@ fn query_output_enum_multi_unit_rejected() {
 
 // --- Valid first parameter ---
 
-#[test]
-fn query_first_param_direct_schema() {
+#[tokio::test]
+async fn query_first_param_direct_schema() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct database schema param should be valid: {:?}",
@@ -837,13 +837,13 @@ fn query_first_param_direct_schema() {
     );
 }
 
-#[test]
-fn query_first_param_alias() {
+#[tokio::test]
+async fn query_first_param_alias() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to database schema param should be valid: {:?}",
@@ -851,14 +851,14 @@ fn query_first_param_alias() {
     );
 }
 
-#[test]
-fn query_first_param_nested_alias() {
+#[tokio::test]
+async fn query_first_param_nested_alias() {
     let input = r#"
         type A = #{"CREATE TABLE t(id INTEGER)"};
         type B = A;
         pub query q(db: B) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Nested alias to database schema param should be valid: {:?}",
@@ -868,24 +868,24 @@ fn query_first_param_nested_alias() {
 
 // --- Invalid first parameter ---
 
-#[test]
-fn query_first_param_int_rejected() {
+#[tokio::test]
+async fn query_first_param_int_rejected() {
     let input = r#"
         pub query q(db: Int) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Int as first param should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
 }
 
-#[test]
-fn query_first_param_struct_rejected() {
+#[tokio::test]
+async fn query_first_param_struct_rejected() {
     let input = r#"
         pub query q(db: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Struct as first param should be rejected"
@@ -895,12 +895,12 @@ fn query_first_param_struct_rejected() {
         .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
 }
 
-#[test]
-fn query_no_params_rejected() {
+#[tokio::test]
+async fn query_no_params_rejected() {
     let input = r#"
         pub query q() -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Query with no params should be rejected"
@@ -914,23 +914,23 @@ fn query_no_params_rejected() {
 
 // --- Valid parameter types ---
 
-#[test]
-fn query_param_int() {
+#[tokio::test]
+async fn query_param_int() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, id: Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(errors.is_empty(), "Int param should be valid: {:?}", errors);
 }
 
-#[test]
-fn query_param_bool() {
+#[tokio::test]
+async fn query_param_bool() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER, active BOOLEAN)"};
         pub query q(db: MyDb, flag: Bool) -> [{id: Int}] = "SELECT id FROM t WHERE active = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Bool param should be valid: {:?}",
@@ -938,13 +938,13 @@ fn query_param_bool() {
     );
 }
 
-#[test]
-fn query_param_string() {
+#[tokio::test]
+async fn query_param_string() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
         pub query q(db: MyDb, name: String) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "String param should be valid: {:?}",
@@ -952,13 +952,13 @@ fn query_param_string() {
     );
 }
 
-#[test]
-fn query_param_optional_int() {
+#[tokio::test]
+async fn query_param_optional_int() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, id: ?Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional Int param should be valid: {:?}",
@@ -966,14 +966,14 @@ fn query_param_optional_int() {
     );
 }
 
-#[test]
-fn query_param_alias_to_int() {
+#[tokio::test]
+async fn query_param_alias_to_int() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         type MyId = Int;
         pub query q(db: MyDb, id: MyId) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to Int param should be valid: {:?}",
@@ -981,14 +981,14 @@ fn query_param_alias_to_int() {
     );
 }
 
-#[test]
-fn query_param_enum_none_string() {
+#[tokio::test]
+async fn query_param_enum_none_string() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
         enum MaybeName = None | Name(String);
         pub query q(db: MyDb, n: MaybeName) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum resolving to ?String param should be valid: {:?}",
@@ -998,52 +998,52 @@ fn query_param_enum_none_string() {
 
 // --- Invalid parameter types ---
 
-#[test]
-fn query_param_struct_rejected() {
+#[tokio::test]
+async fn query_param_struct_rejected() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, s: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct param should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
 }
 
-#[test]
-fn query_param_list_rejected() {
+#[tokio::test]
+async fn query_param_list_rejected() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, ids: [Int]) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "List param should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
 }
 
-#[test]
-fn query_param_linexpr_rejected() {
+#[tokio::test]
+async fn query_param_linexpr_rejected() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, x: LinExpr) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr param should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
 }
 
-#[test]
-fn query_param_constraint_rejected() {
+#[tokio::test]
+async fn query_param_constraint_rejected() {
     let input = r#"
         type MyDb = #{"CREATE TABLE t(id INTEGER)"};
         pub query q(db: MyDb, c: Constraint) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Constraint param should be rejected");
     assert!(errors
         .iter()
@@ -1054,21 +1054,21 @@ fn query_param_constraint_rejected() {
 
 // --- Valid output struct field types ---
 
-#[test]
-fn query_output_field_int() {
+#[tokio::test]
+async fn query_output_field_int() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(errors.is_empty(), "Int field should be valid: {:?}", errors);
 }
 
-#[test]
-fn query_output_field_optional_string() {
+#[tokio::test]
+async fn query_output_field_optional_string() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: ?String}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional String field should be valid: {:?}",
@@ -1076,13 +1076,13 @@ fn query_output_field_optional_string() {
     );
 }
 
-#[test]
-fn query_output_field_alias_to_int() {
+#[tokio::test]
+async fn query_output_field_alias_to_int() {
     let input = r#"
         type MyId = Int;
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: MyId}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to Int field should be valid: {:?}",
@@ -1090,13 +1090,13 @@ fn query_output_field_alias_to_int() {
     );
 }
 
-#[test]
-fn query_output_field_enum_nullable() {
+#[tokio::test]
+async fn query_output_field_enum_nullable() {
     let input = r#"
         enum MaybeName = None | Name(String);
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum resolving to ?String field should be valid: {:?}",
@@ -1104,13 +1104,13 @@ fn query_output_field_enum_nullable() {
     );
 }
 
-#[test]
-fn query_output_field_enum_variant() {
+#[tokio::test]
+async fn query_output_field_enum_variant() {
     let input = r#"
         enum MaybeName = None | Name(String);
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName::Name}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum variant resolving to String field should be valid: {:?}",
@@ -1118,12 +1118,12 @@ fn query_output_field_enum_variant() {
     );
 }
 
-#[test]
-fn query_output_field_optional_struct() {
+#[tokio::test]
+async fn query_output_field_optional_struct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> ?{id: Int, name: String} = "SELECT id, name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Fields in optional struct should be valid: {:?}",
@@ -1133,36 +1133,36 @@ fn query_output_field_optional_struct() {
 
 // --- Invalid output struct field types ---
 
-#[test]
-fn query_output_field_struct_rejected() {
+#[tokio::test]
+async fn query_output_field_struct_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{nested: {a: Int}}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct field should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
 }
 
-#[test]
-fn query_output_field_list_rejected() {
+#[tokio::test]
+async fn query_output_field_list_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{ids: [Int]}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "List field should be rejected");
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
 }
 
-#[test]
-fn query_output_field_linexpr_rejected() {
+#[tokio::test]
+async fn query_output_field_linexpr_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{x: LinExpr}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr field should be rejected");
     assert!(errors
         .iter()

@@ -70,7 +70,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         self.pending_scope.insert(ident.to_string(), value);
     }
 
-    pub(crate) fn eval_expr(
+    pub(crate) async fn eval_expr(
         &mut self,
         eval_history: &mut EvalHistory<'_, T, D>,
         expr: &Spanned<crate::ast::Expr>,
@@ -131,7 +131,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 use crate::ast::PathSegment;
                 assert!(!segments.is_empty());
 
-                let mut current_value = self.eval_expr(eval_history, &object)?;
+                let mut current_value = Box::pin(self.eval_expr(eval_history, &object)).await?;
 
                 // Helper to unwrap Custom values for field/index access
                 fn unwrap_custom<T: EvalObject, D: DatabaseConnection>(
@@ -184,7 +184,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 .expect("Index should be valid after type checking");
                         }
                         PathSegment::ListIndexFallible(index_expr) => {
-                            let index = self.eval_expr(eval_history, index_expr)?;
+                            let index = Box::pin(self.eval_expr(eval_history, index_expr)).await?;
                             let ExprValue::Int(i) = index else {
                                 panic!("Index should be Int after type checking");
                             };
@@ -203,7 +203,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             }
                         }
                         PathSegment::ListIndexPanic(index_expr) => {
-                            let index = self.eval_expr(eval_history, index_expr)?;
+                            let index = Box::pin(self.eval_expr(eval_history, index_expr)).await?;
                             let ExprValue::Int(i) = index else {
                                 panic!("Index should be Int after type checking");
                             };
@@ -232,7 +232,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 current_value
             }
             Expr::Cardinality(list_expr) => {
-                let list_value = self.eval_expr(eval_history, &list_expr)?;
+                let list_value = Box::pin(self.eval_expr(eval_history, &list_expr)).await?;
                 let count = match list_value {
                     ExprValue::List(list) => list.len(),
                     _ => panic!("Unexpected type for list expression"),
@@ -242,7 +242,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 )
             }
             Expr::ExplicitType { expr, typ: _ } => {
-                let value = self.eval_expr(eval_history, &expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, &expr)).await?;
                 // we do nothing: the semantic analysis has already checked everything
                 // and types are relevant only in the semantic phase
                 value
@@ -253,7 +253,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 if args.len() != 1 {
                     panic!("ComplexTypeCast expects exactly one argument");
                 }
-                let value = self.eval_expr(eval_history, &args[0])?;
+                let value = Box::pin(self.eval_expr(eval_history, &args[0])).await?;
 
                 let orig_type = eval_history.ast.get_resolved_type(&typ.span);
                 let target_type = orig_type
@@ -288,7 +288,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 // Evaluate all fields
                 let mut field_values = std::collections::BTreeMap::new();
                 for (name, expr) in fields {
-                    let value = self.eval_expr(eval_history, &expr)?;
+                    let value = Box::pin(self.eval_expr(eval_history, &expr)).await?;
                     field_values.insert(name.node.clone(), value);
                 }
 
@@ -301,7 +301,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }))
             }
             Expr::CastFallible { expr, typ } => {
-                let value = self.eval_expr(eval_history, &expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, &expr)).await?;
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
@@ -312,7 +312,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::CastPanic { expr, typ } => {
-                let value = self.eval_expr(eval_history, &expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, &expr)).await?;
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
@@ -326,16 +326,16 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::ListLiteral { elements } => {
-                let element_values: Vec<_> = elements
-                    .iter()
-                    .map(|x| self.eval_expr(eval_history, &x))
-                    .collect::<Result<_, _>>()?;
+                let mut element_values = Vec::with_capacity(elements.len());
+                for x in elements {
+                    element_values.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                }
 
                 ExprValue::List(element_values)
             }
             Expr::ListRange { start, end } => {
-                let start_value = self.eval_expr(eval_history, &start)?;
-                let end_value = self.eval_expr(eval_history, &end)?;
+                let start_value = Box::pin(self.eval_expr(eval_history, &start)).await?;
+                let end_value = Box::pin(self.eval_expr(eval_history, &end)).await?;
 
                 let start_num = match start_value {
                     ExprValue::Int(v) => v,
@@ -384,21 +384,24 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     }
                     ResolvedPathKind::Function { module, func } => {
                         // Function call
-                        let args = args
-                            .iter()
-                            .map(|x| self.eval_expr(eval_history, &x))
-                            .collect::<Result<_, _>>()?;
-                        eval_history
-                            .add_fn_to_call_history(&module, &func, args, true)?
-                            .0
-                            .into()
+                        let mut eval_args = Vec::with_capacity(args.len());
+                        for x in args {
+                            eval_args.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                        }
+                        Box::pin(
+                            eval_history.add_fn_to_call_history(&module, &func, eval_args, true),
+                        )
+                        .await?
+                        .0
+                        .into()
                     }
                     ResolvedPathKind::Type(simple_type) => {
                         // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
-                        self.eval_generic_call_type_cast(eval_history, &simple_type, args)?
+                        Box::pin(self.eval_generic_call_type_cast(eval_history, &simple_type, args))
+                            .await?
                     }
                     ResolvedPathKind::Query { module, name } => {
-                        self.eval_query_call(eval_history, &module, &name, args)?
+                        Box::pin(self.eval_query_call(eval_history, &module, &name, args)).await?
                     }
                     ResolvedPathKind::Module(_)
                     | ResolvedPathKind::ExternalVariable(_)
@@ -432,10 +435,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let args: Vec<_> = args
-                    .iter()
-                    .map(|x| self.eval_expr(eval_history, &x))
-                    .collect::<Result<_, _>>()?;
+                let mut eval_args = Vec::with_capacity(args.len());
+                for x in args {
+                    eval_args.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                }
+                let args = eval_args;
 
                 match resolve_path(
                     &path,
@@ -467,12 +471,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             (var_module.clone(), var_name.clone(), args.clone()),
                             var_desc.referenced_fn.clone(),
                         );
-                        eval_history.add_fn_to_call_history(
+                        Box::pin(eval_history.add_fn_to_call_history(
                             &var_desc.referenced_fn.0,
                             &var_desc.referenced_fn.1,
                             args.clone(),
                             true,
-                        )?;
+                        ))
+                        .await?;
                         ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
                             eval_history.env,
                             &mut eval_history.cache,
@@ -487,13 +492,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::In { item, collection } => {
-                let collection_value = self.eval_expr(eval_history, &*collection)?;
+                let collection_value = Box::pin(self.eval_expr(eval_history, &*collection)).await?;
                 let list = match collection_value {
                     ExprValue::List(list) => list,
                     _ => panic!("List expected"),
                 };
 
-                let item_value = self.eval_expr(eval_history, &*item)?;
+                let item_value = Box::pin(self.eval_expr(eval_history, &*item)).await?;
                 for elt in list {
                     if item_value == elt {
                         return Ok(ExprValue::Bool(true));
@@ -502,8 +507,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ExprValue::Bool(false)
             }
             Expr::And(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
@@ -519,8 +524,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Or(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 || v2),
@@ -531,7 +536,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Not(not_expr) => {
-                let value = self.eval_expr(eval_history, &*not_expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, &*not_expr)).await?;
 
                 match value {
                     ExprValue::Bool(v) => ExprValue::Bool(!v),
@@ -539,16 +544,16 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::NullCoalesce(lhs, rhs) => {
-                let lhs_value = self.eval_expr(eval_history, &*lhs)?;
+                let lhs_value = Box::pin(self.eval_expr(eval_history, &*lhs)).await?;
                 if lhs_value == ExprValue::None {
-                    self.eval_expr(eval_history, &*rhs)?
+                    Box::pin(self.eval_expr(eval_history, &*rhs)).await?
                 } else {
                     lhs_value
                 }
             }
             Expr::ConstraintEq(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -572,8 +577,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ExprValue::Constraint(Vec::from([lin_expr1.eq(&lin_expr2).into()]))
             }
             Expr::ConstraintLe(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -597,8 +602,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ExprValue::Constraint(Vec::from([lin_expr1.leq(&lin_expr2).into()]))
             }
             Expr::ConstraintGe(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -622,18 +627,18 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ExprValue::Constraint(Vec::from([lin_expr1.geq(&lin_expr2).into()]))
             }
             Expr::Eq(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
                 ExprValue::Bool(value1 == value2)
             }
             Expr::Ne(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
                 ExprValue::Bool(value1 != value2)
             }
             Expr::Lt(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 < v2),
@@ -643,8 +648,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Le(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 <= v2),
@@ -655,8 +660,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Gt(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 > v2),
@@ -666,8 +671,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Ge(expr1, expr2) => {
-                let value1 = self.eval_expr(eval_history, &*expr1)?;
-                let value2 = self.eval_expr(eval_history, &*expr2)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*expr1)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*expr2)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 >= v2),
@@ -678,8 +683,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Add(left, right) => {
-                let value1 = self.eval_expr(eval_history, &*left)?;
-                let value2 = self.eval_expr(eval_history, &*right)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*left)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*right)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
@@ -701,8 +706,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Sub(left, right) => {
-                let value1 = self.eval_expr(eval_history, &*left)?;
-                let value2 = self.eval_expr(eval_history, &*right)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*left)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*right)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 - v2),
@@ -725,7 +730,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Neg(term) => {
-                let value = self.eval_expr(eval_history, &*term)?;
+                let value = Box::pin(self.eval_expr(eval_history, &*term)).await?;
 
                 match value {
                     ExprValue::Int(v) => ExprValue::Int(-v),
@@ -734,12 +739,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Panic(inner_expr) => {
-                let value = self.eval_expr(eval_history, &*inner_expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, &*inner_expr)).await?;
                 return Err(EvalError::Panic(Box::new(value)));
             }
             Expr::Mul(left, right) => {
-                let value1 = self.eval_expr(eval_history, &*left)?;
-                let value2 = self.eval_expr(eval_history, &*right)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*left)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*right)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 * v2),
@@ -753,8 +758,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Div(left, right) => {
-                let value1 = self.eval_expr(eval_history, &*left)?;
-                let value2 = self.eval_expr(eval_history, &*right)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*left)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*right)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 / v2),
@@ -765,8 +770,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 }
             }
             Expr::Mod(left, right) => {
-                let value1 = self.eval_expr(eval_history, &*left)?;
-                let value2 = self.eval_expr(eval_history, &*right)?;
+                let value1 = Box::pin(self.eval_expr(eval_history, &*left)).await?;
+                let value2 = Box::pin(self.eval_expr(eval_history, &*right)).await?;
 
                 match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 % v2),
@@ -780,22 +785,22 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 then_expr,
                 else_expr,
             } => {
-                let cond_value = self.eval_expr(eval_history, &condition)?;
+                let cond_value = Box::pin(self.eval_expr(eval_history, &condition)).await?;
                 let ExprValue::Bool(cond) = cond_value else {
                     panic!("Expected Bool for if condition");
                 };
 
                 if cond {
-                    self.eval_expr(eval_history, &then_expr)?
+                    Box::pin(self.eval_expr(eval_history, &then_expr)).await?
                 } else {
-                    self.eval_expr(eval_history, &else_expr)?
+                    Box::pin(self.eval_expr(eval_history, &else_expr)).await?
                 }
             }
             Expr::Match {
                 match_expr,
                 branches,
             } => {
-                let value = self.eval_expr(eval_history, match_expr)?;
+                let value = Box::pin(self.eval_expr(eval_history, match_expr)).await?;
 
                 for branch in branches {
                     let does_typ_match = match &branch.as_typ {
@@ -818,13 +823,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let where_clause_passes = match &branch.filter {
                         None => true,
                         Some(filter_expr) => {
-                            let cond_value = match self.eval_expr(eval_history, &filter_expr) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    self.pop_scope();
-                                    return Err(e);
-                                }
-                            };
+                            let cond_value =
+                                match Box::pin(self.eval_expr(eval_history, &filter_expr)).await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        self.pop_scope();
+                                        return Err(e);
+                                    }
+                                };
                             let ExprValue::Bool(cond) = cond_value else {
                                 panic!("Expected Bool for where clause");
                             };
@@ -838,7 +844,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         continue;
                     }
 
-                    let output = self.eval_expr(eval_history, &branch.body);
+                    let output = Box::pin(self.eval_expr(eval_history, &branch.body)).await;
 
                     self.pop_scope();
                     return output;
@@ -852,7 +858,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 filter,
                 body,
             } => {
-                let collection_value = self.eval_expr(eval_history, &collection)?;
+                let collection_value = Box::pin(self.eval_expr(eval_history, &collection)).await?;
                 let ExprValue::List(list) = collection_value else {
                     panic!("Expected collection for sum. Got: {:?}", collection_value);
                 };
@@ -878,13 +884,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = match self.eval_expr(eval_history, &f) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    self.pop_scope();
-                                    return Err(e);
-                                }
-                            };
+                            let filter_value =
+                                match Box::pin(self.eval_expr(eval_history, &f)).await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        self.pop_scope();
+                                        return Err(e);
+                                    }
+                                };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -893,7 +900,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = match self.eval_expr(eval_history, &body) {
+                        let new_value = match Box::pin(self.eval_expr(eval_history, &body)).await {
                             Ok(v) => v,
                             Err(e) => {
                                 self.pop_scope();
@@ -939,7 +946,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 body,
                 reversed,
             } => {
-                let collection_value = self.eval_expr(eval_history, &collection)?;
+                let collection_value = Box::pin(self.eval_expr(eval_history, &collection)).await?;
                 let ExprValue::List(mut list) = collection_value else {
                     panic!("Expected collection for sum. Got: {:?}", collection_value);
                 };
@@ -947,7 +954,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     list.reverse();
                 }
 
-                let mut output = self.eval_expr(eval_history, &init_value)?;
+                let mut output = Box::pin(self.eval_expr(eval_history, &init_value)).await?;
 
                 for elem in list {
                     self.register_identifier(&var.node, elem);
@@ -957,13 +964,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = match self.eval_expr(eval_history, &f) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    self.pop_scope();
-                                    return Err(e);
-                                }
-                            };
+                            let filter_value =
+                                match Box::pin(self.eval_expr(eval_history, &f)).await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        self.pop_scope();
+                                        return Err(e);
+                                    }
+                                };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -972,7 +980,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        output = match self.eval_expr(eval_history, &body) {
+                        output = match Box::pin(self.eval_expr(eval_history, &body)).await {
                             Ok(v) => v,
                             Err(e) => {
                                 self.pop_scope();
@@ -992,7 +1000,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 filter,
                 body,
             } => {
-                let collection_value = self.eval_expr(eval_history, &collection)?;
+                let collection_value = Box::pin(self.eval_expr(eval_history, &collection)).await?;
                 let ExprValue::List(list) = collection_value else {
                     panic!("Expected collection for sum. Got: {:?}", collection_value);
                 };
@@ -1016,13 +1024,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let cond = match filter {
                         None => true,
                         Some(f) => {
-                            let filter_value = match self.eval_expr(eval_history, &f) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    self.pop_scope();
-                                    return Err(e);
-                                }
-                            };
+                            let filter_value =
+                                match Box::pin(self.eval_expr(eval_history, &f)).await {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        self.pop_scope();
+                                        return Err(e);
+                                    }
+                                };
                             match filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1031,7 +1040,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = match self.eval_expr(eval_history, &body) {
+                        let new_value = match Box::pin(self.eval_expr(eval_history, &body)).await {
                             Ok(v) => v,
                             Err(e) => {
                                 self.pop_scope();
@@ -1079,10 +1088,10 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let evaluated_args: Vec<_> = args
-                    .iter()
-                    .map(|x| self.eval_expr(eval_history, &x))
-                    .collect::<Result<_, _>>()?;
+                let mut evaluated_args = Vec::with_capacity(args.len());
+                for x in args {
+                    evaluated_args.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                }
 
                 match resolve_path(
                     &path,
@@ -1099,12 +1108,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             .get(&(var_module.clone(), var_name.clone()))
                             .expect("Var list should be declared");
 
-                        let (constraints, _origin) = eval_history.add_fn_to_call_history(
+                        let (constraints, _origin) = Box::pin(eval_history.add_fn_to_call_history(
                             &var_list_fn.0,
                             &var_list_fn.1,
                             evaluated_args.clone(),
                             true,
-                        )?;
+                        ))
+                        .await?;
                         eval_history.var_lists.insert(
                             (var_module.clone(), var_name.clone(), evaluated_args.clone()),
                             var_list_fn.clone(),
@@ -1143,43 +1153,45 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 vars_and_collections,
                 filter,
             } => {
-                let list = self.build_naked_list_for_list_comprehension(
+                let list = Box::pin(self.build_naked_list_for_list_comprehension(
                     eval_history,
                     &body,
                     &vars_and_collections[..],
                     filter.as_ref().map(|x| x.as_ref()),
-                )?;
+                ))
+                .await?;
 
                 ExprValue::List(list)
             }
             Expr::Let { var, value, body } => {
-                let value_value = self.eval_expr(eval_history, &value)?;
+                let value_value = Box::pin(self.eval_expr(eval_history, &value)).await?;
 
                 self.register_identifier(&var.node, value_value);
                 self.push_scope();
 
-                let body_value = self.eval_expr(eval_history, &body);
+                let body_value = Box::pin(self.eval_expr(eval_history, &body)).await;
 
                 self.pop_scope();
 
                 body_value?
             }
             Expr::TupleLiteral { elements } => {
-                let element_values: Vec<_> = elements
-                    .iter()
-                    .map(|x| self.eval_expr(eval_history, &x))
-                    .collect::<Result<_, _>>()?;
+                let mut element_values = Vec::with_capacity(elements.len());
+                for x in elements {
+                    element_values.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                }
 
                 ExprValue::Tuple(element_values)
             }
 
             Expr::StructLiteral { fields } => {
-                let field_values: BTreeMap<_, _> = fields
-                    .iter()
-                    .map(|(name, expr)| {
-                        Ok((name.node.clone(), self.eval_expr(eval_history, expr)?))
-                    })
-                    .collect::<Result<_, EvalError<T, D::Connection>>>()?;
+                let mut field_values = BTreeMap::new();
+                for (name, expr) in fields {
+                    field_values.insert(
+                        name.node.clone(),
+                        Box::pin(self.eval_expr(eval_history, expr)).await?,
+                    );
+                }
 
                 ExprValue::Struct(field_values)
             }
@@ -1187,8 +1199,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     }
 
     /// Execute a query call by evaluating args, extracting the database handle,
-    /// and calling `DatabaseHandle::query` via `block_in_place`.
-    fn eval_query_call(
+    /// and calling `DatabaseHandle::query`.
+    async fn eval_query_call(
         &mut self,
         eval_history: &mut EvalHistory<'_, T, D>,
         module: &str,
@@ -1206,10 +1218,10 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         let sql = query_desc.query_string.node.clone();
         let out_type = query_desc.typ.output.clone();
 
-        let evaluated_args: Vec<ExprValue<T, D::Connection>> = args
-            .iter()
-            .map(|x| self.eval_expr(eval_history, x))
-            .collect::<Result<_, _>>()?;
+        let mut evaluated_args = Vec::with_capacity(args.len());
+        for x in args {
+            evaluated_args.push(Box::pin(self.eval_expr(eval_history, x)).await?);
+        }
 
         let db_handle = {
             let mut val = &evaluated_args[0];
@@ -1226,10 +1238,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
         let global_env = &eval_history.ast.global_env;
 
-        let result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(db_handle.query(&sql, params, out_type, global_env))
-        });
+        let result = db_handle.query(&sql, params, out_type, global_env).await;
 
         match result {
             Ok(value) => Ok(value),
@@ -1243,7 +1252,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     }
 
     /// Helper for evaluating type casts in GenericCall expressions
-    fn eval_generic_call_type_cast(
+    async fn eval_generic_call_type_cast(
         &mut self,
         eval_history: &mut EvalHistory<'_, T, D>,
         simple_type: &SimpleType,
@@ -1262,7 +1271,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     args.len() == 1,
                     "Built-in type cast should have exactly 1 argument"
                 );
-                let value = self.eval_expr(eval_history, &args[0])?;
+                let value = Box::pin(self.eval_expr(eval_history, &args[0])).await?;
                 Ok(unsafe {
                     value.convert_to_unchecked(
                         eval_history.env,
@@ -1299,18 +1308,18 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     if args.is_empty() {
                         ExprValue::None
                     } else {
-                        self.eval_expr(eval_history, &args[0])?
+                        Box::pin(self.eval_expr(eval_history, &args[0])).await?
                     }
                 } else if is_tuple {
                     // Tuple variant - evaluate all args
-                    let values: Vec<ExprValue<T, D::Connection>> = args
-                        .iter()
-                        .map(|x| self.eval_expr(eval_history, &x))
-                        .collect::<Result<_, _>>()?;
+                    let mut values = Vec::with_capacity(args.len());
+                    for x in args {
+                        values.push(Box::pin(self.eval_expr(eval_history, &x)).await?);
+                    }
                     ExprValue::Tuple(values)
                 } else {
                     // Single value variant
-                    self.eval_expr(eval_history, &args[0])?
+                    Box::pin(self.eval_expr(eval_history, &args[0])).await?
                 };
 
                 Ok(ExprValue::Custom(Box::new(CustomValue {
@@ -1326,7 +1335,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         }
     }
 
-    fn build_naked_list_for_list_comprehension(
+    async fn build_naked_list_for_list_comprehension(
         &mut self,
         eval_history: &mut EvalHistory<'_, T, D>,
         body: &Spanned<crate::ast::Expr>,
@@ -1337,7 +1346,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             let cond = match filter {
                 None => true,
                 Some(f) => {
-                    let filter_value = self.eval_expr(eval_history, &f)?;
+                    let filter_value = Box::pin(self.eval_expr(eval_history, &f)).await?;
                     match filter_value {
                         ExprValue::Bool(v) => v,
                         _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
@@ -1346,7 +1355,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             };
 
             return Ok(if cond {
-                Vec::from([self.eval_expr(eval_history, &body)?])
+                Vec::from([Box::pin(self.eval_expr(eval_history, &body)).await?])
             } else {
                 Vec::new()
             });
@@ -1355,7 +1364,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         let (var, collection) = &vars_and_collections[0];
         let remaining_v_and_c = &vars_and_collections[1..];
 
-        let collection_value = self.eval_expr(eval_history, &collection)?;
+        let collection_value = Box::pin(self.eval_expr(eval_history, &collection)).await?;
         let ExprValue::List(list) = collection_value else {
             panic!("Expected list. Got: {:?}", collection_value);
         };
@@ -1366,12 +1375,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             self.register_identifier(&var.node, elem);
             self.push_scope();
 
-            let extension = self.build_naked_list_for_list_comprehension(
+            let extension = Box::pin(self.build_naked_list_for_list_comprehension(
                 eval_history,
                 body,
                 remaining_v_and_c,
                 filter,
-            );
+            ))
+            .await;
 
             self.pop_scope();
 

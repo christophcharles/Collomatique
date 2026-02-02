@@ -2,8 +2,8 @@ use crate::eval::{NoObject, NoObjectEnv};
 
 use super::*;
 
-#[test]
-fn single_constraint_problem() {
+#[tokio::test]
+async fn single_constraint_problem() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -49,6 +49,7 @@ fn single_constraint_problem() {
     let env = NoObjectEnv {};
     let modules = BTreeMap::from([("main", "pub let f() -> Constraint = $V() === 1;")]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -61,7 +62,7 @@ fn single_constraint_problem() {
         .add_constraint("main", "f", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -76,8 +77,8 @@ fn single_constraint_problem() {
     );
 }
 
-#[test]
-fn multiple_constraints_in_script() {
+#[tokio::test]
+async fn multiple_constraints_in_script() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -156,6 +157,7 @@ fn multiple_constraints_in_script() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -168,7 +170,7 @@ fn multiple_constraints_in_script() {
         .add_constraint("main", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -193,8 +195,8 @@ fn multiple_constraints_in_script() {
     );
 }
 
-#[test]
-fn multiple_function_calls() {
+#[tokio::test]
+async fn multiple_function_calls() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -257,6 +259,7 @@ fn multiple_function_calls() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -273,7 +276,7 @@ fn multiple_function_calls() {
         .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -293,8 +296,8 @@ fn multiple_function_calls() {
     );
 }
 
-#[test]
-fn constraints_from_different_modules() {
+#[tokio::test]
+async fn constraints_from_different_modules() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -365,6 +368,7 @@ fn constraints_from_different_modules() {
         ),
     ]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -383,7 +387,7 @@ fn constraints_from_different_modules() {
         .add_constraint("module2", "c2", vec![])
         .expect("Should add constraint from module2");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

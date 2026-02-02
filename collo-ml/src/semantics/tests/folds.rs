@@ -2,18 +2,18 @@ use super::*;
 
 // ========== Basic Fold Expressions ==========
 
-#[test]
-fn simple_fold() {
+#[tokio::test]
+async fn simple_fold() {
     let input = "pub let f() -> Int = fold x in [1, 2, 3] with acc = 0 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Simple fold should work: {:?}", errors);
 }
 
-#[test]
-fn fold_returns_accumulator_type() {
+#[tokio::test]
+async fn fold_returns_accumulator_type() {
     let input = "pub let f() -> Int = fold x in [1, 2, 3] with total = 0 { total + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -22,11 +22,11 @@ fn fold_returns_accumulator_type() {
     );
 }
 
-#[test]
-fn fold_with_linexpr_accumulator() {
+#[tokio::test]
+async fn fold_with_linexpr_accumulator() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc + i };";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -35,10 +35,10 @@ fn fold_with_linexpr_accumulator() {
     );
 }
 
-#[test]
-fn fold_with_list_accumulator() {
+#[tokio::test]
+async fn fold_with_list_accumulator() {
     let input = "pub let f() -> [Int] = fold x in [1, 2, 3] with acc = [] as [Int] { acc + [x] };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -47,19 +47,19 @@ fn fold_with_list_accumulator() {
     );
 }
 
-#[test]
-fn fold_body_must_match_accumulator_type() {
+#[tokio::test]
+async fn fold_body_must_match_accumulator_type() {
     let input = "pub let f() -> Int = fold x in [1, 2, 3] with acc = 0 { true };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Fold body must match accumulator type");
 }
 
-#[test]
-fn fold_body_can_coerce_to_accumulator_type() {
+#[tokio::test]
+async fn fold_body_can_coerce_to_accumulator_type() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc + 1 };";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -68,20 +68,20 @@ fn fold_body_can_coerce_to_accumulator_type() {
     );
 }
 
-#[test]
-fn fold_must_iterate_over_list() {
+#[tokio::test]
+async fn fold_must_iterate_over_list() {
     let input = "pub let f(x: Int) -> Int = fold y in x with acc = 0 { acc + y };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Fold must iterate over list");
 }
 
 // ========== Fold with Where Clause ==========
 
-#[test]
-fn fold_with_where_clause() {
+#[tokio::test]
+async fn fold_with_where_clause() {
     let input = "pub let f(xs: [Int]) -> Int = fold x in xs with acc = 0 where x > 10 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -90,18 +90,18 @@ fn fold_with_where_clause() {
     );
 }
 
-#[test]
-fn fold_where_must_be_bool() {
+#[tokio::test]
+async fn fold_where_must_be_bool() {
     let input = "pub let f(xs: [Int]) -> Int = fold x in xs with acc = 0 where x { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Fold where clause must be Bool");
 }
 
-#[test]
-fn fold_with_complex_where() {
+#[tokio::test]
+async fn fold_with_complex_where() {
     let input = "pub let f(xs: [Int]) -> Int = fold x in xs with acc = 0 where x > 0 and x < 100 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -112,10 +112,10 @@ fn fold_with_complex_where() {
 
 // ========== Different Collection Types ==========
 
-#[test]
-fn fold_over_parameter() {
+#[tokio::test]
+async fn fold_over_parameter() {
     let input = "pub let f(xs: [Int]) -> Int = fold x in xs with acc = 0 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -124,11 +124,11 @@ fn fold_over_parameter() {
     );
 }
 
-#[test]
-fn fold_over_global_collection() {
+#[tokio::test]
+async fn fold_over_global_collection() {
     let types = simple_object("Student");
     let input = "pub let f() -> Int = fold s in @[Student] with acc = 0 { acc + 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -137,13 +137,13 @@ fn fold_over_global_collection() {
     );
 }
 
-#[test]
-fn fold_over_list_comprehension() {
+#[tokio::test]
+async fn fold_over_list_comprehension() {
     let input = r#"
         pub let f(xs: [Int]) -> Int = 
             fold x in [y * 2 for y in xs] with acc = 0 { acc + x };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -152,14 +152,14 @@ fn fold_over_list_comprehension() {
     );
 }
 
-#[test]
-fn fold_with_field_access() {
+#[tokio::test]
+async fn fold_with_field_access() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student]) -> Int = 
             fold s in students with acc = 0 { acc + s.age };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -170,10 +170,10 @@ fn fold_with_field_access() {
 
 // ========== Different Accumulator Initial Values ==========
 
-#[test]
-fn fold_with_computed_init_value() {
+#[tokio::test]
+async fn fold_with_computed_init_value() {
     let input = "pub let f(x: Int) -> Int = fold i in [1, 2, 3] with acc = x * 2 { acc + i };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -182,13 +182,13 @@ fn fold_with_computed_init_value() {
     );
 }
 
-#[test]
-fn fold_with_function_call_init_value() {
+#[tokio::test]
+async fn fold_with_function_call_init_value() {
     let input = r#"
         pub let get_init() -> Int = 0;
         pub let f() -> Int = fold x in [1, 2, 3] with acc = get_init() { acc + x };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -197,11 +197,11 @@ fn fold_with_function_call_init_value() {
     );
 }
 
-#[test]
-fn fold_init_value_determines_accumulator_type() {
+#[tokio::test]
+async fn fold_init_value_determines_accumulator_type() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = fold i in [1, 2, 3] with acc = $V(x) { acc };";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -212,8 +212,8 @@ fn fold_init_value_determines_accumulator_type() {
 
 // ========== Nested Folds ==========
 
-#[test]
-fn nested_fold() {
+#[tokio::test]
+async fn nested_fold() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             fold row in matrix with acc1 = 0 { 
@@ -222,13 +222,13 @@ fn nested_fold() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested fold should work: {:?}", errors);
 }
 
-#[test]
-fn fold_accessing_outer_accumulator() {
+#[tokio::test]
+async fn fold_accessing_outer_accumulator() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             fold row in matrix with outer = 0 { 
@@ -237,7 +237,7 @@ fn fold_accessing_outer_accumulator() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -248,15 +248,15 @@ fn fold_accessing_outer_accumulator() {
 
 // ========== Complex Body Expressions ==========
 
-#[test]
-fn fold_with_if_in_body() {
+#[tokio::test]
+async fn fold_with_if_in_body() {
     let input = r#"
         pub let f(xs: [Int]) -> Int = 
             fold x in xs with acc = 0 { 
                 if x > 0 { acc + x } else { acc } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -265,15 +265,15 @@ fn fold_with_if_in_body() {
     );
 }
 
-#[test]
-fn fold_with_let_in_body() {
+#[tokio::test]
+async fn fold_with_let_in_body() {
     let input = r#"
         pub let f(xs: [Int]) -> Int = 
             fold x in xs with acc = 0 { 
                 let double = x * 2 { acc + double } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -282,15 +282,15 @@ fn fold_with_let_in_body() {
     );
 }
 
-#[test]
-fn fold_with_sum_in_body() {
+#[tokio::test]
+async fn fold_with_sum_in_body() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             fold row in matrix with acc = 0 { 
                 acc + sum x in row { x } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -301,19 +301,19 @@ fn fold_with_sum_in_body() {
 
 // ========== RFold ==========
 
-#[test]
-fn simple_rfold() {
+#[tokio::test]
+async fn simple_rfold() {
     let input = "pub let f() -> Int = rfold x in [1, 2, 3] with acc = 0 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Simple rfold should work: {:?}", errors);
 }
 
-#[test]
-fn rfold_with_where() {
+#[tokio::test]
+async fn rfold_with_where() {
     let input =
         "pub let f(xs: [Int]) -> Int = rfold x in xs with acc = 0 where x > 10 { acc + x };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -322,16 +322,16 @@ fn rfold_with_where() {
     );
 }
 
-#[test]
-fn rfold_body_must_match_accumulator() {
+#[tokio::test]
+async fn rfold_body_must_match_accumulator() {
     let input = "pub let f() -> Int = rfold x in [1, 2, 3] with acc = 0 { true };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "RFold body must match accumulator type");
 }
 
-#[test]
-fn nested_rfold() {
+#[tokio::test]
+async fn nested_rfold() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             rfold row in matrix with acc1 = 0 { 
@@ -340,13 +340,13 @@ fn nested_rfold() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested rfold should work: {:?}", errors);
 }
 
-#[test]
-fn mixing_fold_and_rfold() {
+#[tokio::test]
+async fn mixing_fold_and_rfold() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             fold row in matrix with acc1 = 0 { 
@@ -355,7 +355,7 @@ fn mixing_fold_and_rfold() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -366,13 +366,13 @@ fn mixing_fold_and_rfold() {
 
 // ========== Fold in Larger Expressions ==========
 
-#[test]
-fn fold_in_arithmetic() {
+#[tokio::test]
+async fn fold_in_arithmetic() {
     let input = r#"
         pub let f(xs: [Int]) -> Int = 
             (fold x in xs with acc = 0 { acc + x }) * 2;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -381,13 +381,13 @@ fn fold_in_arithmetic() {
     );
 }
 
-#[test]
-fn fold_in_comparison() {
+#[tokio::test]
+async fn fold_in_comparison() {
     let input = r#"
         pub let f(xs: [Int]) -> Bool = 
             (fold x in xs with acc = 0 { acc + x }) > 10;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -396,13 +396,13 @@ fn fold_in_comparison() {
     );
 }
 
-#[test]
-fn fold_in_constraint() {
+#[tokio::test]
+async fn fold_in_constraint() {
     let input = r#"
         pub let f(xs: [Int]) -> Constraint = 
             (fold x in xs with acc = 0 { acc + x }) === 10;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -413,8 +413,8 @@ fn fold_in_constraint() {
 
 // ========== Fold with Other Control Flow ==========
 
-#[test]
-fn if_with_fold() {
+#[tokio::test]
+async fn if_with_fold() {
     let input = r#"
         pub let f(xs: [Int], flag: Bool) -> Int = 
             if flag { 
@@ -423,20 +423,20 @@ fn if_with_fold() {
                 0 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "If with fold should work: {:?}", errors);
 }
 
-#[test]
-fn forall_with_fold() {
+#[tokio::test]
+async fn forall_with_fold() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Bool = 
             forall row in matrix { 
                 (fold x in row with acc = 0 { acc + x }) > 0 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -445,15 +445,15 @@ fn forall_with_fold() {
     );
 }
 
-#[test]
-fn sum_with_fold_in_body() {
+#[tokio::test]
+async fn sum_with_fold_in_body() {
     let input = r#"
         pub let f(matrix: [[Int]]) -> Int = 
             sum row in matrix { 
                 fold x in row with acc = 0 { acc + x } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -462,13 +462,13 @@ fn sum_with_fold_in_body() {
     );
 }
 
-#[test]
-fn fold_with_forall_in_where() {
+#[tokio::test]
+async fn fold_with_forall_in_where() {
     let input = r#"
         pub let f(lists: [[Int]]) -> Int = 
             fold xs in lists with acc = 0 where (forall x in xs { x > 0 }) { acc + |xs| };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -477,13 +477,13 @@ fn fold_with_forall_in_where() {
     );
 }
 
-#[test]
-fn fold_with_sum_in_where() {
+#[tokio::test]
+async fn fold_with_sum_in_where() {
     let input = r#"
         pub let f(lists: [[Int]]) -> Int = 
             fold xs in lists with acc = 0 where (sum x in xs { x }) > 10 { acc + 1 };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -494,13 +494,13 @@ fn fold_with_sum_in_where() {
 
 // ========== Edge Cases ==========
 
-#[test]
-fn fold_returning_bool() {
+#[tokio::test]
+async fn fold_returning_bool() {
     let input = r#"
         pub let f(xs: [Int]) -> Bool = 
             fold x in xs with acc = true { acc and (x > 0) };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -509,13 +509,13 @@ fn fold_returning_bool() {
     );
 }
 
-#[test]
-fn fold_with_nested_list_accumulator() {
+#[tokio::test]
+async fn fold_with_nested_list_accumulator() {
     let input = r#"
         pub let f(xs: [Int]) -> [[Int]] = 
             fold x in xs with acc = [] as [[Int]] { acc + [[x]] };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -524,15 +524,15 @@ fn fold_with_nested_list_accumulator() {
     );
 }
 
-#[test]
-fn fold_building_list() {
+#[tokio::test]
+async fn fold_building_list() {
     let input = r#"
         pub let f(xs: [Int]) -> [Int] = 
             fold x in xs with acc = [] as [Int] { 
                 if x > 0 { acc + [x] } else { acc } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -541,14 +541,14 @@ fn fold_building_list() {
     );
 }
 
-#[test]
-fn fold_with_object_type() {
+#[tokio::test]
+async fn fold_with_object_type() {
     let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
         pub let f(students: [Student], count: Int) -> Int = 
             fold s in students with acc = count { acc + 1 };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -557,13 +557,13 @@ fn fold_with_object_type() {
     );
 }
 
-#[test]
-fn fold_accumulator_shadows_parameter() {
+#[tokio::test]
+async fn fold_accumulator_shadows_parameter() {
     let input = r#"
         pub let f(acc: Int, xs: [Int]) -> Int = 
             fold x in xs with acc = 0 { acc + x };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -572,15 +572,15 @@ fn fold_accumulator_shadows_parameter() {
     );
 }
 
-#[test]
-fn fold_iterator_shadows_accumulator_name() {
+#[tokio::test]
+async fn fold_iterator_shadows_accumulator_name() {
     let input = r#"
         pub let f(xs: [[Int]]) -> Int = 
             fold acc in xs with result = 0 { 
                 fold x in acc with inner = 0 { inner + x }
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -589,13 +589,13 @@ fn fold_iterator_shadows_accumulator_name() {
     );
 }
 
-#[test]
-fn multiple_independent_folds() {
+#[tokio::test]
+async fn multiple_independent_folds() {
     let input = r#"
         pub let f(xs: [Int]) -> Int = 
             (fold x in xs with a = 0 { a + x }) + (fold y in xs with b = 0 { b + y });
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

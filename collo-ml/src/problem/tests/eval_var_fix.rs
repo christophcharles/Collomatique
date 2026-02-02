@@ -2,8 +2,8 @@ use crate::eval::{NoObject, NoObjectEnv};
 
 use super::*;
 
-#[test]
-fn test_fix_forces_variable_values() {
+#[tokio::test]
+async fn test_fix_forces_variable_values() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V(i32), // Parameter from 0 to 9
@@ -79,6 +79,7 @@ fn test_fix_forces_variable_values() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -93,7 +94,7 @@ fn test_fix_forces_variable_values() {
         .add_constraint("test_fix", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

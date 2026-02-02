@@ -51,36 +51,34 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         })
     }
 
-    fn prettify_docstring(
+    async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
         local_env: &mut LocalEvalEnv<T, D>,
     ) -> Result<Vec<String>, EvalError<T, D::Connection>> {
-        fn_desc
-            .docstring
-            .iter()
-            .map(|line| {
-                let mut result = String::new();
-                for part in line {
-                    result.push_str(&part.prefix);
-                    if let Some(expr) = &part.expr {
-                        match local_env.eval_expr(self, expr)? {
-                            ExprValue::String(s) => result.push_str(&s),
-                            // Expression is wrapped in String(...) at parse time,
-                            // so this should never happen - logic bug if it does
-                            other => panic!(
-                                "Docstring expression should evaluate to String, got {:?}",
-                                other
-                            ),
-                        }
+        let mut lines = Vec::new();
+        for line in &fn_desc.docstring {
+            let mut result = String::new();
+            for part in line {
+                result.push_str(&part.prefix);
+                if let Some(expr) = &part.expr {
+                    match Box::pin(local_env.eval_expr(self, expr)).await? {
+                        ExprValue::String(s) => result.push_str(&s),
+                        // Expression is wrapped in String(...) at parse time,
+                        // so this should never happen - logic bug if it does
+                        other => panic!(
+                            "Docstring expression should evaluate to String, got {:?}",
+                            other
+                        ),
                     }
                 }
-                Ok(result.trim_start().to_string())
-            })
-            .collect()
+            }
+            lines.push(result.trim_start().to_string());
+        }
+        Ok(lines)
     }
 
-    pub(crate) fn add_fn_to_call_history(
+    pub(crate) async fn add_fn_to_call_history(
         &mut self,
         module: &str,
         fn_name: &str,
@@ -134,9 +132,9 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         }
 
         local_env.push_scope();
-        let naked_result = local_env.eval_expr(self, &fn_desc.body);
+        let naked_result = Box::pin(local_env.eval_expr(self, &fn_desc.body)).await;
         // Evaluate docstring expressions BEFORE popping scope (parameters still available)
-        let pretty_docstring = self.prettify_docstring(fn_desc, &mut local_env)?;
+        let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &mut local_env)).await?;
         local_env.pop_scope();
         let naked_result = naked_result?;
 
@@ -196,7 +194,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         }
     }
 
-    pub fn eval_fn(
+    pub async fn eval_fn(
         &mut self,
         module: &str,
         fn_name: &str,
@@ -211,7 +209,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             checked_args.push(arg.into());
         }
 
-        self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)
+        Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)).await
     }
 
     pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T, D::Connection>, T::Cache) {

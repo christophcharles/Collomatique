@@ -3,8 +3,8 @@ use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
-#[test]
-fn simple_objective_selects_solution() {
+#[tokio::test]
+async fn simple_objective_selects_solution() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -67,6 +67,7 @@ fn simple_objective_selects_solution() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -87,7 +88,7 @@ fn simple_objective_selects_solution() {
         .add_objective("main", "maximize_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -108,8 +109,8 @@ fn simple_objective_selects_solution() {
     );
 }
 
-#[test]
-fn objective_direction_changes_solution() {
+#[tokio::test]
+async fn objective_direction_changes_solution() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -172,6 +173,7 @@ fn objective_direction_changes_solution() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -192,7 +194,7 @@ fn objective_direction_changes_solution() {
         .add_objective("main", "minimize_v", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

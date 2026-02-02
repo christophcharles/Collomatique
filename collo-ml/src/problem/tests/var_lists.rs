@@ -2,8 +2,8 @@ use crate::eval::{NoObject, NoObjectEnv};
 
 use super::*;
 
-#[test]
-fn list_constraint_reification() {
+#[tokio::test]
+async fn list_constraint_reification() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
@@ -84,6 +84,7 @@ fn list_constraint_reification() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -96,7 +97,7 @@ fn list_constraint_reification() {
         .add_constraint("list_reify", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -120,8 +121,8 @@ fn list_constraint_reification() {
     );
 }
 
-#[test]
-fn list_constraint_reification_exact_count_with_param() {
+#[tokio::test]
+async fn list_constraint_reification_exact_count_with_param() {
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         X(i32), // Parameter from 0 to 99
@@ -201,6 +202,7 @@ fn list_constraint_reification_exact_count_with_param() {
         "#,
     )]);
     let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+        .await
         .expect("NoObject and Var should be compatible");
 
     assert!(
@@ -213,7 +215,7 @@ fn list_constraint_reification_exact_count_with_param() {
         .add_constraint("exact_count", "exactly_five", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder.build(&env).await.expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

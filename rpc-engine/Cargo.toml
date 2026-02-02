@@ -12,3 +12,4 @@ collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
 collomatique-ilp = { path = "../ilp" }
 collomatique-ops = { path = "../ops" }
 anyhow.workspace = true
+tokio.workspace = true

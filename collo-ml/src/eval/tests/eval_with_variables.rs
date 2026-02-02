@@ -1,7 +1,7 @@
 use super::*;
 
-#[test]
-fn eval_with_variables_simple_reified_var() {
+#[tokio::test]
+async fn eval_with_variables_simple_reified_var() {
     let input = r#"
     let base(x: Int) -> Constraint = $V(x) === 1;
     reify base as $MyVar;
@@ -12,6 +12,7 @@ fn eval_with_variables_simple_reified_var() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -22,6 +23,7 @@ fn eval_with_variables_simple_reified_var() {
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result is a constraint
@@ -58,8 +60,8 @@ fn eval_with_variables_simple_reified_var() {
     assert!(my_var_constraints.contains(&expected));
 }
 
-#[test]
-fn eval_with_variables_multiple_calls_same_var() {
+#[tokio::test]
+async fn eval_with_variables_multiple_calls_same_var() {
     let input = r#"
     let base(x: Int) -> Constraint = $V(x) === 1;
     reify base as $MyVar;
@@ -70,11 +72,13 @@ fn eval_with_variables_multiple_calls_same_var() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(&env, "main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     // Check result
@@ -128,8 +132,8 @@ fn eval_with_variables_multiple_calls_same_var() {
     assert!(my_var_7_constraints.contains(&expected_7));
 }
 
-#[test]
-fn eval_with_variables_in_forall() {
+#[tokio::test]
+async fn eval_with_variables_in_forall() {
     let input = r#"
     let base(x: Int) -> Constraint = $V(x) === 1;
     reify base as $MyVar;
@@ -140,6 +144,7 @@ fn eval_with_variables_in_forall() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -150,6 +155,7 @@ fn eval_with_variables_in_forall() {
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3)],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result has 3 constraints (for i=0,1,2)
@@ -196,8 +202,8 @@ fn eval_with_variables_in_forall() {
     }
 }
 
-#[test]
-fn eval_with_variables_multiple_vars() {
+#[tokio::test]
+async fn eval_with_variables_multiple_vars() {
     let input = r#"
     let base1(x: Int) -> Constraint = $V1(x) === 1;
     let base2(y: Int) -> Constraint = $V2(y) === 0;
@@ -213,6 +219,7 @@ fn eval_with_variables_multiple_vars() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -226,6 +233,7 @@ fn eval_with_variables_multiple_vars() {
                 ExprValue::Int(10),
             ],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result
@@ -278,8 +286,8 @@ fn eval_with_variables_multiple_vars() {
     assert!(var2_constraints.contains(&expected2));
 }
 
-#[test]
-fn eval_with_variables_var_with_multiple_params() {
+#[tokio::test]
+async fn eval_with_variables_var_with_multiple_params() {
     let input = r#"
     let base(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify base as $MyVar;
@@ -293,6 +301,7 @@ fn eval_with_variables_var_with_multiple_params() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -306,6 +315,7 @@ fn eval_with_variables_var_with_multiple_params() {
                 ExprValue::Int(7),
             ],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result
@@ -338,8 +348,8 @@ fn eval_with_variables_var_with_multiple_params() {
     assert!(my_var_constraints.contains(&expected));
 }
 
-#[test]
-fn eval_with_variables_simple_var_list() {
+#[tokio::test]
+async fn eval_with_variables_simple_var_list() {
     let input = r#"
     let base(x: Int, y: Int) -> [Constraint] = [$V(x, y) === 1, $V(x, y) <== 10];
     reify base as $[MyVarList];
@@ -353,6 +363,7 @@ fn eval_with_variables_simple_var_list() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -366,6 +377,7 @@ fn eval_with_variables_simple_var_list() {
                 ExprValue::Int(7),
             ],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result has 2 constraints (one for each element in the var list)
@@ -416,8 +428,8 @@ fn eval_with_variables_simple_var_list() {
     }
 }
 
-#[test]
-fn eval_with_variables_var_list_in_nested_forall() {
+#[tokio::test]
+async fn eval_with_variables_var_list_in_nested_forall() {
     let input = r#"
     let base(x: Int, y: Int) -> [Constraint] = [$V(x, y) === 1, $V(x, y) <== 10];
     reify base as $[MyVarList];
@@ -438,6 +450,7 @@ fn eval_with_variables_var_list_in_nested_forall() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -452,6 +465,7 @@ fn eval_with_variables_var_list_in_nested_forall() {
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(&env, "main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     // Check result: 2 xs * 2 ys * 2 constraints per var list = 8 constraints
@@ -504,8 +518,8 @@ fn eval_with_variables_var_list_in_nested_forall() {
     }
 }
 
-#[test]
-fn eval_with_variables_with_let_expr() {
+#[tokio::test]
+async fn eval_with_variables_with_let_expr() {
     let input = r#"
     let base(x: Int) -> Constraint = $V(x) === 1;
     reify base as $MyVar;
@@ -519,6 +533,7 @@ fn eval_with_variables_with_let_expr() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -529,6 +544,7 @@ fn eval_with_variables_with_let_expr() {
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result
@@ -561,8 +577,8 @@ fn eval_with_variables_with_let_expr() {
     assert!(my_var_constraints.contains(&expected));
 }
 
-#[test]
-fn eval_with_variables_no_reified_vars() {
+#[tokio::test]
+async fn eval_with_variables_no_reified_vars() {
     let input = r#"
     pub let f(x: Int) -> Constraint = $V(x) === 1;
     "#;
@@ -571,6 +587,7 @@ fn eval_with_variables_no_reified_vars() {
 
     let checked_ast =
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
             .expect("Should compile");
     let env = NoObjectEnv {};
 
@@ -581,6 +598,7 @@ fn eval_with_variables_no_reified_vars() {
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
         )
+        .await
         .expect("Should evaluate");
 
     // Check result

@@ -2,17 +2,19 @@ use super::*;
 
 // ========== External/Base Variable Calls ==========
 
-#[test]
-fn base_var_simple() {
+#[tokio::test]
+async fn base_var_simple() {
     let input = "pub let f() -> LinExpr = $V();";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -24,17 +26,19 @@ fn base_var_simple() {
     );
 }
 
-#[test]
-fn base_var_with_int_param() {
+#[tokio::test]
+async fn base_var_with_int_param() {
     let input = "pub let f() -> LinExpr = $V(42);";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -46,17 +50,19 @@ fn base_var_with_int_param() {
     );
 }
 
-#[test]
-fn base_var_with_bool_param() {
+#[tokio::test]
+async fn base_var_with_bool_param() {
     let input = "pub let f() -> LinExpr = $V(true);";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Bool)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -68,8 +74,8 @@ fn base_var_with_bool_param() {
     );
 }
 
-#[test]
-fn base_var_with_multiple_params() {
+#[tokio::test]
+async fn base_var_with_multiple_params() {
     let input = "pub let f() -> LinExpr = $V(1, 2, 3);";
 
     let vars = HashMap::from([(
@@ -81,11 +87,13 @@ fn base_var_with_multiple_params() {
         ],
     )]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -97,17 +105,19 @@ fn base_var_with_multiple_params() {
     );
 }
 
-#[test]
-fn base_var_with_function_param() {
+#[tokio::test]
+async fn base_var_with_function_param() {
     let input = "pub let f(x: Int) -> LinExpr = $V(x);";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -119,17 +129,19 @@ fn base_var_with_function_param() {
     );
 }
 
-#[test]
-fn base_var_with_expression_param() {
+#[tokio::test]
+async fn base_var_with_expression_param() {
     let input = "pub let f(x: Int) -> LinExpr = $V(x + 5);";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(
@@ -141,17 +153,19 @@ fn base_var_with_expression_param() {
     );
 }
 
-#[test]
-fn base_var_in_constraint() {
+#[tokio::test]
+async fn base_var_in_constraint() {
     let input = "pub let f() -> Constraint = $V() === 1;";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -167,17 +181,19 @@ fn base_var_in_constraint() {
     }
 }
 
-#[test]
-fn base_var_in_arithmetic() {
+#[tokio::test]
+async fn base_var_in_arithmetic() {
     let input = "pub let f() -> LinExpr = 3 * $V() + 5;";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -191,17 +207,19 @@ fn base_var_in_arithmetic() {
     }
 }
 
-#[test]
-fn multiple_base_vars() {
+#[tokio::test]
+async fn multiple_base_vars() {
     let input = "pub let f() -> LinExpr = $V1() + $V2();";
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -216,8 +234,8 @@ fn multiple_base_vars() {
 
 // ========== Script Variables (Reified from single Constraint) ==========
 
-#[test]
-fn script_var_simple_reify() {
+#[tokio::test]
+async fn script_var_simple_reify() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
@@ -226,11 +244,13 @@ fn script_var_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -249,8 +269,8 @@ fn script_var_simple_reify() {
     }
 }
 
-#[test]
-fn script_var_in_constraint() {
+#[tokio::test]
+async fn script_var_in_constraint() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
@@ -259,11 +279,13 @@ fn script_var_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -284,8 +306,8 @@ fn script_var_in_constraint() {
     }
 }
 
-#[test]
-fn script_var_with_sum() {
+#[tokio::test]
+async fn script_var_with_sum() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) <== 1;
     reify f as $MyVar;
@@ -294,8 +316,9 @@ fn script_var_with_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -305,6 +328,7 @@ fn script_var_with_sum() {
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -331,8 +355,8 @@ fn script_var_with_sum() {
     }
 }
 
-#[test]
-fn script_var_with_forall() {
+#[tokio::test]
+async fn script_var_with_forall() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
@@ -341,13 +365,15 @@ fn script_var_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -358,8 +384,8 @@ fn script_var_with_forall() {
     }
 }
 
-#[test]
-fn script_var_multiple_params() {
+#[tokio::test]
+async fn script_var_multiple_params() {
     let input = r#"
     let f(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify f as $MyVar;
@@ -371,11 +397,13 @@ fn script_var_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(3), ExprValue::Int(7)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -394,8 +422,8 @@ fn script_var_multiple_params() {
     }
 }
 
-#[test]
-fn script_var_no_params() {
+#[tokio::test]
+async fn script_var_no_params() {
     let input = r#"
     let f() -> Constraint = $V() === 1;
     reify f as $MyVar;
@@ -404,11 +432,13 @@ fn script_var_no_params() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -427,8 +457,8 @@ fn script_var_no_params() {
     }
 }
 
-#[test]
-fn script_var_with_arithmetic() {
+#[tokio::test]
+async fn script_var_with_arithmetic() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
@@ -437,11 +467,13 @@ fn script_var_with_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -458,8 +490,8 @@ fn script_var_with_arithmetic() {
     }
 }
 
-#[test]
-fn multiple_script_vars() {
+#[tokio::test]
+async fn multiple_script_vars() {
     let input = r#"
     let f1(x: Int) -> Constraint = $V1(x) === 1;
     let f2(x: Int) -> Constraint = $V2(x) === 2;
@@ -473,11 +505,13 @@ fn multiple_script_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -499,8 +533,8 @@ fn multiple_script_vars() {
     }
 }
 
-#[test]
-fn script_var_and_base_var_mixed() {
+#[tokio::test]
+async fn script_var_and_base_var_mixed() {
     let input = r#"
     let f(x: Int) -> Constraint = $BaseV(x) === 1;
     reify f as $MyVar;
@@ -509,11 +543,13 @@ fn script_var_and_base_var_mixed() {
 
     let vars = HashMap::from([("BaseV".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -535,8 +571,8 @@ fn script_var_and_base_var_mixed() {
 
 // ========== Variable List Calls (Reified from [Constraint]) ==========
 
-#[test]
-fn var_list_simple_reify() {
+#[tokio::test]
+async fn var_list_simple_reify() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) <== 1 for x in xs];
     reify h as $[MyVars];
@@ -545,8 +581,9 @@ fn var_list_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -556,6 +593,7 @@ fn var_list_simple_reify() {
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list.clone()])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -584,8 +622,8 @@ fn var_list_simple_reify() {
     }
 }
 
-#[test]
-fn var_list_in_sum() {
+#[tokio::test]
+async fn var_list_in_sum() {
     let input = r#"
     let f(xs: [Int]) -> [Constraint] = [$V(x) <== 1 for x in xs];
     reify f as $[MyVars];
@@ -594,13 +632,15 @@ fn var_list_in_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list.clone()])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -624,8 +664,8 @@ fn var_list_in_sum() {
     }
 }
 
-#[test]
-fn var_list_in_constraint() {
+#[tokio::test]
+async fn var_list_in_constraint() {
     let input = r#"
     let f(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify f as $[MyVars];
@@ -634,8 +674,9 @@ fn var_list_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -645,6 +686,7 @@ fn var_list_in_constraint() {
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list.clone()])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -676,8 +718,8 @@ fn var_list_in_constraint() {
     }
 }
 
-#[test]
-fn var_list_with_forall() {
+#[tokio::test]
+async fn var_list_with_forall() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
@@ -686,13 +728,15 @@ fn var_list_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list.clone()])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -722,8 +766,8 @@ fn var_list_with_forall() {
     }
 }
 
-#[test]
-fn var_list_cardinality() {
+#[tokio::test]
+async fn var_list_cardinality() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
@@ -732,8 +776,9 @@ fn var_list_cardinality() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         ExprValue::Int(1),
@@ -743,13 +788,14 @@ fn var_list_cardinality() {
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list])
+        .await
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::Int(3));
 }
 
-#[test]
-fn var_list_with_multiple_params() {
+#[tokio::test]
+async fn var_list_with_multiple_params() {
     let input = r#"
     let h(xs: [Int], y: Int) -> [Constraint] = [$V(x, y) === 1 for x in xs];
     reify h as $[MyVars];
@@ -760,13 +806,15 @@ fn var_list_with_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list.clone(), ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -793,8 +841,8 @@ fn var_list_with_multiple_params() {
     }
 }
 
-#[test]
-fn var_list_empty_input() {
+#[tokio::test]
+async fn var_list_empty_input() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
@@ -803,13 +851,15 @@ fn var_list_empty_input() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let empty_list = ExprValue::List(Vec::new());
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![empty_list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -820,8 +870,8 @@ fn var_list_empty_input() {
     }
 }
 
-#[test]
-fn var_list_in_list_comprehension() {
+#[tokio::test]
+async fn var_list_in_list_comprehension() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
@@ -830,13 +880,15 @@ fn var_list_in_list_comprehension() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -848,8 +900,8 @@ fn var_list_in_list_comprehension() {
     }
 }
 
-#[test]
-fn var_list_with_collection_ops() {
+#[tokio::test]
+async fn var_list_with_collection_ops() {
     let input = r#"
     let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
     reify h as $[MyVars];
@@ -858,14 +910,16 @@ fn var_list_with_collection_ops() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([ExprValue::Int(1)]));
     let list2 = ExprValue::List(Vec::from([ExprValue::Int(2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list1, list2])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -880,8 +934,8 @@ fn var_list_with_collection_ops() {
 
 // ========== Complex Variable Usage ==========
 
-#[test]
-fn nested_reification_usage() {
+#[tokio::test]
+async fn nested_reification_usage() {
     let input = r#"
     let helper(x: Int) -> Constraint = $V(x) === 1;
     reify helper as $H;
@@ -892,13 +946,15 @@ fn nested_reification_usage() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([ExprValue::Int(1)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "final", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -907,8 +963,8 @@ fn nested_reification_usage() {
     }
 }
 
-#[test]
-fn var_in_if_expression() {
+#[tokio::test]
+async fn var_in_if_expression() {
     let input = r#"
     let f(x: Int) -> Constraint = $V(x) === 1;
     reify f as $MyVar;
@@ -917,11 +973,13 @@ fn var_in_if_expression() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
+        .await
+        .expect("Should compile");
 
     let result_true = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
 
     match result_true {
@@ -941,6 +999,7 @@ fn var_in_if_expression() {
 
     let result_false = checked_ast
         .quick_eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(false)])
+        .await
         .expect("Should evaluate");
 
     match result_false {

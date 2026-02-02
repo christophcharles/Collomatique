@@ -34,9 +34,11 @@ fn try_solve() -> Result<(), anyhow::Error> {
         .as_ref()
         .map(|x| x.as_str())
         .unwrap_or(get_default_main_module());
-    let problem = match default_problem_builder(&main_script)
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let problem = match rt
+        .block_on(default_problem_builder(&main_script))
         .map_err(|e| format!("{}", e))
-        .and_then(|b| b.build(&env).map_err(|e| format!("{}", e)))
+        .and_then(|b| rt.block_on(b.build(&env)).map_err(|e| format!("{}", e)))
     {
         Ok(p) => p,
         Err(msg) => {
