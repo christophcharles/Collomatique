@@ -62,6 +62,13 @@ pub trait DatabaseConnection: fmt::Debug + Send + Sync + 'static {
                 + 'a,
         >,
     >;
+
+    /// Validate SQL and get column metadata WITHOUT executing the query.
+    /// Returns (column_name, type_name, is_nullable) for each column.
+    fn describe_query<'a>(
+        &'a self,
+        sql: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, String, bool)>, SqlQueryError>> + Send + 'a>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,6 +200,40 @@ impl DatabaseConnection for SqliteDatabaseConnection {
             }
 
             Ok((result, columns))
+        })
+    }
+
+    fn describe_query<'a>(
+        &'a self,
+        sql: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, String, bool)>, SqlQueryError>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            use sqlx::Column;
+            use sqlx::Executor;
+            use sqlx::TypeInfo;
+
+            let mut tx = self.tx.lock().await;
+
+            let describe = (&mut **tx)
+                .describe(sql)
+                .await
+                .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
+
+            let columns: Vec<(String, String, bool)> = describe
+                .columns()
+                .iter()
+                .enumerate()
+                .map(|(idx, col)| {
+                    let name = col.name().to_string();
+                    let type_name = col.type_info().name().to_string();
+                    // nullable() returns Option<bool>, default to true if unknown
+                    let is_nullable = describe.nullable(idx).unwrap_or(true);
+                    (name, type_name, is_nullable)
+                })
+                .collect();
+
+            Ok(columns)
         })
     }
 }

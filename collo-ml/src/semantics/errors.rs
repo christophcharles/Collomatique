@@ -320,6 +320,14 @@ pub enum SemError {
         error: String,
         span: Span,
     },
+
+    #[error("Invalid SQL in query '{query_name}' in module '{module}': {error}")]
+    InvalidQuerySql {
+        module: String,
+        query_name: String,
+        error: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

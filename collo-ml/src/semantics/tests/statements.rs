@@ -606,7 +606,7 @@ async fn function_conflicts_with_query() {
 #[tokio::test]
 async fn query_output_list_struct_direct() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{name: String}] = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: String}] = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -619,7 +619,7 @@ async fn query_output_list_struct_direct() {
 #[tokio::test]
 async fn query_output_optional_struct_direct() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(

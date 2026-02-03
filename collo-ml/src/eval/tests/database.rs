@@ -1373,6 +1373,8 @@ async fn eval_query_call_optional_not_found() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_query_failed() {
+    // This test verifies that invalid SQL (referencing a nonexistent table)
+    // is caught at compile time via SQL validation
     let input = r#"
     type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
     query bad_query(db: Db) -> [{id: Int}]
@@ -1380,31 +1382,26 @@ async fn eval_query_call_query_failed() {
     pub let run(db: Db) -> [{id: Int}] = bad_query(db);
     "#;
 
-    let pool = test_pool().await;
-    setup_users_table(&pool).await;
-    let handle = test_handle(&pool).await;
-
-    let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
-        module: "main".to_string(),
-        type_name: "Db".to_string(),
-        variant: None,
-        content: ExprValue::Database(handle),
-    }));
-    let result = ast.quick_eval_fn("main", "run", vec![db_arg]).await;
+    let result = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await;
 
     match result {
-        Err(EvalError::Panic(value)) => match *value {
-            ExprValue::String(msg) => {
-                assert!(
-                    msg.contains("nonexistent_table"),
-                    "Error message should mention the table: {msg}"
-                );
-            }
-            other => panic!("Expected String inside Panic, got {:?}", other),
-        },
-        Ok(v) => panic!("Expected Panic error, got Ok({:?})", v),
-        Err(e) => panic!("Expected Panic error, got {:?}", e),
+        Err(CompileError::SemanticsError { errors, .. }) => {
+            let has_invalid_sql_error = errors.iter().any(|e| {
+                matches!(e, crate::SemError::InvalidQuerySql { query_name, error, .. }
+                    if query_name == "bad_query" && error.contains("nonexistent_table"))
+            });
+            assert!(
+                has_invalid_sql_error,
+                "Expected InvalidQuerySql error mentioning 'nonexistent_table', got: {:?}",
+                errors
+            );
+        }
+        Ok(_) => panic!("Expected compilation to fail with InvalidQuerySql error"),
+        Err(e) => panic!("Expected SemanticsError, got {:?}", e),
     }
 }
 

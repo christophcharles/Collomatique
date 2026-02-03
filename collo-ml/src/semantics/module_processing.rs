@@ -12,7 +12,7 @@ use super::path_resolution::{resolve_path, ResolvedPathKind};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
-use crate::database::{DatabaseDriver, SqlQueryError};
+use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -979,9 +979,24 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 let model_name = format!("{}::{}", current_module, name.node);
 
                 match get_or_create_model::<D>(db_models, &model_name, schema).await {
-                    Ok(_connection) => {
-                        // For now, just getting the model is the goal
-                        // Future: Use connection to validate query_string SQL
+                    Ok(connection) => {
+                        // Validate the SQL query and get column metadata
+                        match connection.describe_query(&query_string.node).await {
+                            Ok(_columns) => {
+                                // Query SQL is valid
+                                // _columns contains Vec<(name, type_name, is_nullable)>
+                                // Future: Validate columns match declared output type
+                            }
+                            Err(e) => {
+                                errors.push(SemError::InvalidQuerySql {
+                                    module: current_module.to_string(),
+                                    query_name: name.node.clone(),
+                                    error: e.to_string(),
+                                    span: query_string.span.clone(),
+                                });
+                                return;
+                            }
+                        }
                     }
                     Err(e) => {
                         errors.push(SemError::DatabaseModelCreationFailed {
