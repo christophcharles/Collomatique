@@ -49,19 +49,19 @@ pub enum Expr {
     /// Unifies fn_call, qualified_type_cast, and module-qualified function calls.
     GenericCall {
         path: Spanned<NamespacePath>,
-        args: Vec<Spanned<Expr>>,
+        args: Vec<Arc<Spanned<Expr>>>,
     },
     /// Variable call: $Var(args) or mod::$Var(args)
     VarCall {
         module: Option<Spanned<String>>,
         name: Spanned<String>,
-        args: Vec<Spanned<Expr>>,
+        args: Vec<Arc<Spanned<Expr>>>,
     },
     /// Variable list call: $[VarList](args) or mod::$[VarList](args)
     VarListCall {
         module: Option<Spanned<String>>,
         name: Spanned<String>,
-        args: Vec<Spanned<Expr>>,
+        args: Vec<Arc<Spanned<Expr>>>,
     },
 
     // Elements
@@ -77,10 +77,10 @@ pub enum Expr {
         segments: Vec<Spanned<PathSegment>>, // and this is [Field("student"), Field("age")] or [TupleIndex(0)]
     },
     TupleLiteral {
-        elements: Vec<Spanned<Expr>>, // (expr, expr, ...) - at least 2 elements
+        elements: Vec<Arc<Spanned<Expr>>>, // (expr, expr, ...) - at least 2 elements
     },
     StructLiteral {
-        fields: Vec<(Spanned<String>, Spanned<Expr>)>, // {field1: expr1, field2: expr2}
+        fields: Vec<(Spanned<String>, Arc<Spanned<Expr>>)>, // {field1: expr1, field2: expr2}
     },
 
     // Arithmetic
@@ -123,7 +123,7 @@ pub enum Expr {
 
     GlobalList(Spanned<TypeName>),
     ListLiteral {
-        elements: Vec<Spanned<Expr>>,
+        elements: Vec<Arc<Spanned<Expr>>>,
     },
     ListRange {
         start: Arc<Spanned<Expr>>,
@@ -131,7 +131,7 @@ pub enum Expr {
     },
     ListComprehension {
         body: Arc<Spanned<Expr>>,
-        vars_and_collections: Vec<(Spanned<String>, Spanned<Expr>)>,
+        vars_and_collections: Vec<(Spanned<String>, Arc<Spanned<Expr>>)>,
         filter: Option<Arc<Spanned<Expr>>>,
     },
 
@@ -156,13 +156,13 @@ pub enum Expr {
     // Type cast with complex type: [LinExpr]([1,2,3]), (Int,Bool)(1,true)
     ComplexTypeCast {
         typ: Spanned<TypeName>,
-        args: Vec<Spanned<Expr>>,
+        args: Vec<Arc<Spanned<Expr>>>,
     },
 
     /// Struct-style call: Type{fields}, Enum::Variant{fields}
     /// Unifies struct_type_cast and qualified_struct_cast.
     StructCall {
         path: Spanned<NamespacePath>,
-        fields: Vec<(Spanned<String>, Spanned<Expr>)>,
+        fields: Vec<(Spanned<String>, Arc<Spanned<Expr>>)>,
     },
 }

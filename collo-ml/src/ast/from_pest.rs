@@ -1497,7 +1497,10 @@ impl Expr {
             .filter(|p| p.as_rule() == Rule::expr)
             .map(|expr_pair| {
                 let expr_span = Span::from_pest(&expr_pair);
-                Ok(Spanned::new(Expr::from_pest(expr_pair)?, expr_span))
+                Ok(Arc::new(Spanned::new(
+                    Expr::from_pest(expr_pair)?,
+                    expr_span,
+                )))
             })
             .collect();
 
@@ -1521,7 +1524,7 @@ impl Expr {
 
                 let expr_pair = inner.next().unwrap();
                 let expr_span = Span::from_pest(&expr_pair);
-                let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+                let expr = Arc::new(Spanned::new(Expr::from_pest(expr_pair)?, expr_span));
 
                 fields.push((name, expr));
             }
@@ -1566,7 +1569,7 @@ impl Expr {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::expr {
                 let expr_span = Span::from_pest(&inner);
-                let expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
+                let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                 elements.push(expr);
             }
         }
@@ -1611,12 +1614,12 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let parsed_expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
+                    let parsed_expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
 
                     if has_filter {
-                        filter = Some(Arc::new(parsed_expr));
+                        filter = Some(parsed_expr);
                     } else if expr.is_none() {
-                        expr = Some(Arc::new(parsed_expr));
+                        expr = Some(parsed_expr);
                     } else {
                         collections.push(parsed_expr);
                     }
@@ -1812,7 +1815,8 @@ impl Expr {
 
                             let expr_pair = field_inner.next().unwrap();
                             let expr_span = Span::from_pest(&expr_pair);
-                            let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+                            let expr =
+                                Arc::new(Spanned::new(Expr::from_pest(expr_pair)?, expr_span));
 
                             fields.push((name, expr));
                         }
@@ -1938,14 +1942,17 @@ impl Expr {
     }
 }
 
-fn parse_args(pair: Pair<Rule>) -> Result<Vec<Spanned<Expr>>, AstError> {
+fn parse_args(pair: Pair<Rule>) -> Result<Vec<Arc<Spanned<Expr>>>, AstError> {
     let mut args = Vec::new();
     for arg_pair in pair.into_inner() {
         if arg_pair.as_rule() == Rule::arg {
             let arg_span = Span::from_pest(&arg_pair);
             // arg contains expr
             let comp_pair = arg_pair.into_inner().next().unwrap();
-            args.push(Spanned::new(Expr::from_pest(comp_pair)?, arg_span));
+            args.push(Arc::new(Spanned::new(
+                Expr::from_pest(comp_pair)?,
+                arg_span,
+            )));
         }
     }
     Ok(args)

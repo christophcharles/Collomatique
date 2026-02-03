@@ -128,13 +128,13 @@ pub fn parse_docstring_line(
                         end: expr_span_start,
                     },
                 ),
-                args: vec![Spanned::new(
+                args: vec![Arc::new(Spanned::new(
                     inner_expr,
                     Span {
                         start: expr_span_start,
                         end: expr_span_start + expr_text.len(),
                     },
-                )],
+                ))],
             };
 
             // Add prefix text part (if any)
