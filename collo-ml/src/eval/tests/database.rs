@@ -1407,3 +1407,258 @@ async fn eval_query_call_query_failed() {
         Err(e) => panic!("Expected Panic error, got {:?}", e),
     }
 }
+
+// =============================================================================
+// 17. PRIMITIVE QUERY OUTPUT TYPES
+// =============================================================================
+
+#[tokio::test]
+async fn typed_query_list_of_ints() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // [Int]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_list_of_strings() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // [String]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::String)));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT name FROM users ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::String("Alice".to_string()),
+        ExprValue::String("Bob".to_string()),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_optional_int_found() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // Int | None
+    let out_type = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::Int(1));
+}
+
+#[tokio::test]
+async fn typed_query_optional_int_not_found() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // Int | None
+    let out_type = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[tokio::test]
+async fn typed_query_optional_string_found() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // String | None
+    let out_type = ExprType::from_variants([SimpleType::String, SimpleType::None]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT name FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::String("Alice".to_string()));
+}
+
+#[tokio::test]
+async fn typed_query_primitive_column_count_mismatch() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // [Int] but SELECT returns 2 columns
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
+
+    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> = handle
+        .query(
+            "SELECT id, name FROM users",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await;
+
+    assert!(
+        matches!(result, Err(SqlQueryError::ColumnMismatch(_))),
+        "Expected ColumnMismatch, got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn typed_query_empty_primitive_list() {
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = empty_ast().await;
+
+    // [Int]
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::List(vec![]));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_primitive_list() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query all_ids(db: Db) -> [Int] = "SELECT id FROM users ORDER BY id";
+    pub let run(db: Db) -> [Int] = all_ids(db);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg])
+        .await
+        .expect("Should evaluate");
+
+    let expected = ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_optional_primitive_found() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query find_name(db: Db, id: Int) -> ?String = "SELECT name FROM users WHERE id = ?";
+    pub let run(db: Db, id: Int) -> ?String = find_name(db, id);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
+        .await
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::String("Alice".to_string()));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_call_optional_primitive_not_found() {
+    let input = r#"
+    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    query find_name(db: Db, id: Int) -> ?String = "SELECT name FROM users WHERE id = ?";
+    pub let run(db: Db, id: Int) -> ?String = find_name(db, id);
+    "#;
+
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
+        .await
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::None);
+}

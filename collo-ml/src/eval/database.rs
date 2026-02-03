@@ -194,6 +194,27 @@ fn try_wrap_to<T: EvalObject, D: DatabaseDriver>(
                 Err(DbConversionError)
             }
         }
+        SimpleType::Int => {
+            if matches!(value, ExprValue::Int(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::Bool => {
+            if matches!(value, ExprValue::Bool(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
+        SimpleType::String => {
+            if matches!(value, ExprValue::String(_)) {
+                Ok(value)
+            } else {
+                Err(DbConversionError)
+            }
+        }
         SimpleType::Struct(_) => {
             if matches!(value, ExprValue::Struct(_)) {
                 Ok(value)
@@ -243,6 +264,7 @@ enum OutputMode {
 enum ResolvedRowShape {
     Struct(BTreeMap<String, ExprType>),
     Tuple(Vec<ExprType>),
+    Primitive(ExprType),
 }
 
 fn convert_params<T: EvalObject, D: DatabaseConnection>(
@@ -290,9 +312,13 @@ fn classify_output_type<D: DatabaseDriver>(
             let shape = match &inner_resolved[0] {
                 SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
                 SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
+                SimpleType::Int | SimpleType::Bool | SimpleType::String => {
+                    ResolvedRowShape::Primitive(inner_type.clone())
+                }
                 _ => {
                     return Err(SqlQueryError::InvalidOutputType(
-                        "list element must be a struct or tuple".to_string(),
+                        "list element must be a struct, tuple, or primitive (Int, Bool, String)"
+                            .to_string(),
                     ));
                 }
             };
@@ -308,15 +334,6 @@ fn classify_output_type<D: DatabaseDriver>(
                         .to_string(),
                 ));
             }
-            let shape = match non_none[0] {
-                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
-                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
-                _ => {
-                    return Err(SqlQueryError::InvalidOutputType(
-                        "optional variant must be a struct or tuple".to_string(),
-                    ));
-                }
-            };
             // Build the row target type from the original out_type's non-None variants
             let row_target_type = ExprType::from_variants(
                 out_type
@@ -325,6 +342,19 @@ fn classify_output_type<D: DatabaseDriver>(
                     .filter(|v| !v.is_none())
                     .cloned(),
             );
+            let shape = match non_none[0] {
+                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
+                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
+                SimpleType::Int | SimpleType::Bool | SimpleType::String => {
+                    ResolvedRowShape::Primitive(row_target_type.clone())
+                }
+                _ => {
+                    return Err(SqlQueryError::InvalidOutputType(
+                        "optional variant must be a struct, tuple, or primitive (Int, Bool, String)"
+                            .to_string(),
+                    ));
+                }
+            };
             Ok((OutputMode::Optional, shape, row_target_type))
         }
         _ => Err(SqlQueryError::InvalidOutputType(format!(
@@ -359,6 +389,15 @@ fn validate_columns(shape: &ResolvedRowShape, columns: &[String]) -> Result<(), 
                 return Err(SqlQueryError::ColumnMismatch(format!(
                     "expected {} columns for tuple, got {}",
                     elements.len(),
+                    columns.len()
+                )));
+            }
+            Ok(())
+        }
+        ResolvedRowShape::Primitive(_) => {
+            if columns.len() != 1 {
+                return Err(SqlQueryError::ColumnMismatch(format!(
+                    "expected 1 column for primitive type, got {}",
                     columns.len()
                 )));
             }
@@ -403,6 +442,16 @@ fn convert_row<T: EvalObject, D: DatabaseDriver>(
                 values.push(val);
             }
             Ok(ExprValue::Tuple(values))
+        }
+        ResolvedRowShape::Primitive(elem_type) => {
+            let col_name = &columns[0];
+            let db_val = &row[col_name];
+            db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
+                SqlQueryError::ResultConversionError {
+                    row: row_idx,
+                    column: col_name.clone(),
+                }
+            })
         }
     }
 }

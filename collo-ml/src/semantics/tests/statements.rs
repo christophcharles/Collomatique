@@ -760,33 +760,29 @@ async fn query_output_int_rejected() {
 }
 
 #[tokio::test]
-async fn query_output_list_int_rejected() {
+async fn query_output_list_int_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [Int] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
-        !errors.is_empty(),
-        "List of Int output type should be rejected"
+        errors.is_empty(),
+        "List of Int output type should be valid: {:?}",
+        errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
 #[tokio::test]
-async fn query_output_optional_int_rejected() {
+async fn query_output_optional_int_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?Int = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
-        !errors.is_empty(),
-        "Optional Int output type should be rejected"
+        errors.is_empty(),
+        "Optional Int output type should be valid: {:?}",
+        errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }
 
 #[tokio::test]
@@ -1167,4 +1163,114 @@ async fn query_output_field_linexpr_rejected() {
     assert!(errors
         .iter()
         .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+}
+
+// ========== Primitive Query Output Type Tests ==========
+
+#[tokio::test]
+async fn query_output_list_bool_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(active BOOLEAN)"}) -> [Bool] = "SELECT active FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "List of Bool output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_list_string_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [String] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "List of String output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_optional_bool_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(active BOOLEAN)"}) -> ?Bool = "SELECT active FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Optional Bool output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_optional_string_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?String = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Optional String output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_list_tuple_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> [(Int, String)] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "List of tuple output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_optional_tuple_valid() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> ?(Int, String) = "SELECT id, name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Optional tuple output type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_list_linexpr_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [LinExpr] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        !errors.is_empty(),
+        "List of LinExpr output type should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+}
+
+#[tokio::test]
+async fn query_output_optional_linexpr_rejected() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?LinExpr = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        !errors.is_empty(),
+        "Optional LinExpr output type should be rejected"
+    );
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
 }

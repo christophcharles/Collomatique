@@ -285,7 +285,7 @@ pub enum SemError {
         span: Span,
     },
 
-    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: output type must be [{{...}}] (list of struct) or ?{{...}} (optional struct), found {found}")]
+    #[error("Query \"{query_name}\" in module \"{module}\" at {span:?}: output type must be [T] or ?T where T is a struct, tuple, or primitive (Int, Bool, String), found {found}")]
     QueryInvalidOutputType {
         module: String,
         query_name: String,

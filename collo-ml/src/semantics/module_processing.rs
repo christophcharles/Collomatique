@@ -950,24 +950,28 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             }
         }
 
-        // Check: output type must be [Struct] or ?Struct (after deep resolution)
+        // Check: output type must be [T] or ?T where T is a SQL-compatible inner type
+        // (Struct, Tuple, Int, Bool, String)
         if let Some(resolved_output) = self.resolve_type_deep(&out_typ) {
             let valid = match resolved_output.len() {
                 1 => {
-                    // Must be List(inner) where inner deep-resolves to a single Struct
+                    // Must be List(inner) where inner deep-resolves to a single SQL-compatible type
                     if let SimpleType::List(inner) = &resolved_output[0] {
                         self.resolve_type_deep(inner).is_some_and(|inner_resolved| {
-                            inner_resolved.len() == 1 && inner_resolved[0].is_struct()
+                            inner_resolved.len() == 1 && inner_resolved[0].is_sql_compatible_inner()
                         })
                     } else {
                         false
                     }
                 }
                 2 => {
-                    // Must be exactly one None and one Struct
+                    // Must be exactly one None and one SQL-compatible inner type
                     let nones = resolved_output.iter().filter(|v| v.is_none()).count();
-                    let structs = resolved_output.iter().filter(|v| v.is_struct()).count();
-                    nones == 1 && structs == 1
+                    let compatible = resolved_output
+                        .iter()
+                        .filter(|v| v.is_sql_compatible_inner())
+                        .count();
+                    nones == 1 && compatible == 1
                 }
                 _ => false,
             };
@@ -996,47 +1000,74 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             }
         }
 
-        // Check: output struct field types must be SQL-compatible
-        let output_struct_fields: Option<BTreeMap<String, ExprType>> = {
+        // Check: output struct fields or tuple elements must be SQL-compatible
+        // For primitives (Int, Bool, String), no check is needed as they're inherently SQL-compatible
+        enum OutputInnerShape {
+            Struct(BTreeMap<String, ExprType>),
+            Tuple(Vec<ExprType>),
+            Primitive, // Int, Bool, String - no validation needed
+        }
+
+        let output_inner_shape: Option<OutputInnerShape> = {
             let resolved_output = self.resolve_type_deep(&out_typ);
             resolved_output.and_then(|ro| {
-                if ro.len() == 1 {
+                // Extract the inner type, handling both List and Optional cases
+                let inner_resolved = if ro.len() == 1 {
                     if let SimpleType::List(inner) = &ro[0] {
-                        self.resolve_type_deep(inner).and_then(|ir| {
-                            ir.into_iter().find_map(|v| {
-                                if let SimpleType::Struct(fields) = v {
-                                    Some(fields)
-                                } else {
-                                    None
-                                }
-                            })
-                        })
+                        self.resolve_type_deep(inner)
                     } else {
                         None
                     }
                 } else {
-                    ro.into_iter().find_map(|v| {
-                        if let SimpleType::Struct(fields) = v {
-                            Some(fields)
-                        } else {
-                            None
+                    // For optional (None | T), filter out None and use T
+                    Some(ro.into_iter().filter(|v| !v.is_none()).collect())
+                };
+
+                inner_resolved.and_then(|ir| {
+                    ir.into_iter().find_map(|v| match v {
+                        SimpleType::Struct(fields) => Some(OutputInnerShape::Struct(fields)),
+                        SimpleType::Tuple(elements) => Some(OutputInnerShape::Tuple(elements)),
+                        SimpleType::Int | SimpleType::Bool | SimpleType::String => {
+                            Some(OutputInnerShape::Primitive)
                         }
+                        _ => None,
                     })
-                }
+                })
             })
         };
 
-        if let Some(fields) = &output_struct_fields {
-            for (field_name, field_typ) in fields {
-                if DbType::try_from(self, field_typ).is_err() {
-                    errors.push(SemError::QueryOutputFieldNotSqlCompatible {
-                        module: current_module.to_string(),
-                        query_name: name.node.clone(),
-                        field_name: field_name.clone(),
-                        found: field_typ.to_string(),
-                        span: output_type.span.clone(),
-                    });
-                    return;
+        if let Some(shape) = &output_inner_shape {
+            match shape {
+                OutputInnerShape::Struct(fields) => {
+                    for (field_name, field_typ) in fields {
+                        if DbType::try_from(self, field_typ).is_err() {
+                            errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                field_name: field_name.clone(),
+                                found: field_typ.to_string(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                OutputInnerShape::Tuple(elements) => {
+                    for (idx, elem_typ) in elements.iter().enumerate() {
+                        if DbType::try_from(self, elem_typ).is_err() {
+                            errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                field_name: format!("element {}", idx),
+                                found: elem_typ.to_string(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                OutputInnerShape::Primitive => {
+                    // Primitives (Int, Bool, String) are inherently SQL-compatible
                 }
             }
         }
