@@ -310,6 +310,16 @@ pub enum SemError {
         found: String,
         span: Span,
     },
+
+    #[error(
+        "Failed to create database model for query '{query_name}' in module '{module}': {error}"
+    )]
+    DatabaseModelCreationFailed {
+        module: String,
+        query_name: String,
+        error: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

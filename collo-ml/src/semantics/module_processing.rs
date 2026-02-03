@@ -12,9 +12,26 @@ use super::path_resolution::{resolve_path, ResolvedPathKind};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
-use crate::database::DatabaseDriver;
+use crate::database::{DatabaseDriver, SqlQueryError};
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+
+/// Get or create a database model for the given schema.
+/// Uses the cache to avoid recreating databases for the same schema.
+async fn get_or_create_model<'a, D: DatabaseDriver>(
+    db_models: &'a mut HashMap<String, D::Connection>,
+    name: &str,
+    schema: &str,
+) -> Result<&'a D::Connection, SqlQueryError> {
+    match db_models.entry(schema.to_string()) {
+        Entry::Occupied(entry) => Ok(entry.into_mut()),
+        Entry::Vacant(entry) => {
+            let connection = D::build_with_schema(name, schema).await?;
+            Ok(entry.insert(connection))
+        }
+    }
+}
 
 impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
@@ -195,6 +212,9 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         // PASS 2a: Register all function signatures
         // Now all types are resolved, we can build function signatures
         // ====================================================================
+        // Create the db_models cache for query validation
+        let mut db_models: HashMap<String, D::Connection> = HashMap::new();
+
         for (module_name, module_file) in modules {
             let current_module = *module_name;
             for statement in &module_file.statements {
@@ -228,18 +248,21 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                         query_string,
                         docstring,
                     } => {
-                        temp_env.expand_with_query_statement_pass1(
-                            current_module,
-                            *public,
-                            name,
-                            params,
-                            output_type,
-                            query_string,
-                            docstring,
-                            &mut type_info,
-                            &mut errors,
-                            &mut warnings,
-                        );
+                        temp_env
+                            .expand_with_query_statement_pass1(
+                                current_module,
+                                *public,
+                                name,
+                                params,
+                                output_type,
+                                query_string,
+                                docstring,
+                                &mut type_info,
+                                &mut errors,
+                                &mut warnings,
+                                &mut db_models,
+                            )
+                            .await;
                     }
                     _ => {}
                 }
@@ -801,7 +824,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
     }
 
     /// Register query signature (queries have no body to validate, just static SQL string)
-    fn expand_with_query_statement_pass1(
+    async fn expand_with_query_statement_pass1(
         &mut self,
         current_module: &str,
         public: bool,
@@ -813,6 +836,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
+        db_models: &mut HashMap<String, D::Connection>,
     ) {
         // Check for duplicate query name
         if let Some((_query_type, span)) = self.lookup_query(current_module, &name.node) {
@@ -947,6 +971,28 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     span: params[0].typ.span.clone(),
                 });
                 error_in_typs = true;
+            } else {
+                // .expect() is safe here because is_db being true guarantees this is a DatabaseSchema
+                let schema = resolved_first[0]
+                    .get_database_schema()
+                    .expect("is_db was true, so this must be a DatabaseSchema");
+                let model_name = format!("{}::{}", current_module, name.node);
+
+                match get_or_create_model::<D>(db_models, &model_name, schema).await {
+                    Ok(_connection) => {
+                        // For now, just getting the model is the goal
+                        // Future: Use connection to validate query_string SQL
+                    }
+                    Err(e) => {
+                        errors.push(SemError::DatabaseModelCreationFailed {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            error: e.to_string(),
+                            span: params[0].typ.span.clone(),
+                        });
+                        return;
+                    }
+                }
             }
         }
 
