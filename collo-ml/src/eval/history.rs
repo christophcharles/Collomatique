@@ -62,7 +62,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             for part in line {
                 result.push_str(&part.prefix);
                 if let Some(expr) = &part.expr {
-                    match Box::pin(Arc::clone(local_env).eval_expr(self, expr)).await? {
+                    match Box::pin(Arc::clone(local_env).eval_expr(self, Arc::clone(expr))).await? {
                         ExprValue::String(s) => result.push_str(&s),
                         // Expression is wrapped in String(...) at parse time,
                         // so this should never happen - logic bug if it does
@@ -133,7 +133,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         }
 
         let local_env = builder.build_subscope();
-        let naked_result = Box::pin(Arc::clone(&local_env).eval_expr(self, &fn_desc.body)).await;
+        let naked_result =
+            Box::pin(Arc::clone(&local_env).eval_expr(self, Arc::clone(&fn_desc.body))).await;
         let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
         let naked_result = naked_result?;
 

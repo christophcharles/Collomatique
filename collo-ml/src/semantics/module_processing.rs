@@ -1078,8 +1078,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     // so it should type-check if the inner expression can convert to String
                     Arc::clone(local_env).check_expr(
                         self,
-                        &expr.node,
-                        &expr.span,
+                        Arc::clone(expr),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -1132,8 +1131,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         // Then validate body
         let body_type_opt = Arc::clone(&local_env).check_expr(
             self,
-            &body.node,
-            &body.span,
+            Arc::new(body.clone()),
             type_info,
             expr_types,
             resolved_types,

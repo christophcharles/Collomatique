@@ -4,6 +4,7 @@ use super::{
 };
 use crate::parser::{ColloMLParser, Rule};
 use pest::Parser;
+use std::sync::Arc;
 
 /// Parse a docstring line and extract expressions delimited by backticks.
 /// Supports multiple backticks for escaping: `` `x` ``, ``` ``x with `backticks` `` ```, etc.
@@ -145,13 +146,13 @@ pub fn parse_docstring_line(
             // Add expression part
             parts.push(DocstringPart {
                 prefix: String::new(),
-                expr: Some(Spanned::new(
+                expr: Some(Arc::new(Spanned::new(
                     wrapped_expr,
                     Span {
                         start: expr_span_start,
                         end: expr_span_start + expr_text.len(),
                     },
-                )),
+                ))),
             });
 
             current_pos = i;

@@ -5,6 +5,7 @@ use super::{
 };
 use crate::parser::Rule;
 use pest::iterators::Pair;
+use std::sync::Arc;
 
 impl File {
     pub fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -720,8 +721,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::NullCoalesce(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -741,8 +742,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::Or(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -764,8 +765,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::And(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -783,7 +784,7 @@ impl Expr {
                 let expr_pair = inner.next().unwrap();
                 let expr_span = Span::from_pest(&expr_pair);
                 let expr = Self::from_not_expr(expr_pair)?;
-                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
+                Ok(Expr::Not(Arc::new(Spanned::new(expr, expr_span))))
             }
             Rule::forall_expr => Self::from_forall_expr(first),
             _ => Err(AstError::UnexpectedRule {
@@ -831,7 +832,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if has_filter && filter.is_none() {
@@ -873,7 +874,7 @@ impl Expr {
 
         let item_pair = inner.next().unwrap();
         let item_span = Span::from_pest(&item_pair);
-        let item = Box::new(Spanned::new(
+        let item = Arc::new(Spanned::new(
             Self::from_relational_expr(item_pair)?,
             item_span,
         ));
@@ -882,7 +883,7 @@ impl Expr {
 
         let coll_pair = inner.next().unwrap();
         let coll_span = Span::from_pest(&coll_pair);
-        let collection = Box::new(Spanned::new(
+        let collection = Arc::new(Spanned::new(
             Self::from_relational_expr(coll_pair)?,
             coll_span,
         ));
@@ -903,8 +904,8 @@ impl Expr {
             let right_span = Span::from_pest(&right_pair);
             let right = Self::from_add_sub_expr(right_pair)?;
 
-            let left_spanned = Box::new(Spanned::new(left, left_span));
-            let right_spanned = Box::new(Spanned::new(right, right_span));
+            let left_spanned = Arc::new(Spanned::new(left, left_span));
+            let right_spanned = Arc::new(Spanned::new(right, right_span));
 
             match op_pair.as_str() {
                 "===" => Ok(Expr::ConstraintEq(left_spanned, right_spanned)),
@@ -942,12 +943,12 @@ impl Expr {
             let result_span = span.clone();
             result = match op_pair.as_rule() {
                 Rule::add_op => Expr::Add(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::sub_op => Expr::Sub(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 _ => {
                     return Err(AstError::UnexpectedRule {
@@ -976,16 +977,16 @@ impl Expr {
             let result_span = span.clone();
             result = match op_pair.as_rule() {
                 Rule::mul_op => Expr::Mul(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::div_op => Expr::Div(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::mod_op => Expr::Mod(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 _ => {
                     return Err(AstError::UnexpectedRule {
@@ -1026,11 +1027,11 @@ impl Expr {
 
             match cast_op {
                 "cast?" => Ok(Expr::CastFallible {
-                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    expr: Arc::new(Spanned::new(expr, expr_span)),
                     typ: Spanned::new(typ, type_span),
                 }),
                 "cast!" => Ok(Expr::CastPanic {
-                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    expr: Arc::new(Spanned::new(expr, expr_span)),
                     typ: Spanned::new(typ, type_span),
                 }),
                 _ => panic!("Unknown cast operator: {}", cast_op),
@@ -1065,7 +1066,7 @@ impl Expr {
             let typ = TypeName::from_pest(type_pair)?;
 
             Ok(Expr::ExplicitType {
-                expr: Box::new(Spanned::new(expr, expr_span)),
+                expr: Arc::new(Spanned::new(expr, expr_span)),
                 typ: Spanned::new(typ, type_span),
             })
         } else {
@@ -1127,7 +1128,7 @@ impl Expr {
                     let index_expr_pair = index_inner.next().unwrap();
                     let index_expr_span = Span::from_pest(&index_expr_pair);
                     let index_expr = Self::from_pest(index_expr_pair)?;
-                    let boxed_index = Box::new(Spanned::new(index_expr, index_expr_span));
+                    let boxed_index = Arc::new(Spanned::new(index_expr, index_expr_span));
 
                     // Second is index_suffix which contains "]" and index_op
                     let suffix_pair = index_inner.next().unwrap();
@@ -1150,7 +1151,7 @@ impl Expr {
             Ok(expr)
         } else {
             Ok(Expr::Path {
-                object: Box::new(Spanned::new(expr, expr_span)),
+                object: Arc::new(Spanned::new(expr, expr_span)),
                 segments,
             })
         }
@@ -1224,18 +1225,18 @@ impl Expr {
 
         let condition_pair = inner.next().unwrap();
         let condition_span = Span::from_pest(&condition_pair);
-        let condition = Box::new(Spanned::new(
+        let condition = Arc::new(Spanned::new(
             Self::from_pest(condition_pair)?,
             condition_span,
         ));
 
         let then_pair = inner.next().unwrap();
         let then_span = Span::from_pest(&then_pair);
-        let then_expr = Box::new(Spanned::new(Self::from_pest(then_pair)?, then_span));
+        let then_expr = Arc::new(Spanned::new(Self::from_pest(then_pair)?, then_span));
 
         let else_pair = inner.next().unwrap();
         let else_span = Span::from_pest(&else_pair);
-        let else_expr = Box::new(Spanned::new(Self::from_pest(else_pair)?, else_span));
+        let else_expr = Arc::new(Spanned::new(Self::from_pest(else_pair)?, else_span));
 
         Ok(Expr::If {
             condition,
@@ -1252,7 +1253,7 @@ impl Expr {
         // First inner element is the expression being matched
         let expr_pair = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
         let expr_span = Span::from_pest(&expr_pair);
-        let match_expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
+        let match_expr = Arc::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
 
         // Remaining elements are match branches
         let mut branches = Vec::new();
@@ -1306,7 +1307,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&element);
-                    let parsed_expr = Spanned::new(Expr::from_pest(element)?, expr_span);
+                    let parsed_expr = Arc::new(Spanned::new(Expr::from_pest(element)?, expr_span));
 
                     if has_filter && filter.is_none() {
                         filter = Some(parsed_expr);
@@ -1345,7 +1346,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if has_filter && filter.is_none() {
@@ -1391,7 +1392,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if init_value.is_none() {
@@ -1431,7 +1432,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if value.is_none() {
                         value = Some(expr);
                     } else if body.is_none() {
@@ -1458,7 +1459,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let coll_span = Span::from_pest(&coll_pair);
-        let collection = Box::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
+        let collection = Arc::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
 
         Ok(Expr::Cardinality(collection))
     }
@@ -1471,7 +1472,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let neg_span = Span::from_pest(&neg_pair);
-        let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
+        let term = Arc::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
 
         Ok(Expr::Neg(term))
     }
@@ -1484,7 +1485,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let inner_span = Span::from_pest(&inner_pair);
-        let inner = Box::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
+        let inner = Arc::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
 
         Ok(Expr::Panic(inner))
     }
@@ -1553,7 +1554,7 @@ impl Expr {
         );
 
         Ok(Expr::ExplicitType {
-            expr: Box::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
+            expr: Arc::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
             typ,
         })
     }
@@ -1581,11 +1582,11 @@ impl Expr {
 
         let first = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
         let expr_span = Span::from_pest(&first);
-        let start = Box::new(Spanned::new(Expr::from_pest(first)?, expr_span));
+        let start = Arc::new(Spanned::new(Expr::from_pest(first)?, expr_span));
 
         let second = inner.next().ok_or(AstError::MissingExpr(span))?;
         let expr_span = Span::from_pest(&second);
-        let end = Box::new(Spanned::new(Expr::from_pest(second)?, expr_span));
+        let end = Arc::new(Spanned::new(Expr::from_pest(second)?, expr_span));
 
         Ok(Expr::ListRange { start, end })
     }
@@ -1613,9 +1614,9 @@ impl Expr {
                     let parsed_expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
 
                     if has_filter {
-                        filter = Some(Box::new(parsed_expr));
+                        filter = Some(Arc::new(parsed_expr));
                     } else if expr.is_none() {
-                        expr = Some(Box::new(parsed_expr));
+                        expr = Some(Arc::new(parsed_expr));
                     } else {
                         collections.push(parsed_expr);
                     }

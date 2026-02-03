@@ -1,4 +1,5 @@
 use super::{Expr, Span, Spanned};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File {
@@ -117,8 +118,8 @@ pub enum SimpleTypeName {
 pub enum PathSegment {
     Field(String),
     TupleIndex(usize),
-    ListIndexFallible(Box<Spanned<Expr>>), // [expr]?
-    ListIndexPanic(Box<Spanned<Expr>>),    // [expr]!
+    ListIndexFallible(Arc<Spanned<Expr>>), // [expr]?
+    ListIndexPanic(Arc<Spanned<Expr>>),    // [expr]!
 }
 
 /// A namespace path with one or more segments: ident or ident::ident::...
@@ -132,8 +133,8 @@ pub struct NamespacePath {
 pub struct MatchBranch {
     pub ident: Spanned<String>,
     pub as_typ: Option<Spanned<TypeName>>,
-    pub filter: Option<Spanned<Expr>>,
-    pub body: Spanned<Expr>,
+    pub filter: Option<Arc<Spanned<Expr>>>,
+    pub body: Arc<Spanned<Expr>>,
 }
 
 /// A part of a docstring line, either plain text or an expression to evaluate
@@ -142,7 +143,7 @@ pub struct DocstringPart {
     /// Text before the expression (or the entire text if no expression)
     pub prefix: String,
     /// Optional expression to evaluate, wrapped in String(...)
-    pub expr: Option<Spanned<Expr>>,
+    pub expr: Option<Arc<Spanned<Expr>>>,
 }
 
 /// A complete docstring line with all its parts

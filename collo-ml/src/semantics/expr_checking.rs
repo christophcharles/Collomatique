@@ -17,8 +17,7 @@ impl LocalCheckEnv {
     pub(crate) fn check_expr<D: DatabaseDriver>(
         self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
-        expr: &Expr,
-        span: &Span,
+        expr: Arc<Spanned<Expr>>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
@@ -26,15 +25,14 @@ impl LocalCheckEnv {
     ) -> Option<ExprType> {
         let result = Arc::clone(&self).check_expr_internal(
             global_env,
-            expr,
-            span,
+            Arc::clone(&expr),
             type_info,
             expr_types,
             resolved_types,
             errors,
         );
         if let Some(typ) = &result {
-            expr_types.insert(span.clone(), typ.clone());
+            expr_types.insert(expr.span.clone(), typ.clone());
         }
         result
     }
@@ -155,14 +153,14 @@ impl LocalCheckEnv {
     fn check_expr_internal<D: DatabaseDriver>(
         self: Arc<Self>,
         global_env: &mut GlobalEnv<D>,
-        expr: &Expr,
-        global_span: &Span,
+        expr: Arc<Spanned<Expr>>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
     ) -> Option<ExprType> {
-        match expr {
+        let global_span = &expr.span;
+        match &expr.node {
             // ========== Literals ==========
             Expr::None => Some(SimpleType::None.into()),
             Expr::Number(_) => Some(SimpleType::Int.into()),
@@ -189,8 +187,7 @@ impl LocalCheckEnv {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &expr.node,
-                    &expr.span,
+                    Arc::clone(&expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -240,8 +237,7 @@ impl LocalCheckEnv {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &expr.node,
-                    &expr.span,
+                    Arc::clone(&expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -290,8 +286,7 @@ impl LocalCheckEnv {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &expr.node,
-                    &expr.span,
+                    Arc::clone(&expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -342,8 +337,7 @@ impl LocalCheckEnv {
                 for arg in args {
                     let arg_type = Arc::clone(&self).check_expr(
                         global_env,
-                        &arg.node,
-                        &arg.span,
+                        Arc::new(arg.clone()),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -417,8 +411,7 @@ impl LocalCheckEnv {
             Expr::Add(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -426,8 +419,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -520,8 +512,7 @@ impl LocalCheckEnv {
             Expr::Sub(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -529,8 +520,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -634,8 +624,7 @@ impl LocalCheckEnv {
             Expr::Neg(term) => {
                 let term_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &term.node,
-                    &term.span,
+                    Arc::clone(&term),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -662,8 +651,7 @@ impl LocalCheckEnv {
             Expr::Mul(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -671,8 +659,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -746,8 +733,7 @@ impl LocalCheckEnv {
             Expr::Div(left, right) | Expr::Mod(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -755,8 +741,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -828,8 +813,7 @@ impl LocalCheckEnv {
             | Expr::ConstraintGe(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -837,8 +821,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -878,8 +861,7 @@ impl LocalCheckEnv {
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -887,8 +869,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -916,8 +897,7 @@ impl LocalCheckEnv {
             | Expr::Gt(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -925,8 +905,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -963,8 +942,7 @@ impl LocalCheckEnv {
             Expr::And(left, right) | Expr::Or(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &left.node,
-                    &left.span,
+                    Arc::clone(&left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -972,8 +950,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &right.node,
-                    &right.span,
+                    Arc::clone(&right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1043,8 +1020,7 @@ impl LocalCheckEnv {
             Expr::Not(expr) => {
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &expr.node,
-                    &expr.span,
+                    Arc::clone(&expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1071,8 +1047,7 @@ impl LocalCheckEnv {
             Expr::NullCoalesce(lhs, rhs) => {
                 let lhs_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &lhs.node,
-                    &lhs.span,
+                    Arc::clone(&lhs),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1080,8 +1055,7 @@ impl LocalCheckEnv {
                 );
                 let rhs_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &rhs.node,
-                    &rhs.span,
+                    Arc::clone(&rhs),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1125,8 +1099,7 @@ impl LocalCheckEnv {
                 // Type-check the inner expression (any type is allowed)
                 let _ = Arc::clone(&self).check_expr(
                     global_env,
-                    &inner_expr.node,
-                    &inner_expr.span,
+                    Arc::clone(&inner_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1142,8 +1115,7 @@ impl LocalCheckEnv {
             Expr::In { item, collection } => {
                 let item_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &item.node,
-                    &item.span,
+                    Arc::clone(&item),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1151,8 +1123,7 @@ impl LocalCheckEnv {
                 );
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &collection.node,
-                    &collection.span,
+                    Arc::clone(&collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1204,8 +1175,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &collection.node,
-                    &collection.span,
+                    Arc::clone(&collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1258,8 +1228,7 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                &filter_expr.node,
-                                &filter_expr.span,
+                                Arc::clone(&filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -1281,8 +1250,7 @@ impl LocalCheckEnv {
                         // Check body (must be Constraint or Bool)
                         subscope.check_expr(
                             global_env,
-                            &body.node,
-                            &body.span,
+                            Arc::clone(&body),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1326,8 +1294,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &collection.node,
-                    &collection.span,
+                    Arc::clone(&collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1382,8 +1349,7 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                &filter_expr.node,
-                                &filter_expr.span,
+                                Arc::clone(&filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -1405,8 +1371,7 @@ impl LocalCheckEnv {
                         // Check body (must be arithmetic: Int or LinExpr)
                         subscope.check_expr(
                             global_env,
-                            &body.node,
-                            &body.span,
+                            Arc::clone(&body),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1453,8 +1418,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &collection.node,
-                    &collection.span,
+                    Arc::clone(&collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1463,8 +1427,7 @@ impl LocalCheckEnv {
 
                 let acc_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &init_value.node,
-                    &init_value.span,
+                    Arc::clone(&init_value),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1556,8 +1519,7 @@ impl LocalCheckEnv {
                     if let Some(filter_expr) = filter {
                         let filter_type = Arc::clone(&subscope).check_expr(
                             global_env,
-                            &filter_expr.node,
-                            &filter_expr.span,
+                            Arc::clone(&filter_expr),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1579,8 +1541,7 @@ impl LocalCheckEnv {
                     // Check body (must match accumulator)
                     let body_type = subscope.check_expr(
                         global_env,
-                        &body.node,
-                        &body.span,
+                        Arc::clone(&body),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -1613,8 +1574,7 @@ impl LocalCheckEnv {
             } => {
                 let cond_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &condition.node,
-                    &condition.span,
+                    Arc::clone(&condition),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1634,8 +1594,7 @@ impl LocalCheckEnv {
 
                 let then_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &then_expr.node,
-                    &then_expr.span,
+                    Arc::clone(&then_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1643,8 +1602,7 @@ impl LocalCheckEnv {
                 );
                 let else_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &else_expr.node,
-                    &else_expr.span,
+                    Arc::clone(&else_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1663,8 +1621,7 @@ impl LocalCheckEnv {
             } => {
                 let Some(expr_type) = Arc::clone(&self).check_expr(
                     global_env,
-                    &match_expr.node,
-                    &match_expr.span,
+                    Arc::clone(&match_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1743,8 +1700,7 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = &branch.filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                &filter_expr.node,
-                                &filter_expr.span,
+                                Arc::clone(&filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -1765,8 +1721,7 @@ impl LocalCheckEnv {
 
                         let body_typ = subscope.check_expr(
                             global_env,
-                            &branch.body.node,
-                            &branch.body.span,
+                            Arc::clone(&branch.body),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1859,8 +1814,7 @@ impl LocalCheckEnv {
                         {
                             let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
-                                &arg.node,
-                                &arg.span,
+                                Arc::new(arg.clone()),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -1910,8 +1864,7 @@ impl LocalCheckEnv {
                         {
                             let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
-                                &arg.node,
-                                &arg.span,
+                                Arc::new(arg.clone()),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -2004,8 +1957,7 @@ impl LocalCheckEnv {
                         {
                             let arg_type = Arc::clone(&self).check_expr(
                                 global_env,
-                                &arg.node,
-                                &arg.span,
+                                Arc::new(arg.clone()),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -2097,8 +2049,7 @@ impl LocalCheckEnv {
                                 {
                                     let arg_type = Arc::clone(&self).check_expr(
                                         global_env,
-                                        &arg.node,
-                                        &arg.span,
+                                        Arc::new(arg.clone()),
                                         type_info,
                                         expr_types,
                                         resolved_types,
@@ -2171,8 +2122,7 @@ impl LocalCheckEnv {
                                 {
                                     let arg_type = Arc::clone(&self).check_expr(
                                         global_env,
-                                        &arg.node,
-                                        &arg.span,
+                                        Arc::new(arg.clone()),
                                         type_info,
                                         expr_types,
                                         resolved_types,
@@ -2333,8 +2283,7 @@ impl LocalCheckEnv {
                 // Check all elements and unify their types
                 let mut unified_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &elements[0].node,
-                    &elements[0].span,
+                    Arc::new(elements[0].clone()),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2344,8 +2293,7 @@ impl LocalCheckEnv {
                 for item in &elements[1..] {
                     let item_type = Arc::clone(&self).check_expr(
                         global_env,
-                        &item.node,
-                        &item.span,
+                        Arc::new(item.clone()),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -2384,8 +2332,7 @@ impl LocalCheckEnv {
                     .filter_map(|elem| {
                         Arc::clone(&self).check_expr(
                             global_env,
-                            &elem.node,
-                            &elem.span,
+                            Arc::new(elem.clone()),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -2437,8 +2384,7 @@ impl LocalCheckEnv {
                     // Type-check the field expression
                     if let Some(field_type) = Arc::clone(&self).check_expr(
                         global_env,
-                        &field_expr.node,
-                        &field_expr.span,
+                        Arc::new(field_expr.clone()),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -2461,8 +2407,7 @@ impl LocalCheckEnv {
             Expr::ListRange { start, end } => {
                 let start_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &start.node,
-                    &start.span,
+                    Arc::clone(&start),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2470,8 +2415,7 @@ impl LocalCheckEnv {
                 );
                 let end_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &end.node,
-                    &end.span,
+                    Arc::clone(&end),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2514,8 +2458,7 @@ impl LocalCheckEnv {
                 for (var, collection) in vars_and_collections.iter() {
                     let coll_type = Arc::clone(&current).check_expr(
                         global_env,
-                        &collection.node,
-                        &collection.span,
+                        Arc::new(collection.clone()),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -2581,8 +2524,7 @@ impl LocalCheckEnv {
                 if let Some(filter_expr) = filter {
                     let filter_type = Arc::clone(&current).check_expr(
                         global_env,
-                        &filter_expr.node,
-                        &filter_expr.span,
+                        Arc::clone(&filter_expr),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -2604,8 +2546,7 @@ impl LocalCheckEnv {
                 // Check the output expression - this determines the result element type
                 let elem_type = current.check_expr(
                     global_env,
-                    &expr.node,
-                    &expr.span,
+                    Arc::clone(&expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2622,8 +2563,7 @@ impl LocalCheckEnv {
             Expr::Cardinality(collection) => {
                 let elem_t = Arc::clone(&self).check_expr(
                     global_env,
-                    &collection.node,
-                    &collection.span,
+                    Arc::clone(&collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2648,8 +2588,7 @@ impl LocalCheckEnv {
             Expr::Let { var, value, body } => {
                 let value_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &value.node,
-                    &value.span,
+                    Arc::clone(&value),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2694,8 +2633,7 @@ impl LocalCheckEnv {
 
                 let body_type = subscope.check_expr(
                     global_env,
-                    &body.node,
-                    &body.span,
+                    Arc::clone(&body),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2750,8 +2688,7 @@ impl LocalCheckEnv {
                 let arg = &args[0];
                 let arg_type = Arc::clone(&self).check_expr(
                     global_env,
-                    &arg.node,
-                    &arg.span,
+                    Arc::new(arg.clone()),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2821,8 +2758,7 @@ impl LocalCheckEnv {
                     if let Some(arg) = args.first() {
                         let arg_type = Arc::clone(&self).check_expr(
                             global_env,
-                            &arg.node,
-                            &arg.span,
+                            Arc::new(arg.clone()),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -2855,8 +2791,7 @@ impl LocalCheckEnv {
                         for arg in args {
                             Arc::clone(&self).check_expr(
                                 global_env,
-                                &arg.node,
-                                &arg.span,
+                                Arc::new(arg.clone()),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -2880,8 +2815,7 @@ impl LocalCheckEnv {
                     {
                         let arg_type = Arc::clone(&self).check_expr(
                             global_env,
-                            &arg.node,
-                            &arg.span,
+                            Arc::new(arg.clone()),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -3008,8 +2942,7 @@ impl LocalCheckEnv {
                         Some(exp_typ) => {
                             let inferred = Arc::clone(&self).check_expr(
                                 global_env,
-                                &field_expr.node,
-                                &field_expr.span,
+                                Arc::new(field_expr.clone()),
                                 type_info,
                                 expr_types,
                                 resolved_types,
@@ -3211,8 +3144,7 @@ impl LocalCheckEnv {
         // First segment can be an expression
         let mut current_type = Arc::clone(&self).check_expr(
             global_env,
-            &object.node,
-            &object.span,
+            Arc::new(object.clone()),
             type_info,
             expr_types,
             resolved_types,
@@ -3331,8 +3263,7 @@ impl LocalCheckEnv {
                     // 1. Check index expression is Int
                     let index_type = Arc::clone(&self).check_expr(
                         global_env,
-                        &index_expr.node,
-                        &index_expr.span,
+                        Arc::clone(&index_expr),
                         type_info,
                         expr_types,
                         resolved_types,

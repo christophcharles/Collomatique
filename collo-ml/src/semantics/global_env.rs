@@ -5,6 +5,7 @@ use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Span, Spanned};
 use crate::database::DatabaseDriver;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub type ObjectFields = HashMap<String, ExprType>;
 
@@ -15,7 +16,7 @@ pub struct FunctionDesc {
     pub public: bool,
     pub used: bool,
     pub arg_names: Vec<String>,
-    pub body: Spanned<crate::ast::Expr>,
+    pub body: Arc<Spanned<crate::ast::Expr>>,
     pub docstring: Vec<DocstringLine>,
 }
 
@@ -301,6 +302,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         let key = (module.to_string(), name.to_string());
         assert!(!self.functions.contains_key(&key));
 
+        let body_span = body.span.clone();
         self.functions.insert(
             key,
             FunctionDesc {
@@ -309,12 +311,12 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 public,
                 used: should_be_used_by_default(name),
                 arg_names,
-                body: body.clone(),
+                body: Arc::new(body),
                 docstring,
             },
         );
 
-        type_info.types.insert(body.span, fn_typ.into());
+        type_info.types.insert(body_span, fn_typ.into());
     }
 
     pub fn get_queries(&self) -> &HashMap<(String, String), QueryDesc> {
