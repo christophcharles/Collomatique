@@ -1370,7 +1370,6 @@ async fn eval_query_call_optional_not_found() {
 
     assert_eq!(result, ExprValue::None);
 }
-
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_query_failed() {
     // This test verifies that invalid SQL (referencing a nonexistent table)
@@ -1658,4 +1657,471 @@ async fn eval_query_call_optional_primitive_not_found() {
         .expect("Should evaluate");
 
     assert_eq!(result, ExprValue::None);
+}
+
+// =============================================================================
+// 18. NESTED NULLABLE CUSTOM TYPES (breadth-first resolution)
+// =============================================================================
+
+#[tokio::test]
+async fn typed_query_nullable_custom_nullable_string_found() {
+    // ?NullableString where NullableString = ?String
+    // This breaks with depth-first resolution because flattening gives [None, None, String]
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type NullableString = ?String;").await;
+
+    // ?NullableString = None | Custom(NullableString)
+    let out_type = ExprType::from_variants([
+        SimpleType::None,
+        SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
+    ]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT name FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    // Should be Custom(NullableString, String("Alice"))
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "NullableString".to_string(),
+        variant: None,
+        content: ExprValue::String("Alice".to_string()),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_nullable_custom_nullable_string_not_found() {
+    // ?NullableString where NullableString = ?String — empty result → None
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked("type NullableString = ?String;").await;
+
+    let out_type = ExprType::from_variants([
+        SimpleType::None,
+        SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
+    ]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT name FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[tokio::test]
+async fn typed_query_nullable_custom_nullable_string_null_value() {
+    // ?NullableString where NullableString = ?String — row exists but value is NULL
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (val TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO data VALUES (NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let handle = test_handle(&pool).await;
+    let ast = checked("type NullableString = ?String;").await;
+
+    let out_type = ExprType::from_variants([
+        SimpleType::None,
+        SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
+    ]);
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query("SELECT val FROM data", vec![], out_type, &ast.global_env)
+        .await
+        .unwrap();
+
+    // Row exists → goes through data branch (NullableString), NULL in column → None inside NullableString
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "NullableString".to_string(),
+        variant: None,
+        content: ExprValue::None,
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_deeply_nested_enum_with_value() {
+    // Complex nested enum types
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked(
+        r#"
+        type MyNone = None;
+        type MyInt = Int;
+        enum MyInnerEnum = None(MyNone) | Int(MyInt);
+        type MyOuter = MyInnerEnum;
+        enum MyOuterEnum = None(MyNone) | Row(MyOuter);
+        type MyWrapper = MyOuterEnum;
+        "#,
+    )
+    .await;
+
+    let out_type = ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "MyWrapper".to_string(),
+        None,
+    ));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 1",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    // Expected: MyWrapper(MyOuterEnum(MyOuterEnum::Row(MyOuter(MyInnerEnum(MyInnerEnum::Int(MyInt(1)))))))
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyWrapper".to_string(),
+        variant: None,
+        content: ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "MyOuterEnum".to_string(),
+            variant: None,
+            content: ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
+                type_name: "MyOuterEnum".to_string(),
+                variant: Some("Row".to_string()),
+                content: ExprValue::Custom(Box::new(CustomValue {
+                    module: "main".to_string(),
+                    type_name: "MyOuter".to_string(),
+                    variant: None,
+                    content: ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "MyInnerEnum".to_string(),
+                        variant: None,
+                        content: ExprValue::Custom(Box::new(CustomValue {
+                            module: "main".to_string(),
+                            type_name: "MyInnerEnum".to_string(),
+                            variant: Some("Int".to_string()),
+                            content: ExprValue::Custom(Box::new(CustomValue {
+                                module: "main".to_string(),
+                                type_name: "MyInt".to_string(),
+                                variant: None,
+                                content: ExprValue::Int(1),
+                            })),
+                        })),
+                    })),
+                })),
+            })),
+        })),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_deeply_nested_enum_empty() {
+    // Same complex enum setup but with no rows → None path
+    let pool = test_pool().await;
+    setup_users_table(&pool).await;
+    let handle = test_handle(&pool).await;
+    let ast = checked(
+        r#"
+        type MyNone = None;
+        type MyInt = Int;
+        enum MyInnerEnum = None(MyNone) | Int(MyInt);
+        type MyOuter = MyInnerEnum;
+        enum MyOuterEnum = None(MyNone) | Row(MyOuter);
+        type MyWrapper = MyOuterEnum;
+        "#,
+    )
+    .await;
+
+    let out_type = ExprType::simple(SimpleType::Custom(
+        "main".to_string(),
+        "MyWrapper".to_string(),
+        None,
+    ));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id FROM users WHERE id = 999",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    // Expected: MyWrapper(MyOuterEnum(MyOuterEnum::None(MyNone(None))))
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyWrapper".to_string(),
+        variant: None,
+        content: ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "MyOuterEnum".to_string(),
+            variant: None,
+            content: ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
+                type_name: "MyOuterEnum".to_string(),
+                variant: Some("None".to_string()),
+                content: ExprValue::Custom(Box::new(CustomValue {
+                    module: "main".to_string(),
+                    type_name: "MyNone".to_string(),
+                    variant: None,
+                    content: ExprValue::None,
+                })),
+            })),
+        })),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+async fn typed_query_list_with_nullable_custom_fields() {
+    // Struct with a custom-wrapped nullable field:
+    // type NullableString = ?String;
+    // [{id: Int, val: NullableString}]
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (id INTEGER, val TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO data VALUES (1, 'hello'), (2, NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let handle = test_handle(&pool).await;
+    let ast = checked("type NullableString = ?String;").await;
+
+    let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Struct(
+        [
+            ("id".to_string(), ExprType::simple(SimpleType::Int)),
+            (
+                "val".to_string(),
+                ExprType::simple(SimpleType::Custom(
+                    "main".to_string(),
+                    "NullableString".to_string(),
+                    None,
+                )),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    ))));
+
+    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+        .query(
+            "SELECT id, val FROM data ORDER BY id",
+            vec![],
+            out_type,
+            &ast.global_env,
+        )
+        .await
+        .unwrap();
+
+    let expected = ExprValue::List(vec![
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(1)),
+                (
+                    "val".to_string(),
+                    ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "NullableString".to_string(),
+                        variant: None,
+                        content: ExprValue::String("hello".to_string()),
+                    })),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        ExprValue::Struct(
+            [
+                ("id".to_string(), ExprValue::Int(2)),
+                (
+                    "val".to_string(),
+                    ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "NullableString".to_string(),
+                        variant: None,
+                        content: ExprValue::None,
+                    })),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    ]);
+    assert_eq!(result, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_nullable_custom_type() {
+    // End-to-end eval test for ?NullableString where NullableString = ?String
+    let input = r#"
+    type Db = #{"CREATE TABLE data (val TEXT)"};
+    type NullableString = ?String;
+    query find_val(db: Db) -> ?NullableString = "SELECT val FROM data WHERE rowid = 1";
+    pub let run(db: Db) -> ?NullableString = find_val(db);
+    "#;
+
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (val TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO data VALUES ('hello')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let handle = test_handle(&pool).await;
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg])
+        .await
+        .expect("Should evaluate");
+
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "NullableString".to_string(),
+        variant: None,
+        content: ExprValue::String("hello".to_string()),
+    }));
+    assert_eq!(result, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_nullable_custom_type_not_found() {
+    // End-to-end eval test for ?NullableString — no rows → None
+    let input = r#"
+    type Db = #{"CREATE TABLE data (val TEXT)"};
+    type NullableString = ?String;
+    query find_val(db: Db) -> ?NullableString = "SELECT val FROM data WHERE rowid = 999";
+    pub let run(db: Db) -> ?NullableString = find_val(db);
+    "#;
+
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (val TEXT)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let handle = test_handle(&pool).await;
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg])
+        .await
+        .expect("Should evaluate");
+
+    assert_eq!(result, ExprValue::None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eval_query_deeply_nested_enum() {
+    // End-to-end eval test for deeply nested custom enum types
+    let input = r#"
+    type Db = #{"CREATE TABLE data (id INTEGER)"};
+    type MyNone = None;
+    type MyInt = Int;
+    enum MyInnerEnum = None(MyNone) | Int(MyInt);
+    type MyOuter = MyInnerEnum;
+    enum MyOuterEnum = None(MyNone) | Row(MyOuter);
+    type MyWrapper = MyOuterEnum;
+    query find_val(db: Db) -> MyWrapper = "SELECT id FROM data WHERE id = 1";
+    pub let run(db: Db) -> MyWrapper = find_val(db);
+    "#;
+
+    let pool = test_pool().await;
+    sqlx::query("CREATE TABLE data (id INTEGER)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO data VALUES (1)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let handle = test_handle(&pool).await;
+    let ast = checked(input).await;
+    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "Db".to_string(),
+        variant: None,
+        content: ExprValue::Database(handle),
+    }));
+    let result = ast
+        .quick_eval_fn("main", "run", vec![db_arg])
+        .await
+        .expect("Should evaluate");
+
+    // MyWrapper(MyOuterEnum(MyOuterEnum::Row(MyOuter(MyInnerEnum(MyInnerEnum::Int(MyInt(1)))))))
+    let expected = ExprValue::Custom(Box::new(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyWrapper".to_string(),
+        variant: None,
+        content: ExprValue::Custom(Box::new(CustomValue {
+            module: "main".to_string(),
+            type_name: "MyOuterEnum".to_string(),
+            variant: None,
+            content: ExprValue::Custom(Box::new(CustomValue {
+                module: "main".to_string(),
+                type_name: "MyOuterEnum".to_string(),
+                variant: Some("Row".to_string()),
+                content: ExprValue::Custom(Box::new(CustomValue {
+                    module: "main".to_string(),
+                    type_name: "MyOuter".to_string(),
+                    variant: None,
+                    content: ExprValue::Custom(Box::new(CustomValue {
+                        module: "main".to_string(),
+                        type_name: "MyInnerEnum".to_string(),
+                        variant: None,
+                        content: ExprValue::Custom(Box::new(CustomValue {
+                            module: "main".to_string(),
+                            type_name: "MyInnerEnum".to_string(),
+                            variant: Some("Int".to_string()),
+                            content: ExprValue::Custom(Box::new(CustomValue {
+                                module: "main".to_string(),
+                                type_name: "MyInt".to_string(),
+                                variant: None,
+                                content: ExprValue::Int(1),
+                            })),
+                        })),
+                    })),
+                })),
+            })),
+        })),
+    }));
+    assert_eq!(result, expected);
 }

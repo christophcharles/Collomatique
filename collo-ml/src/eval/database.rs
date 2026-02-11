@@ -16,7 +16,7 @@ use crate::semantics::database::DbConversionError;
 use crate::semantics::{ExprType, GlobalEnv, SimpleType};
 use crate::traits::EvalObject;
 
-use super::values::ExprValue;
+use super::values::{CustomValue, ExprValue};
 
 /// Generic wrapper around a `DatabaseConnection`.
 ///
@@ -164,109 +164,6 @@ impl<T: EvalObject, D: DatabaseConnection> TryFrom<ExprValue<T, D>> for DbValue 
 // Typed query helpers
 // =============================================================================
 
-/// Wrap an `ExprValue` to match a target `ExprType`, adding `Custom` wrappers as needed.
-///
-/// Iterates over the target's variants and returns the first successful wrapping.
-fn wrap_expr_value<T: EvalObject, D: DatabaseDriver>(
-    value: ExprValue<T, D::Connection>,
-    target: &ExprType,
-    env: &GlobalEnv<D>,
-) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
-    for variant in target.get_variants() {
-        if let Ok(v) = try_wrap_to(value.clone(), variant, env) {
-            return Ok(v);
-        }
-    }
-    Err(DbConversionError)
-}
-
-/// Try to wrap an `ExprValue` to match a single `SimpleType` variant.
-fn try_wrap_to<T: EvalObject, D: DatabaseDriver>(
-    value: ExprValue<T, D::Connection>,
-    variant: &SimpleType,
-    env: &GlobalEnv<D>,
-) -> Result<ExprValue<T, D::Connection>, DbConversionError> {
-    match variant {
-        SimpleType::None => {
-            if matches!(value, ExprValue::None) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::Int => {
-            if matches!(value, ExprValue::Int(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::Bool => {
-            if matches!(value, ExprValue::Bool(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::String => {
-            if matches!(value, ExprValue::String(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::Struct(_) => {
-            if matches!(value, ExprValue::Struct(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::Tuple(_) => {
-            if matches!(value, ExprValue::Tuple(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::List(_) => {
-            if matches!(value, ExprValue::List(_)) {
-                Ok(value)
-            } else {
-                Err(DbConversionError)
-            }
-        }
-        SimpleType::Custom(module, root, variant_name) => {
-            let qualified = match variant_name {
-                Some(v) => format!("{}::{}", root, v),
-                None => root.clone(),
-            };
-            let underlying = env
-                .get_custom_type_underlying(module, &qualified)
-                .ok_or(DbConversionError)?;
-            let inner = wrap_expr_value(value, underlying, env)?;
-            Ok(ExprValue::Custom(Box::new(super::values::CustomValue {
-                module: module.clone(),
-                type_name: root.clone(),
-                variant: variant_name.clone(),
-                content: inner,
-            })))
-        }
-        _ => Err(DbConversionError),
-    }
-}
-
-enum OutputMode {
-    List,
-    Optional,
-}
-
-enum ResolvedRowShape {
-    Struct(BTreeMap<String, ExprType>),
-    Tuple(Vec<ExprType>),
-    Primitive(ExprType),
-}
-
 fn convert_params<T: EvalObject, D: DatabaseConnection>(
     params: Vec<ExprValue<T, D>>,
 ) -> Result<Vec<DbValue>, SqlQueryError> {
@@ -279,194 +176,284 @@ fn convert_params<T: EvalObject, D: DatabaseConnection>(
         .collect()
 }
 
-fn classify_output_type<D: DatabaseDriver>(
-    out_type: &ExprType,
-    env: &GlobalEnv<D>,
-) -> Result<(OutputMode, ResolvedRowShape, ExprType), SqlQueryError> {
-    let resolved = env
-        .resolve_type_deep(out_type)
-        .ok_or_else(|| SqlQueryError::InvalidOutputType("cyclic type".to_string()))?;
+/// Helper to wrap an ExprValue in a Custom wrapper.
+fn wrap_custom<T: EvalObject, D: DatabaseConnection>(
+    module: &str,
+    root: &str,
+    variant: &Option<String>,
+    inner: ExprValue<T, D>,
+) -> ExprValue<T, D> {
+    ExprValue::Custom(Box::new(CustomValue {
+        module: module.to_string(),
+        type_name: root.to_string(),
+        variant: variant.clone(),
+        content: inner,
+    }))
+}
 
-    match resolved.len() {
-        // 1 element — must be List(inner)
+/// Build the query result by walking `out_type` breadth-first, peeling one
+/// custom type layer at a time.
+///
+/// Handles three shapes:
+/// - **Single Custom** → peel, recurse, wrap in Custom on unwind
+/// - **Single List(inner)** → base case: build list by calling `build_row_value` for each row
+/// - **Two variants (one resolving to None)** → optional: if rows empty build None path,
+///   else call `build_row_value` on the data variant for rows[0]
+fn build_query_result<T: EvalObject, D: DatabaseDriver>(
+    out_type: &ExprType,
+    rows: &[BTreeMap<String, DbValue>],
+    columns: &[String],
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
+    let variants: Vec<_> = out_type.get_variants().iter().cloned().collect();
+
+    match variants.len() {
         1 => {
-            let variant = &resolved[0];
-            let inner_type = match variant {
-                SimpleType::List(inner) => inner,
-                _ => {
-                    return Err(SqlQueryError::InvalidOutputType(format!(
-                        "expected list or optional type, got single non-list variant"
-                    )));
+            let single = &variants[0];
+            match single {
+                SimpleType::Custom(module, root, variant_name) => {
+                    let qualified = match variant_name {
+                        Some(v) => format!("{}::{}", root, v),
+                        None => root.clone(),
+                    };
+                    let underlying = env
+                        .get_custom_type_underlying(module, &qualified)
+                        .ok_or_else(|| {
+                            SqlQueryError::InvalidOutputType(format!(
+                                "unknown custom type: {}",
+                                qualified
+                            ))
+                        })?;
+                    let inner = build_query_result(underlying, rows, columns, env)?;
+                    Ok(wrap_custom(module, root, variant_name, inner))
                 }
-            };
-            // Resolve the inner type to get the row shape
-            let inner_resolved = env.resolve_type_deep(inner_type).ok_or_else(|| {
-                SqlQueryError::InvalidOutputType("cyclic type in list element".to_string())
-            })?;
-            if inner_resolved.len() != 1 {
-                return Err(SqlQueryError::InvalidOutputType(format!(
-                    "list element type must resolve to a single struct or tuple, got {} variants",
-                    inner_resolved.len()
-                )));
+                SimpleType::List(inner_type) => {
+                    let mut list = Vec::with_capacity(rows.len());
+                    for (i, row) in rows.iter().enumerate() {
+                        let row_val = build_row_value(inner_type, row, columns, i, env)?;
+                        list.push(row_val);
+                    }
+                    Ok(ExprValue::List(list))
+                }
+                _ => Err(SqlQueryError::InvalidOutputType(format!(
+                    "expected list or optional type, got single non-list variant: {}",
+                    single
+                ))),
             }
-            let shape = match &inner_resolved[0] {
-                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
-                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
-                SimpleType::Int | SimpleType::Bool | SimpleType::String => {
-                    ResolvedRowShape::Primitive(inner_type.clone())
-                }
-                _ => {
-                    return Err(SqlQueryError::InvalidOutputType(
-                        "list element must be a struct, tuple, or primitive (Int, Bool, String)"
-                            .to_string(),
-                    ));
-                }
-            };
-            Ok((OutputMode::List, shape, inner_type.clone()))
         }
-        // 2 elements — one None, one other (optional)
         2 => {
-            let non_none: Vec<_> = resolved.iter().filter(|v| !v.is_none()).collect();
-            let none_count = resolved.iter().filter(|v| v.is_none()).count();
-            if none_count != 1 || non_none.len() != 1 {
-                return Err(SqlQueryError::InvalidOutputType(
-                    "expected exactly one None and one non-None variant for optional type"
-                        .to_string(),
-                ));
+            // Determine which variant is the None branch and which is the data branch
+            let (none_variant, data_variant) = classify_optional_variants(&variants, env)?;
+
+            if rows.is_empty() {
+                // Build None through the none_variant path
+                build_none_value(&ExprType::simple(none_variant.clone()), env)
+            } else {
+                // Build value through the data variant for the first row
+                let data_type = ExprType::simple(data_variant.clone());
+                build_row_value(&data_type, &rows[0], columns, 0, env)
             }
-            // Build the row target type from the original out_type's non-None variants
-            let row_target_type = ExprType::from_variants(
-                out_type
-                    .get_variants()
-                    .iter()
-                    .filter(|v| !v.is_none())
-                    .cloned(),
-            );
-            let shape = match non_none[0] {
-                SimpleType::Struct(fields) => ResolvedRowShape::Struct(fields.clone()),
-                SimpleType::Tuple(elements) => ResolvedRowShape::Tuple(elements.clone()),
-                SimpleType::Int | SimpleType::Bool | SimpleType::String => {
-                    ResolvedRowShape::Primitive(row_target_type.clone())
-                }
-                _ => {
-                    return Err(SqlQueryError::InvalidOutputType(
-                        "optional variant must be a struct, tuple, or primitive (Int, Bool, String)"
-                            .to_string(),
-                    ));
-                }
-            };
-            Ok((OutputMode::Optional, shape, row_target_type))
         }
         _ => Err(SqlQueryError::InvalidOutputType(format!(
             "output type must resolve to a list or an optional (None | T), got {} variants",
-            resolved.len()
+            variants.len()
         ))),
     }
 }
 
-fn validate_columns(shape: &ResolvedRowShape, columns: &[String]) -> Result<(), SqlQueryError> {
-    match shape {
-        ResolvedRowShape::Struct(fields) => {
-            if fields.len() != columns.len() {
-                return Err(SqlQueryError::ColumnMismatch(format!(
-                    "expected {} columns, got {}",
-                    fields.len(),
-                    columns.len()
-                )));
-            }
-            for col in columns {
-                if !fields.contains_key(col) {
-                    return Err(SqlQueryError::ColumnMismatch(format!(
-                        "column \"{}\" not found in struct fields",
-                        col
-                    )));
-                }
-            }
-            Ok(())
-        }
-        ResolvedRowShape::Tuple(elements) => {
-            if elements.len() != columns.len() {
-                return Err(SqlQueryError::ColumnMismatch(format!(
-                    "expected {} columns for tuple, got {}",
-                    elements.len(),
-                    columns.len()
-                )));
-            }
-            Ok(())
-        }
-        ResolvedRowShape::Primitive(_) => {
-            if columns.len() != 1 {
-                return Err(SqlQueryError::ColumnMismatch(format!(
-                    "expected 1 column for primitive type, got {}",
-                    columns.len()
-                )));
-            }
-            Ok(())
-        }
+/// Classify the two variants of an optional type into (none_variant, data_variant).
+///
+/// Uses `resolve_type_until_several_or_not_custom` to determine which variant
+/// ultimately resolves to None.
+fn classify_optional_variants<D: DatabaseDriver>(
+    variants: &[SimpleType],
+    env: &GlobalEnv<D>,
+) -> Result<(SimpleType, SimpleType), SqlQueryError> {
+    assert_eq!(variants.len(), 2);
+
+    let resolved_0 = env
+        .resolve_type_until_several_or_not_custom(&ExprType::simple(variants[0].clone()))
+        .ok_or_else(|| SqlQueryError::InvalidOutputType("cyclic type".to_string()))?;
+    let resolved_1 = env
+        .resolve_type_until_several_or_not_custom(&ExprType::simple(variants[1].clone()))
+        .ok_or_else(|| SqlQueryError::InvalidOutputType("cyclic type".to_string()))?;
+
+    let is_none_0 = resolved_0.len() == 1 && resolved_0[0].is_none();
+    let is_none_1 = resolved_1.len() == 1 && resolved_1[0].is_none();
+
+    match (is_none_0, is_none_1) {
+        (true, false) => Ok((variants[0].clone(), variants[1].clone())),
+        (false, true) => Ok((variants[1].clone(), variants[0].clone())),
+        _ => Err(SqlQueryError::InvalidOutputType(
+            "expected exactly one None and one non-None variant for optional type".to_string(),
+        )),
     }
 }
 
-fn convert_row<T: EvalObject, D: DatabaseDriver>(
+/// Build a None value by walking through custom type layers until reaching
+/// `SimpleType::None`, then wrapping in Custom on unwind.
+fn build_none_value<T: EvalObject, D: DatabaseDriver>(
+    typ: &ExprType,
+    env: &GlobalEnv<D>,
+) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
+    let variants: Vec<_> = typ.get_variants().iter().cloned().collect();
+
+    match variants.len() {
+        1 => match &variants[0] {
+            SimpleType::None => Ok(ExprValue::None),
+            SimpleType::Custom(module, root, variant_name) => {
+                let qualified = match variant_name {
+                    Some(v) => format!("{}::{}", root, v),
+                    None => root.clone(),
+                };
+                let underlying = env
+                    .get_custom_type_underlying(module, &qualified)
+                    .ok_or_else(|| {
+                        SqlQueryError::InvalidOutputType(format!(
+                            "unknown custom type: {}",
+                            qualified
+                        ))
+                    })?;
+                let inner = build_none_value(underlying, env)?;
+                Ok(wrap_custom(module, root, variant_name, inner))
+            }
+            other => Err(SqlQueryError::InvalidOutputType(format!(
+                "expected None through custom type chain, got: {}",
+                other
+            ))),
+        },
+        2 => {
+            // Fork — find the None branch and recurse into it
+            let (none_variant, _data_variant) = classify_optional_variants(&variants, env)?;
+            build_none_value(&ExprType::simple(none_variant), env)
+        }
+        _ => Err(SqlQueryError::InvalidOutputType(
+            "cannot build None value from type with more than 2 variants".to_string(),
+        )),
+    }
+}
+
+/// Build an ExprValue for a single row by walking `row_type` breadth-first.
+///
+/// Handles:
+/// - **Single Custom** → peel, recurse, wrap in Custom on unwind
+/// - **Single Struct(fields)** → base case: convert each field via `to_expr_value`
+/// - **Single Tuple(elements)** → base case: convert each element via `to_expr_value`
+/// - **Single primitive or any fork** → delegate to `to_expr_value` (single column expected)
+fn build_row_value<T: EvalObject, D: DatabaseDriver>(
+    row_type: &ExprType,
     row: &BTreeMap<String, DbValue>,
     columns: &[String],
-    shape: &ResolvedRowShape,
     row_idx: usize,
     env: &GlobalEnv<D>,
 ) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
-    match shape {
-        ResolvedRowShape::Struct(fields) => {
-            let mut struct_fields = BTreeMap::new();
-            for (col_name, db_val) in row {
-                let field_type = &fields[col_name];
-                let val = db_val.clone().to_expr_value(env, field_type).map_err(|_| {
-                    SqlQueryError::ResultConversionError {
-                        row: row_idx,
-                        column: col_name.clone(),
-                    }
-                })?;
-                struct_fields.insert(col_name.clone(), val);
-            }
-            Ok(ExprValue::Struct(struct_fields))
-        }
-        ResolvedRowShape::Tuple(elements) => {
-            let mut values = Vec::with_capacity(columns.len());
-            for (i, col_name) in columns.iter().enumerate() {
-                let db_val = &row[col_name];
-                let elem_type = &elements[i];
-                let val = db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
-                    SqlQueryError::ResultConversionError {
-                        row: row_idx,
-                        column: col_name.clone(),
-                    }
-                })?;
-                values.push(val);
-            }
-            Ok(ExprValue::Tuple(values))
-        }
-        ResolvedRowShape::Primitive(elem_type) => {
-            let col_name = &columns[0];
-            let db_val = &row[col_name];
-            db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
-                SqlQueryError::ResultConversionError {
-                    row: row_idx,
-                    column: col_name.clone(),
-                }
-            })
-        }
-    }
-}
+    let variants: Vec<_> = row_type.get_variants().iter().cloned().collect();
 
-fn build_empty_result<T: EvalObject, D: DatabaseDriver>(
-    mode: &OutputMode,
-    out_type: &ExprType,
-    env: &GlobalEnv<D>,
-) -> Result<ExprValue<T, D::Connection>, SqlQueryError> {
-    let raw = match mode {
-        OutputMode::Optional => ExprValue::None,
-        OutputMode::List => ExprValue::List(vec![]),
-    };
-    wrap_expr_value(raw, out_type, env)
-        .map_err(|_| SqlQueryError::InvalidOutputType("cannot wrap empty result".to_string()))
+    if variants.len() == 1 {
+        match &variants[0] {
+            SimpleType::Custom(module, root, variant_name) => {
+                let qualified = match variant_name {
+                    Some(v) => format!("{}::{}", root, v),
+                    None => root.clone(),
+                };
+                let underlying = env
+                    .get_custom_type_underlying(module, &qualified)
+                    .ok_or_else(|| {
+                        SqlQueryError::InvalidOutputType(format!(
+                            "unknown custom type: {}",
+                            qualified
+                        ))
+                    })?;
+                let inner = build_row_value(underlying, row, columns, row_idx, env)?;
+                Ok(wrap_custom(module, root, variant_name, inner))
+            }
+            SimpleType::Struct(fields) => {
+                // Validate columns match struct fields
+                if fields.len() != columns.len() {
+                    return Err(SqlQueryError::ColumnMismatch(format!(
+                        "expected {} columns, got {}",
+                        fields.len(),
+                        columns.len()
+                    )));
+                }
+                for col in columns {
+                    if !fields.contains_key(col) {
+                        return Err(SqlQueryError::ColumnMismatch(format!(
+                            "column \"{}\" not found in struct fields",
+                            col
+                        )));
+                    }
+                }
+                let mut struct_fields = BTreeMap::new();
+                for (col_name, db_val) in row {
+                    let field_type = &fields[col_name];
+                    let val = db_val.clone().to_expr_value(env, field_type).map_err(|_| {
+                        SqlQueryError::ResultConversionError {
+                            row: row_idx,
+                            column: col_name.clone(),
+                        }
+                    })?;
+                    struct_fields.insert(col_name.clone(), val);
+                }
+                Ok(ExprValue::Struct(struct_fields))
+            }
+            SimpleType::Tuple(elements) => {
+                if elements.len() != columns.len() {
+                    return Err(SqlQueryError::ColumnMismatch(format!(
+                        "expected {} columns for tuple, got {}",
+                        elements.len(),
+                        columns.len()
+                    )));
+                }
+                let mut values = Vec::with_capacity(columns.len());
+                for (i, col_name) in columns.iter().enumerate() {
+                    let db_val = &row[col_name];
+                    let elem_type = &elements[i];
+                    let val = db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
+                        SqlQueryError::ResultConversionError {
+                            row: row_idx,
+                            column: col_name.clone(),
+                        }
+                    })?;
+                    values.push(val);
+                }
+                Ok(ExprValue::Tuple(values))
+            }
+            // Single primitive — delegate to to_expr_value
+            _ => {
+                if columns.len() != 1 {
+                    return Err(SqlQueryError::ColumnMismatch(format!(
+                        "expected 1 column for primitive type, got {}",
+                        columns.len()
+                    )));
+                }
+                let col_name = &columns[0];
+                let db_val = &row[col_name];
+                db_val.clone().to_expr_value(env, row_type).map_err(|_| {
+                    SqlQueryError::ResultConversionError {
+                        row: row_idx,
+                        column: col_name.clone(),
+                    }
+                })
+            }
+        }
+    } else {
+        // Multiple variants (fork) — delegate to to_expr_value (single column expected)
+        if columns.len() != 1 {
+            return Err(SqlQueryError::ColumnMismatch(format!(
+                "expected 1 column for primitive type, got {}",
+                columns.len()
+            )));
+        }
+        let col_name = &columns[0];
+        let db_val = &row[col_name];
+        db_val.clone().to_expr_value(env, row_type).map_err(|_| {
+            SqlQueryError::ResultConversionError {
+                row: row_idx,
+                column: col_name.clone(),
+            }
+        })
+    }
 }
 
 // =============================================================================
@@ -484,43 +471,10 @@ impl<C: DatabaseConnection> DatabaseHandle<C> {
         // 1. Convert params
         let db_params = convert_params(params)?;
 
-        // 2. Classify output type
-        let (mode, shape, row_target_type) = classify_output_type(&out_type, global_env)?;
-
-        // 3. Execute raw query
+        // 2. Execute raw query
         let (rows, columns) = self.inner.query(sql, db_params).await?;
 
-        // 4. Empty result shortcut
-        if rows.is_empty() {
-            return build_empty_result(&mode, &out_type, global_env);
-        }
-
-        // 5. Validate columns
-        validate_columns(&shape, &columns)?;
-
-        // 6. Convert rows
-        match mode {
-            OutputMode::Optional => {
-                let row_val = convert_row(&rows[0], &columns, &shape, 0, global_env)?;
-                wrap_expr_value(row_val, &out_type, global_env).map_err(|_| {
-                    SqlQueryError::InvalidOutputType("cannot wrap optional result".to_string())
-                })
-            }
-            OutputMode::List => {
-                let mut list = Vec::with_capacity(rows.len());
-                for (i, row) in rows.iter().enumerate() {
-                    let row_val = convert_row(row, &columns, &shape, i, global_env)?;
-                    let wrapped =
-                        wrap_expr_value(row_val, &row_target_type, global_env).map_err(|_| {
-                            SqlQueryError::InvalidOutputType("cannot wrap list row".to_string())
-                        })?;
-                    list.push(wrapped);
-                }
-                let list_val = ExprValue::List(list);
-                wrap_expr_value(list_val, &out_type, global_env).map_err(|_| {
-                    SqlQueryError::InvalidOutputType("cannot wrap list result".to_string())
-                })
-            }
-        }
+        // 3. Build result by walking the type tree breadth-first
+        build_query_result(&out_type, &rows, &columns, global_env)
     }
 }
