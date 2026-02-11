@@ -26,7 +26,6 @@ mod types;
 mod tests;
 
 // Re-export public types
-pub use database::DbConversionError;
 pub use errors::{ArgsType, GlobalEnvError, SemError, SemWarning};
 pub use global_env::{FunctionDesc, GlobalEnv, TypeInfo};
 pub use local_env::LocalEnvCheck;
