@@ -12,6 +12,7 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    clippy,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -36,6 +37,7 @@ rustPlatform.buildRustPackage rec {
         pkg-config
         wrapGAppsHook4
         cbc # We need it for tests
+        clippy
         python3
     ];
 
