@@ -1332,3 +1332,90 @@ async fn query_output_optional_linexpr_rejected() {
             .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
     );
 }
+
+// ========== Nested Nullable / Custom Type Resolution Tests ==========
+
+#[tokio::test]
+async fn query_output_nested_nullable_valid() {
+    let input = r#"
+        type NullableString = ?String;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?NullableString = "SELECT name FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Nested nullable output (?NullableString where NullableString = ?String) should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_list_nullable_inner_valid() {
+    let input = r#"
+        type NullableString = ?String;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [NullableString] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "List of nullable custom type ([NullableString]) should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_param_nested_nullable_valid() {
+    let input = r#"
+        type NullableString = ?String;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}, n: NullableString) -> [{name: String}] = "SELECT name FROM t WHERE name = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Nested nullable param (NullableString = ?String) should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_param_deep_nested_nullable() {
+    let input = r#"
+        type MyType1 = Int;
+        type MyType3 = ?MyType1;
+        type MyType4 = MyType3;
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}, id: MyType4) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Deep nested nullable param (MyType4 = MyType3 = ?MyType1 = ?Int) should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_struct_nullable_custom_field() {
+    let input = r#"
+        type NullableString = ?String;
+        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: NullableString}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Struct with nullable custom type field should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_output_list_optional_int() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [?Int] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "List of ?Int should be valid: {:?}",
+        errors
+    );
+}

@@ -31,16 +31,31 @@ impl DbType {
         env: &GlobalEnv<D>,
         typ: &ExprType,
     ) -> Result<Self, DbConversionError> {
-        let resolved = env.resolve_type_deep(typ).ok_or(DbConversionError)?;
+        let resolved = env
+            .resolve_type_until_several_or_not_custom(typ)
+            .ok_or(DbConversionError)?;
         match resolved.len() {
             1 => Self::from_primitive(&resolved[0]),
             2 => {
-                let nones = resolved.iter().filter(|v| v.is_none()).count();
-                if nones != 1 {
+                // Resolve each individually — each must resolve to exactly 1 type
+                let a = env
+                    .resolve_type_until_several_or_not_custom(&ExprType::from(resolved[0].clone()))
+                    .ok_or(DbConversionError)?;
+                let b = env
+                    .resolve_type_until_several_or_not_custom(&ExprType::from(resolved[1].clone()))
+                    .ok_or(DbConversionError)?;
+
+                if a.len() != 1 || b.len() != 1 {
                     return Err(DbConversionError);
                 }
-                let non_none = resolved.iter().find(|v| !v.is_none()).unwrap();
-                Self::from_primitive(non_none).map(|db| db.as_nullable())
+
+                if a[0].is_none() {
+                    Self::from_primitive(&b[0]).map(|db| db.as_nullable())
+                } else if b[0].is_none() {
+                    Self::from_primitive(&a[0]).map(|db| db.as_nullable())
+                } else {
+                    Err(DbConversionError)
+                }
             }
             _ => Err(DbConversionError),
         }

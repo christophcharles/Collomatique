@@ -494,6 +494,71 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             .map(|desc| desc.args.clone())
     }
 
+    /// Breadth-first resolution: peel custom type wrappers one level at a time.
+    /// Stops when the ExprType has more than 1 variant (returns all as-is),
+    /// or the single variant is not a Custom type (returns it).
+    /// Returns None if a cycle is detected.
+    pub fn resolve_type_until_several_or_not_custom(
+        &self,
+        typ: &ExprType,
+    ) -> Option<Vec<SimpleType>> {
+        let mut visited = HashSet::new();
+        self.resolve_type_until_several_or_not_custom_inner(typ, &mut visited)
+    }
+
+    fn resolve_type_until_several_or_not_custom_inner(
+        &self,
+        typ: &ExprType,
+        visited: &mut HashSet<(String, String)>,
+    ) -> Option<Vec<SimpleType>> {
+        let variants = typ.get_variants();
+        if variants.len() != 1 {
+            return Some(variants.iter().cloned().collect());
+        }
+
+        let single = variants.iter().next().unwrap();
+        match single {
+            SimpleType::Custom(module, root, None) => {
+                let key = (module.clone(), root.clone());
+                if !visited.insert(key.clone()) {
+                    return None; // cycle
+                }
+                let enum_variants = self.get_enum_variants(module, root);
+                let result = if !enum_variants.is_empty() {
+                    // Enum root → get underlying (union of variant custom types)
+                    if let Some(underlying) = self.get_custom_type_underlying(module, root) {
+                        self.resolve_type_until_several_or_not_custom_inner(underlying, visited)
+                    } else {
+                        Some(vec![single.clone()])
+                    }
+                } else if let Some(underlying) = self.get_custom_type_underlying(module, root) {
+                    // Type alias → unwrap and recurse
+                    self.resolve_type_until_several_or_not_custom_inner(underlying, visited)
+                } else {
+                    Some(vec![single.clone()])
+                };
+                visited.remove(&key);
+                result
+            }
+            SimpleType::Custom(module, root, Some(variant)) => {
+                let qualified = format!("{}::{}", root, variant);
+                let key = (module.clone(), qualified.clone());
+                if !visited.insert(key.clone()) {
+                    return None; // cycle
+                }
+                let result =
+                    if let Some(underlying) = self.get_custom_type_underlying(module, &qualified) {
+                        self.resolve_type_until_several_or_not_custom_inner(underlying, visited)
+                    } else {
+                        Some(vec![single.clone()])
+                    };
+                visited.remove(&key);
+                result
+            }
+            other => Some(vec![other.clone()]),
+        }
+    }
+
     /// Recursively resolve an ExprType by unwrapping Custom type aliases
     /// and expanding enum variants. Returns a Vec<SimpleType> to preserve
     /// duplicate variants (e.g., multiple unit enum variants all resolving

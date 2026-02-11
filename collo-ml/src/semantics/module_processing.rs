@@ -961,7 +961,9 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 span: name.span.clone(),
             });
             return;
-        } else if let Some(resolved_first) = self.resolve_type_deep(&params_typ[0]) {
+        } else if let Some(resolved_first) =
+            self.resolve_type_until_several_or_not_custom(&params_typ[0])
+        {
             let is_db = resolved_first.len() == 1 && resolved_first[0].is_database_schema();
             if !is_db {
                 errors.push(SemError::QueryFirstParamNotDatabase {
@@ -1013,26 +1015,26 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
         // Check: output type must be [T] or ?T where T is a SQL-compatible inner type
         // (Struct, Tuple, Int, Bool, String)
-        if let Some(resolved_output) = self.resolve_type_deep(&out_typ) {
+        if let Some(resolved_output) = self.resolve_type_until_several_or_not_custom(&out_typ) {
             let valid = match resolved_output.len() {
                 1 => {
-                    // Must be List(inner) where inner deep-resolves to a single SQL-compatible type
-                    if let SimpleType::List(inner) = &resolved_output[0] {
-                        self.resolve_type_deep(inner).is_some_and(|inner_resolved| {
-                            inner_resolved.len() == 1 && inner_resolved[0].is_sql_compatible_inner()
-                        })
-                    } else {
-                        false
-                    }
+                    // Must be List(inner)
+                    matches!(&resolved_output[0], SimpleType::List(_))
                 }
                 2 => {
-                    // Must be exactly one None and one SQL-compatible inner type
-                    let nones = resolved_output.iter().filter(|v| v.is_none()).count();
-                    let compatible = resolved_output
-                        .iter()
-                        .filter(|v| v.is_sql_compatible_inner())
-                        .count();
-                    nones == 1 && compatible == 1
+                    // Resolve each: one must resolve to exactly [None]
+                    let mut found_none = false;
+                    let mut found_other = false;
+                    for st in &resolved_output {
+                        let inner = self
+                            .resolve_type_until_several_or_not_custom(&ExprType::from(st.clone()));
+                        match inner.as_deref() {
+                            Some([SimpleType::None]) => found_none = true,
+                            Some(_) => found_other = true,
+                            None => {} // cycle
+                        }
+                    }
+                    found_none && found_other
                 }
                 _ => false,
             };
@@ -1069,67 +1071,93 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             Primitive, // Int, Bool, String - no validation needed
         }
 
+        // Helper: resolve an inner type to its output shape
+        let resolve_inner_to_shape = |inner_typ: &ExprType| -> Option<OutputInnerShape> {
+            let resolved = self.resolve_type_until_several_or_not_custom(inner_typ)?;
+            match resolved.len() {
+                1 => match &resolved[0] {
+                    SimpleType::Struct(fields) => Some(OutputInnerShape::Struct(fields.clone())),
+                    SimpleType::Tuple(elems) => Some(OutputInnerShape::Tuple(elems.clone())),
+                    SimpleType::Int | SimpleType::Bool | SimpleType::String => {
+                        Some(OutputInnerShape::Primitive)
+                    }
+                    _ => None,
+                },
+                _ => {
+                    // Could be ?Int etc. — validate via DbType::try_from
+                    if DbType::try_from(self, inner_typ).is_ok() {
+                        Some(OutputInnerShape::Primitive)
+                    } else {
+                        None
+                    }
+                }
+            }
+        };
+
         let output_inner_shape: Option<OutputInnerShape> = {
-            let resolved_output = self.resolve_type_deep(&out_typ);
+            let resolved_output = self.resolve_type_until_several_or_not_custom(&out_typ);
             resolved_output.and_then(|ro| {
-                // Extract the inner type, handling both List and Optional cases
-                let inner_resolved = if ro.len() == 1 {
+                if ro.len() == 1 {
+                    // List case: extract inner type
                     if let SimpleType::List(inner) = &ro[0] {
-                        self.resolve_type_deep(inner)
+                        resolve_inner_to_shape(inner)
                     } else {
                         None
                     }
                 } else {
-                    // For optional (None | T), filter out None and use T
-                    Some(ro.into_iter().filter(|v| !v.is_none()).collect())
-                };
-
-                inner_resolved.and_then(|ir| {
-                    ir.into_iter().find_map(|v| match v {
-                        SimpleType::Struct(fields) => Some(OutputInnerShape::Struct(fields)),
-                        SimpleType::Tuple(elements) => Some(OutputInnerShape::Tuple(elements)),
-                        SimpleType::Int | SimpleType::Bool | SimpleType::String => {
-                            Some(OutputInnerShape::Primitive)
-                        }
-                        _ => None,
-                    })
-                })
+                    // Optional case: find the non-None type
+                    let non_none = ro.iter().find(|st| {
+                        let resolved = self.resolve_type_until_several_or_not_custom(
+                            &ExprType::from((*st).clone()),
+                        );
+                        !matches!(resolved.as_deref(), Some([SimpleType::None]))
+                    })?;
+                    resolve_inner_to_shape(&ExprType::from(non_none.clone()))
+                }
             })
         };
 
-        if let Some(shape) = &output_inner_shape {
-            match shape {
-                OutputInnerShape::Struct(fields) => {
-                    for (field_name, field_typ) in fields {
-                        if DbType::try_from(self, field_typ).is_err() {
-                            errors.push(SemError::QueryOutputFieldNotSqlCompatible {
-                                module: current_module.to_string(),
-                                query_name: name.node.clone(),
-                                field_name: field_name.clone(),
-                                found: field_typ.to_string(),
-                                span: output_type.span.clone(),
-                            });
-                            return;
-                        }
+        match &output_inner_shape {
+            None => {
+                // Inner type is not SQL-compatible (e.g. [LinExpr], ?LinExpr)
+                errors.push(SemError::QueryInvalidOutputType {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: out_typ.to_string(),
+                    span: output_type.span.clone(),
+                });
+                return;
+            }
+            Some(OutputInnerShape::Struct(fields)) => {
+                for (field_name, field_typ) in fields {
+                    if DbType::try_from(self, field_typ).is_err() {
+                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            field_name: field_name.clone(),
+                            found: field_typ.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
                     }
                 }
-                OutputInnerShape::Tuple(elements) => {
-                    for (idx, elem_typ) in elements.iter().enumerate() {
-                        if DbType::try_from(self, elem_typ).is_err() {
-                            errors.push(SemError::QueryOutputFieldNotSqlCompatible {
-                                module: current_module.to_string(),
-                                query_name: name.node.clone(),
-                                field_name: format!("element {}", idx),
-                                found: elem_typ.to_string(),
-                                span: output_type.span.clone(),
-                            });
-                            return;
-                        }
+            }
+            Some(OutputInnerShape::Tuple(elements)) => {
+                for (idx, elem_typ) in elements.iter().enumerate() {
+                    if DbType::try_from(self, elem_typ).is_err() {
+                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            field_name: format!("element {}", idx),
+                            found: elem_typ.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
                     }
                 }
-                OutputInnerShape::Primitive => {
-                    // Primitives (Int, Bool, String) are inherently SQL-compatible
-                }
+            }
+            Some(OutputInnerShape::Primitive) => {
+                // Primitives (Int, Bool, String) are inherently SQL-compatible
             }
         }
 
