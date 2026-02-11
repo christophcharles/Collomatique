@@ -171,7 +171,9 @@ impl SubjectsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\" pour la période {}",
-                    subject.parameters.name, group_list.params.name, period_num+1
+                    subject.parameters.name,
+                    group_list.params.name,
+                    period_num + 1
                 ))
             }
             Self::LooseColloscopeSlotsForPeriod(subject_id, period_id) => {

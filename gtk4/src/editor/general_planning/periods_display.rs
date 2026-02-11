@@ -1,8 +1,8 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
-use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
 pub struct EntryData {

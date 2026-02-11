@@ -64,10 +64,12 @@ fn parse_option_constraint_type() {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
             assert_eq!(output_type.node.types[0].node.maybe_count, 1);
-            assert!(output_type.node.types[0]
-                .node
-                .inner
-                .matches_str("Constraint"));
+            assert!(
+                output_type.node.types[0]
+                    .node
+                    .inner
+                    .matches_str("Constraint")
+            );
         }
         _ => panic!("Expected Let statement"),
     }

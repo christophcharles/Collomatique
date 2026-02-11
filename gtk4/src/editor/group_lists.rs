@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::GroupListsUpdateOp;
 

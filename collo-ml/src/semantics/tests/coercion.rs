@@ -49,9 +49,11 @@ async fn linexpr_does_not_coerce_to_int() {
     let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(!errors.is_empty(), "LinExpr should not coerce to Int");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -98,9 +100,11 @@ async fn bool_does_not_coerce_to_constraint_in_return() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Bool should not coerce to Constraint");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -276,9 +280,11 @@ async fn collection_diff_checks_overlapping_types() {
         "Diff should check overlapping types between [Int] and [LinExpr]: {:?}",
         errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -292,9 +298,11 @@ async fn collection_diff_checks_not_from_empty() {
         "Diff should check overlapping types between [] and [Int]: {:?}",
         errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -308,9 +316,11 @@ async fn collection_diff_checks_not_by_empty() {
         "Diff should check overlapping types between [] and [Int]: {:?}",
         errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -324,9 +334,11 @@ async fn collection_diff_checks_not_by_and_no_from_empty() {
         "Diff should check that we are not doing [] - []: {:?}",
         errors
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 // ========== Forced Type (as) Prevents Coercion ==========
@@ -340,9 +352,11 @@ async fn forced_type_prohibits_coercion_in_return() {
         !errors.is_empty(),
         "Forced Int should not coerce to LinExpr"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]

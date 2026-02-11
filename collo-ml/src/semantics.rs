@@ -30,5 +30,5 @@ pub use database::{DbConversionError, DbType};
 pub use errors::{ArgsType, GlobalEnvError, SemError, SemWarning};
 pub use global_env::{FunctionDesc, GlobalEnv, TypeInfo};
 pub use local_env::LocalEnvCheck;
-pub use path_resolution::{resolve_path, ResolvedPathKind};
+pub use path_resolution::{ResolvedPathKind, resolve_path};
 pub use types::{ConcreteType, ExprType, SimpleType};

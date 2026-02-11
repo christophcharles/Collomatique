@@ -103,8 +103,10 @@ impl FileLoader {
                     "Le format de fichier semble incorrect ({}).\nVérifier s'il s'agit du bon fichier.",
                     json_error.to_string()
                 ),
-                DeserializationError::Decode(decode_error) => Self::generate_decode_error_message(decode_error),
-            }
+                DeserializationError::Decode(decode_error) => {
+                    Self::generate_decode_error_message(decode_error)
+                }
+            },
         }
     }
 

@@ -27,7 +27,7 @@ pub use database::{
 };
 pub use history::{EvalHistory, VariableDefinitions};
 pub use values::{CustomValue, ExprValue, NoObject, NoObjectEnv};
-pub use variables::{strip_origins, ConstraintWithOrigin, ExternVar, IlpVar, Origin, ScriptVar};
+pub use variables::{ConstraintWithOrigin, ExternVar, IlpVar, Origin, ScriptVar, strip_origins};
 
 // Re-export traits and types used by eval (for backwards compatibility)
 pub use crate::traits::EvalObject;

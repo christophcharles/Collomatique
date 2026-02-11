@@ -1,5 +1,5 @@
 use super::errors::{SemError, SemWarning};
-use super::global_env::{ident_can_be_shadowed, GlobalEnv, TypeInfo};
+use super::global_env::{GlobalEnv, TypeInfo, ident_can_be_shadowed};
 use super::types::ExprType;
 use crate::ast::Span;
 use crate::database::DatabaseDriver;

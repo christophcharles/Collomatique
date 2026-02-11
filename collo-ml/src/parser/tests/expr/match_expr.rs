@@ -364,16 +364,12 @@ fn match_complex_real_world_examples() {
     let cases = vec![
         // Type-based dispatch
         "match value { i as Int { $IntVar(value) } b as Bool { if value { 1 } else { 0 } } other { 0 } }",
-
         // Optional handling with filtering
         "match student { s as ?Student where student.age > 18 { student.age } other { 0 } }",
-
         // List processing
         "match items { lst as [Int] { sum i in items where i > 0 { i } } other { 0 } }",
-
         // Type-based dispatch with conversion in body
         "match data { i as Int { LinExpr($V(data)) } lst as [Int] { (sum x in data { $V(x) }) === 10 } }",
-
         // Complex filtering
         "match students { s as [Student] where |students| > 0 { forall s in students { s.age >== 18 } } other { true } }",
     ];

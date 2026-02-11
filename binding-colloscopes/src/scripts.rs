@@ -1,7 +1,7 @@
 use super::{vars::Var, views::ObjectId};
+use collo_ml::SqliteDatabaseDriver;
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::SqliteDatabaseDriver;
 use collo_ml::{SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;

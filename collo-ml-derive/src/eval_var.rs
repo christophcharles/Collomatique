@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta,
-    PathArguments, Type, Variant,
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta, PathArguments, Type,
+    Variant, parse_macro_input,
 };
 
 pub fn derive(input: TokenStream) -> TokenStream {

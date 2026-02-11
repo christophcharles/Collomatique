@@ -9,7 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver, SolverWithTimeLimit, TimeLimitSolution};
-use crate::{linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData};
+use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// Coin-cbc solver
 ///
@@ -197,7 +197,7 @@ impl CbcSolver {
                 return TimeLimitSolution {
                     config: None,
                     time_limit_reached,
-                }
+                };
             }
         };
 

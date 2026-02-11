@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{gtk, ComponentController};
 use relm4::{Component, ComponentParts, ComponentSender, Controller, RelmWidgetExt};
+use relm4::{ComponentController, gtk};
 
 use collomatique_ops::SlotsUpdateOp;
 

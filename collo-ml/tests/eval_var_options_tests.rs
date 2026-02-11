@@ -213,9 +213,11 @@ fn test_optional_field_schema() {
     assert_eq!(variants.len(), 2, "Should have None and Object variants");
     assert!(variants.contains(&SimpleFieldType::None));
     // Check for Object variant (can't easily check TypeId)
-    assert!(variants
-        .iter()
-        .any(|v| matches!(v, SimpleFieldType::Object(_))));
+    assert!(
+        variants
+            .iter()
+            .any(|v| matches!(v, SimpleFieldType::Object(_)))
+    );
 }
 
 #[test]
@@ -332,15 +334,19 @@ fn test_optional_week_vars_generation() {
     assert_eq!(opt_week_vars.len(), 4, "Should have None + 3 weeks");
 
     // Check None
-    assert!(opt_week_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::OptionalWeek(None))));
+    assert!(
+        opt_week_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::OptionalWeek(None)))
+    );
 
     // Check weeks 0, 1, 2
     for week in 0..3 {
-        assert!(opt_week_vars
-            .iter()
-            .any(|v| matches!(v, OptionVar::OptionalWeek(Some(w)) if *w == week)));
+        assert!(
+            opt_week_vars
+                .iter()
+                .any(|v| matches!(v, OptionVar::OptionalWeek(Some(w)) if *w == week))
+        );
     }
 }
 
@@ -357,15 +363,21 @@ fn test_optional_bool_vars_generation() {
 
     assert_eq!(opt_flag_vars.len(), 3, "Should have None + true + false");
 
-    assert!(opt_flag_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::OptionalFlag(None))));
-    assert!(opt_flag_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::OptionalFlag(Some(true)))));
-    assert!(opt_flag_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::OptionalFlag(Some(false)))));
+    assert!(
+        opt_flag_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::OptionalFlag(None)))
+    );
+    assert!(
+        opt_flag_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::OptionalFlag(Some(true))))
+    );
+    assert!(
+        opt_flag_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::OptionalFlag(Some(false))))
+    );
 }
 
 #[test]
@@ -418,19 +430,25 @@ fn test_both_optional_vars_generation() {
     assert_eq!(both_opt_vars.len(), 16, "Should have 4 x 4 combinations");
 
     // Check None, None
-    assert!(both_opt_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::BothOptional(None, None))));
+    assert!(
+        both_opt_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::BothOptional(None, None)))
+    );
 
     // Check Some student, None subject
-    assert!(both_opt_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::BothOptional(Some(StudentId(0)), None))));
+    assert!(
+        both_opt_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::BothOptional(Some(StudentId(0)), None)))
+    );
 
     // Check None student, Some subject
-    assert!(both_opt_vars
-        .iter()
-        .any(|v| matches!(v, OptionVar::BothOptional(None, Some(SubjectId(0))))));
+    assert!(
+        both_opt_vars
+            .iter()
+            .any(|v| matches!(v, OptionVar::BothOptional(None, Some(SubjectId(0)))))
+    );
 
     // Check Some student, Some subject
     assert!(both_opt_vars.iter().any(|v| matches!(
@@ -454,7 +472,7 @@ fn test_multiple_optionals_vars_generation() {
 
     // Check all None
     assert!(multi_vars.iter().any(
-        |v| matches!(v, OptionVar::MultipleOptionals { student, subject, week } 
+        |v| matches!(v, OptionVar::MultipleOptionals { student, subject, week }
                 if student.is_none() && subject.is_none() && week.is_none())
     ));
 

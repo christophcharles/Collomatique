@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::glib::SignalHandlerId;
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
-use relm4::FactorySender;
 use relm4::{Component, ComponentController, Controller};
 
 use std::collections::{BTreeMap, BTreeSet};

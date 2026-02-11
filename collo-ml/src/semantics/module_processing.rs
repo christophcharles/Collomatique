@@ -8,7 +8,7 @@ use super::database::DbType;
 use super::errors::{ArgsType, FunctionType, GlobalEnvError, SemError, SemWarning};
 use super::global_env::{GlobalEnv, ObjectFields, Symbol, SymbolPath, TypeDesc, TypeInfo};
 use super::local_env::LocalCheckEnv;
-use super::path_resolution::{resolve_path, ResolvedPathKind};
+use super::path_resolution::{ResolvedPathKind, resolve_path};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};

@@ -326,19 +326,14 @@ fn let_statement_realistic_sum_type_examples() {
     let cases = vec![
         // Function that might return different types
         "let find_person(id: Int) -> Student | Teacher | None = lookup(id);",
-
         // Parameter accepting multiple types
         "let process(entity: Student | Teacher) -> Bool = entity.active;",
-
         // Optional result
         "let get_room(id: Int) -> ?Room = find_room(id);",
-
         // List of mixed entities
         "let all_people() -> [Student | Teacher] = @[Student | Teacher];",
-
         // Complex aggregation
         "let count_all() -> Int = |@[Student | Teacher]|;",
-
         // Working with optional lists
         "let get_students(week: ?Week) -> [Student] = if week == none { [] } else { get_for_week(week) };",
     ];

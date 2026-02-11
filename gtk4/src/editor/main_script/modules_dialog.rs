@@ -1,7 +1,7 @@
 use gtk::prelude::{ButtonExt, GtkWindowExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,

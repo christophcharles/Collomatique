@@ -70,10 +70,12 @@ fn parse_let_with_multiple_params() {
             assert_eq!(params[2].name.node, "z");
             assert_eq!(params[2].typ.node.types.len(), 1);
             assert_eq!(params[2].typ.node.types[0].node.maybe_count, 0);
-            assert!(params[2].typ.node.types[0]
-                .node
-                .inner
-                .matches_str("Student"));
+            assert!(
+                params[2].typ.node.types[0]
+                    .node
+                    .inner
+                    .matches_str("Student")
+            );
         }
         _ => panic!("Expected Let statement"),
     }

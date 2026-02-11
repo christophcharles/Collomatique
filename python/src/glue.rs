@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use collomatique_rpc::{
-    cmd_msg::{ExtensionDesc, OpenFileDialogMsg},
     GuiAnswer, ResultMsg,
+    cmd_msg::{ExtensionDesc, OpenFileDialogMsg},
 };
 
 use collomatique_ops::{

@@ -1,11 +1,11 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_binding_colloscopes::scripts::SimpleProblemError;
 

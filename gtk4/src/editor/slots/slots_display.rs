@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
-use relm4::factory::FactoryView;
-use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
 use relm4::RelmWidgetExt;
+use relm4::factory::FactoryView;
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{adw, gtk};
 
 #[derive(Debug, Clone)]

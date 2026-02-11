@@ -184,9 +184,11 @@ async fn error_shadowing_object_type() {
         !errors.is_empty(),
         "Should error when shadowing object type"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeShadowsObject { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeShadowsObject { .. }))
+    );
 }
 
 #[tokio::test]
@@ -200,9 +202,11 @@ async fn error_shadowing_previous_custom_type() {
         !errors.is_empty(),
         "Should error when shadowing custom type"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeShadowsCustomType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeShadowsCustomType { .. }))
+    );
 }
 
 // =============================================================================
@@ -353,9 +357,11 @@ async fn error_unknown_custom_type() {
     "#;
     let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Should error on unknown type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownType { .. }))
+    );
 }
 
 #[tokio::test]

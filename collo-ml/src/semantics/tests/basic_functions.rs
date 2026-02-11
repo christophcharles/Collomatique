@@ -106,9 +106,11 @@ async fn string_concatenation_mixed_with_int_should_fail() {
         !errors.is_empty(),
         "Should error when concatenating string with int"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -120,9 +122,11 @@ async fn string_concatenation_mixed_with_bool_should_fail() {
         !errors.is_empty(),
         "Should error when concatenating string with bool"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -249,9 +253,11 @@ async fn calling_undefined_function() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on undefined function");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownIdentifer { .. }))
+    );
 }
 
 #[tokio::test]
@@ -263,9 +269,11 @@ async fn function_call_with_wrong_argument_count() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -277,9 +285,11 @@ async fn function_call_with_wrong_argument_types() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 // ========== Error Detection Tests ==========
@@ -293,9 +303,11 @@ async fn duplicate_function_definition() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on duplicate function");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. }))
+    );
 }
 
 #[tokio::test]
@@ -325,9 +337,11 @@ async fn unknown_type_in_return_type() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on unknown return type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -345,9 +359,11 @@ async fn body_type_mismatch_bool_to_int() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Bool should not match Int return type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 // ========== Recursive and Mutually Recursive Functions ==========

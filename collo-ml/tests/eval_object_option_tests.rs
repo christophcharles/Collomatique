@@ -488,22 +488,30 @@ fn test_option_of_primitives_schema() {
     // Option<i32> should be ?Int (None | Int)
     let grade_type = schema.get("grade").unwrap();
     assert_eq!(grade_type.get_variants().len(), 2);
-    assert!(grade_type
-        .get_variants()
-        .contains(&collo_ml::traits::SimpleFieldType::None));
-    assert!(grade_type
-        .get_variants()
-        .contains(&collo_ml::traits::SimpleFieldType::Int));
+    assert!(
+        grade_type
+            .get_variants()
+            .contains(&collo_ml::traits::SimpleFieldType::None)
+    );
+    assert!(
+        grade_type
+            .get_variants()
+            .contains(&collo_ml::traits::SimpleFieldType::Int)
+    );
 
     // Option<bool> should be ?Bool (None | Bool)
     let passing_type = schema.get("passing").unwrap();
     assert_eq!(passing_type.get_variants().len(), 2);
-    assert!(passing_type
-        .get_variants()
-        .contains(&collo_ml::traits::SimpleFieldType::None));
-    assert!(passing_type
-        .get_variants()
-        .contains(&collo_ml::traits::SimpleFieldType::Bool));
+    assert!(
+        passing_type
+            .get_variants()
+            .contains(&collo_ml::traits::SimpleFieldType::None)
+    );
+    assert!(
+        passing_type
+            .get_variants()
+            .contains(&collo_ml::traits::SimpleFieldType::Bool)
+    );
 }
 
 #[test]

@@ -977,9 +977,10 @@ async fn coercion_in_list_unification() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert!(list
-                .iter()
-                .all(|x| matches!(x, ExprValue::LinExpr(_) | ExprValue::Int(_))));
+            assert!(
+                list.iter()
+                    .all(|x| matches!(x, ExprValue::LinExpr(_) | ExprValue::Int(_)))
+            );
         }
         _ => panic!("Expected List of Int | LinExpr"),
     }

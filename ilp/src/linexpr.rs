@@ -7,7 +7,7 @@ mod tests;
 
 use crate::f64_is_positive;
 
-use super::{f64_is_zero, UsableData};
+use super::{UsableData, f64_is_zero};
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, BTreeSet},

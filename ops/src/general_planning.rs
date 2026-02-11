@@ -133,7 +133,9 @@ impl GeneralPlanningUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
-                    subject.parameters.name, group_list.params.name, period_num+1
+                    subject.parameters.name,
+                    group_list.params.name,
+                    period_num + 1
                 ))
             }
             GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
@@ -819,8 +821,9 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::PeriodError::InvalidPeriodId(_),
                     )) => {
                         panic!(
-                                "Period Id {:?} should be valid at this point but InvalidPeriodId received", *period_id
-                            )
+                            "Period Id {:?} should be valid at this point but InvalidPeriodId received",
+                            *period_id
+                        )
                     }
                     Err(e) => {
                         panic!("Unexpected error for UpdatePeriodWeekCount! {:?}", e);

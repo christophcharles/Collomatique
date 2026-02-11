@@ -62,10 +62,12 @@ fn parse_constraint_type() {
         Statement::Let { output_type, .. } => {
             assert_eq!(output_type.node.types.len(), 1);
             assert_eq!(output_type.node.types[0].node.maybe_count, 0);
-            assert!(output_type.node.types[0]
-                .node
-                .inner
-                .matches_str("Constraint"));
+            assert!(
+                output_type.node.types[0]
+                    .node
+                    .inner
+                    .matches_str("Constraint")
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -165,10 +167,12 @@ fn parse_list_of_object() {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
                     assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
-                    assert!(inner_typename.node.types[0]
-                        .node
-                        .inner
-                        .matches_str("Student"));
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("Student")
+                    );
                 }
                 _ => panic!("Expected List type"),
             }
@@ -226,10 +230,12 @@ fn parse_deeply_nested_list_type() {
                                 SimpleTypeName::List(level3_typename) => {
                                     assert_eq!(level3_typename.node.types.len(), 1);
                                     assert_eq!(level3_typename.node.types[0].node.maybe_count, 0);
-                                    assert!(level3_typename.node.types[0]
-                                        .node
-                                        .inner
-                                        .matches_str("Bool"));
+                                    assert!(
+                                        level3_typename.node.types[0]
+                                            .node
+                                            .inner
+                                            .matches_str("Bool")
+                                    );
                                 }
                                 _ => panic!("Expected deeply nested List type"),
                             }
@@ -258,10 +264,12 @@ fn parse_list_of_linexpr() {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
                     assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
-                    assert!(inner_typename.node.types[0]
-                        .node
-                        .inner
-                        .matches_str("LinExpr"));
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("LinExpr")
+                    );
                 }
                 _ => panic!("Expected List type"),
             }
@@ -284,10 +292,12 @@ fn parse_list_of_constraint() {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
                     assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
-                    assert!(inner_typename.node.types[0]
-                        .node
-                        .inner
-                        .matches_str("Constraint"));
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("Constraint")
+                    );
                 }
                 _ => panic!("Expected List type"),
             }
@@ -310,10 +320,12 @@ fn parse_list_of_string() {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
                     assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
-                    assert!(inner_typename.node.types[0]
-                        .node
-                        .inner
-                        .matches_str("String"));
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("String")
+                    );
                 }
                 _ => panic!("Expected List type"),
             }

@@ -1,8 +1,8 @@
-use collomatique_state::{traits::Manager, AppState};
+use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
+    Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity,
     periods::WeekDesc,
     subjects::{SubjectInterrogationParameters, WeekBlock},
-    Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity,
 };
 use std::{collections::BTreeSet, num::NonZeroU32};
 

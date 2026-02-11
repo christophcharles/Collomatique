@@ -8,7 +8,7 @@ use colloscopes::ColloscopePeriod;
 use ops::AnnotatedColloscopeOp;
 use serde::{Deserialize, Serialize};
 
-use collomatique_state::{tools, InMemoryData, Operation};
+use collomatique_state::{InMemoryData, Operation, tools};
 use ops::{AnnotatedMainScriptOp, AnnotatedSettingsOp};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -542,7 +542,9 @@ pub enum GroupListError {
     NotCompatibleGroupListInColloscope(GroupListId),
 
     /// The subject has non-empty slots associated to the old group list with invalid numbers
-    #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number")]
+    #[error(
+        "subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number"
+    )]
     InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 
     /// Prefilled groups count does not match group_names count
@@ -550,7 +552,9 @@ pub enum GroupListError {
     PrefillGroupCountMismatch { expected: usize, actual: usize },
 
     /// Cannot reduce group count when last groups have students
-    #[error("cannot reduce group count: groups to be removed still have students (ops layer should clean first)")]
+    #[error(
+        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
+    )]
     NonEmptyGroupsWhenReducing,
 
     /// Cannot set prefilling: colloscope group list has students assigned

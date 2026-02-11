@@ -24,6 +24,8 @@ pub use crate::eval::CompileError;
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]
+pub(crate) use crate::EvalVar;
+#[cfg(test)]
 pub(crate) use crate::database::DatabaseConnection;
 #[cfg(test)]
 pub(crate) use crate::eval::ExternVar;
@@ -33,7 +35,5 @@ pub(crate) use crate::eval::SqliteDatabaseDriver;
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
 pub(crate) use crate::traits::{EvalObject, VarConversionError};
-#[cfg(test)]
-pub(crate) use crate::EvalVar;
 #[cfg(test)]
 pub(crate) use std::collections::{BTreeMap, HashMap};

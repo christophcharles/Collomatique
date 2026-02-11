@@ -38,9 +38,11 @@ async fn parameter_not_accessible_in_other_function() {
         !errors.is_empty(),
         "Parameter from other function should not be accessible"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownIdentifer { .. }))
+    );
 }
 
 // ========== Forall Scoping Tests ==========
@@ -72,9 +74,11 @@ async fn forall_variable_not_accessible_outside() {
         !errors.is_empty(),
         "Forall variable should not leak outside"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownIdentifer { .. }))
+    );
 }
 
 #[tokio::test]
@@ -161,9 +165,11 @@ async fn sum_variable_not_accessible_outside() {
     let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Sum variable should not leak outside");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownIdentifer { .. }))
+    );
 }
 
 #[tokio::test]

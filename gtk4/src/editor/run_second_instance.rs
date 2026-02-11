@@ -3,7 +3,7 @@ use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{adw, gtk, Component, ComponentController};
+use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use collomatique_ops::Desc;

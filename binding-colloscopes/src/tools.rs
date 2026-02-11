@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::{colloscope_params::Parameters, PeriodId, WeekPatternId};
+use collomatique_state_colloscopes::{PeriodId, WeekPatternId, colloscope_params::Parameters};
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;

@@ -21,11 +21,7 @@ async fn test_fix_forces_variable_values() {
             match self {
                 Var::V(i) => {
                     // Fix all variables to 0 except V(7)
-                    if *i != 7 {
-                        Some(0.0)
-                    } else {
-                        None
-                    }
+                    if *i != 7 { Some(0.0) } else { None }
                 }
             }
         }
@@ -61,7 +57,7 @@ async fn test_fix_forces_variable_values() {
                                 name: "V".into(),
                                 param: 0,
                                 expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                            });
                         }
                     };
                     Ok(Var::V(param))

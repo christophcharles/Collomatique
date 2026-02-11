@@ -179,7 +179,10 @@ pub trait Manager: private::ManagerInternal {
             Some(aggregated_op) => {
                 if let Err(e) = private::update_internal_state_with_aggregated(self, &aggregated_op)
                 {
-                    panic!("Data should be consistent as it was automatically build from previous state.\n{}", e);
+                    panic!(
+                        "Data should be consistent as it was automatically build from previous state.\n{}",
+                        e
+                    );
                 }
                 Ok(aggregated_op)
             }
@@ -200,7 +203,10 @@ pub trait Manager: private::ManagerInternal {
             Some(aggregated_op) => {
                 if let Err(e) = private::update_internal_state_with_aggregated(self, &aggregated_op)
                 {
-                    panic!("Data should be consistent as it was automatically build from previous state.\n{}", e);
+                    panic!(
+                        "Data should be consistent as it was automatically build from previous state.\n{}",
+                        e
+                    );
                 }
                 Ok(aggregated_op)
             }

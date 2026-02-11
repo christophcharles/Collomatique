@@ -18,7 +18,7 @@
 //! it fits on most modern smartphones).
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{f64_is_positive, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable};
+use crate::{Constraint, UsableData, Variable, f64_is_positive, f64_is_zero, linexpr::EqSymbol};
 
 use sprs::{CsMat, CsVec, TriMat};
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,7 +39,8 @@ pub struct SprsProblem<V: UsableData> {
 }
 
 impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
-    type Config<'a> = SprsConfig<'a, V>
+    type Config<'a>
+        = SprsConfig<'a, V>
     where
         V: 'a,
         Self: 'a;

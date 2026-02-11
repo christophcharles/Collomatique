@@ -99,7 +99,7 @@ async fn complete_interrogations_scheduling() {
                                 name: "StudentWithTeacher".into(),
                                 param: 0,
                                 expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                            });
                         }
                     };
                     let teacher = match &value.params[1] {
@@ -109,7 +109,7 @@ async fn complete_interrogations_scheduling() {
                                 name: "StudentWithTeacher".into(),
                                 param: 1,
                                 expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                            });
                         }
                     };
                     let week = match &value.params[2] {
@@ -119,7 +119,7 @@ async fn complete_interrogations_scheduling() {
                                 name: "StudentWithTeacher".into(),
                                 param: 2,
                                 expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                            });
                         }
                     };
                     Ok(Var::StudentWithTeacher {

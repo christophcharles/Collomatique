@@ -90,7 +90,7 @@
 
 use std::collections::VecDeque;
 
-use crate::{traits::Description, Operation};
+use crate::{Operation, traits::Description};
 
 /// Reversible operation
 ///

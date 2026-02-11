@@ -13,7 +13,7 @@
 //! Still, this representation is sufficiently straightforward for testing purposes.
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{f64_is_positive, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable};
+use crate::{Constraint, UsableData, Variable, f64_is_positive, f64_is_zero, linexpr::EqSymbol};
 
 use ndarray::{Array1, Array2};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,7 +34,8 @@ pub struct NdProblem<V: UsableData> {
 }
 
 impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
-    type Config<'a> = NdConfig<'a, V>
+    type Config<'a>
+        = NdConfig<'a, V>
     where
         V: 'a,
         Self: 'a;

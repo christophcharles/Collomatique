@@ -33,16 +33,12 @@ fn complex_realistic_constraints() {
     let cases = vec![
         // Forall with sum constraint
         "forall w in @[Week] { sum s in @[Student] { $Assigned(s, w) } <== 10 }",
-
         // Conjunction of constraints
         "$V1(s) >== 0 and $V1(s) <== s.max_value",
-
         // Nested forall
         "forall s in @[Student] { forall w in @[Week] { $InWeek(s, w) <== 1 } }",
-
         // Conditional constraint
         "if r.available { sum s in @[Student] { $InRoom(s, r) } <== r.capacity } else { sum s in @[Student] { $InRoom(s, r) } === 0 }",
-
         // Complex nested structure
         "forall student in @[Student] { forall week in @[Week] { (sum slot in subject.slots { $StudentInSlot(student, slot, week) }) <== 1 and $HasSubject(subject, student, week) === 1 } }",
     ];
@@ -58,18 +54,14 @@ fn complex_deeply_nested_expressions() {
         // Nested parentheses
         "((($Var(x))))",
         "(($V1(x) <== 10) and ($V2(y) >== 0))",
-
         // Nested aggregations
         "sum x in @[X] { sum y in @[Y] { $Var(x, y) } }",
         "forall x in @[X] { forall y in @[Y] { $V(x, y) <== 1 } }",
-
         // Nested collections
         "((a + b) - c) + d",
         "@[Student] - (excluded - suspended)",
-
         // Nested if expressions
         "if x { if y { 1 } else { 2 } } else { 3 }",
-
         // Complex combination
         "forall s in (@[Student] - excluded) where s.active { sum w in @[Week] where w.number > 10 { if s.priority > 5 { 2 * $V(s, w) } else { $V(s, w) } } <== s.max_load }",
     ];
@@ -129,7 +121,6 @@ fn complex_with_all_features() {
     let cases = vec![
         // Kitchen sink expression
         "if flag { forall x in (@[X] - excluded) where x > 0 { sum y in @[Y] { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |@[Y]| } } else { sum x in @[X] { $V2(x) } >= 1 }",
-
         // Another complex one
         "forall s in @[Student] + @[Teacher] where s.active { (if s.kind == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
     ];

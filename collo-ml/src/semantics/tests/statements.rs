@@ -102,9 +102,11 @@ async fn reify_undefined_function() {
         !errors.is_empty(),
         "Should error on undefined function in reify"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownIdentifer { .. }))
+    );
 }
 
 #[tokio::test]
@@ -119,9 +121,11 @@ async fn reify_non_constraint_function() {
         !errors.is_empty(),
         "Should error when reifying non-constraint function"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -150,9 +154,11 @@ async fn duplicate_variable_name() {
         !errors.is_empty(),
         "Should error on duplicate variable name"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::VariableAlreadyDefined { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::VariableAlreadyDefined { .. }))
+    );
 }
 
 #[tokio::test]
@@ -196,9 +202,11 @@ async fn using_undefined_variable() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on undefined variable");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownVariable { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownVariable { .. }))
+    );
 }
 
 #[tokio::test]
@@ -211,9 +219,11 @@ async fn variable_call_with_wrong_arguments() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -226,9 +236,11 @@ async fn variable_call_with_wrong_types() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 // ========== Pre-defined Variables ==========
@@ -466,9 +478,11 @@ async fn query_wrong_argument_count() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -481,9 +495,11 @@ async fn query_wrong_argument_type() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -499,9 +515,11 @@ async fn query_duplicate_name_with_query() {
         !errors.is_empty(),
         "Should error when query has same name as another query"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryAlreadyDefined { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryAlreadyDefined { .. }))
+    );
 }
 
 #[tokio::test]
@@ -517,9 +535,11 @@ async fn unused_private_query_warning() {
         !warnings.is_empty(),
         "Should warn about unused private query"
     );
-    assert!(warnings
-        .iter()
-        .any(|w| matches!(w, SemWarning::UnusedQuery { .. })));
+    assert!(
+        warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::UnusedQuery { .. }))
+    );
 }
 
 #[tokio::test]
@@ -549,9 +569,11 @@ async fn function_conflicts_with_type() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::SymbolConflict { .. }))
+    );
 }
 
 #[tokio::test]
@@ -564,9 +586,11 @@ async fn query_conflicts_with_type() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with type");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::SymbolConflict { .. }))
+    );
 }
 
 #[tokio::test]
@@ -579,9 +603,11 @@ async fn query_conflicts_with_function() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with function");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::SymbolConflict { .. }))
+    );
 }
 
 #[tokio::test]
@@ -594,9 +620,11 @@ async fn function_conflicts_with_query() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with query");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::SymbolConflict { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::SymbolConflict { .. }))
+    );
 }
 
 // ========== Query Output Type Validation Tests ==========
@@ -754,9 +782,11 @@ async fn query_output_int_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Int output type should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -795,9 +825,11 @@ async fn query_output_bare_struct_rejected() {
         !errors.is_empty(),
         "Bare struct output type should be rejected"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -811,9 +843,11 @@ async fn query_output_enum_multi_unit_rejected() {
         !errors.is_empty(),
         "Enum with 2 unit + 1 struct variant should be rejected (3 resolved variants)"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
+    );
 }
 
 // ========== Query First Parameter Validation Tests ==========
@@ -871,9 +905,11 @@ async fn query_first_param_int_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Int as first param should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. }))
+    );
 }
 
 #[tokio::test]
@@ -886,9 +922,11 @@ async fn query_first_param_struct_rejected() {
         !errors.is_empty(),
         "Struct as first param should be rejected"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryFirstParamNotDatabase { .. }))
+    );
 }
 
 #[tokio::test]
@@ -901,9 +939,11 @@ async fn query_no_params_rejected() {
         !errors.is_empty(),
         "Query with no params should be rejected"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryMissingDatabaseParam { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryMissingDatabaseParam { .. }))
+    );
 }
 
 // ========== Query Parameter SQL-Compatibility Tests ==========
@@ -1002,9 +1042,11 @@ async fn query_param_struct_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct param should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1015,9 +1057,11 @@ async fn query_param_list_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "List param should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1028,9 +1072,11 @@ async fn query_param_linexpr_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr param should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1041,9 +1087,11 @@ async fn query_param_constraint_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Constraint param should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryParamNotSqlCompatible { .. }))
+    );
 }
 
 // ========== Query Output Field SQL-Compatibility Tests ==========
@@ -1136,9 +1184,11 @@ async fn query_output_field_struct_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct field should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1148,9 +1198,11 @@ async fn query_output_field_list_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "List field should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1160,9 +1212,11 @@ async fn query_output_field_linexpr_rejected() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr field should be rejected");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryOutputFieldNotSqlCompatible { .. }))
+    );
 }
 
 // ========== Primitive Query Output Type Tests ==========
@@ -1255,9 +1309,11 @@ async fn query_output_list_linexpr_rejected() {
         !errors.is_empty(),
         "List of LinExpr output type should be rejected"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -1270,7 +1326,9 @@ async fn query_output_optional_linexpr_rejected() {
         !errors.is_empty(),
         "Optional LinExpr output type should be rejected"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryInvalidOutputType { .. }))
+    );
 }

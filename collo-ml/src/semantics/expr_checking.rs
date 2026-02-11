@@ -5,7 +5,7 @@
 use super::errors::{SemError, SemWarning};
 use super::global_env::{GlobalEnv, TypeInfo};
 use super::local_env::LocalCheckEnv;
-use super::path_resolution::{resolve_path, ResolvedPathKind};
+use super::path_resolution::{ResolvedPathKind, resolve_path};
 use super::string_case;
 use super::types::{ConcreteType, ExprType, SimpleType};
 use crate::ast::{Expr, Span, Spanned};
@@ -1692,7 +1692,10 @@ impl LocalCheckEnv {
                             actual_branch_typ.clone(),
                             type_info,
                         ) {
-                            panic!("There should be no other identifier in the current scope. But got: {:?}", e);
+                            panic!(
+                                "There should be no other identifier in the current scope. But got: {:?}",
+                                e
+                            );
                         }
 
                         let subscope = builder.build_subscope();
@@ -2641,11 +2644,7 @@ impl LocalCheckEnv {
                 );
 
                 // Return None if registration failed, otherwise return body type
-                if registration_failed {
-                    None
-                } else {
-                    body_type
-                }
+                if registration_failed { None } else { body_type }
             }
         }
     }

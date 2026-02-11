@@ -140,11 +140,7 @@ async fn list_constraint_reification_exact_count_with_param() {
             match self {
                 Var::X(i) => {
                     // Fix to 0 (false) if out of valid range [0, 100)
-                    if *i < 0 || *i >= 100 {
-                        Some(0.0)
-                    } else {
-                        None
-                    }
+                    if *i < 0 || *i >= 100 { Some(0.0) } else { None }
                 }
             }
         }
@@ -181,7 +177,7 @@ async fn list_constraint_reification_exact_count_with_param() {
                                 name: "X".into(),
                                 param: 0,
                                 expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                            });
                         }
                     };
                     Ok(Var::X(param))

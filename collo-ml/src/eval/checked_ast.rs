@@ -77,7 +77,9 @@ pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
         expected: ExprType,
         found: ExprValue<T, D>,
     },
-    #[error("Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}")]
+    #[error(
+        "Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}"
+    )]
     ArgumentCountMismatch {
         identifier: String,
         expected: usize,

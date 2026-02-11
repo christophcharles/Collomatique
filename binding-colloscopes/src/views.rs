@@ -7,7 +7,7 @@ use super::objects::{
 use super::tools::*;
 use collo_ml::{EvalObject, ViewBuilder, ViewObject};
 use collomatique_state_colloscopes::{
-    colloscope_params::Parameters, GroupListId, IncompatId, PeriodId, StudentId, SubjectId,
+    GroupListId, IncompatId, PeriodId, StudentId, SubjectId, colloscope_params::Parameters,
 };
 use collomatique_time::{NonZeroMinutes, SlotWithDuration, WholeMinuteTime};
 use std::collections::BTreeSet;

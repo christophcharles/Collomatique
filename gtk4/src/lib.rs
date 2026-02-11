@@ -2,8 +2,8 @@ use adw::prelude::AdwDialogExt;
 use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
-use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use relm4::{adw, gtk};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 

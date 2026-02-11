@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use collomatique_state_colloscopes::{
-    assignments, colloscope_params, colloscopes, group_lists, ids, incompats, periods, settings,
-    slots, students, subjects, teachers, week_patterns, InnerData, PersonWithContact,
+    InnerData, PersonWithContact, assignments, colloscope_params, colloscopes, group_lists, ids,
+    incompats, periods, settings, slots, students, subjects, teachers, week_patterns,
 };
 use collomatique_time::{
     NonZeroMinutes, SlotStart, SlotWithDuration, WeekStart, Weekday, WholeMinuteTime,
@@ -64,7 +64,9 @@ pub enum ValidationError {
         slot_id: i64,
     },
 
-    #[error("Student {student_id} is assigned to subject {subject_id} in period {period_id} but is excluded from that period")]
+    #[error(
+        "Student {student_id} is assigned to subject {subject_id} in period {period_id} but is excluded from that period"
+    )]
     StudentExcludedFromPeriod {
         student_id: i64,
         subject_id: i64,
@@ -76,7 +78,9 @@ pub enum ValidationError {
     )]
     SubjectExcludedFromPeriod { subject_id: i64, period_id: i64 },
 
-    #[error("Colloscope slot entry for period {period_id}, slot {slot_id}, week {week_index} is invalid")]
+    #[error(
+        "Colloscope slot entry for period {period_id}, slot {slot_id}, week {week_index} is invalid"
+    )]
     InvalidColloscopeSlot {
         period_id: i64,
         slot_id: i64,

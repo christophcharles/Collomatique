@@ -44,9 +44,11 @@ async fn linexpr_type_from_arithmetic_no_automatic_coercion() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Int should not autoconvert",);
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 #[tokio::test]
@@ -120,9 +122,11 @@ async fn list_type_mismatch_with_output() {
         !errors.is_empty(),
         "Mixed type list should not work if incompatible with output"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
 // ========== Object Type Tests ==========
@@ -166,9 +170,11 @@ async fn unknown_object_type() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Unknown object type should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -178,9 +184,11 @@ async fn unknown_field_access() {
     let (_, errors, _) = analyze(input, types, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Unknown field should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownField { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownField { .. }))
+    );
 }
 
 #[tokio::test]
@@ -222,9 +230,11 @@ async fn field_access_on_non_object() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Field access on Int should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::FieldAccessOnNonObject { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FieldAccessOnNonObject { .. }))
+    );
 }
 
 // ========== Type Annotation Tests (as keyword) ==========
@@ -259,9 +269,11 @@ async fn type_conversion_invalid_cast() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Invalid type cast should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::ImpossibleConversion { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ImpossibleConversion { .. }))
+    );
 }
 
 #[tokio::test]
@@ -463,9 +475,11 @@ async fn global_collection_unknown_type() {
         !errors.is_empty(),
         "Global collection of unknown type should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownType { .. }))
+    );
 }
 
 // ========== Never Type ==========

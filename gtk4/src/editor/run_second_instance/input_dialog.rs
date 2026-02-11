@@ -2,8 +2,8 @@ use gtk::prelude::{
     BoxExt, ButtonExt, EntryBufferExt, EntryBufferExtManual, EntryExt, GtkWindowExt, WidgetExt,
 };
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,

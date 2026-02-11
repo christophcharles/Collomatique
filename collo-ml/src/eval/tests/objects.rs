@@ -1,10 +1,10 @@
+use crate::ExprType;
 use crate::eval::{
     CheckedAST, DatabaseConnection, EvalObject, ExprValue, SqliteDatabaseConnection,
     SqliteDatabaseDriver,
 };
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
-use crate::ExprType;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

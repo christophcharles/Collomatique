@@ -1775,12 +1775,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     }
 }
 
-impl<
-        'a,
-        V: UsableData + std::fmt::Display,
-        C: UsableData + std::fmt::Display,
-        P: ProblemRepr<V>,
-    > std::fmt::Display for Config<'a, V, C, P>
+impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: ProblemRepr<V>>
+    std::fmt::Display for Config<'a, V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, (v, desc)) in self.values.iter().enumerate() {
@@ -1828,12 +1824,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref
     }
 }
 
-impl<
-        'a,
-        V: UsableData + std::fmt::Display,
-        C: UsableData + std::fmt::Display,
-        P: ProblemRepr<V>,
-    > std::fmt::Display for FeasableConfig<'a, V, C, P>
+impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: ProblemRepr<V>>
+    std::fmt::Display for FeasableConfig<'a, V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner().fmt(f)

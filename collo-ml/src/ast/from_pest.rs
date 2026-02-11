@@ -1,7 +1,7 @@
 use super::{
-    parse_docstring_line, AstError, EnumVariant, EnumVariantType, Expr, File, ImportAlias,
-    MatchBranch, MaybeTypeName, NamespacePath, Param, PathSegment, SimpleTypeName, Span, Spanned,
-    Statement, TypeName,
+    AstError, EnumVariant, EnumVariantType, Expr, File, ImportAlias, MatchBranch, MaybeTypeName,
+    NamespacePath, Param, PathSegment, SimpleTypeName, Span, Spanned, Statement, TypeName,
+    parse_docstring_line,
 };
 use crate::parser::Rule;
 use pest::iterators::Pair;
@@ -955,7 +955,7 @@ impl Expr {
                         expected: "add_op or sub_op",
                         found: op_pair.as_rule(),
                         span: Span::from_pest(&op_pair),
-                    })
+                    });
                 }
             };
         }
@@ -993,7 +993,7 @@ impl Expr {
                         expected: "mul_op, div_op, or mod_op",
                         found: op_pair.as_rule(),
                         span: Span::from_pest(&op_pair),
-                    })
+                    });
                 }
             };
         }
@@ -1869,7 +1869,7 @@ impl Expr {
                     expected: "list_type_brackets or tuple_type",
                     found: type_pair.as_rule(),
                     span: type_span,
-                })
+                });
             }
         };
 

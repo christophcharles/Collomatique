@@ -9,7 +9,7 @@ use super::values::{CustomValue, ExprValue};
 use super::variables::{ExternVar, IlpVar, ScriptVar};
 use crate::ast::{Span, Spanned};
 use crate::database::{DatabaseConnection, DatabaseDriver};
-use crate::semantics::{resolve_path, LocalEnvCheck, ResolvedPathKind, SimpleType};
+use crate::semantics::{LocalEnvCheck, ResolvedPathKind, SimpleType, resolve_path};
 use crate::traits::EvalObject;
 use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
@@ -232,10 +232,10 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             if i < 0 || (i as usize) >= elements.len() {
                                 return Err(EvalError::Panic(Box::new(ExprValue::String(
                                     format!(
-                                    "list index out of bounds: index {} but list has {} elements",
-                                    i,
-                                    elements.len()
-                                ),
+                                        "list index out of bounds: index {} but list has {} elements",
+                                        i,
+                                        elements.len()
+                                    ),
                                 ))));
                             }
                             current_value = elements.into_iter().nth(i as usize).unwrap();
@@ -1307,7 +1307,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 match val {
                     ExprValue::Database(h) => break h.clone(),
                     ExprValue::Custom(c) => val = &c.content,
-                    _ => panic!("First query argument must be a Database (semantic phase should have caught this)"),
+                    _ => panic!(
+                        "First query argument must be a Database (semantic phase should have caught this)"
+                    ),
                 }
             }
         };

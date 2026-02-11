@@ -1,8 +1,8 @@
 use gtk::prelude::{TextBufferExt, TextViewExt, WidgetExt};
-use relm4::{gtk, Component};
+use relm4::{Component, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt};
 
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::BufRead;
 use std::io::BufReader;
 

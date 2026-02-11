@@ -9,7 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver};
-use crate::{linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData};
+use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// [good_lp] solver
 ///

@@ -286,9 +286,11 @@ async fn error_unguarded_direct_recursion() {
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(!errors.is_empty(), "Direct self-reference should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -301,9 +303,11 @@ async fn error_unguarded_union_recursion() {
         !errors.is_empty(),
         "Bare self-reference in union should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -316,9 +320,11 @@ async fn error_unguarded_union_recursion_multiple_variants() {
         !errors.is_empty(),
         "Bare self-reference among multiple variants should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -332,9 +338,11 @@ async fn error_unguarded_mutual_recursion() {
         !errors.is_empty(),
         "Mutual unguarded recursion should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -349,9 +357,11 @@ async fn error_unguarded_transitive_recursion() {
         !errors.is_empty(),
         "Transitive unguarded recursion should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 #[tokio::test]
@@ -365,9 +375,11 @@ async fn error_unguarded_through_custom_type() {
         !errors.is_empty(),
         "Unguarded recursion through alias should error"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnguardedRecursiveType { .. }))
+    );
 }
 
 // =============================================================================

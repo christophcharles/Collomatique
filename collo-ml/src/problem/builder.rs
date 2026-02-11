@@ -92,10 +92,10 @@ pub(crate) struct EvalData<
 }
 
 impl<
-        T: EvalObject,
-        D: DatabaseDriver,
-        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
-    > ProblemBuilder<T, D, V>
+    T: EvalObject,
+    D: DatabaseDriver,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+> ProblemBuilder<T, D, V>
 {
     fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T, D::Connection>> {
         V::field_schema()
@@ -318,11 +318,11 @@ impl<
 }
 
 impl<
-        'a,
-        T: EvalObject,
-        D: DatabaseDriver,
-        V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
-    > EvalData<'a, T, D, V>
+    'a,
+    T: EvalObject,
+    D: DatabaseDriver,
+    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+> EvalData<'a, T, D, V>
 {
     fn generate_helper_var(&mut self) -> ProblemVar<T, D::Connection, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
@@ -629,7 +629,10 @@ impl<
                         },
                     })
                 } else {
-                    panic!("Undeclared variable {}: this should have been caught in the semantic analysis", extern_var.name);
+                    panic!(
+                        "Undeclared variable {}: this should have been caught in the semantic analysis",
+                        extern_var.name
+                    );
                 }
             }
             IlpVar::Script(ScriptVar {
