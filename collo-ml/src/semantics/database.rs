@@ -1,27 +1,13 @@
 use super::global_env::GlobalEnv;
 use super::types::{ExprType, SimpleType};
-use crate::database::DatabaseDriver;
+use crate::database::{DatabaseDriver, DbType};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[error("Cannot convert to database type: not representable")]
 pub struct DbConversionError;
 
-/// A database-level type. Each variant carries a `bool` indicating nullability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DbType {
-    Int(bool),
-    Bool(bool),
-    String(bool),
-}
-
 impl DbType {
-    pub fn is_nullable(&self) -> bool {
-        match self {
-            DbType::Int(n) | DbType::Bool(n) | DbType::String(n) => *n,
-        }
-    }
-
     /// Convert an `ExprType` to a `DbType` by deep-resolving through `env`.
     ///
     /// Valid resolved patterns:
@@ -68,14 +54,6 @@ impl DbType {
             SimpleType::Bool => Ok(DbType::Bool(false)),
             SimpleType::String => Ok(DbType::String(false)),
             _ => Err(DbConversionError),
-        }
-    }
-
-    fn as_nullable(self) -> Self {
-        match self {
-            DbType::Int(_) => DbType::Int(true),
-            DbType::Bool(_) => DbType::Bool(true),
-            DbType::String(_) => DbType::String(true),
         }
     }
 }

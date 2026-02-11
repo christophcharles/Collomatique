@@ -427,7 +427,7 @@ async fn forward_declaration_now_allowed() {
 #[tokio::test]
 async fn query_with_db_param_and_option_struct_return() {
     let input = r#"
-        pub query get_student(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
+        pub query get_student(db: #{"CREATE TABLE students(id INTEGER NOT NULL, name TEXT NOT NULL)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
@@ -441,7 +441,7 @@ async fn query_with_db_param_and_option_struct_return() {
 #[tokio::test]
 async fn query_with_db_param_and_list_struct_return() {
     let input = r#"
-        pub query all_students(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";
+        pub query all_students(db: #{"CREATE TABLE students(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
@@ -455,7 +455,7 @@ async fn query_with_db_param_and_list_struct_return() {
 #[tokio::test]
 async fn query_callable_from_function() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE students(id INTEGER, name TEXT)"};
+        type MyDb = #{"CREATE TABLE students(id INTEGER NOT NULL, name TEXT NOT NULL)"};
         pub query get_student(db: MyDb, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
         pub let wrapper(db: MyDb, id: Int) -> ?{name: String} = get_student(db, id);
     "#;
@@ -471,7 +471,7 @@ async fn query_callable_from_function() {
 #[tokio::test]
 async fn query_wrong_argument_count() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db);
     "#;
@@ -488,7 +488,7 @@ async fn query_wrong_argument_count() {
 #[tokio::test]
 async fn query_wrong_argument_type() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db, "not an int");
     "#;
@@ -505,7 +505,7 @@ async fn query_wrong_argument_type() {
 #[tokio::test]
 async fn query_duplicate_name_with_query() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
@@ -525,7 +525,7 @@ async fn query_duplicate_name_with_query() {
 #[tokio::test]
 async fn unused_private_query_warning() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query unused_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -545,7 +545,7 @@ async fn unused_private_query_warning() {
 #[tokio::test]
 async fn public_query_not_warned_as_unused() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query public_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -579,7 +579,7 @@ async fn function_conflicts_with_type() {
 #[tokio::test]
 async fn query_conflicts_with_type() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         type my_name = Int;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
@@ -596,7 +596,7 @@ async fn query_conflicts_with_type() {
 #[tokio::test]
 async fn query_conflicts_with_function() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub let my_name() -> Int = 42;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
@@ -613,7 +613,7 @@ async fn query_conflicts_with_function() {
 #[tokio::test]
 async fn function_conflicts_with_query() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         pub let my_name() -> Int = 42;
     "#;
@@ -634,7 +634,7 @@ async fn function_conflicts_with_query() {
 #[tokio::test]
 async fn query_output_list_struct_direct() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: String}] = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: String}] = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -647,7 +647,7 @@ async fn query_output_list_struct_direct() {
 #[tokio::test]
 async fn query_output_optional_struct_direct() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -661,7 +661,7 @@ async fn query_output_optional_struct_direct() {
 async fn query_output_custom_alias_in_list() {
     let input = r#"
         type T = {name: String};
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [T] = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [T] = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -675,7 +675,7 @@ async fn query_output_custom_alias_in_list() {
 async fn query_output_custom_alias_optional() {
     let input = r#"
         type T = {name: String};
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?T = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?T = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -689,7 +689,7 @@ async fn query_output_custom_alias_optional() {
 async fn query_output_alias_wrapping_optional() {
     let input = r#"
         type T = ?{name: String};
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> T = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -703,7 +703,7 @@ async fn query_output_alias_wrapping_optional() {
 async fn query_output_alias_wrapping_list() {
     let input = r#"
         type T = [{name: String}];
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> T = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> T = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -718,7 +718,7 @@ async fn query_output_none_union_alias() {
     let input = r#"
         type T = {name: String};
         type U = None | T;
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -733,7 +733,7 @@ async fn query_output_nested_alias() {
     let input = r#"
         type T = {name: String};
         type U = ?T;
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -747,7 +747,7 @@ async fn query_output_nested_alias() {
 async fn query_output_enum_none_struct_variant() {
     let input = r#"
         enum E = None | V{name: String};
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> E = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -763,7 +763,7 @@ async fn query_output_alias_chain_none() {
         type MyNone = None;
         type T = {name: String};
         type U = MyNone | T;
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> U = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -792,7 +792,7 @@ async fn query_output_int_rejected() {
 #[tokio::test]
 async fn query_output_list_int_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [Int] = "SELECT id FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [Int] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -805,7 +805,7 @@ async fn query_output_list_int_valid() {
 #[tokio::test]
 async fn query_output_optional_int_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?Int = "SELECT id FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> ?Int = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -857,7 +857,7 @@ async fn query_output_enum_multi_unit_rejected() {
 #[tokio::test]
 async fn query_first_param_direct_schema() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -870,7 +870,7 @@ async fn query_first_param_direct_schema() {
 #[tokio::test]
 async fn query_first_param_alias() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -884,7 +884,7 @@ async fn query_first_param_alias() {
 #[tokio::test]
 async fn query_first_param_nested_alias() {
     let input = r#"
-        type A = #{"CREATE TABLE t(id INTEGER)"};
+        type A = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         type B = A;
         pub query q(db: B) -> [{id: Int}] = "SELECT id FROM t";
     "#;
@@ -953,7 +953,7 @@ async fn query_no_params_rejected() {
 #[tokio::test]
 async fn query_param_int() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, id: Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -963,7 +963,7 @@ async fn query_param_int() {
 #[tokio::test]
 async fn query_param_bool() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER, active BOOLEAN)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL, active BOOLEAN NOT NULL)"};
         pub query q(db: MyDb, flag: Bool) -> [{id: Int}] = "SELECT id FROM t WHERE active = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -977,7 +977,7 @@ async fn query_param_bool() {
 #[tokio::test]
 async fn query_param_string() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"};
         pub query q(db: MyDb, name: String) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -991,7 +991,7 @@ async fn query_param_string() {
 #[tokio::test]
 async fn query_param_optional_int() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, id: ?Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -1005,7 +1005,7 @@ async fn query_param_optional_int() {
 #[tokio::test]
 async fn query_param_alias_to_int() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         type MyId = Int;
         pub query q(db: MyDb, id: MyId) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
@@ -1020,7 +1020,7 @@ async fn query_param_alias_to_int() {
 #[tokio::test]
 async fn query_param_enum_none_string() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER, name TEXT)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"};
         enum MaybeName = None | Name(String);
         pub query q(db: MyDb, n: MaybeName) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
@@ -1037,7 +1037,7 @@ async fn query_param_enum_none_string() {
 #[tokio::test]
 async fn query_param_struct_rejected() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, s: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -1052,7 +1052,7 @@ async fn query_param_struct_rejected() {
 #[tokio::test]
 async fn query_param_list_rejected() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, ids: [Int]) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -1067,7 +1067,7 @@ async fn query_param_list_rejected() {
 #[tokio::test]
 async fn query_param_linexpr_rejected() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, x: LinExpr) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -1082,7 +1082,7 @@ async fn query_param_linexpr_rejected() {
 #[tokio::test]
 async fn query_param_constraint_rejected() {
     let input = r#"
-        type MyDb = #{"CREATE TABLE t(id INTEGER)"};
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, c: Constraint) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -1101,7 +1101,7 @@ async fn query_param_constraint_rejected() {
 #[tokio::test]
 async fn query_output_field_int() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(errors.is_empty(), "Int field should be valid: {:?}", errors);
@@ -1124,7 +1124,7 @@ async fn query_output_field_optional_string() {
 async fn query_output_field_alias_to_int() {
     let input = r#"
         type MyId = Int;
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: MyId}] = "SELECT id FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: MyId}] = "SELECT id FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1152,7 +1152,7 @@ async fn query_output_field_enum_nullable() {
 async fn query_output_field_enum_variant() {
     let input = r#"
         enum MaybeName = None | Name(String);
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName::Name}] = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: MaybeName::Name}] = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1165,7 +1165,7 @@ async fn query_output_field_enum_variant() {
 #[tokio::test]
 async fn query_output_field_optional_struct() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> ?{id: Int, name: String} = "SELECT id, name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> ?{id: Int, name: String} = "SELECT id, name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1224,7 +1224,7 @@ async fn query_output_field_linexpr_rejected() {
 #[tokio::test]
 async fn query_output_list_bool_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(active BOOLEAN)"}) -> [Bool] = "SELECT active FROM t";
+        pub query q(db: #{"CREATE TABLE t(active BOOLEAN NOT NULL)"}) -> [Bool] = "SELECT active FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1237,7 +1237,7 @@ async fn query_output_list_bool_valid() {
 #[tokio::test]
 async fn query_output_list_string_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [String] = "SELECT name FROM t";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [String] = "SELECT name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1250,7 +1250,7 @@ async fn query_output_list_string_valid() {
 #[tokio::test]
 async fn query_output_optional_bool_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(active BOOLEAN)"}) -> ?Bool = "SELECT active FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(active BOOLEAN NOT NULL)"}) -> ?Bool = "SELECT active FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1263,7 +1263,7 @@ async fn query_output_optional_bool_valid() {
 #[tokio::test]
 async fn query_output_optional_string_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?String = "SELECT name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?String = "SELECT name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1276,7 +1276,7 @@ async fn query_output_optional_string_valid() {
 #[tokio::test]
 async fn query_output_list_tuple_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> [(Int, String)] = "SELECT id, name FROM t";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1289,7 +1289,7 @@ async fn query_output_list_tuple_valid() {
 #[tokio::test]
 async fn query_output_optional_tuple_valid() {
     let input = r#"
-        pub query q(db: #{"CREATE TABLE t(id INTEGER, name TEXT)"}) -> ?(Int, String) = "SELECT id, name FROM t LIMIT 1";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> ?(Int, String) = "SELECT id, name FROM t LIMIT 1";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1367,7 +1367,7 @@ async fn query_output_list_nullable_inner_valid() {
 async fn query_param_nested_nullable_valid() {
     let input = r#"
         type NullableString = ?String;
-        pub query q(db: #{"CREATE TABLE t(name TEXT)"}, n: NullableString) -> [{name: String}] = "SELECT name FROM t WHERE name = ?";
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}, n: NullableString) -> [{name: String}] = "SELECT name FROM t WHERE name = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1383,7 +1383,7 @@ async fn query_param_deep_nested_nullable() {
         type MyType1 = Int;
         type MyType3 = ?MyType1;
         type MyType4 = MyType3;
-        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}, id: MyType4) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}, id: MyType4) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
@@ -1416,6 +1416,243 @@ async fn query_output_list_optional_int() {
     assert!(
         errors.is_empty(),
         "List of ?Int should be valid: {:?}",
+        errors
+    );
+}
+
+// =============================================================================
+// Column Validation Tests: Count Mismatch
+// =============================================================================
+
+#[tokio::test]
+async fn query_column_count_mismatch_struct_too_few_sql_columns() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnCountMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_count_mismatch_struct_too_many_sql_columns() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int}] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnCountMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_count_mismatch_tuple() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL, flag BOOLEAN NOT NULL)"}) -> [(Int, String)] = "SELECT id, name, flag FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnCountMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_count_mismatch_primitive_multiple_columns() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [Int] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnCountMismatch { .. }))
+    );
+}
+
+// =============================================================================
+// Column Validation Tests: Name Mismatch
+// =============================================================================
+
+#[tokio::test]
+async fn query_column_name_mismatch_struct() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, label TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, label FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnNameMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_name_mismatch_struct_all_wrong() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(a INTEGER NOT NULL, b TEXT NOT NULL)"}) -> [{x: Int, y: String}] = "SELECT a, b FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnNameMismatch { .. }))
+    );
+}
+
+// =============================================================================
+// Column Validation Tests: Type Mismatch
+// =============================================================================
+
+#[tokio::test]
+async fn query_column_type_mismatch_int_vs_string() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: Int}] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnTypeMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_type_mismatch_nullable_column_nonnullable_declared() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnTypeMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_type_mismatch_tuple_type() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id TEXT NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnTypeMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_type_mismatch_primitive() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [Int] = "SELECT name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnTypeMismatch { .. }))
+    );
+}
+
+#[tokio::test]
+async fn query_column_type_mismatch_optional_output_nullable_column_wrong_base() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id TEXT)"}) -> ?Int = "SELECT id FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryColumnTypeMismatch { .. }))
+    );
+}
+
+// =============================================================================
+// Column Validation Tests: Valid Matches
+// =============================================================================
+
+#[tokio::test]
+async fn query_column_valid_struct_match() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Struct with matching columns should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_column_valid_struct_nullable_field() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT)"}) -> [{id: Int, name: ?String}] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Struct with nullable field matching nullable column should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_column_valid_tuple_match() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Tuple with matching columns should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_column_valid_primitive_match() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [Int] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Primitive with matching single column should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_column_valid_nonnullable_column_to_nullable_declared() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: ?Int}] = "SELECT id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Non-nullable SQL column assigned to nullable declared type should be valid: {:?}",
+        errors
+    );
+}
+
+#[tokio::test]
+async fn query_column_valid_optional_output_with_matching_type() {
+    let input = r#"
+        pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> ?Int = "SELECT id FROM t LIMIT 1";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    assert!(
+        errors.is_empty(),
+        "Optional output with matching primitive type should be valid: {:?}",
         errors
     );
 }

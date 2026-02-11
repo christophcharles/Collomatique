@@ -4,7 +4,6 @@
 //! including type declarations, enum declarations, function signatures,
 //! reify statements, and function body validation.
 
-use super::database::DbType;
 use super::errors::{ArgsType, FunctionType, GlobalEnvError, SemError, SemWarning};
 use super::global_env::{GlobalEnv, ObjectFields, Symbol, SymbolPath, TypeDesc, TypeInfo};
 use super::local_env::LocalCheckEnv;
@@ -12,7 +11,7 @@ use super::path_resolution::{ResolvedPathKind, resolve_path};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
-use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
+use crate::database::{DatabaseConnection, DatabaseDriver, DbType, SqlQueryError};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -953,6 +952,9 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
         // --- Query-specific validation ---
 
+        // Will be populated by describe_query if a database connection is available
+        let mut sql_columns: Option<Vec<(String, DbType)>> = None;
+
         // Check: query must have at least one parameter, and the first must be a database schema
         if params_typ.is_empty() {
             errors.push(SemError::QueryMissingDatabaseParam {
@@ -984,10 +986,8 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     Ok(connection) => {
                         // Validate the SQL query and get column metadata
                         match connection.describe_query(&query_string.node).await {
-                            Ok(_columns) => {
-                                // Query SQL is valid
-                                // _columns contains Vec<(name, type_name, is_nullable)>
-                                // Future: Validate columns match declared output type
+                            Ok(columns) => {
+                                sql_columns = Some(columns);
                             }
                             Err(e) => {
                                 errors.push(SemError::InvalidQuerySql {
@@ -1068,7 +1068,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         enum OutputInnerShape {
             Struct(BTreeMap<String, ExprType>),
             Tuple(Vec<ExprType>),
-            Primitive, // Int, Bool, String - no validation needed
+            Primitive(ExprType),
         }
 
         // Helper: resolve an inner type to its output shape
@@ -1079,14 +1079,14 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     SimpleType::Struct(fields) => Some(OutputInnerShape::Struct(fields.clone())),
                     SimpleType::Tuple(elems) => Some(OutputInnerShape::Tuple(elems.clone())),
                     SimpleType::Int | SimpleType::Bool | SimpleType::String => {
-                        Some(OutputInnerShape::Primitive)
+                        Some(OutputInnerShape::Primitive(inner_typ.clone()))
                     }
                     _ => None,
                 },
                 _ => {
                     // Could be ?Int etc. — validate via DbType::try_from
                     if DbType::try_from(self, inner_typ).is_ok() {
-                        Some(OutputInnerShape::Primitive)
+                        Some(OutputInnerShape::Primitive(inner_typ.clone()))
                     } else {
                         None
                     }
@@ -1156,8 +1156,117 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     }
                 }
             }
-            Some(OutputInnerShape::Primitive) => {
+            Some(OutputInnerShape::Primitive(_)) => {
                 // Primitives (Int, Bool, String) are inherently SQL-compatible
+            }
+        }
+
+        // --- Column validation: check SQL columns match declared output type ---
+        if let Some(columns) = &sql_columns {
+            match &output_inner_shape {
+                Some(OutputInnerShape::Struct(fields)) => {
+                    // Check column count
+                    if columns.len() != fields.len() {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: fields.len(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    // Check each column name exists in the struct fields
+                    let field_names: Vec<String> = fields.keys().cloned().collect();
+                    for (col_name, col_db_type) in columns {
+                        if let Some(field_typ) = fields.get(col_name) {
+                            // Check type compatibility
+                            if let Ok(declared_db_type) = DbType::try_from(self, field_typ) {
+                                if !col_db_type.is_assignable_to(&declared_db_type) {
+                                    errors.push(SemError::QueryColumnTypeMismatch {
+                                        module: current_module.to_string(),
+                                        query_name: name.node.clone(),
+                                        column_name: col_name.clone(),
+                                        sql_type: col_db_type.to_string(),
+                                        declared_type: declared_db_type.to_string(),
+                                        span: output_type.span.clone(),
+                                    });
+                                    return;
+                                }
+                            }
+                            // If DbType::try_from fails, we already reported that
+                            // in the output field validation above
+                        } else {
+                            errors.push(SemError::QueryColumnNameMismatch {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                sql_column: col_name.clone(),
+                                struct_fields: field_names.clone(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                Some(OutputInnerShape::Tuple(elements)) => {
+                    // Check column count
+                    if columns.len() != elements.len() {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: elements.len(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    // Check each positional pair
+                    for ((col_name, col_db_type), elem_typ) in columns.iter().zip(elements.iter()) {
+                        if let Ok(declared_db_type) = DbType::try_from(self, elem_typ) {
+                            if !col_db_type.is_assignable_to(&declared_db_type) {
+                                errors.push(SemError::QueryColumnTypeMismatch {
+                                    module: current_module.to_string(),
+                                    query_name: name.node.clone(),
+                                    column_name: col_name.clone(),
+                                    sql_type: col_db_type.to_string(),
+                                    declared_type: declared_db_type.to_string(),
+                                    span: output_type.span.clone(),
+                                });
+                                return;
+                            }
+                        }
+                    }
+                }
+                Some(OutputInnerShape::Primitive(expr_type)) => {
+                    // Exactly 1 column expected
+                    if columns.len() != 1 {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: 1,
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    let (col_name, col_db_type) = &columns[0];
+                    if let Ok(declared_db_type) = DbType::try_from(self, expr_type) {
+                        if !col_db_type.is_assignable_to(&declared_db_type) {
+                            errors.push(SemError::QueryColumnTypeMismatch {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                column_name: col_name.clone(),
+                                sql_type: col_db_type.to_string(),
+                                declared_type: declared_db_type.to_string(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                None => {
+                    // Already handled above with QueryInvalidOutputType error
+                }
             }
         }
 

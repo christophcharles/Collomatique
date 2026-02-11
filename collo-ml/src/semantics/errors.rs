@@ -370,6 +370,40 @@ pub enum SemError {
         error: String,
         span: Span,
     },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: SQL returns {sql_count} column(s) but declared type has {declared_count}"
+    )]
+    QueryColumnCountMismatch {
+        module: String,
+        query_name: String,
+        sql_count: usize,
+        declared_count: usize,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: SQL column \"{sql_column}\" not found in struct fields {struct_fields:?}"
+    )]
+    QueryColumnNameMismatch {
+        module: String,
+        query_name: String,
+        sql_column: String,
+        struct_fields: Vec<String>,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: column \"{column_name}\" has SQL type {sql_type} but declared type {declared_type}"
+    )]
+    QueryColumnTypeMismatch {
+        module: String,
+        query_name: String,
+        column_name: String,
+        sql_type: String,
+        declared_type: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

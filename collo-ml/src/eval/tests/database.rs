@@ -1264,7 +1264,7 @@ async fn typed_query_custom_enum_type() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_list() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query all_users(db: Db) -> [{id: Int, name: String}]
         = "SELECT id, name FROM users ORDER BY id";
     pub let run(db: Db) -> [{id: Int, name: String}] = all_users(db);
@@ -1310,7 +1310,7 @@ async fn eval_query_call_list() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_optional_found() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query find_user(db: Db, id: Int) -> ?{id: Int, name: String}
         = "SELECT id, name FROM users WHERE id = ?";
     pub let run(db: Db, id: Int) -> ?{id: Int, name: String} = find_user(db, id);
@@ -1346,7 +1346,7 @@ async fn eval_query_call_optional_found() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_optional_not_found() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query find_user(db: Db, id: Int) -> ?{id: Int, name: String}
         = "SELECT id, name FROM users WHERE id = ?";
     pub let run(db: Db, id: Int) -> ?{id: Int, name: String} = find_user(db, id);
@@ -1580,7 +1580,7 @@ async fn typed_query_empty_primitive_list() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_primitive_list() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query all_ids(db: Db) -> [Int] = "SELECT id FROM users ORDER BY id";
     pub let run(db: Db) -> [Int] = all_ids(db);
     "#;
@@ -1608,7 +1608,7 @@ async fn eval_query_call_primitive_list() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_optional_primitive_found() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query find_name(db: Db, id: Int) -> ?String = "SELECT name FROM users WHERE id = ?";
     pub let run(db: Db, id: Int) -> ?String = find_name(db, id);
     "#;
@@ -1635,7 +1635,7 @@ async fn eval_query_call_optional_primitive_found() {
 #[tokio::test(flavor = "multi_thread")]
 async fn eval_query_call_optional_primitive_not_found() {
     let input = r#"
-    type Db = #{"CREATE TABLE users (id INTEGER, name TEXT)"};
+    type Db = #{"CREATE TABLE users (id INTEGER NOT NULL, name TEXT NOT NULL)"};
     query find_name(db: Db, id: Int) -> ?String = "SELECT name FROM users WHERE id = ?";
     pub let run(db: Db, id: Int) -> ?String = find_name(db, id);
     "#;

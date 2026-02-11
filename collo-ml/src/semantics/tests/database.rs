@@ -1,6 +1,7 @@
 use super::analyze_with_env;
+use crate::database::DbType;
 use crate::database::SqliteDatabaseDriver;
-use crate::semantics::database::{DbConversionError, DbType};
+use crate::semantics::database::DbConversionError;
 use crate::semantics::types::{ExprType, SimpleType};
 
 // =============================================================================

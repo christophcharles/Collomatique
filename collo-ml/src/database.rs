@@ -14,6 +14,57 @@ use std::pin::Pin;
 use sqlx::{Row, ValueRef};
 use thiserror::Error;
 
+/// A database-level type. Each variant carries a `bool` indicating nullability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DbType {
+    Int(bool),
+    Bool(bool),
+    String(bool),
+}
+
+impl DbType {
+    pub fn is_nullable(&self) -> bool {
+        match self {
+            DbType::Int(n) | DbType::Bool(n) | DbType::String(n) => *n,
+        }
+    }
+
+    pub fn as_nullable(self) -> Self {
+        match self {
+            DbType::Int(_) => DbType::Int(true),
+            DbType::Bool(_) => DbType::Bool(true),
+            DbType::String(_) => DbType::String(true),
+        }
+    }
+
+    /// Check whether a SQL column type (`self`) is assignable to a declared ColloML type.
+    /// Base types must match; if the SQL column is nullable, the declared type must also be nullable.
+    pub fn is_assignable_to(&self, declared: &DbType) -> bool {
+        match (self, declared) {
+            (DbType::Int(sql_null), DbType::Int(decl_null))
+            | (DbType::Bool(sql_null), DbType::Bool(decl_null))
+            | (DbType::String(sql_null), DbType::String(decl_null)) => {
+                // If SQL column is nullable, declared must also be nullable
+                !sql_null || *decl_null
+            }
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for DbType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DbType::Int(true) => write!(f, "?Int"),
+            DbType::Int(false) => write!(f, "Int"),
+            DbType::Bool(true) => write!(f, "?Bool"),
+            DbType::Bool(false) => write!(f, "Bool"),
+            DbType::String(true) => write!(f, "?String"),
+            DbType::String(false) => write!(f, "String"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SqlQueryError {
     #[error("SQL query failed: {0}")]
@@ -34,6 +85,8 @@ pub enum SqlQueryError {
     ParamConversionError { index: usize },
     #[error("Result conversion failed at row {row}, column \"{column}\"")]
     ResultConversionError { row: usize, column: String },
+    #[error("Unsupported column type in describe for column \"{column}\": {type_name}")]
+    UnsupportedDescribeType { column: String, type_name: String },
 }
 
 /// Trait for database drivers that can build a fresh in-memory database from a schema.
@@ -64,11 +117,11 @@ pub trait DatabaseConnection: fmt::Debug + Send + Sync + 'static {
     >;
 
     /// Validate SQL and get column metadata WITHOUT executing the query.
-    /// Returns (column_name, type_name, is_nullable) for each column.
+    /// Returns (column_name, DbType) for each column.
     fn describe_query<'a>(
         &'a self,
         sql: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, String, bool)>, SqlQueryError>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, DbType)>, SqlQueryError>> + Send + 'a>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,7 +259,7 @@ impl DatabaseConnection for SqliteDatabaseConnection {
     fn describe_query<'a>(
         &'a self,
         sql: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, String, bool)>, SqlQueryError>> + Send + 'a>>
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<(String, DbType)>, SqlQueryError>> + Send + 'a>>
     {
         Box::pin(async move {
             use sqlx::Column;
@@ -220,18 +273,33 @@ impl DatabaseConnection for SqliteDatabaseConnection {
                 .await
                 .map_err(|e| SqlQueryError::QueryFailed(e.to_string()))?;
 
-            let columns: Vec<(String, String, bool)> = describe
-                .columns()
-                .iter()
-                .enumerate()
-                .map(|(idx, col)| {
-                    let name = col.name().to_string();
-                    let type_name = col.type_info().name().to_string();
-                    // nullable() returns Option<bool>, default to true if unknown
-                    let is_nullable = describe.nullable(idx).unwrap_or(true);
-                    (name, type_name, is_nullable)
-                })
-                .collect();
+            let mut columns = Vec::with_capacity(describe.columns().len());
+            for (idx, col) in describe.columns().iter().enumerate() {
+                let name = col.name().to_string();
+                let type_name = col.type_info().name().to_uppercase();
+                // nullable() returns Option<bool>, default to true if unknown
+                let is_nullable = describe.nullable(idx).unwrap_or(true);
+
+                let base_db_type = match type_name.as_str() {
+                    "INTEGER" | "INT" => DbType::Int(false),
+                    "TEXT" => DbType::String(false),
+                    "BOOLEAN" | "BOOL" => DbType::Bool(false),
+                    _ => {
+                        return Err(SqlQueryError::UnsupportedDescribeType {
+                            column: name,
+                            type_name,
+                        });
+                    }
+                };
+
+                let db_type = if is_nullable {
+                    base_db_type.as_nullable()
+                } else {
+                    base_db_type
+                };
+
+                columns.push((name, db_type));
+            }
 
             Ok(columns)
         })
