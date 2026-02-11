@@ -99,7 +99,7 @@ impl SimpleComponent for Dialog {
             scrolled_window.set_child(Some(&text_view));
             widgets
                 .modules_stack
-                .add_titled(&scrolled_window, Some(*name), *name);
+                .add_titled(&scrolled_window, Some(*name), name);
         }
 
         ComponentParts { model, widgets }

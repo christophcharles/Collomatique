@@ -53,10 +53,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                     weeks_status: weeks_status.into_iter().map(|x| x.into()).collect(),
                 })
                 .collect(),
-            periods_first_week: match value.periods.first_week {
-                Some(week) => Some(week.into()),
-                None => None,
-            },
+            periods_first_week: value.periods.first_week.map(|week| week.into()),
             subjects: value
                 .subjects
                 .ordered_subject_list

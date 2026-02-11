@@ -19,7 +19,7 @@ impl StudentId {
 
 impl From<&collomatique_state_colloscopes::StudentId> for StudentId {
     fn from(value: &collomatique_state_colloscopes::StudentId) -> Self {
-        StudentId { id: value.clone() }
+        StudentId { id: *value }
     }
 }
 
@@ -31,7 +31,7 @@ impl From<collomatique_state_colloscopes::StudentId> for StudentId {
 
 impl From<&StudentId> for collomatique_state_colloscopes::StudentId {
     fn from(value: &StudentId) -> Self {
-        value.id.clone().into()
+        value.id
     }
 }
 

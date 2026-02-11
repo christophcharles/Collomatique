@@ -104,7 +104,7 @@ impl<
                 Ok((
                     name,
                     typ.into_iter()
-                        .map(|x| Ok(x.convert_to_expr_type::<T>()?))
+                        .map(|x| x.convert_to_expr_type::<T>())
                         .collect::<Result<_, _>>()
                         .map_err(|e| match e {
                             FieldConversionError::UnknownTypeId(type_id) => {
@@ -253,7 +253,7 @@ impl<
                 let ProblemVar::Base(v) = var else {
                     continue;
                 };
-                let Some(value) = v.fix(&eval_data.env) else {
+                let Some(value) = v.fix(eval_data.env) else {
                     continue;
                 };
                 fixed_variables.insert(ProblemVar::Base(v), value);
@@ -271,7 +271,7 @@ impl<
             let ProblemVar::Base(v) = var else {
                 continue;
             };
-            let Some(value) = v.fix(&eval_data.env) else {
+            let Some(value) = v.fix(eval_data.env) else {
                 continue;
             };
             fixed_variables.insert(ProblemVar::Base(v), value);
@@ -279,11 +279,9 @@ impl<
         if !fixed_variables.is_empty() {
             eval_data.objective = eval_data.objective.reduce(&fixed_variables);
         }
-        eval_data.constraints = eval_data
+        eval_data
             .constraints
-            .into_iter()
-            .filter(|(c, _d)| !c.is_trivially_true())
-            .collect();
+            .retain(|(c, _d)| !c.is_trivially_true());
 
         let reification_constraints: Vec<_> = eval_data
             .constraints
@@ -345,7 +343,7 @@ impl<
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
-                None => match b.fix(&self.env) {
+                None => match b.fix(self.env) {
                     Some(val) => {
                         let new_var = Variable::integer().min(val).max(val);
                         if !new_var.checks_value(val) {
@@ -644,7 +642,7 @@ impl<
             }) => ProblemVar::Reified(ReifiedVar {
                 module: module.clone(),
                 name: name.clone(),
-                from_list: from_list.clone(),
+                from_list: *from_list,
                 params: params.clone(),
             }),
         }
@@ -714,7 +712,7 @@ impl<
                     fn_name.clone(),
                     result,
                     *coef,
-                    obj_sense.clone(),
+                    *obj_sense,
                 ));
             }
 
@@ -797,7 +795,7 @@ impl<
                 match value {
                     ExprValue::LinExpr(lin_expr) => {
                         let cleaned_lin_expr = eval_data.clean_lin_expr(&lin_expr);
-                        obj = obj + Objective::new(cleaned_lin_expr, obj_sense.clone());
+                        obj = obj + Objective::new(cleaned_lin_expr, obj_sense);
                     }
                     ExprValue::Constraint(c) => {
                         let cleaned_constraints: Vec<_> = c

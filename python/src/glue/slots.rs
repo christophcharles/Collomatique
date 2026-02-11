@@ -17,7 +17,7 @@ impl SlotId {
 
 impl From<&collomatique_state_colloscopes::SlotId> for SlotId {
     fn from(value: &collomatique_state_colloscopes::SlotId) -> Self {
-        SlotId { id: value.clone() }
+        SlotId { id: *value }
     }
 }
 
@@ -29,7 +29,7 @@ impl From<collomatique_state_colloscopes::SlotId> for SlotId {
 
 impl From<&SlotId> for collomatique_state_colloscopes::SlotId {
     fn from(value: &SlotId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 

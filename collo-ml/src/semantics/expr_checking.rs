@@ -69,19 +69,18 @@ impl LocalCheckEnv {
         }
 
         // Check if source is a custom type and underlying can convert to target
-        if from.is_concrete() {
-            if let Some(from_simple) = from.clone().to_simple() {
-                if let SimpleType::Custom(module, root, variant) = from_simple {
-                    let key = match variant {
-                        None => root.clone(),
-                        Some(v) => format!("{}::{}", root, v),
-                    };
-                    if let Some(underlying) = global_env.get_custom_type_underlying(&module, &key) {
-                        // Can convert if the underlying type can convert to target
-                        if underlying.can_convert_to(to) {
-                            return true;
-                        }
-                    }
+        if from.is_concrete()
+            && let Some(from_simple) = from.clone().to_simple()
+            && let SimpleType::Custom(module, root, variant) = from_simple
+        {
+            let key = match variant {
+                None => root.clone(),
+                Some(v) => format!("{}::{}", root, v),
+            };
+            if let Some(underlying) = global_env.get_custom_type_underlying(&module, &key) {
+                // Can convert if the underlying type can convert to target
+                if underlying.can_convert_to(to) {
+                    return true;
                 }
             }
         }
@@ -167,27 +166,23 @@ impl LocalCheckEnv {
             Expr::Boolean(_) => Some(SimpleType::Bool.into()),
             Expr::StringLiteral(_) => Some(SimpleType::String.into()),
 
-            Expr::IdentPath(path) => self
-                .check_ident_path(global_env, path, type_info, errors)
-                .map(|x| x.into()),
-            Expr::Path { object, segments } => self
-                .check_path(
-                    global_env,
-                    object,
-                    segments,
-                    type_info,
-                    expr_types,
-                    resolved_types,
-                    errors,
-                )
-                .map(|x| x.into()),
+            Expr::IdentPath(path) => self.check_ident_path(global_env, path, type_info, errors),
+            Expr::Path { object, segments } => self.check_path(
+                global_env,
+                object,
+                segments,
+                type_info,
+                expr_types,
+                resolved_types,
+                errors,
+            ),
 
             // ========== As construct ==========
             Expr::ExplicitType { expr, typ } => {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&expr),
+                    Arc::clone(expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -237,7 +232,7 @@ impl LocalCheckEnv {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&expr),
+                    Arc::clone(expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -286,7 +281,7 @@ impl LocalCheckEnv {
                 // Check the inner expression
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&expr),
+                    Arc::clone(expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -411,7 +406,7 @@ impl LocalCheckEnv {
             Expr::Add(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -419,7 +414,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -512,7 +507,7 @@ impl LocalCheckEnv {
             Expr::Sub(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -520,7 +515,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -624,7 +619,7 @@ impl LocalCheckEnv {
             Expr::Neg(term) => {
                 let term_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&term),
+                    Arc::clone(term),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -651,7 +646,7 @@ impl LocalCheckEnv {
             Expr::Mul(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -659,7 +654,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -733,7 +728,7 @@ impl LocalCheckEnv {
             Expr::Div(left, right) | Expr::Mod(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -741,7 +736,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -813,7 +808,7 @@ impl LocalCheckEnv {
             | Expr::ConstraintGe(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -821,7 +816,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -861,7 +856,7 @@ impl LocalCheckEnv {
             Expr::Eq(left, right) | Expr::Ne(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -869,23 +864,22 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
                     errors,
                 );
 
-                if let (Some(l), Some(r)) = (left_type, right_type) {
-                    if !l.overlaps_with(&r) {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: l.clone(),
-                            found: r.clone(),
-                            context: "equality can never happens with incompatible types"
-                                .to_string(),
-                        });
-                    }
+                if let (Some(l), Some(r)) = (left_type, right_type)
+                    && !l.overlaps_with(&r)
+                {
+                    errors.push(SemError::TypeMismatch {
+                        span: right.span.clone(),
+                        expected: l.clone(),
+                        found: r.clone(),
+                        context: "equality can never happens with incompatible types".to_string(),
+                    });
                 }
                 Some(SimpleType::Bool.into())
             }
@@ -897,7 +891,7 @@ impl LocalCheckEnv {
             | Expr::Gt(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -905,7 +899,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -942,7 +936,7 @@ impl LocalCheckEnv {
             Expr::And(left, right) | Expr::Or(left, right) => {
                 let left_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&left),
+                    Arc::clone(left),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -950,7 +944,7 @@ impl LocalCheckEnv {
                 );
                 let right_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&right),
+                    Arc::clone(right),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1020,7 +1014,7 @@ impl LocalCheckEnv {
             Expr::Not(expr) => {
                 let expr_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&expr),
+                    Arc::clone(expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1047,7 +1041,7 @@ impl LocalCheckEnv {
             Expr::NullCoalesce(lhs, rhs) => {
                 let lhs_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&lhs),
+                    Arc::clone(lhs),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1055,7 +1049,7 @@ impl LocalCheckEnv {
                 );
                 let rhs_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&rhs),
+                    Arc::clone(rhs),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1099,7 +1093,7 @@ impl LocalCheckEnv {
                 // Type-check the inner expression (any type is allowed)
                 let _ = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&inner_expr),
+                    Arc::clone(inner_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1115,7 +1109,7 @@ impl LocalCheckEnv {
             Expr::In { item, collection } => {
                 let item_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&item),
+                    Arc::clone(item),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1123,7 +1117,7 @@ impl LocalCheckEnv {
                 );
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&collection),
+                    Arc::clone(collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1135,16 +1129,16 @@ impl LocalCheckEnv {
                         let elem_t_opt = a.get_inner_list_type();
                         if let Some(elem_t) = elem_t_opt {
                             // The list might not be empty so we check the inner type
-                            if let Some(item_t) = item_type {
-                                if !item_t.overlaps_with(&elem_t) {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: item.span.clone(),
-                                        expected: elem_t.into(),
-                                        found: item_t,
-                                        context: "item type must match collection element type"
-                                            .to_string(),
-                                    });
-                                }
+                            if let Some(item_t) = item_type
+                                && !item_t.overlaps_with(&elem_t)
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: item.span.clone(),
+                                    expected: elem_t,
+                                    found: item_t,
+                                    context: "item type must match collection element type"
+                                        .to_string(),
+                                });
                             }
                         }
                     }
@@ -1175,7 +1169,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&collection),
+                    Arc::clone(collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1228,29 +1222,29 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                Arc::clone(&filter_expr),
+                                Arc::clone(filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
                                 errors,
                             );
 
-                            if let Some(typ) = filter_type {
-                                if !typ.is_bool() {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: filter_expr.span.clone(),
-                                        expected: SimpleType::Bool.into(),
-                                        found: typ,
-                                        context: "forall filter must be Bool".to_string(),
-                                    });
-                                }
+                            if let Some(typ) = filter_type
+                                && !typ.is_bool()
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: filter_expr.span.clone(),
+                                    expected: SimpleType::Bool.into(),
+                                    found: typ,
+                                    context: "forall filter must be Bool".to_string(),
+                                });
                             }
                         }
 
                         // Check body (must be Constraint or Bool)
                         subscope.check_expr(
                             global_env,
-                            Arc::clone(&body),
+                            Arc::clone(body),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1294,7 +1288,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&collection),
+                    Arc::clone(collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1349,29 +1343,29 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                Arc::clone(&filter_expr),
+                                Arc::clone(filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
                                 errors,
                             );
 
-                            if let Some(typ) = filter_type {
-                                if !typ.is_bool() {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: filter_expr.span.clone(),
-                                        expected: SimpleType::Bool.into(),
-                                        found: typ,
-                                        context: "sum filter must be Bool".to_string(),
-                                    });
-                                }
+                            if let Some(typ) = filter_type
+                                && !typ.is_bool()
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: filter_expr.span.clone(),
+                                    expected: SimpleType::Bool.into(),
+                                    found: typ,
+                                    context: "sum filter must be Bool".to_string(),
+                                });
                             }
                         }
 
                         // Check body (must be arithmetic: Int or LinExpr)
                         subscope.check_expr(
                             global_env,
-                            Arc::clone(&body),
+                            Arc::clone(body),
                             type_info,
                             expr_types,
                             resolved_types,
@@ -1418,7 +1412,7 @@ impl LocalCheckEnv {
             } => {
                 let coll_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&collection),
+                    Arc::clone(collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1427,7 +1421,7 @@ impl LocalCheckEnv {
 
                 let acc_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&init_value),
+                    Arc::clone(init_value),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1485,10 +1479,7 @@ impl LocalCheckEnv {
                     None => return None, // Return early
                 };
 
-                let mut current_acc_type = match acc_type {
-                    Some(t) => t,
-                    None => return None,
-                };
+                let mut current_acc_type = acc_type?;
                 let mut has_to_iterate = true;
                 while has_to_iterate {
                     // Register the loop variable and accumulator
@@ -1519,29 +1510,29 @@ impl LocalCheckEnv {
                     if let Some(filter_expr) = filter {
                         let filter_type = Arc::clone(&subscope).check_expr(
                             global_env,
-                            Arc::clone(&filter_expr),
+                            Arc::clone(filter_expr),
                             type_info,
                             expr_types,
                             resolved_types,
                             errors,
                         );
 
-                        if let Some(typ) = filter_type {
-                            if !typ.is_bool() {
-                                errors.push(SemError::TypeMismatch {
-                                    span: filter_expr.span.clone(),
-                                    expected: SimpleType::Bool.into(),
-                                    found: typ,
-                                    context: "fold|rfold filter must be Bool".to_string(),
-                                });
-                            }
+                        if let Some(typ) = filter_type
+                            && !typ.is_bool()
+                        {
+                            errors.push(SemError::TypeMismatch {
+                                span: filter_expr.span.clone(),
+                                expected: SimpleType::Bool.into(),
+                                found: typ,
+                                context: "fold|rfold filter must be Bool".to_string(),
+                            });
                         }
                     }
 
                     // Check body (must match accumulator)
                     let body_type = subscope.check_expr(
                         global_env,
-                        Arc::clone(&body),
+                        Arc::clone(body),
                         type_info,
                         expr_types,
                         resolved_types,
@@ -1574,27 +1565,27 @@ impl LocalCheckEnv {
             } => {
                 let cond_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&condition),
+                    Arc::clone(condition),
                     type_info,
                     expr_types,
                     resolved_types,
                     errors,
                 );
 
-                if let Some(typ) = cond_type {
-                    if !typ.is_bool() {
-                        errors.push(SemError::TypeMismatch {
-                            span: condition.span.clone(),
-                            expected: SimpleType::Bool.into(),
-                            found: typ,
-                            context: "if condition must be Bool".to_string(),
-                        });
-                    }
+                if let Some(typ) = cond_type
+                    && !typ.is_bool()
+                {
+                    errors.push(SemError::TypeMismatch {
+                        span: condition.span.clone(),
+                        expected: SimpleType::Bool.into(),
+                        found: typ,
+                        context: "if condition must be Bool".to_string(),
+                    });
                 }
 
                 let then_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&then_expr),
+                    Arc::clone(then_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1602,7 +1593,7 @@ impl LocalCheckEnv {
                 );
                 let else_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&else_expr),
+                    Arc::clone(else_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1621,7 +1612,7 @@ impl LocalCheckEnv {
             } => {
                 let Some(expr_type) = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&match_expr),
+                    Arc::clone(match_expr),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -1703,22 +1694,22 @@ impl LocalCheckEnv {
                         if let Some(filter_expr) = &branch.filter {
                             let filter_type = Arc::clone(&subscope).check_expr(
                                 global_env,
-                                Arc::clone(&filter_expr),
+                                Arc::clone(filter_expr),
                                 type_info,
                                 expr_types,
                                 resolved_types,
                                 errors,
                             );
 
-                            if let Some(typ) = filter_type {
-                                if !typ.is_bool() {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: filter_expr.span.clone(),
-                                        expected: SimpleType::Bool.into(),
-                                        found: typ,
-                                        context: "where filter must be Bool".to_string(),
-                                    });
-                                }
+                            if let Some(typ) = filter_type
+                                && !typ.is_bool()
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: filter_expr.span.clone(),
+                                    expected: SimpleType::Bool.into(),
+                                    found: typ,
+                                    context: "where filter must be Bool".to_string(),
+                                });
                             }
                         }
 
@@ -1740,12 +1731,12 @@ impl LocalCheckEnv {
                         }
 
                         // Update remaining type
-                        if branch.filter.is_none() {
-                            if let Some(typ) = current_type {
-                                // Use enum-aware subtraction to properly handle enum variants
-                                current_type =
-                                    global_env.substract_enum_aware(&typ, &actual_branch_typ);
-                            }
+                        if branch.filter.is_none()
+                            && let Some(typ) = current_type
+                        {
+                            // Use enum-aware subtraction to properly handle enum variants
+                            current_type =
+                                global_env.substract_enum_aware(&typ, &actual_branch_typ);
                         }
                     }
                 }
@@ -1824,19 +1815,19 @@ impl LocalCheckEnv {
                                 errors,
                             );
 
-                            if let Some(found_type) = arg_type {
-                                if !found_type.is_subtype_of(expected_type) {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: arg.span.clone(),
-                                        expected: expected_type.clone(),
-                                        found: found_type,
-                                        context: format!(
-                                            "argument {} to variable ${}",
-                                            i + 1,
-                                            name.node
-                                        ),
-                                    });
-                                }
+                            if let Some(found_type) = arg_type
+                                && !found_type.is_subtype_of(expected_type)
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: arg.span.clone(),
+                                    expected: expected_type.clone(),
+                                    found: found_type,
+                                    context: format!(
+                                        "argument {} to variable ${}",
+                                        i + 1,
+                                        name.node
+                                    ),
+                                });
                             }
                         }
 
@@ -1874,19 +1865,19 @@ impl LocalCheckEnv {
                                 errors,
                             );
 
-                            if let Some(found_type) = arg_type {
-                                if !found_type.is_subtype_of(expected_type) {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: arg.span.clone(),
-                                        expected: expected_type.clone(),
-                                        found: found_type,
-                                        context: format!(
-                                            "argument {} to variable ${}",
-                                            i + 1,
-                                            name.node
-                                        ),
-                                    });
-                                }
+                            if let Some(found_type) = arg_type
+                                && !found_type.is_subtype_of(expected_type)
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: arg.span.clone(),
+                                    expected: expected_type.clone(),
+                                    found: found_type,
+                                    context: format!(
+                                        "argument {} to variable ${}",
+                                        i + 1,
+                                        name.node
+                                    ),
+                                });
                             }
                         }
 
@@ -1967,19 +1958,19 @@ impl LocalCheckEnv {
                                 errors,
                             );
 
-                            if let Some(found_type) = arg_type {
-                                if !found_type.is_subtype_of(expected_type) {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: arg.span.clone(),
-                                        expected: expected_type.clone(),
-                                        found: found_type,
-                                        context: format!(
-                                            "argument {} to variable list $[{}]",
-                                            i + 1,
-                                            name.node
-                                        ),
-                                    });
-                                }
+                            if let Some(found_type) = arg_type
+                                && !found_type.is_subtype_of(expected_type)
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: arg.span.clone(),
+                                    expected: expected_type.clone(),
+                                    found: found_type,
+                                    context: format!(
+                                        "argument {} to variable list $[{}]",
+                                        i + 1,
+                                        name.node
+                                    ),
+                                });
                             }
                         }
 
@@ -2059,19 +2050,19 @@ impl LocalCheckEnv {
                                         errors,
                                     );
 
-                                    if let Some(found_type) = arg_type {
-                                        if !found_type.is_subtype_of(expected_type) {
-                                            errors.push(SemError::TypeMismatch {
-                                                span: arg.span.clone(),
-                                                expected: expected_type.clone(),
-                                                found: found_type,
-                                                context: format!(
-                                                    "argument {} to function {}",
-                                                    i + 1,
-                                                    func
-                                                ),
-                                            });
-                                        }
+                                    if let Some(found_type) = arg_type
+                                        && !found_type.is_subtype_of(expected_type)
+                                    {
+                                        errors.push(SemError::TypeMismatch {
+                                            span: arg.span.clone(),
+                                            expected: expected_type.clone(),
+                                            found: found_type,
+                                            context: format!(
+                                                "argument {} to function {}",
+                                                i + 1,
+                                                func
+                                            ),
+                                        });
                                     }
                                 }
 
@@ -2132,19 +2123,19 @@ impl LocalCheckEnv {
                                         errors,
                                     );
 
-                                    if let Some(found_type) = arg_type {
-                                        if !found_type.is_subtype_of(expected_type) {
-                                            errors.push(SemError::TypeMismatch {
-                                                span: arg.span.clone(),
-                                                expected: expected_type.clone(),
-                                                found: found_type,
-                                                context: format!(
-                                                    "argument {} to query {}",
-                                                    i + 1,
-                                                    name
-                                                ),
-                                            });
-                                        }
+                                    if let Some(found_type) = arg_type
+                                        && !found_type.is_subtype_of(expected_type)
+                                    {
+                                        errors.push(SemError::TypeMismatch {
+                                            span: arg.span.clone(),
+                                            expected: expected_type.clone(),
+                                            found: found_type,
+                                            context: format!(
+                                                "argument {} to query {}",
+                                                i + 1,
+                                                name
+                                            ),
+                                        });
                                     }
                                 }
 
@@ -2322,10 +2313,7 @@ impl LocalCheckEnv {
                     }
                 }
 
-                match unified_type {
-                    Some(t) => Some(SimpleType::List(t).into()),
-                    None => None, // Inner None does not imply [<unknown>] because this is reserved for empty lists
-                }
+                unified_type.map(|t| SimpleType::List(t).into())
             }
 
             Expr::TupleLiteral { elements } => {
@@ -2410,7 +2398,7 @@ impl LocalCheckEnv {
             Expr::ListRange { start, end } => {
                 let start_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&start),
+                    Arc::clone(start),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2418,7 +2406,7 @@ impl LocalCheckEnv {
                 );
                 let end_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&end),
+                    Arc::clone(end),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2527,46 +2515,43 @@ impl LocalCheckEnv {
                 if let Some(filter_expr) = filter {
                     let filter_type = Arc::clone(&current).check_expr(
                         global_env,
-                        Arc::clone(&filter_expr),
+                        Arc::clone(filter_expr),
                         type_info,
                         expr_types,
                         resolved_types,
                         errors,
                     );
 
-                    if let Some(typ) = filter_type {
-                        if !typ.is_bool() {
-                            errors.push(SemError::TypeMismatch {
-                                span: filter_expr.span.clone(),
-                                expected: SimpleType::Bool.into(),
-                                found: typ,
-                                context: "list comprehension filter must be Bool".to_string(),
-                            });
-                        }
+                    if let Some(typ) = filter_type
+                        && !typ.is_bool()
+                    {
+                        errors.push(SemError::TypeMismatch {
+                            span: filter_expr.span.clone(),
+                            expected: SimpleType::Bool.into(),
+                            found: typ,
+                            context: "list comprehension filter must be Bool".to_string(),
+                        });
                     }
                 }
 
                 // Check the output expression - this determines the result element type
                 let elem_type = current.check_expr(
                     global_env,
-                    Arc::clone(&expr),
+                    Arc::clone(expr),
                     type_info,
                     expr_types,
                     resolved_types,
                     errors,
                 );
 
-                match elem_type {
-                    Some(t) => Some(SimpleType::List(t).into()),
-                    None => None, // Inner None does not imply [<unknown>] because this is reserved for empty lists
-                }
+                elem_type.map(|t| SimpleType::List(t).into())
             }
 
             // ========== Cardinality ==========
             Expr::Cardinality(collection) => {
                 let elem_t = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&collection),
+                    Arc::clone(collection),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2591,7 +2576,7 @@ impl LocalCheckEnv {
             Expr::Let { var, value, body } => {
                 let value_type = Arc::clone(&self).check_expr(
                     global_env,
-                    Arc::clone(&value),
+                    Arc::clone(value),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2636,7 +2621,7 @@ impl LocalCheckEnv {
 
                 let body_type = subscope.check_expr(
                     global_env,
-                    Arc::clone(&body),
+                    Arc::clone(body),
                     type_info,
                     expr_types,
                     resolved_types,
@@ -2694,22 +2679,22 @@ impl LocalCheckEnv {
                     errors,
                 );
 
-                if let Some(inferred) = arg_type {
-                    if let Some(concrete_target) = simple_type.clone().into_concrete() {
-                        let can_convert = inferred.can_convert_to(&concrete_target)
-                            || self.can_convert_with_custom_types(
-                                global_env,
-                                &inferred,
-                                &concrete_target,
-                            );
+                if let Some(inferred) = arg_type
+                    && let Some(concrete_target) = simple_type.clone().into_concrete()
+                {
+                    let can_convert = inferred.can_convert_to(&concrete_target)
+                        || self.can_convert_with_custom_types(
+                            global_env,
+                            &inferred,
+                            &concrete_target,
+                        );
 
-                        if !can_convert {
-                            errors.push(SemError::ImpossibleConversion {
-                                span: arg.span.clone(),
-                                found: inferred,
-                                target: concrete_target,
-                            });
-                        }
+                    if !can_convert {
+                        errors.push(SemError::ImpossibleConversion {
+                            span: arg.span.clone(),
+                            found: inferred,
+                            target: concrete_target,
+                        });
                     }
                 }
 
@@ -2763,16 +2748,16 @@ impl LocalCheckEnv {
                             resolved_types,
                             errors,
                         );
-                        if let Some(inferred) = arg_type {
-                            if !inferred.is_none() {
-                                let none_concrete = SimpleType::None.into_concrete().unwrap();
-                                if !inferred.can_convert_to(&none_concrete) {
-                                    errors.push(SemError::ImpossibleConversion {
-                                        span: arg.span.clone(),
-                                        found: inferred,
-                                        target: none_concrete,
-                                    });
-                                }
+                        if let Some(inferred) = arg_type
+                            && !inferred.is_none()
+                        {
+                            let none_concrete = SimpleType::None.into_concrete().unwrap();
+                            if !inferred.can_convert_to(&none_concrete) {
+                                errors.push(SemError::ImpossibleConversion {
+                                    span: arg.span.clone(),
+                                    found: inferred,
+                                    target: none_concrete,
+                                });
                             }
                         }
                     }
@@ -2821,16 +2806,15 @@ impl LocalCheckEnv {
                             errors,
                         );
 
-                        if let Some(inferred) = arg_type {
-                            if let Some(concrete_target) = underlying.clone().into_concrete() {
-                                if !inferred.can_convert_to(&concrete_target) {
-                                    errors.push(SemError::ImpossibleConversion {
-                                        span: arg.span.clone(),
-                                        found: inferred,
-                                        target: concrete_target,
-                                    });
-                                }
-                            }
+                        if let Some(inferred) = arg_type
+                            && let Some(concrete_target) = underlying.clone().into_concrete()
+                            && !inferred.can_convert_to(&concrete_target)
+                        {
+                            errors.push(SemError::ImpossibleConversion {
+                                span: arg.span.clone(),
+                                found: inferred,
+                                target: concrete_target,
+                            });
                         }
                     }
                 }
@@ -2948,18 +2932,15 @@ impl LocalCheckEnv {
                                 errors,
                             );
 
-                            if let Some(inf) = inferred {
-                                if !inf.is_subtype_of(exp_typ) {
-                                    errors.push(SemError::TypeMismatch {
-                                        span: field_expr.span.clone(),
-                                        expected: exp_typ.clone(),
-                                        found: inf,
-                                        context: format!(
-                                            "Field '{}' has wrong type",
-                                            field_name.node
-                                        ),
-                                    });
-                                }
+                            if let Some(inf) = inferred
+                                && !inf.is_subtype_of(exp_typ)
+                            {
+                                errors.push(SemError::TypeMismatch {
+                                    span: field_expr.span.clone(),
+                                    expected: exp_typ.clone(),
+                                    found: inf,
+                                    context: format!("Field '{}' has wrong type", field_name.node),
+                                });
                             }
                         }
                     }
@@ -2990,7 +2971,7 @@ impl LocalCheckEnv {
         errors: &mut Vec<SemError>,
     ) -> Option<ExprType> {
         // Use resolve_path to determine what this path refers to
-        let resolved = match resolve_path(path, self.current_module(), global_env, Some(&*self)) {
+        let resolved = match resolve_path(path, self.current_module(), global_env, Some(self)) {
             Ok(r) => r,
             Err(e) => {
                 errors.push(e.into_sem_error(self.current_module()));
@@ -3159,7 +3140,7 @@ impl LocalCheckEnv {
 
                     if resolved_variants.is_empty() {
                         errors.push(SemError::FieldAccessOnNonObject {
-                            typ: current_type.clone().into(),
+                            typ: current_type.clone(),
                             field: field_name.clone(),
                             span: segment.span.clone(),
                         });
@@ -3204,7 +3185,7 @@ impl LocalCheckEnv {
                             _ => {
                                 // Can't access fields on non-object/non-struct types
                                 errors.push(SemError::FieldAccessOnNonObject {
-                                    typ: current_type.clone().into(),
+                                    typ: current_type.clone(),
                                     field: field_name.clone(),
                                     span: segment.span.clone(),
                                 });
@@ -3262,7 +3243,7 @@ impl LocalCheckEnv {
                     // 1. Check index expression is Int
                     let index_type = Arc::clone(&self).check_expr(
                         global_env,
-                        Arc::clone(&index_expr),
+                        Arc::clone(index_expr),
                         type_info,
                         expr_types,
                         resolved_types,

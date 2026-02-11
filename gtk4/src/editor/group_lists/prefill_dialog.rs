@@ -142,7 +142,7 @@ impl SimpleComponent for Dialog {
                                     #[track(model.should_redraw)]
                                     set_selected: Dialog::prefill_mode_to_selected(model.prefill_mode),
                                     connect_selected_notify[sender] => move |widget| {
-                                        let selected = widget.selected() as u32;
+                                        let selected = widget.selected();
                                         let mode = Dialog::selected_to_prefill_mode(selected);
                                         sender.input(DialogInput::UpdatePrefillMode(mode));
                                     },
@@ -380,7 +380,7 @@ impl Dialog {
                     name: format!("{} {}", firstname, surname),
                     included: !self.excluded_students.contains(id),
                 }),
-            |data| StudentExclusionInput::UpdateData(data),
+            StudentExclusionInput::UpdateData,
         );
     }
 
@@ -444,7 +444,7 @@ impl Dialog {
         crate::tools::factories::update_vec_deque(
             &mut self.group_entries,
             self.group_data.iter().take(entries_count).cloned(),
-            |x| GroupEntryInput::UpdateData(x),
+            GroupEntryInput::UpdateData,
         );
     }
 
@@ -764,7 +764,7 @@ impl GroupEntry {
                         filtered_students: self.data.filtered_students.clone(),
                     }
                 }),
-            |x| StudentEntryInput::UpdateData(x),
+            StudentEntryInput::UpdateData,
         );
     }
 }
@@ -868,7 +868,7 @@ impl FactoryComponent for StudentEntry {
             #[track(self.should_update_selected)]
             set_selected: self.selected_student,
             connect_selected_notify[sender] => move |widget| {
-                let selected = widget.selected() as u32;
+                let selected = widget.selected();
                 sender.input(StudentEntryInput::UpdateSelectedStudent(selected));
             },
         },

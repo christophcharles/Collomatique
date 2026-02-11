@@ -224,16 +224,14 @@ impl Settings {
             .iter()
             .map(|(id, student)| {
                 (
-                    id.clone(),
+                    *id,
                     student.desc.firstname.clone(),
                     student.desc.surname.clone(),
                 )
             })
             .collect();
 
-        students.sort_by_key(|(id, firstname, surname)| {
-            (surname.clone(), firstname.clone(), id.clone())
-        });
+        students.sort_by_key(|(id, firstname, surname)| (surname.clone(), firstname.clone(), *id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.student_entries,
@@ -244,7 +242,7 @@ impl Settings {
                     student_name: format!("{} {}", firstname, surname),
                     limits: self.settings.students.get(&student_id).cloned(),
                 }),
-            |data| StudentEntryInput::UpdateData(data),
+            StudentEntryInput::UpdateData,
         );
     }
 }
@@ -412,9 +410,7 @@ impl FactoryComponent for StudentEntry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(
@@ -436,16 +432,12 @@ impl FactoryComponent for StudentEntry {
             }
             StudentEntryInput::EditClicked => {
                 sender
-                    .output(StudentEntryOutput::EditClicked(
-                        self.data.student_id.clone(),
-                    ))
+                    .output(StudentEntryOutput::EditClicked(self.data.student_id))
                     .unwrap();
             }
             StudentEntryInput::DeleteClicked => {
                 sender
-                    .output(StudentEntryOutput::DeleteClicked(
-                        self.data.student_id.clone(),
-                    ))
+                    .output(StudentEntryOutput::DeleteClicked(self.data.student_id))
                     .unwrap();
             }
         }

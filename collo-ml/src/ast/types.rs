@@ -6,6 +6,12 @@ pub struct File {
     pub statements: Vec<Spanned<Statement>>,
 }
 
+impl Default for File {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl File {
     pub fn new() -> Self {
         File { statements: vec![] }

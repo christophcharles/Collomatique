@@ -17,7 +17,7 @@ impl GroupListId {
 
 impl From<&collomatique_state_colloscopes::GroupListId> for GroupListId {
     fn from(value: &collomatique_state_colloscopes::GroupListId) -> Self {
-        GroupListId { id: value.clone() }
+        GroupListId { id: *value }
     }
 }
 
@@ -29,7 +29,7 @@ impl From<collomatique_state_colloscopes::GroupListId> for GroupListId {
 
 impl From<&GroupListId> for collomatique_state_colloscopes::GroupListId {
     fn from(value: &GroupListId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 

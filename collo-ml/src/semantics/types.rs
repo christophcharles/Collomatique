@@ -603,20 +603,19 @@ impl SimpleType {
             SimpleTypeName::Struct(fields) => {
                 let mut converted = BTreeMap::new();
                 for (name, typ) in fields {
-                    if let Some(ref mut w) = warnings {
-                        if let Some(suggestion) =
+                    if let Some(ref mut w) = warnings
+                        && let Some(suggestion) =
                             super::string_case::generate_suggestion_for_naming_convention(
                                 &name.node,
                                 super::string_case::NamingConvention::SnakeCase,
                             )
-                        {
-                            w.push(SemWarning::FieldNamingConvention {
-                                module: current_module.to_string(),
-                                identifier: name.node.clone(),
-                                span: name.span.clone(),
-                                suggestion,
-                            });
-                        }
+                    {
+                        w.push(SemWarning::FieldNamingConvention {
+                            module: current_module.to_string(),
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            suggestion,
+                        });
                     }
                     let resolved = ExprType::from_ast(
                         typ,
@@ -763,7 +762,7 @@ impl ExprType {
 
     fn assert_invariant(&self) {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always have at least one variant"
         );
         if let Some((variant1, variant2)) = Self::check_subtypes(&self.variants) {
@@ -827,7 +826,7 @@ impl ExprType {
 
     pub fn is_simple(&self) -> bool {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always carry at least one type"
         );
         self.variants.len() == 1
@@ -865,7 +864,7 @@ impl ExprType {
 
     pub fn is_concrete(&self) -> bool {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always carry at least one type"
         );
         if self.variants.len() != 1 {
@@ -912,13 +911,11 @@ impl ExprType {
     }
 
     pub fn get_inner_object_type(&self) -> Option<&String> {
-        self.as_simple()
-            .map(|x| x.get_inner_object_type())
-            .flatten()
+        self.as_simple().and_then(|x| x.get_inner_object_type())
     }
 
     pub fn to_inner_object_type(self) -> Option<String> {
-        self.to_simple().map(|x| x.to_inner_object_type()).flatten()
+        self.to_simple().and_then(|x| x.to_inner_object_type())
     }
 
     pub fn is_object(&self) -> bool {

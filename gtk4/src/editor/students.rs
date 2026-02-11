@@ -54,7 +54,7 @@ pub struct Students {
 
 impl Students {
     fn generate_students_count_text(&self) -> String {
-        if self.current_list.len() == 0 || self.current_list.len() == 1 {
+        if self.current_list.is_empty() || self.current_list.len() == 1 {
             format!(
                 "<i>{} élève sur {} affiché</i>",
                 self.current_list.len(),
@@ -219,7 +219,7 @@ impl Component for Students {
                         let index = x - 2;
                         assert!(index < self.periods.ordered_period_list.len());
 
-                        StudentFilter::Period(self.periods.ordered_period_list[index].0.clone())
+                        StudentFilter::Period(self.periods.ordered_period_list[index].0)
                     }
                 };
                 self.update_current_list();
@@ -304,7 +304,7 @@ impl Students {
 
             if keep_student {
                 self.current_list.push(ContactInfo {
-                    id: student_id.clone(),
+                    id: *student_id,
                     contact: student.desc.clone(),
                     extra: {
                         let mut excluded_period_list: Vec<_> = student

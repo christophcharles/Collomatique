@@ -55,10 +55,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             custom_types: HashMap::new(),
             functions: HashMap::new(),
             queries: HashMap::new(),
-            external_variables: variables
-                .into_iter()
-                .map(|(var_name, args_type)| (var_name, args_type))
-                .collect(),
+            external_variables: variables.into_iter().collect(),
             internal_variables: HashMap::new(),
             variable_lists: HashMap::new(),
             symbols: HashMap::new(),
@@ -283,26 +280,25 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
             // Import function symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
-                    if temp_env.module_exists(&module_path.node)
-                        && module_path.node != current_module
-                    {
-                        let prefix = match alias {
-                            crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
-                            crate::ast::ImportAlias::Wildcard(_) => None,
-                        };
-                        let import_span = match alias {
-                            crate::ast::ImportAlias::Named(name) => &name.span,
-                            crate::ast::ImportAlias::Wildcard(span) => span,
-                        };
-                        temp_env.import_function_symbols(
-                            current_module,
-                            &module_path.node,
-                            prefix,
-                            Some(import_span),
-                            &mut errors,
-                        );
-                    }
+                if let crate::ast::Statement::Import { module_path, alias } = &statement.node
+                    && temp_env.module_exists(&module_path.node)
+                    && module_path.node != current_module
+                {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_function_symbols(
+                        current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
                 }
             }
         }
@@ -352,26 +348,25 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
             // Import variable symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
-                    if temp_env.module_exists(&module_path.node)
-                        && module_path.node != current_module
-                    {
-                        let prefix = match alias {
-                            crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
-                            crate::ast::ImportAlias::Wildcard(_) => None,
-                        };
-                        let import_span = match alias {
-                            crate::ast::ImportAlias::Named(name) => &name.span,
-                            crate::ast::ImportAlias::Wildcard(span) => span,
-                        };
-                        temp_env.import_variable_symbols(
-                            current_module,
-                            &module_path.node,
-                            prefix,
-                            Some(import_span),
-                            &mut errors,
-                        );
-                    }
+                if let crate::ast::Statement::Import { module_path, alias } = &statement.node
+                    && temp_env.module_exists(&module_path.node)
+                    && module_path.node != current_module
+                {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_variable_symbols(
+                        current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
                 }
             }
         }
@@ -1181,18 +1176,18 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     for (col_name, col_db_type) in columns {
                         if let Some(field_typ) = fields.get(col_name) {
                             // Check type compatibility
-                            if let Ok(declared_db_type) = DbType::try_from(self, field_typ) {
-                                if !col_db_type.is_assignable_to(&declared_db_type) {
-                                    errors.push(SemError::QueryColumnTypeMismatch {
-                                        module: current_module.to_string(),
-                                        query_name: name.node.clone(),
-                                        column_name: col_name.clone(),
-                                        sql_type: col_db_type.to_string(),
-                                        declared_type: declared_db_type.to_string(),
-                                        span: output_type.span.clone(),
-                                    });
-                                    return;
-                                }
+                            if let Ok(declared_db_type) = DbType::try_from(self, field_typ)
+                                && !col_db_type.is_assignable_to(&declared_db_type)
+                            {
+                                errors.push(SemError::QueryColumnTypeMismatch {
+                                    module: current_module.to_string(),
+                                    query_name: name.node.clone(),
+                                    column_name: col_name.clone(),
+                                    sql_type: col_db_type.to_string(),
+                                    declared_type: declared_db_type.to_string(),
+                                    span: output_type.span.clone(),
+                                });
+                                return;
                             }
                             // If DbType::try_from fails, we already reported that
                             // in the output field validation above
@@ -1222,18 +1217,18 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     }
                     // Check each positional pair
                     for ((col_name, col_db_type), elem_typ) in columns.iter().zip(elements.iter()) {
-                        if let Ok(declared_db_type) = DbType::try_from(self, elem_typ) {
-                            if !col_db_type.is_assignable_to(&declared_db_type) {
-                                errors.push(SemError::QueryColumnTypeMismatch {
-                                    module: current_module.to_string(),
-                                    query_name: name.node.clone(),
-                                    column_name: col_name.clone(),
-                                    sql_type: col_db_type.to_string(),
-                                    declared_type: declared_db_type.to_string(),
-                                    span: output_type.span.clone(),
-                                });
-                                return;
-                            }
+                        if let Ok(declared_db_type) = DbType::try_from(self, elem_typ)
+                            && !col_db_type.is_assignable_to(&declared_db_type)
+                        {
+                            errors.push(SemError::QueryColumnTypeMismatch {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                column_name: col_name.clone(),
+                                sql_type: col_db_type.to_string(),
+                                declared_type: declared_db_type.to_string(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
                         }
                     }
                 }
@@ -1250,18 +1245,18 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                         return;
                     }
                     let (col_name, col_db_type) = &columns[0];
-                    if let Ok(declared_db_type) = DbType::try_from(self, expr_type) {
-                        if !col_db_type.is_assignable_to(&declared_db_type) {
-                            errors.push(SemError::QueryColumnTypeMismatch {
-                                module: current_module.to_string(),
-                                query_name: name.node.clone(),
-                                column_name: col_name.clone(),
-                                sql_type: col_db_type.to_string(),
-                                declared_type: declared_db_type.to_string(),
-                                span: output_type.span.clone(),
-                            });
-                            return;
-                        }
+                    if let Ok(declared_db_type) = DbType::try_from(self, expr_type)
+                        && !col_db_type.is_assignable_to(&declared_db_type)
+                    {
+                        errors.push(SemError::QueryColumnTypeMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            column_name: col_name.clone(),
+                            sql_type: col_db_type.to_string(),
+                            declared_type: declared_db_type.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
                     }
                 }
                 None => {

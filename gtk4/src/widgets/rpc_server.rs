@@ -132,7 +132,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à  la création du PTY : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                         sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
@@ -167,7 +167,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'exécution du sous-processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                         sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
@@ -187,7 +187,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'acquisition du reader PTY : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -203,7 +203,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'acquisition de l'entrée standard : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -227,7 +227,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'arrêt du processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -235,7 +235,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'arrêt du processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -308,21 +308,21 @@ impl Component for RpcLogger {
                 let encoded_msg = EncodedMsg::from_raw_string(self.current_cmd.clone());
                 self.current_cmd.clear();
 
-                let complete_cmd = encoded_msg.map(|x| CompleteCmdMsg::try_from(x)).flatten();
+                let complete_cmd = encoded_msg.and_then(CompleteCmdMsg::try_from);
                 let cmd = match complete_cmd {
                     Ok(c) => match c {
                         CompleteCmdMsg::CmdMsg(cmd) => Ok(cmd),
                         CompleteCmdMsg::GracefulExit => {
                             self.child_stdin = None;
-                            if let Some(mut child_process) = self.child_process.take() {
-                                if let Err(e) = child_process.wait() {
-                                    sender
-                                        .output(RpcLoggerOutput::Error(format!(
-                                            "Erreur à l'arrêt du processus : {}",
-                                            e.to_string()
-                                        )))
-                                        .unwrap();
-                                }
+                            if let Some(mut child_process) = self.child_process.take()
+                                && let Err(e) = child_process.wait()
+                            {
+                                sender
+                                    .output(RpcLoggerOutput::Error(format!(
+                                        "Erreur à l'arrêt du processus : {}",
+                                        e
+                                    )))
+                                    .unwrap();
                             }
                             sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
                             return;
@@ -405,7 +405,7 @@ impl RpcLogger {
                 sender
                     .output(RpcLoggerOutput::Error(format!(
                         "Erreur dans une RPC : {}",
-                        e.to_string()
+                        e
                     )))
                     .unwrap();
                 return;
@@ -418,10 +418,9 @@ impl RpcLogger {
                 sender
                     .output(RpcLoggerOutput::Error(format!(
                         "Erreur dans une RPC : {}",
-                        e.to_string()
+                        e
                     )))
                     .unwrap();
-                return;
             }
         }
     }

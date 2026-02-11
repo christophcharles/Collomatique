@@ -371,7 +371,7 @@ impl SubjectsUpdateOp {
                         .subject_map
                         .get(subject_id)
                         .expect("Subject should have associated slots at this point");
-                    if let Some((slot_id, _slot)) = subject_slots.ordered_slots.iter().next() {
+                    if let Some((slot_id, _slot)) = subject_slots.ordered_slots.first() {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
@@ -577,13 +577,12 @@ impl SubjectsUpdateOp {
                     .slots
                     .subject_map
                     .get(subject_id)
+                    && let Some((slot_id, _slot)) = subject_slots.ordered_slots.first()
                 {
-                    if let Some((slot_id, _slot)) = subject_slots.ordered_slots.iter().next() {
-                        return Some(CleaningOp {
-                            warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
-                        });
-                    }
+                    return Some(CleaningOp {
+                        warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
+                        op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                    });
                 }
 
                 let Some(subject) = &data

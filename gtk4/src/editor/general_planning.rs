@@ -248,7 +248,7 @@ impl Component for GeneralPlanning {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
                             desc: desc.clone(),
-                            period_id: id.clone(),
+                            period_id: *id,
                         })
                     })
                     .collect::<Vec<_>>();
@@ -256,7 +256,7 @@ impl Component for GeneralPlanning {
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods_list,
                     new_data.into_iter(),
-                    |data| periods_display::EntryInput::UpdateData(data),
+                    periods_display::EntryInput::UpdateData,
                 );
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {

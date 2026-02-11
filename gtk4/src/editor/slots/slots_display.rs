@@ -59,16 +59,12 @@ impl Entry {
             .get(&slot.teacher_id)
             .expect("Teacher Id should be valid")
             .clone();
-        let week_pattern = if let Some(id) = slot.week_pattern {
-            Some(
-                self.week_patterns
-                    .week_pattern_map
-                    .get(&id)
-                    .expect("Week pattern ID should be valid"),
-            )
-        } else {
-            None
-        };
+        let week_pattern = slot.week_pattern.map(|id| {
+            self.week_patterns
+                .week_pattern_map
+                .get(&id)
+                .expect("Week pattern ID should be valid")
+        });
         let week_pattern_name = match week_pattern {
             Some(pattern) => pattern.name.clone(),
             None => "Toutes les semaines".into(),
@@ -142,7 +138,7 @@ impl FactoryComponent for Entry {
                 #[watch]
                 set_sensitive: !self.teachers.is_empty(),
                 #[watch]
-                set_tooltip_text: self.generate_tooltip_text().as_ref().map(|x| x.as_str()),
+                set_tooltip_text: self.generate_tooltip_text().as_deref(),
                 connect_clicked => EntryInput::AddSlotClicked,
             }
         },
@@ -211,7 +207,7 @@ impl FactoryComponent for Entry {
                 crate::tools::factories::update_vec_deque(
                     &mut self.slots,
                     slots_vec.into_iter(),
-                    |x| SlotInput::UpdateData(x),
+                    SlotInput::UpdateData,
                 );
             }
             EntryInput::AddSlotClicked => {

@@ -225,7 +225,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                         continue;
                     };
 
-                    if list.iter().all(|x| x.fits_in_typ(env, &inner_typ)) {
+                    if list.iter().all(|x| x.fits_in_typ(env, inner_typ)) {
                         return true;
                     }
                 }
@@ -417,7 +417,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     .expect("Inner list target type should have already been checked");
                 Self::List(
                     list.into_iter()
-                        .map(|x| unsafe { x.convert_to_unchecked(env, cache, &inner_target) })
+                        .map(|x| unsafe { x.convert_to_unchecked(env, cache, inner_target) })
                         .collect(),
                 )
             }
@@ -469,7 +469,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     custom
                         .content
                         .clone()
-                        .convert_to_unchecked(env, cache, &target_typ)
+                        .convert_to_unchecked(env, cache, target_typ)
                 }
             }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value

@@ -294,9 +294,9 @@ impl CollomatiqueFile {
                 MergeWithPreviousPeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
-                MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith => {
-                    Err(PyValueError::new_err(format!("Cannot merge first period")))
-                }
+                MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith => Err(
+                    PyValueError::new_err("Cannot merge first period".to_string()),
+                ),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -911,9 +911,9 @@ impl CollomatiqueFile {
                         tid, sid,
                     )))
                 }
-                AddNewSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(format!(
-                    "Slot overlaps with next day"
-                ))),
+                AddNewSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
+                    "Slot overlaps with next day".to_string(),
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -958,9 +958,9 @@ impl CollomatiqueFile {
                         tid, sid,
                     )))
                 }
-                UpdateSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(format!(
-                    "Slot overlaps with next day"
-                ))),
+                UpdateSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
+                    "Slot overlaps with next day".to_string(),
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }

@@ -259,9 +259,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(

@@ -250,7 +250,7 @@ impl Dialog {
                         selected_group: Self::group_opt_to_selected(group_opt),
                     }
                 }),
-            |data| StudentInput::UpdateData(data),
+            StudentInput::UpdateData,
         );
     }
 }
@@ -299,7 +299,7 @@ impl FactoryComponent for StudentEntry {
             #[track(self.should_redraw)]
             set_selected: self.data.selected_group,
             connect_selected_notify[sender] => move |widget| {
-                let selected = widget.selected() as u32;
+                let selected = widget.selected();
                 sender.input(StudentInput::StudentGroupChanged(selected));
             },
         },

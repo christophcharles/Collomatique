@@ -163,7 +163,7 @@ impl SimpleComponent for Dialog {
             DialogInput::Show(date) => {
                 self.hidden = false;
                 self.start_date = date;
-                self.current_selected_date = self.start_date.monday().clone();
+                self.current_selected_date = *self.start_date.monday();
                 self.update_date = true;
             }
             DialogInput::Cancel => {
@@ -176,7 +176,7 @@ impl SimpleComponent for Dialog {
                     .unwrap();
             }
             DialogInput::Select(date) => {
-                self.start_date = collomatique_time::WeekStart::round_from(date.clone());
+                self.start_date = collomatique_time::WeekStart::round_from(date);
                 self.current_selected_date = date;
             }
         }

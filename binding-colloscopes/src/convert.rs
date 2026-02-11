@@ -79,7 +79,7 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
         if data_group_list.is_prefilled() {
             continue;
         }
-        for (student_id, _student) in &env.params.students.student_map {
+        for student_id in env.params.students.student_map.keys() {
             if group_list.filling.excluded_students().contains(student_id) {
                 continue;
             }

@@ -71,7 +71,7 @@ pub fn compute_time_resolution(params: &Parameters) -> u32 {
         }
     }
 
-    for (_incompat_id, incompat) in &params.incompats.incompat_map {
+    for incompat in params.incompats.incompat_map.values() {
         for slot in &incompat.slots {
             resolution = gcd(resolution, slot.start().start_time.minutes_from_midnight());
             resolution = gcd(resolution, slot.duration().get().get());

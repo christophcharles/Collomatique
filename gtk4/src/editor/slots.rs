@@ -138,9 +138,7 @@ impl Component for Slots {
                     .ordered_subject_list
                     .iter()
                     .filter_map(|(id, desc)| {
-                        if desc.parameters.interrogation_parameters.is_none() {
-                            return None;
-                        }
+                        desc.parameters.interrogation_parameters.as_ref()?;
 
                         let subject_slots = self
                             .slots
@@ -150,7 +148,7 @@ impl Component for Slots {
                             .clone();
                         Some(slots_display::EntryData {
                             subject_params: desc.parameters.clone(),
-                            subject_id: id.clone(),
+                            subject_id: *id,
                             teachers: self.filter_teachers(*id),
                             week_patterns: self.week_patterns.clone(),
                             subject_slots,
@@ -161,7 +159,7 @@ impl Component for Slots {
                 crate::tools::factories::update_vec_deque(
                     &mut self.subjects_list,
                     new_data.into_iter(),
-                    |data| slots_display::EntryInput::UpdateData(data),
+                    slots_display::EntryInput::UpdateData,
                 );
             }
 
@@ -214,12 +212,11 @@ impl Component for Slots {
                     .name
                     .clone();
                 let teachers = self.filter_teachers(subject_id);
-                let teacher_id = teachers
+                let teacher_id = *teachers
                     .iter()
                     .next()
                     .expect("There should be at least one teacher for the subject")
-                    .0
-                    .clone();
+                    .0;
                 let default_slot = collomatique_state_colloscopes::slots::Slot {
                     teacher_id,
                     start_time: collomatique_time::SlotStart {
@@ -279,7 +276,7 @@ impl Slots {
             .iter()
             .filter_map(|(teacher_id, teacher)| {
                 if teacher.subjects.contains(&subject_id) {
-                    Some((teacher_id.clone(), teacher.clone()))
+                    Some((*teacher_id, teacher.clone()))
                 } else {
                     None
                 }

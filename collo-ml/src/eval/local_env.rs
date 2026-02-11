@@ -138,8 +138,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 assert!(!segments.is_empty());
 
                 let mut current_value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&object)))
-                        .await?;
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(object))).await?;
 
                 // Helper to unwrap Custom values for field/index access
                 fn unwrap_custom<T: EvalObject, D: DatabaseConnection>(
@@ -160,13 +159,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 ExprValue::Object(obj) => {
                                     current_value = obj
                                         .field_access::<D::Connection>(
-                                            &eval_history.env,
+                                            eval_history.env,
                                             &mut eval_history.cache,
                                             field_name,
                                         )
                                         .ok_or(EvalError::MissingObjectField {
                                             object: format!("{:?}", obj),
-                                            typ: obj.typ_name(&eval_history.env),
+                                            typ: obj.typ_name(eval_history.env),
                                             field: field_name.clone(),
                                         })?;
                                 }
@@ -247,7 +246,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             }
             Expr::Cardinality(list_expr) => {
                 let list_value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&list_expr)))
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(list_expr)))
                         .await?;
                 let count = match list_value {
                     ExprValue::List(list) => list.len(),
@@ -258,11 +257,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 )
             }
             Expr::ExplicitType { expr, typ: _ } => {
-                let value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&expr))).await?;
                 // we do nothing: the semantic analysis has already checked everything
                 // and types are relevant only in the semantic phase
-                value
+                Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr))).await?
             }
             Expr::ComplexTypeCast { typ, args } => {
                 // For type casts like [LinExpr]([1,2,3]) or (Int, Bool)(1, true)
@@ -323,7 +320,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             }
             Expr::CastFallible { expr, typ } => {
                 let value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&expr))).await?;
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr))).await?;
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
@@ -335,7 +332,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             }
             Expr::CastPanic { expr, typ } => {
                 let value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&expr))).await?;
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr))).await?;
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
@@ -360,9 +357,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             }
             Expr::ListRange { start, end } => {
                 let start_value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&start))).await?;
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(start))).await?;
                 let end_value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&end))).await?;
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(end))).await?;
 
                 let start_num = match start_value {
                     ExprValue::Int(v) => v,
@@ -373,12 +370,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     _ => panic!("Int expected"),
                 };
 
-                ExprValue::List(
-                    (start_num..end_num)
-                        .into_iter()
-                        .map(ExprValue::Int)
-                        .collect(),
-                )
+                ExprValue::List((start_num..end_num).map(ExprValue::Int).collect())
             }
             Expr::GlobalList(typ_name) => {
                 let expr_type = eval_history.ast.get_resolved_type(&typ_name.span);
@@ -389,7 +381,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         SimpleType::Object(obj) => obj.clone(),
                         _ => panic!("Object expected"),
                     };
-                    let objects = T::objects_with_typ(&eval_history.env, &typ_as_str);
+                    let objects = T::objects_with_typ(eval_history.env, &typ_as_str);
                     collection.extend(objects.into_iter().map(|x| ExprValue::Object(x)));
                 }
 
@@ -423,7 +415,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         )
                         .await?
                         .0
-                        .into()
                     }
                     ResolvedPathKind::Type(simple_type) => {
                         // Type cast: BuiltinType(x), CustomType(x), Enum::Variant(x)
@@ -611,7 +602,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -620,7 +611,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 };
                 let ExprValue::LinExpr(lin_expr2) = (unsafe {
                     value2.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -638,7 +629,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -647,7 +638,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 };
                 let ExprValue::LinExpr(lin_expr2) = (unsafe {
                     value2.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -665,7 +656,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -674,7 +665,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 };
                 let ExprValue::LinExpr(lin_expr2) = (unsafe {
                     value2.convert_to_unchecked(
-                        &eval_history.env,
+                        eval_history.env,
                         &mut eval_history.cache,
                         &SimpleType::LinExpr,
                     )
@@ -895,7 +886,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let does_typ_match = match &branch.as_typ {
                         Some(t) => {
                             let target_type = eval_history.ast.get_resolved_type(&t.span);
-                            value.fits_in_typ(&eval_history.env, target_type)
+                            value.fits_in_typ(eval_history.env, target_type)
                         }
                         None => true,
                     };
@@ -1358,7 +1349,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     value.convert_to_unchecked(
                         eval_history.env,
                         &mut eval_history.cache,
-                        &simple_type,
+                        simple_type,
                     )
                 })
             }

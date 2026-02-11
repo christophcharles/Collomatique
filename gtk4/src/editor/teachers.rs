@@ -54,7 +54,7 @@ pub struct Teachers {
 
 impl Teachers {
     fn generate_teachers_count_text(&self) -> String {
-        if self.current_list.len() == 0 || self.current_list.len() == 1 {
+        if self.current_list.is_empty() || self.current_list.len() == 1 {
             format!(
                 "<i>{} colleur sur {} affiché</i>",
                 self.current_list.len(),
@@ -247,10 +247,10 @@ impl Teachers {
             return;
         };
 
-        if let Some(subject) = self.subjects.find_subject(subject_id) {
-            if subject.parameters.interrogation_parameters.is_some() {
-                return;
-            }
+        if let Some(subject) = self.subjects.find_subject(subject_id)
+            && subject.parameters.interrogation_parameters.is_some()
+        {
+            return;
         }
 
         self.current_filter = TeacherFilter::NoFilter;
@@ -332,7 +332,7 @@ impl Teachers {
 
             if keep_teacher {
                 self.current_list.push(ContactInfo {
-                    id: teacher_id.clone(),
+                    id: *teacher_id,
                     contact: teacher.desc.clone(),
                     extra: {
                         let subject_list: Vec<_> = teacher

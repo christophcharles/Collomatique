@@ -21,11 +21,11 @@ impl NaiveMondayDate {
     #[new]
     fn new(year: i32, month: u32, day: u32) -> PyResult<Self> {
         let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, day) else {
-            return Err(PyValueError::new_err(format!("Invalid date")));
+            return Err(PyValueError::new_err("Invalid date".to_string()));
         };
 
         let Some(internal) = collomatique_time::WeekStart::new(date) else {
-            return Err(PyValueError::new_err(format!("Not a monday")));
+            return Err(PyValueError::new_err("Not a monday".to_string()));
         };
 
         Ok(NaiveMondayDate { internal })
@@ -60,7 +60,7 @@ impl NaiveDate {
     #[new]
     fn new(year: i32, month: u32, day: u32) -> PyResult<Self> {
         let Some(internal) = chrono::NaiveDate::from_ymd_opt(year, month, day) else {
-            return Err(PyValueError::new_err(format!("Invalid date")));
+            return Err(PyValueError::new_err("Invalid date".to_string()));
         };
 
         Ok(NaiveDate { internal })
@@ -101,7 +101,7 @@ impl Time {
     #[new]
     fn new(h: u32, m: u32) -> PyResult<Self> {
         let Some(time) = chrono::NaiveTime::from_hms_milli_opt(h, m, 0, 0) else {
-            return Err(PyValueError::new_err(format!("Invalid time")));
+            return Err(PyValueError::new_err("Invalid time".to_string()));
         };
 
         let internal =

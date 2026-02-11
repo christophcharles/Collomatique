@@ -124,7 +124,7 @@ impl FactoryComponent for Entry {
             }
             EntryInput::EditClicked => {
                 sender
-                    .output(EntryOutput::EditGroupList(self.data.id.clone()))
+                    .output(EntryOutput::EditGroupList(self.data.id))
                     .unwrap();
             }
         }

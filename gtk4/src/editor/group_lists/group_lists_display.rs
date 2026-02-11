@@ -146,9 +146,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(
@@ -170,17 +168,17 @@ impl FactoryComponent for Entry {
             }
             EntryInput::EditClicked => {
                 sender
-                    .output(EntryOutput::EditGroupList(self.data.id.clone()))
+                    .output(EntryOutput::EditGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::PrefillClicked => {
                 sender
-                    .output(EntryOutput::PrefillGroupList(self.data.id.clone()))
+                    .output(EntryOutput::PrefillGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {
                 sender
-                    .output(EntryOutput::DeleteGroupList(self.data.id.clone()))
+                    .output(EntryOutput::DeleteGroupList(self.data.id))
                     .unwrap();
             }
         }

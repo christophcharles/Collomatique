@@ -138,22 +138,22 @@ impl CheckSubscopeBuilder {
         }
 
         // Check if there's a shadowed identifier in outer scopes (including parent chain)
-        if !ident_can_be_shadowed(ident) {
-            if let Some((_, old_ident_span)) = self.parent.lookup_ident(ident) {
-                self.parent
-                    .warnings
-                    .lock()
-                    .unwrap()
-                    .push(SemWarning::IdentifierShadowed {
-                        module: self.parent.current_module().to_string(),
-                        identifier: ident.to_string(),
-                        span: span.clone(),
-                        previous: old_ident_span,
-                    });
-            }
+        if !ident_can_be_shadowed(ident)
+            && let Some((_, old_ident_span)) = self.parent.lookup_ident(ident)
+        {
+            self.parent
+                .warnings
+                .lock()
+                .unwrap()
+                .push(SemWarning::IdentifierShadowed {
+                    module: self.parent.current_module().to_string(),
+                    identifier: ident.to_string(),
+                    span: span.clone(),
+                    previous: old_ident_span,
+                });
         }
 
-        let should_be_used_by_default = ident.chars().next().unwrap() == '_';
+        let should_be_used_by_default = ident.starts_with('_');
 
         type_info.types.insert(span.clone(), typ.clone().into());
         self.identifiers.insert(

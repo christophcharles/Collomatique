@@ -28,7 +28,7 @@ impl Dialog {
 
         for warning in &self.warnings {
             output += "\n - ";
-            output += &warning;
+            output += warning;
         }
 
         output

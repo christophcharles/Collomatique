@@ -174,7 +174,7 @@ impl SimpleComponent for Dialog {
                                 #[track(model.should_redraw)]
                                 set_selected: model.subject_selected,
                                 connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected() as u32;
+                                    let selected = widget.selected();
                                     sender.input(DialogInput::UpdateSelectedSubject(selected));
                                 },
                             },
@@ -190,7 +190,7 @@ impl SimpleComponent for Dialog {
                                 #[track(model.should_redraw)]
                                 set_selected: model.week_pattern_selected,
                                 connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected() as u32;
+                                    let selected = widget.selected();
                                     sender.input(DialogInput::UpdateSelectedWeekPattern(selected));
                                 },
                             },
@@ -351,7 +351,7 @@ impl Dialog {
         crate::tools::factories::update_vec_deque(
             &mut self.slots,
             self.slots_data.iter().cloned(),
-            |x| SlotInput::UpdateData(x),
+            SlotInput::UpdateData,
         );
     }
 
@@ -371,9 +371,9 @@ impl Dialog {
             .subjects
             .ordered_subject_list
             .iter()
-            .map(|(subject_id, subject)| (subject_id.clone(), subject.parameters.name.clone()))
+            .map(|(subject_id, subject)| (*subject_id, subject.parameters.name.clone()))
             .collect();
-        subjects.sort_by_key(|(id, name)| (name.clone(), id.clone()));
+        subjects.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_subjects = subjects;
     }
 
@@ -382,11 +382,9 @@ impl Dialog {
             .week_patterns
             .week_pattern_map
             .iter()
-            .map(|(week_pattern_id, week_pattern)| {
-                (week_pattern_id.clone(), week_pattern.name.clone())
-            })
+            .map(|(week_pattern_id, week_pattern)| (*week_pattern_id, week_pattern.name.clone()))
             .collect();
-        week_patterns.sort_by_key(|(id, name)| (name.clone(), id.clone()));
+        week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_week_patterns = week_patterns;
     }
 
@@ -474,7 +472,7 @@ impl FactoryComponent for Slot {
                 #[track(self.should_redraw)]
                 set_selected: self.day_selected,
                 connect_selected_notify[sender] => move |widget| {
-                    let selected = widget.selected() as u32;
+                    let selected = widget.selected();
                     sender.input(SlotInput::UpdateSelectedDay(selected));
                 },
             },
@@ -484,7 +482,7 @@ impl FactoryComponent for Slot {
                 #[wrap(Some)]
                 set_adjustment = &gtk::Adjustment {
                     set_lower: 0.,
-                    set_upper: 23. as f64,
+                    set_upper: 23_f64,
                     set_step_increment: 1.,
                     set_page_increment: 5.,
                 },
@@ -504,7 +502,7 @@ impl FactoryComponent for Slot {
                 #[wrap(Some)]
                 set_adjustment = &gtk::Adjustment {
                     set_lower: 0.,
-                    set_upper: 59. as f64,
+                    set_upper: 59_f64,
                     set_step_increment: 1.,
                     set_page_increment: 5.,
                 },

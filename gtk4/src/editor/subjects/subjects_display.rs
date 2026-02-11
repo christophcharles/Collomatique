@@ -349,7 +349,7 @@ impl FactoryComponent for Entry {
         crate::tools::factories::update_vec_deque(
             &mut model.periods,
             transformed_data.into_iter(),
-            |x| PeriodInput::UpdateData(x),
+            PeriodInput::UpdateData,
         );
 
         model
@@ -395,7 +395,7 @@ impl FactoryComponent for Entry {
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods,
                     transformed_data.into_iter(),
-                    |x| PeriodInput::UpdateData(x),
+                    PeriodInput::UpdateData,
                 );
             }
             EntryInput::EditClicked => {

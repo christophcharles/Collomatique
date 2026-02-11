@@ -857,7 +857,7 @@ impl Component for EditorPanel {
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
-                    self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                     self.update_data_and_recompile_main_script(DataUpdate::Undo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
@@ -1177,8 +1177,8 @@ fn generate_week_title(
             format!(
                 "Semaine {} du {} au {}",
                 week_number + 1,
-                start_date.format("%d/%m/%Y").to_string(),
-                end_date.format("%d/%m/%Y").to_string(),
+                start_date.format("%d/%m/%Y"),
+                end_date.format("%d/%m/%Y"),
             )
         }
         None => {
@@ -1230,8 +1230,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaines {} à {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                     end_week,
                 )
@@ -1240,8 +1240,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaine {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                 )
             }

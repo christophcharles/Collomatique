@@ -93,10 +93,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             .get(&(module.to_string(), fn_name.to_string()))
             .ok_or(EvalError::UnknownFunction(fn_name.to_string()))?;
 
-        if !allow_private {
-            if !fn_desc.public {
-                return Err(EvalError::UnknownFunction(fn_name.to_string()));
-            }
+        if !allow_private && !fn_desc.public {
+            return Err(EvalError::UnknownFunction(fn_name.to_string()));
         }
 
         if fn_desc.typ.args.len() != args.len() {
@@ -115,9 +113,9 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
-            if !arg.fits_in_typ(&self.env, arg_typ) {
+            if !arg.fits_in_typ(self.env, arg_typ) {
                 return Err(EvalError::TypeMismatch {
-                    param: param,
+                    param,
                     expected: arg_typ.clone(),
                     found: arg.clone(),
                 });
@@ -167,7 +165,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             ExprValue::Object(obj) => self
                 .ast
                 .global_env
-                .validate_object_type(&obj.typ_name(&self.env)),
+                .validate_object_type(&obj.typ_name(self.env)),
             ExprValue::List(list) => {
                 for elem in list {
                     if !self.validate_value(elem) {
@@ -206,7 +204,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             if !self.validate_value(&arg) {
                 return Err(EvalError::InvalidExprValue { param });
             }
-            checked_args.push(arg.into());
+            checked_args.push(arg);
         }
 
         Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)).await

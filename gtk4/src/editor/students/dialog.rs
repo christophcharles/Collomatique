@@ -217,7 +217,7 @@ impl SimpleComponent for Dialog {
                 crate::tools::factories::update_vec_deque(
                     &mut self.period_entries,
                     transformed_data.into_iter(),
-                    |x| PeriodInput::UpdateData(x),
+                    PeriodInput::UpdateData,
                 );
             }
             DialogInput::Cancel => {

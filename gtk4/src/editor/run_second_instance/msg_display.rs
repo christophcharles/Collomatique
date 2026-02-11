@@ -63,9 +63,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn update(&mut self, _msg: Self::Input, _sender: FactorySender<Self>) {}

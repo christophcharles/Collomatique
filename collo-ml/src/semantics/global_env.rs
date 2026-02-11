@@ -242,7 +242,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 }
             })
             .collect();
-        ExprType::sum(expanded.into_iter()).unwrap_or_else(|| typ.clone())
+        ExprType::sum(expanded).unwrap_or_else(|| typ.clone())
     }
 
     /// Subtract types with enum-awareness: expands root enum types before subtracting
@@ -643,7 +643,7 @@ impl TypeInfo {
 
 fn ident_can_be_unused(ident: &str) -> bool {
     assert!(!ident.is_empty());
-    ident.chars().next().unwrap() == '_'
+    ident.starts_with('_')
 }
 
 pub(crate) fn should_be_used_by_default(ident: &str) -> bool {

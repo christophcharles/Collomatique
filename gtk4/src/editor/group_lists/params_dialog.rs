@@ -326,7 +326,7 @@ impl Dialog {
                     name: name.clone(),
                     group_num: num,
                 }),
-            |data| GroupNameInput::UpdateData(data),
+            GroupNameInput::UpdateData,
         );
     }
 }

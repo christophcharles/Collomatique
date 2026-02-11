@@ -291,7 +291,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
             .group_lists
             .group_list_map
             .keys()
-            .map(|x| *x)
+            .copied()
             .collect()
     }
 
@@ -322,7 +322,6 @@ impl GroupList {
 
         Some(
             (0..(group_list_data.params.group_names.len() as i32))
-                .into_iter()
                 .map(|num| GroupId {
                     group_list: *group_list_id,
                     num,
@@ -602,7 +601,7 @@ impl TimeSlot {
                 .expect("Time should be with a whole minute");
                 collomatique_time::SlotWithDuration::new(
                     collomatique_time::SlotStart {
-                        weekday: day.clone().into(),
+                        weekday: day,
                         start_time,
                     },
                     NonZeroMinutes::new(duration).expect("duration should be non-zero"),
@@ -659,7 +658,7 @@ impl ViewBuilder<Env, TimeSlotData> for ObjectId {
                 .interrogation_parameters
                 .as_ref()
                 .expect("Subject with slots should have parameters");
-            let duration = subject_params.duration.clone();
+            let duration = subject_params.duration;
             for (slot_id, slot_desc) in &subject_slots.ordered_slots {
                 let week_pattern = tools::extract_week_pattern(&env.params, slot_desc.week_pattern);
                 let status = week_pattern
@@ -774,7 +773,7 @@ impl ViewBuilder<Env, IncompatId> for ObjectId {
                         return None;
                     }
                     Some(IncompatWeekData {
-                        incompat: id.clone(),
+                        incompat: *id,
                         week: WeekId(week),
                     })
                 })
@@ -868,7 +867,7 @@ impl ViewBuilder<Env, IncompatSlotData> for ObjectId {
                 incompat: id.incompat,
                 week: id.week,
             },
-            time_slots: IncompatSlot::generate_time_slots_in_slot(env, &slot_data, id.week),
+            time_slots: IncompatSlot::generate_time_slots_in_slot(env, slot_data, id.week),
         })
     }
 }
@@ -898,7 +897,7 @@ impl IncompatSlot {
                 .expect("Time should be with a whole minute");
                 let actual_slot = collomatique_time::SlotWithDuration::new(
                     collomatique_time::SlotStart {
-                        weekday: slot_with_duration.start().weekday.clone().into(),
+                        weekday: slot_with_duration.start().weekday,
                         start_time,
                     },
                     NonZeroMinutes::new(duration).expect("duration should be non-zero"),

@@ -199,7 +199,7 @@ impl SimpleComponent for Dialog {
                             #[track(model.should_redraw)]
                             set_selected: model.teacher_selected,
                             connect_selected_notify[sender] => move |widget| {
-                                let selected = widget.selected() as u32;
+                                let selected = widget.selected();
                                 sender.input(DialogInput::UpdateSelectedTeacher(selected));
                             },
                         },
@@ -215,7 +215,7 @@ impl SimpleComponent for Dialog {
                             #[track(model.should_redraw)]
                             set_selected: model.day_selected,
                             connect_selected_notify[sender] => move |widget| {
-                                let selected = widget.selected() as u32;
+                                let selected = widget.selected();
                                 sender.input(DialogInput::UpdateSelectedDay(selected));
                             },
                         },
@@ -225,7 +225,7 @@ impl SimpleComponent for Dialog {
                             #[wrap(Some)]
                             set_adjustment = &gtk::Adjustment {
                                 set_lower: 0.,
-                                set_upper: 23. as f64,
+                                set_upper: 23_f64,
                                 set_step_increment: 1.,
                                 set_page_increment: 5.,
                             },
@@ -245,7 +245,7 @@ impl SimpleComponent for Dialog {
                             #[wrap(Some)]
                             set_adjustment = &gtk::Adjustment {
                                 set_lower: 0.,
-                                set_upper: 59. as f64,
+                                set_upper: 59_f64,
                                 set_step_increment: 1.,
                                 set_page_increment: 5.,
                             },
@@ -271,7 +271,7 @@ impl SimpleComponent for Dialog {
                             #[track(model.should_redraw)]
                             set_selected: model.week_pattern_selected,
                             connect_selected_notify[sender] => move |widget| {
-                                let selected = widget.selected() as u32;
+                                let selected = widget.selected();
                                 sender.input(DialogInput::UpdateSelectedWeekPattern(selected));
                             },
                         },
@@ -414,14 +414,14 @@ impl Dialog {
             .iter()
             .map(|(teacher_id, teacher)| {
                 (
-                    teacher_id.clone(),
+                    *teacher_id,
                     teacher.desc.firstname.clone(),
                     teacher.desc.surname.clone(),
                 )
             })
             .collect();
         teachers.sort_by_key(|(id, first_name, last_name)| {
-            (last_name.clone(), first_name.clone(), id.clone())
+            (last_name.clone(), first_name.clone(), *id)
         });
         self.ordered_teachers = teachers;
     }
@@ -431,11 +431,9 @@ impl Dialog {
             .week_patterns
             .week_pattern_map
             .iter()
-            .map(|(week_pattern_id, week_pattern)| {
-                (week_pattern_id.clone(), week_pattern.name.clone())
-            })
+            .map(|(week_pattern_id, week_pattern)| (*week_pattern_id, week_pattern.name.clone()))
             .collect();
-        week_patterns.sort_by_key(|(id, name)| (name.clone(), id.clone()));
+        week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_week_patterns = week_patterns;
     }
 

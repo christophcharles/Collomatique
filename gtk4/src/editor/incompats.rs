@@ -142,12 +142,12 @@ impl Component for Incompats {
                                 if incompat.subject_id != *id {
                                     return None;
                                 }
-                                Some((incompat_id.clone(), incompat.clone()))
+                                Some((*incompat_id, incompat.clone()))
                             })
                             .collect();
                         incompats_display::EntryData {
                             subject_params: desc.parameters.clone(),
-                            subject_id: id.clone(),
+                            subject_id: *id,
                             week_patterns: self.week_patterns.clone(),
                             subject_incompats,
                         }
@@ -157,7 +157,7 @@ impl Component for Incompats {
                 crate::tools::factories::update_vec_deque(
                     &mut self.incompats_list,
                     new_data.into_iter(),
-                    |data| incompats_display::EntryInput::UpdateData(data),
+                    incompats_display::EntryInput::UpdateData,
                 );
             }
 

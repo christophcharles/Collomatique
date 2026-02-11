@@ -66,12 +66,11 @@ struct CacheConfig {
 
 fn extract_env_type(attrs: &[Attribute]) -> Option<syn::Type> {
     for attr in attrs {
-        if attr.path().is_ident("env") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone()) {
-                    return Some(ty);
-                }
-            }
+        if attr.path().is_ident("env")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone())
+        {
+            return Some(ty);
         }
     }
     None
@@ -100,14 +99,12 @@ fn extract_cache_attribute(attrs: &[Attribute], enum_name: &syn::Ident) -> Optio
 
 fn extract_name_attribute(attrs: &[Attribute]) -> Option<String> {
     for attr in attrs {
-        if attr.path().is_ident("name") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(lit) = syn::parse2::<syn::Lit>(meta_list.tokens.clone()) {
-                    if let syn::Lit::Str(lit_str) = lit {
-                        return Some(lit_str.value());
-                    }
-                }
-            }
+        if attr.path().is_ident("name")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(lit) = syn::parse2::<syn::Lit>(meta_list.tokens.clone())
+            && let syn::Lit::Str(lit_str) = lit
+        {
+            return Some(lit_str.value());
         }
     }
     None

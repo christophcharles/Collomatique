@@ -112,10 +112,10 @@ impl Component for Widget {
                 assert!(new_list.len() < u32::MAX as usize);
                 self.current_list = new_list;
                 self.update_gtk_model();
-                if let Some(num) = selected {
-                    if num >= self.current_list.len() {
-                        return;
-                    }
+                if let Some(num) = selected
+                    && num >= self.current_list.len()
+                {
+                    return;
                 }
 
                 self.currently_selected = selected.map(|x| {

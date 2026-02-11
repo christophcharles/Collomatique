@@ -146,7 +146,7 @@ impl FieldType {
 
     pub fn is_simple(&self) -> bool {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "FieldType should always carry at least one type"
         );
         self.variants.len() == 1
@@ -185,8 +185,7 @@ impl FieldType {
             self.variants
                 .into_iter()
                 .map(|x| x.convert_to_simple_type::<T>())
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter(),
+                .collect::<Result<Vec<_>, _>>()?,
         )
         .expect("There should always be at least one variant"))
     }

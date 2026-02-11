@@ -197,7 +197,7 @@ impl Dialog {
         super::super::tools::factories::update_vec_deque(
             &mut self.messages,
             messages.into_iter(),
-            |x| EntryInput::Update(x),
+            EntryInput::Update,
         );
     }
 }
@@ -262,9 +262,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {

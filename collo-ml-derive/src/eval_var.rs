@@ -70,12 +70,11 @@ struct FieldInfo {
 fn unwrap_option_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         let segment = type_path.path.segments.last()?;
-        if segment.ident == "Option" {
-            if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                    return Some(inner_ty);
-                }
-            }
+        if segment.ident == "Option"
+            && let PathArguments::AngleBracketed(args) = &segment.arguments
+            && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+        {
+            return Some(inner_ty);
         }
     }
     None
@@ -98,12 +97,11 @@ fn get_core_type(ty: &Type) -> &Type {
 // Helper function to extract #[env(Type)]
 fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
     for attr in attrs {
-        if attr.path().is_ident("env") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone()) {
-                    return Some(ty);
-                }
-            }
+        if attr.path().is_ident("env")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone())
+        {
+            return Some(ty);
         }
     }
     None
@@ -112,12 +110,11 @@ fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
 // Helper function to extract #[fix_with(expr)]
 fn extract_fix_with_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("fix_with") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("fix_with")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -126,12 +123,11 @@ fn extract_fix_with_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[defer_fix(expr)]
 fn extract_defer_fix_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("defer_fix") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("defer_fix")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -140,14 +136,12 @@ fn extract_defer_fix_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[name("...")]
 fn extract_name_attribute(attrs: &[Attribute]) -> Option<String> {
     for attr in attrs {
-        if attr.path().is_ident("name") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone()) {
-                    if let Lit::Str(lit_str) = lit {
-                        return Some(lit_str.value());
-                    }
-                }
-            }
+        if attr.path().is_ident("name")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone())
+            && let Lit::Str(lit_str) = lit
+        {
+            return Some(lit_str.value());
         }
     }
     None
@@ -156,12 +150,11 @@ fn extract_name_attribute(attrs: &[Attribute]) -> Option<String> {
 // Helper function to extract #[var(...)]
 fn extract_var_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("var") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("var")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -170,12 +163,11 @@ fn extract_var_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[range(...)]
 fn extract_range_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("range") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("range")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -692,27 +684,27 @@ fn generate_fix_pattern_and_checks_and_output(
                     let segment = type_path.path.segments.last().unwrap();
                     let type_name = segment.ident.to_string();
 
-                    if type_name == "i32" {
-                        if let Some(range_expr) = &field.range {
-                            let check = if is_option {
-                                // For Option<i32>, check if Some and in range
-                                quote! {
-                                    if let Some(val) = #var_name {
-                                        if !(#range_expr).contains(val) {
-                                            return Some(#fix_with);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // For i32, check if in range
-                                quote! {
-                                    if !(#range_expr).contains(#var_name) {
+                    if type_name == "i32"
+                        && let Some(range_expr) = &field.range
+                    {
+                        let check = if is_option {
+                            // For Option<i32>, check if Some and in range
+                            quote! {
+                                if let Some(val) = #var_name {
+                                    if !(#range_expr).contains(val) {
                                         return Some(#fix_with);
                                     }
                                 }
-                            };
-                            checks.push(check);
-                        }
+                            }
+                        } else {
+                            // For i32, check if in range
+                            quote! {
+                                if !(#range_expr).contains(#var_name) {
+                                    return Some(#fix_with);
+                                }
+                            }
+                        };
+                        checks.push(check);
                     }
                 }
             }

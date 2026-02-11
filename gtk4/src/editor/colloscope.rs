@@ -680,7 +680,7 @@ impl Colloscope {
             .iter()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: id.clone(),
+                id: *id,
                 group_list: group_list.clone(),
                 collo_group_list: self
                     .colloscope
@@ -692,12 +692,12 @@ impl Colloscope {
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id.clone()));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
             group_lists_vec.into_iter(),
-            |data| group_lists_display::EntryInput::UpdateData(data),
+            group_lists_display::EntryInput::UpdateData,
         );
     }
 

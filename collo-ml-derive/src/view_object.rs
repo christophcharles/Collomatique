@@ -87,12 +87,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
 // Helper function to extract #[eval_object(Type)]
 fn extract_eval_object_type(attrs: &[Attribute]) -> Option<syn::Ident> {
     for attr in attrs {
-        if attr.path().is_ident("eval_object") {
-            if let Meta::List(meta_list) = &attr.meta {
-                // Parse the tokens inside the parentheses
-                if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
-                    return Some(ident);
-                }
+        if attr.path().is_ident("eval_object")
+            && let Meta::List(meta_list) = &attr.meta
+        {
+            // Parse the tokens inside the parentheses
+            if let Ok(ident) = syn::parse2::<syn::Ident>(meta_list.tokens.clone()) {
+                return Some(ident);
             }
         }
     }
@@ -110,16 +110,16 @@ fn extract_pretty_format(
     fields: &syn::punctuated::Punctuated<syn::Field, syn::token::Comma>,
 ) -> proc_macro2::TokenStream {
     for attr in attrs {
-        if attr.path().is_ident("pretty") {
-            if let Meta::List(meta_list) = &attr.meta {
-                // Parse the string literal
-                if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone()) {
-                    if let Lit::Str(lit_str) = lit {
-                        let format_str = lit_str.value();
-                        // Generate format! call with field accesses
-                        return generate_pretty_print_from_format(&format_str, fields);
-                    }
-                }
+        if attr.path().is_ident("pretty")
+            && let Meta::List(meta_list) = &attr.meta
+        {
+            // Parse the string literal
+            if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone())
+                && let Lit::Str(lit_str) = lit
+            {
+                let format_str = lit_str.value();
+                // Generate format! call with field accesses
+                return generate_pretty_print_from_format(&format_str, fields);
             }
         }
     }
@@ -145,44 +145,43 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                 "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
                 "Vec" => {
                     // Extract the inner type from Vec<T>
-                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            let inner_expr_type = type_to_field_type(inner_ty);
-                            return quote! {
-                                ::collo_ml::traits::SimpleFieldType::List(#inner_expr_type).into()
-                            };
-                        }
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        let inner_expr_type = type_to_field_type(inner_ty);
+                        return quote! {
+                            ::collo_ml::traits::SimpleFieldType::List(#inner_expr_type).into()
+                        };
                     }
                     panic!("Vec must have a type parameter");
                 }
                 "Option" => {
                     // Extract the inner type from Option<T>
-                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            if let Type::Path(path) = inner_ty {
-                                if path
-                                    .path
-                                    .segments
-                                    .last()
-                                    .unwrap()
-                                    .ident
-                                    .to_string()
-                                    .as_str()
-                                    == "Option"
-                                {
-                                    panic!("Nested Option are not supported");
-                                }
-                            }
-                            let inner_expr_type = type_to_field_type(inner_ty);
-                            return quote! {
-                                ::collo_ml::traits::FieldType::sum(
-                                    [
-                                        ::collo_ml::traits::SimpleFieldType::None,
-                                        #inner_expr_type
-                                    ]
-                                ).expect("Sum type should be valid")
-                            };
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        if let Type::Path(path) = inner_ty
+                            && path
+                                .path
+                                .segments
+                                .last()
+                                .unwrap()
+                                .ident
+                                .to_string()
+                                .as_str()
+                                == "Option"
+                        {
+                            panic!("Nested Option are not supported");
                         }
+                        let inner_expr_type = type_to_field_type(inner_ty);
+                        return quote! {
+                            ::collo_ml::traits::FieldType::sum(
+                                [
+                                    ::collo_ml::traits::SimpleFieldType::None,
+                                    #inner_expr_type
+                                ]
+                            ).expect("Sum type should be valid")
+                        };
                     }
                     panic!("Vec must have a type parameter");
                 }
@@ -214,53 +213,52 @@ fn generate_field_value(
                 },
                 "Vec" => {
                     // Need to convert collection elements
-                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            let inner = generate_field_value(
-                                &quote! {
-                                    x
-                                },
-                                inner_ty,
-                            );
-                            return quote! {
-                                ::collo_ml::ExprValue::List(
-                                    #field_name.iter().map(|x| #inner).collect(),
-                                ),
-                            };
-                        }
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        let inner = generate_field_value(
+                            &quote! {
+                                x
+                            },
+                            inner_ty,
+                        );
+                        return quote! {
+                            ::collo_ml::ExprValue::List(
+                                #field_name.iter().map(|x| #inner).collect(),
+                            ),
+                        };
                     }
                     panic!("Vec must have type parameter");
                 }
                 "Option" => {
-                    if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            if let Type::Path(path) = inner_ty {
-                                if path
-                                    .path
-                                    .segments
-                                    .last()
-                                    .unwrap()
-                                    .ident
-                                    .to_string()
-                                    .as_str()
-                                    == "Option"
-                                {
-                                    panic!("Nested Option are not supported");
-                                }
-                            }
-                            let inner = generate_field_value(
-                                &quote! {
-                                    x
-                                },
-                                inner_ty,
-                            );
-                            return quote! {
-                                match #field_name.clone() {
-                                    Some(x) => #inner
-                                    None => ::collo_ml::ExprValue::None,
-                                },
-                            };
+                    if let PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        if let Type::Path(path) = inner_ty
+                            && path
+                                .path
+                                .segments
+                                .last()
+                                .unwrap()
+                                .ident
+                                .to_string()
+                                .as_str()
+                                == "Option"
+                        {
+                            panic!("Nested Option are not supported");
                         }
+                        let inner = generate_field_value(
+                            &quote! {
+                                x
+                            },
+                            inner_ty,
+                        );
+                        return quote! {
+                            match #field_name.clone() {
+                                Some(x) => #inner
+                                None => ::collo_ml::ExprValue::None,
+                            },
+                        };
                     }
                     panic!("Vec must have a type parameter");
                 }
@@ -294,7 +292,7 @@ fn generate_pretty_print_from_format(
     // Simple parser for {field_name}
     while let Some(start) = format_str[current_pos..].find('{') {
         let start = current_pos + start;
-        if let Some(end) = format_str[start..].find(|c| c == '}' || c == ':') {
+        if let Some(end) = format_str[start..].find(['}', ':']) {
             let end = start + end;
             let field_name = &format_str[start + 1..end];
 

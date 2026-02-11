@@ -215,7 +215,7 @@ impl SimpleComponent for Dialog {
                         name: sub.parameters.name.clone(),
                         enable: self.teacher_data.subjects.contains(id),
                     }),
-                    |data| SubjectInput::UpdateData(data),
+                    SubjectInput::UpdateData,
                 );
             }
             DialogInput::Cancel => {

@@ -299,17 +299,17 @@ impl GroupLists {
             .group_list_map
             .iter()
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: id.clone(),
+                id: *id,
                 group_list: group_list.clone(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id.clone()));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
             group_lists_vec.into_iter(),
-            |data| group_lists_display::EntryInput::UpdateData(data),
+            group_lists_display::EntryInput::UpdateData,
         );
     }
 
@@ -321,7 +321,7 @@ impl GroupLists {
             .enumerate()
             .scan(0usize, |acc, (num, (id, desc))| {
                 let out = associations_display::PeriodEntryData {
-                    period_id: id.clone(),
+                    period_id: *id,
                     period_text: super::generate_week_succession_title(
                         "Associations pour la période",
                         &self.periods.first_week,
@@ -337,11 +337,9 @@ impl GroupLists {
                             if subject.excluded_periods.contains(id) {
                                 return None;
                             }
-                            if subject.parameters.interrogation_parameters.is_none() {
-                                return None;
-                            }
+                            subject.parameters.interrogation_parameters.as_ref()?;
 
-                            Some((subject_id.clone(), subject.clone()))
+                            Some((*subject_id, subject.clone()))
                         })
                         .collect(),
                     group_list_associations: self
@@ -361,7 +359,7 @@ impl GroupLists {
         crate::tools::factories::update_vec_deque(
             &mut self.period_entries,
             periods_vec.into_iter(),
-            |data| associations_display::PeriodEntryInput::UpdateData(data),
+            associations_display::PeriodEntryInput::UpdateData,
         );
     }
 }

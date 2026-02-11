@@ -66,12 +66,12 @@ impl MainScript {
     }
 
     fn update_errors_list(&mut self) {
-        let messages = self.errors.as_ref().map(|e| e.clone()).unwrap_or_default();
+        let messages = self.errors.clone().unwrap_or_default();
 
         crate::tools::factories::update_vec_deque(
             &mut self.errors_list,
             messages.into_iter(),
-            |x| ErrorEntryInput::Update(x),
+            ErrorEntryInput::Update,
         );
     }
 }

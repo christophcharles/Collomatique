@@ -74,10 +74,10 @@ pub fn resolve_path<D: DatabaseDriver>(
     let segments: Vec<&str> = path.node.segments.iter().map(|s| s.node.as_str()).collect();
 
     // 1. Check built-in types (single segment only)
-    if segments.len() == 1 {
-        if let Some(builtin) = try_resolve_builtin_type(segments[0]) {
-            return Ok(ResolvedPathKind::Type(builtin));
-        }
+    if segments.len() == 1
+        && let Some(builtin) = try_resolve_builtin_type(segments[0])
+    {
+        return Ok(ResolvedPathKind::Type(builtin));
     }
 
     // 2. Check external entities (single segment only, treated like primitives)
@@ -143,12 +143,11 @@ pub fn resolve_path<D: DatabaseDriver>(
     }
 
     // 4. Check local variables (single segment only, last for defensive programming)
-    if segments.len() == 1 {
-        if let Some(local) = local_env {
-            if local.has_ident(segments[0]) {
-                return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
-            }
-        }
+    if segments.len() == 1
+        && let Some(local) = local_env
+        && local.has_ident(segments[0])
+    {
+        return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
     }
 
     Err(PathResolutionError::UnknownIdentifier {

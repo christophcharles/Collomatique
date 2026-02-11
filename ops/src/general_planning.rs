@@ -545,21 +545,20 @@ impl GeneralPlanningUpdateOp {
                     .group_lists
                     .subjects_associations
                     .get(period_id)
+                    && let Some((subject_id, group_list_id)) = subject_map.iter().next()
                 {
-                    if let Some((subject_id, group_list_id)) = subject_map.iter().next() {
-                        return Some(CleaningOp {
-                            warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
-                                *group_list_id,
-                                *subject_id,
-                                *period_id,
-                            ),
-                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
-                                *period_id,
-                                *subject_id,
-                                None,
-                            )),
-                        });
-                    }
+                    return Some(CleaningOp {
+                        warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                            *group_list_id,
+                            *subject_id,
+                            *period_id,
+                        ),
+                        op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                            *period_id,
+                            *subject_id,
+                            None,
+                        )),
+                    });
                 }
 
                 None
@@ -700,21 +699,20 @@ impl GeneralPlanningUpdateOp {
                     .group_lists
                     .subjects_associations
                     .get(period_id)
+                    && let Some((subject_id, group_list_id)) = subject_map.iter().next()
                 {
-                    if let Some((subject_id, group_list_id)) = subject_map.iter().next() {
-                        return Some(CleaningOp {
-                            warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
-                                *group_list_id,
-                                *subject_id,
-                                *period_id,
-                            ),
-                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
-                                *period_id,
-                                *subject_id,
-                                None,
-                            )),
-                        });
-                    }
+                    return Some(CleaningOp {
+                        warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                            *group_list_id,
+                            *subject_id,
+                            *period_id,
+                        ),
+                        op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                            *period_id,
+                            *subject_id,
+                            None,
+                        )),
+                    });
                 }
 
                 None

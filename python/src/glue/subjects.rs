@@ -20,7 +20,7 @@ impl SubjectId {
 
 impl From<&collomatique_state_colloscopes::SubjectId> for SubjectId {
     fn from(value: &collomatique_state_colloscopes::SubjectId) -> Self {
-        SubjectId { id: value.clone() }
+        SubjectId { id: *value }
     }
 }
 
@@ -32,7 +32,7 @@ impl From<collomatique_state_colloscopes::SubjectId> for SubjectId {
 
 impl From<&SubjectId> for collomatique_state_colloscopes::SubjectId {
     fn from(value: &SubjectId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 
@@ -128,10 +128,10 @@ impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
 {
     fn from(value: collomatique_state_colloscopes::SubjectInterrogationParameters) -> Self {
         SubjectInterrogationParameters {
-            students_per_group_min: value.students_per_group.start().clone(),
-            students_per_group_max: value.students_per_group.end().clone(),
-            groups_per_interrogation_min: value.students_per_group.start().clone(),
-            groups_per_interrogation_max: value.students_per_group.end().clone(),
+            students_per_group_min: *value.students_per_group.start(),
+            students_per_group_max: *value.students_per_group.end(),
+            groups_per_interrogation_min: *value.students_per_group.start(),
+            groups_per_interrogation_max: *value.students_per_group.end(),
             duration: value.duration.get(),
             take_duration_into_account: value.take_duration_into_account,
             periodicity: value.periodicity.into(),
@@ -230,8 +230,8 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
                 interrogation_count_in_year,
                 minimum_week_separation,
             } => SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year_min: interrogation_count_in_year.start().clone(),
-                interrogation_count_in_year_max: interrogation_count_in_year.end().clone(),
+                interrogation_count_in_year_min: *interrogation_count_in_year.start(),
+                interrogation_count_in_year_max: *interrogation_count_in_year.end(),
                 minimum_week_separation,
             },
             collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
@@ -293,8 +293,8 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBl
         SubjectWeekBlock {
             delay_in_weeks: value.delay_in_weeks,
             size_in_weeks: value.size_in_weeks,
-            interrogation_count_in_block_min: value.interrogation_count_in_block.start().clone(),
-            interrogation_count_in_block_max: value.interrogation_count_in_block.end().clone(),
+            interrogation_count_in_block_min: *value.interrogation_count_in_block.start(),
+            interrogation_count_in_block_max: *value.interrogation_count_in_block.end(),
         }
     }
 }
