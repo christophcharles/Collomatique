@@ -164,17 +164,13 @@ impl AssignmentsUpdateOp {
                     .periods
                     .find_period_position(*period_id)
                 else {
-                    return Err(
-                        DuplicatePreviousPeriodError::InvalidPeriodId(period_id.clone()).into(),
-                    );
+                    return Err(DuplicatePreviousPeriodError::InvalidPeriodId(*period_id).into());
                 };
 
                 if position == 0 {
                     return Err(
-                        DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(
-                            period_id.clone(),
-                        )
-                        .into(),
+                        DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(*period_id)
+                            .into(),
                     );
                 }
 
@@ -220,7 +216,7 @@ impl AssignmentsUpdateOp {
                         continue;
                     }
 
-                    for (subject_id, _) in &current_period_assignments.subject_map {
+                    for subject_id in current_period_assignments.subject_map.keys() {
                         let Some(previous_assigned_students) =
                             previous_period_assignments.subject_map.get(subject_id)
                         else {
@@ -255,7 +251,7 @@ impl AssignmentsUpdateOp {
                     .find_period_position(*period_id)
                     .is_none()
                 {
-                    return Err(AssignAllError::InvalidPeriodId(period_id.clone()).into());
+                    return Err(AssignAllError::InvalidPeriodId(*period_id).into());
                 };
 
                 let Some(subject) = data

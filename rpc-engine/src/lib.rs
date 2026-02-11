@@ -4,7 +4,7 @@ use collomatique_state_colloscopes::ColloscopeOp;
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
     let encoded_msg = EncodedMsg::receive()?;
-    Ok(encoded_msg.try_into()?)
+    encoded_msg.try_into()
 }
 
 pub fn send_exit() {
@@ -31,12 +31,11 @@ fn try_solve() -> Result<(), anyhow::Error> {
     let main_script = env
         .get_params()
         .main_script
-        .as_ref()
-        .map(|x| x.as_str())
+        .as_deref()
         .unwrap_or(get_default_main_module());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let problem = match rt
-        .block_on(default_problem_builder(&main_script))
+        .block_on(default_problem_builder(main_script))
         .map_err(|e| format!("{}", e))
         .and_then(|b| rt.block_on(b.build(&env)).map_err(|e| format!("{}", e)))
     {

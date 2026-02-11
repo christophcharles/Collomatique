@@ -310,9 +310,10 @@ impl GeneralPlanningUpdateOp {
                 if !colloscope_period.is_empty() {
                     for (slot_id, collo_slot) in &colloscope_period.slot_map {
                         for week in old_week_count..*week_count {
-                            if let Some(interrogation) = &collo_slot.interrogations[week] {
-                                if !interrogation.is_empty() {
-                                    return Some(CleaningOp {
+                            if let Some(interrogation) = &collo_slot.interrogations[week]
+                                && !interrogation.is_empty()
+                            {
+                                return Some(CleaningOp {
                                         warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
                                         op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                                             *period_id,
@@ -321,7 +322,6 @@ impl GeneralPlanningUpdateOp {
                                             collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
                                         )),
                                     });
-                                }
                             }
                         }
                     }
@@ -377,9 +377,10 @@ impl GeneralPlanningUpdateOp {
                         let Some(interrogation_opt) = collo_slot.interrogations.get(*week) else {
                             return None;
                         };
-                        if let Some(interrogation) = interrogation_opt {
-                            if !interrogation.is_empty() {
-                                return Some(CleaningOp {
+                        if let Some(interrogation) = interrogation_opt
+                            && !interrogation.is_empty()
+                        {
+                            return Some(CleaningOp {
                                     warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
                                     op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                                         *period_id,
@@ -388,7 +389,6 @@ impl GeneralPlanningUpdateOp {
                                         collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
                                     )),
                                 });
-                            }
                         }
                     }
                 }
@@ -546,7 +546,7 @@ impl GeneralPlanningUpdateOp {
                     .subjects_associations
                     .get(period_id)
                 {
-                    for (subject_id, group_list_id) in subject_map {
+                    if let Some((subject_id, group_list_id)) = subject_map.iter().next() {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
                                 *group_list_id,
@@ -660,7 +660,7 @@ impl GeneralPlanningUpdateOp {
                 for (subject_id, assigned_students) in &period_assignments.subject_map {
                     match previous_assignments.subject_map.get(subject_id) {
                         None => {
-                            for student_id in assigned_students {
+                            if let Some(student_id) = assigned_students.iter().next() {
                                 return Some(CleaningOp {
                                     warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
                                     op: UpdateOp::Assignments(
@@ -670,8 +670,13 @@ impl GeneralPlanningUpdateOp {
                             }
                         }
                         Some(previous_students) => {
-                            for (student_id, _student) in
-                                &data.get_data().get_inner_data().params.students.student_map
+                            for student_id in data
+                                .get_data()
+                                .get_inner_data()
+                                .params
+                                .students
+                                .student_map
+                                .keys()
                             {
                                 if assigned_students.contains(student_id)
                                     != previous_students.contains(student_id)
@@ -696,7 +701,7 @@ impl GeneralPlanningUpdateOp {
                     .subjects_associations
                     .get(period_id)
                 {
-                    for (subject_id, group_list_id) in subject_map {
+                    if let Some((subject_id, group_list_id)) = subject_map.iter().next() {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
                                 *group_list_id,
@@ -904,7 +909,7 @@ impl GeneralPlanningUpdateOp {
                 for (subject_id, subject) in &ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();
-                        new_subject.excluded_periods.insert(new_id.clone());
+                        new_subject.excluded_periods.insert(new_id);
                         let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Subject(
@@ -932,7 +937,7 @@ impl GeneralPlanningUpdateOp {
                 for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
-                        new_student.excluded_periods.insert(new_id.clone());
+                        new_student.excluded_periods.insert(new_id);
                         let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Student(

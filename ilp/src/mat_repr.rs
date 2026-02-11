@@ -60,7 +60,6 @@ pub trait ProblemRepr<V: UsableData>:
 /// This is the configuration equivalent to [ProblemRepr].
 ///
 /// Each [ConfigRepr] is associated with a [ProblemRepr] through [ProblemRepr::Config].
-
 pub trait ConfigRepr<'a, V: UsableData>:
     PartialEq + Eq + PartialOrd + Ord + Sized + Clone + std::fmt::Debug + Send + Sync
 {

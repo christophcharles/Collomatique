@@ -179,7 +179,7 @@ impl<V: UsableData> Ord for SprsProblem<V> {
             }
         }
 
-        return std::cmp::Ordering::Equal;
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -238,7 +238,7 @@ impl<'a, V: UsableData> Eq for SprsConfig<'a, V> {}
 
 impl<'a, V: UsableData> Ord for SprsConfig<'a, V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let ord = self.pb_repr.cmp(&other.pb_repr);
+        let ord = self.pb_repr.cmp(other.pb_repr);
         if ord != std::cmp::Ordering::Equal {
             return ord;
         }
@@ -258,7 +258,7 @@ impl<'a, V: UsableData> Ord for SprsConfig<'a, V> {
             }
         }
 
-        return std::cmp::Ordering::Equal;
+        std::cmp::Ordering::Equal
     }
 }
 

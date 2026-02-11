@@ -32,7 +32,7 @@ pub fn encode(data: &Data) -> JsonData {
             .map(|x| Entry {
                 minimum_spec_version: x.minimum_spec_version(),
                 needed_entry: x.needed_entry(),
-                content: EntryContent::ValidEntry(x),
+                content: EntryContent::ValidEntry(Box::new(x)),
             })
             .collect(),
     }

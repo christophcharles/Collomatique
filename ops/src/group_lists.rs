@@ -572,9 +572,9 @@ impl GroupListsUpdateOp {
                 if let collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                     excluded_students,
                 } = &old_group_list.filling
+                    && !excluded_students.is_empty()
                 {
-                    if !excluded_students.is_empty() {
-                        return Some(CleaningOp {
+                    return Some(CleaningOp {
                             warning: GroupListsUpdateWarning::LooseExcludedStudents(
                                 *group_list_id,
                                 excluded_students.iter().copied().collect(),
@@ -586,7 +586,6 @@ impl GroupListsUpdateOp {
                                 },
                             )),
                         });
-                    }
                 }
 
                 if !old_group_list.is_prefilled() {
@@ -664,33 +663,32 @@ impl GroupListsUpdateOp {
                 if let collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                     excluded_students,
                 } = filling
+                    && !group_list.is_prefilled()
                 {
-                    if !group_list.is_prefilled() {
-                        let collo_group_list = data
-                            .get_data()
-                            .get_inner_data()
-                            .colloscope
-                            .group_lists
-                            .get(group_list_id)
-                            .expect("Non-prefilled group list should have colloscope entry");
+                    let collo_group_list = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Non-prefilled group list should have colloscope entry");
 
-                        for (student_id, _) in &collo_group_list.groups_for_students {
-                            if excluded_students.contains(student_id) {
-                                let mut new_collo_group_list = collo_group_list.clone();
-                                new_collo_group_list.groups_for_students.remove(student_id);
-                                return Some(CleaningOp {
-                                    warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                    for student_id in collo_group_list.groups_for_students.keys() {
+                        if excluded_students.contains(student_id) {
+                            let mut new_collo_group_list = collo_group_list.clone();
+                            new_collo_group_list.groups_for_students.remove(student_id);
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                                    *group_list_id,
+                                    *student_id,
+                                ),
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                         *group_list_id,
-                                        *student_id,
+                                        new_collo_group_list,
                                     ),
-                                    op: UpdateOp::Colloscope(
-                                        ColloscopeUpdateOp::UpdateColloscopeGroupList(
-                                            *group_list_id,
-                                            new_collo_group_list,
-                                        ),
-                                    ),
-                                });
-                            }
+                                ),
+                            });
                         }
                     }
                 }
@@ -1130,20 +1128,18 @@ impl GroupListsUpdateOp {
                     return Err(AssignGroupListToSubjectError::InvalidPeriodId(*period_id).into());
                 }
 
-                if let Some(group_list_id) = group_list_id_opt {
-                    if !data
+                if let Some(group_list_id) = group_list_id_opt
+                    && !data
                         .get_data()
                         .get_inner_data()
                         .params
                         .group_lists
                         .group_list_map
                         .contains_key(group_list_id)
-                    {
-                        return Err(AssignGroupListToSubjectError::InvalidGroupListId(
-                            *group_list_id,
-                        )
-                        .into());
-                    }
+                {
+                    return Err(
+                        AssignGroupListToSubjectError::InvalidGroupListId(*group_list_id).into(),
+                    );
                 }
 
                 let result = data
@@ -1171,7 +1167,7 @@ impl GroupListsUpdateOp {
                     .find_period_position(*period_id)
                 else {
                     return Err(DuplicatePreviousPeriodAssociationsError::InvalidPeriodId(
-                        period_id.clone(),
+                        *period_id,
                     )
                     .into());
                 };
@@ -1179,7 +1175,7 @@ impl GroupListsUpdateOp {
                 if position == 0 {
                     return Err(
                         DuplicatePreviousPeriodAssociationsError::FirstPeriodHasNoPreviousPeriod(
-                            period_id.clone(),
+                            *period_id,
                         )
                         .into(),
                     );

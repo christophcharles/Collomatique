@@ -1,3 +1,5 @@
+#![allow(clippy::op_ref)]
+
 //! Objective module
 //!
 //! This modules mainly defines [ObjectiveSense] and [Objective].
@@ -450,7 +452,7 @@ impl<V: UsableData> std::ops::Mul<&Objective<V>> for f64 {
     type Output = Objective<V>;
 
     fn mul(self, rhs: &Objective<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 
@@ -482,7 +484,7 @@ impl<V: UsableData> std::ops::Mul<&Objective<V>> for i32 {
     type Output = Objective<V>;
 
     fn mul(self, rhs: &Objective<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 

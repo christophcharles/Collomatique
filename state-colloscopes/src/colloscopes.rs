@@ -174,11 +174,10 @@ impl Colloscope {
                 .period_map
                 .get(period_id)
                 .expect("Period Id should be valid");
-            if let Some(collo_slot) = collo_period.slot_map.get(&slot_id) {
-                if !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
-                {
-                    return false;
-                }
+            if let Some(collo_slot) = collo_period.slot_map.get(&slot_id)
+                && !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
+            {
+                return false;
             }
 
             current_first_week += period_desc.len();
@@ -368,7 +367,6 @@ impl ColloscopeSlot {
         let period = &params.periods.ordered_period_list[period_pos].1;
 
         let first_week: usize = (0..period_pos)
-            .into_iter()
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
@@ -427,7 +425,6 @@ impl ColloscopeSlot {
         let period = &params.periods.ordered_period_list[period_pos].1;
 
         let first_week_num: usize = (0..period_pos)
-            .into_iter()
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
@@ -486,10 +483,10 @@ impl ColloscopeSlot {
                 continue;
             }
 
-            if let Some(interrogation) = interrogation_opt {
-                if !interrogation.is_empty() {
-                    return false;
-                }
+            if let Some(interrogation) = interrogation_opt
+                && !interrogation.is_empty()
+            {
+                return false;
             }
         }
 

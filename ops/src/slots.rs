@@ -334,7 +334,7 @@ impl SlotsUpdateOp {
                     return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
                 };
 
-                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| id.clone());
+                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| *id);
 
                 let result = data
                     .apply(

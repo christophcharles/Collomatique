@@ -146,7 +146,7 @@ impl<V: UsableData> Ord for NdProblem<V> {
             }
         }
 
-        return std::cmp::Ordering::Equal;
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -205,7 +205,7 @@ impl<'a, V: UsableData> Eq for NdConfig<'a, V> {}
 
 impl<'a, V: UsableData> Ord for NdConfig<'a, V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let ord = self.pb_repr.cmp(&other.pb_repr);
+        let ord = self.pb_repr.cmp(other.pb_repr);
         if ord != std::cmp::Ordering::Equal {
             return ord;
         }
@@ -224,7 +224,7 @@ impl<'a, V: UsableData> Ord for NdConfig<'a, V> {
                 return ord;
             }
         }
-        return std::cmp::Ordering::Equal;
+        std::cmp::Ordering::Equal
     }
 }
 

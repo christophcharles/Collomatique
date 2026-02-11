@@ -24,7 +24,13 @@ pub trait Id:
     fn inner(&self) -> u64;
     /// Builds a new ID from u64
     ///
+    /// # Safety
+    ///
     /// This is unsafe as invariants should be checked first (to avoid duplicated ids)
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> Self;
 }
 
@@ -40,6 +46,11 @@ impl Id for StudentId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> StudentId {
         StudentId(value)
     }
@@ -57,6 +68,11 @@ impl Id for PeriodId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> PeriodId {
         PeriodId(value)
     }
@@ -74,6 +90,11 @@ impl Id for SubjectId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> SubjectId {
         SubjectId(value)
     }
@@ -91,6 +112,11 @@ impl Id for TeacherId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> TeacherId {
         TeacherId(value)
     }
@@ -108,6 +134,11 @@ impl Id for WeekPatternId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> WeekPatternId {
         WeekPatternId(value)
     }
@@ -125,6 +156,11 @@ impl Id for SlotId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> SlotId {
         SlotId(value)
     }
@@ -142,6 +178,11 @@ impl Id for IncompatId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> IncompatId {
         IncompatId(value)
     }
@@ -159,6 +200,11 @@ impl Id for GroupListId {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
     unsafe fn new(value: u64) -> GroupListId {
         GroupListId(value)
     }

@@ -140,10 +140,10 @@ impl GoodSolver {
         Some((Box::new(solution), good_model.vars))
     }
 
-    fn reconstruct_config<'a, 'b, 'c, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
+    fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
         problem: &'a Problem<V, C, P>,
         sol: Box<dyn good_lp::Solution>,
-        vars: &'c std::collections::BTreeMap<V, good_lp::Variable>,
+        vars: &std::collections::BTreeMap<V, good_lp::Variable>,
     ) -> Option<FeasableConfig<'a, V, C, P>> {
         let config_data =
             ConfigData::new().set_iter(vars.iter().map(|(v, var)| (v.clone(), sol.value(*var))));

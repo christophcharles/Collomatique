@@ -239,7 +239,7 @@ pub(crate) mod private {
     /// and the error is returned.
     ///
     /// If the reverse process fails, the function panics.
-    pub fn update_internal_state_with_aggregated<T: ManagerInternal + ?Sized>(
+    pub fn update_internal_state_with_aggregated<T: ManagerInternal>(
         manager: &mut T,
         aggregated_op: &crate::history::AggregatedOp<<T::Data as InMemoryData>::AnnotatedOperation>,
     ) -> Result<(), <T::Data as InMemoryData>::Error> {

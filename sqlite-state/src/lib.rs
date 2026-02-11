@@ -243,6 +243,16 @@ async fn insert_periods(
     Ok(())
 }
 
+type PeriodicityColumns = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
 async fn insert_subjects(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     subjects: &subjects::Subjects,
@@ -271,63 +281,56 @@ async fn insert_subjects(
         // Insert interrogation parameters if present
         if let Some(interrogation_params) = &subject.parameters.interrogation_parameters {
             // Prepare periodicity column values based on periodicity variant
-            let (ep, ofeb_wpb, ofeb_mws, aiy_min, aiy_max, aiy_mws, afab_mws): (
-                Option<i64>,
-                Option<i64>,
-                Option<i64>,
-                Option<i64>,
-                Option<i64>,
-                Option<i64>,
-                Option<i64>,
-            ) = match &interrogation_params.periodicity {
-                subjects::SubjectPeriodicity::ExactlyPeriodic {
-                    periodicity_in_weeks,
-                } => (
-                    Some(periodicity_in_weeks.get() as i64),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ),
-                subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                    weeks_per_block,
-                    minimum_week_separation,
-                } => (
-                    None,
-                    Some(weeks_per_block.get() as i64),
-                    Some(minimum_week_separation.get() as i64),
-                    None,
-                    None,
-                    None,
-                    None,
-                ),
-                subjects::SubjectPeriodicity::AmountInYear {
-                    interrogation_count_in_year,
-                    minimum_week_separation,
-                } => (
-                    None,
-                    None,
-                    None,
-                    Some(*interrogation_count_in_year.start() as i64),
-                    Some(*interrogation_count_in_year.end() as i64),
-                    Some(*minimum_week_separation as i64),
-                    None,
-                ),
-                subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                    minimum_week_separation,
-                    ..
-                } => (
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(*minimum_week_separation as i64),
-                ),
-            };
+            let (ep, ofeb_wpb, ofeb_mws, aiy_min, aiy_max, aiy_mws, afab_mws): PeriodicityColumns =
+                match &interrogation_params.periodicity {
+                    subjects::SubjectPeriodicity::ExactlyPeriodic {
+                        periodicity_in_weeks,
+                    } => (
+                        Some(periodicity_in_weeks.get() as i64),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                    subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                        weeks_per_block,
+                        minimum_week_separation,
+                    } => (
+                        None,
+                        Some(weeks_per_block.get() as i64),
+                        Some(minimum_week_separation.get() as i64),
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                    subjects::SubjectPeriodicity::AmountInYear {
+                        interrogation_count_in_year,
+                        minimum_week_separation,
+                    } => (
+                        None,
+                        None,
+                        None,
+                        Some(*interrogation_count_in_year.start() as i64),
+                        Some(*interrogation_count_in_year.end() as i64),
+                        Some(*minimum_week_separation as i64),
+                        None,
+                    ),
+                    subjects::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                        minimum_week_separation,
+                        ..
+                    } => (
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(*minimum_week_separation as i64),
+                    ),
+                };
 
             sqlx::query(
                 "INSERT INTO subject_interrogation_params (
@@ -935,6 +938,22 @@ async fn read_periods(pool: &SqlitePool) -> Result<periods::Periods, Error> {
     })
 }
 
+type InterrogationParams = (
+    i64,
+    i64,
+    i64,
+    i64,
+    i64,
+    i64,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
 async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
     let subject_rows: Vec<(i64, i64, String)> =
         sqlx::query_as("SELECT id, position, name FROM subjects ORDER BY position")
@@ -957,21 +976,7 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
             .collect();
 
         // Read interrogation parameters with inline periodicity columns
-        let interr_params: Option<(
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            Option<i64>,
-            Option<i64>,
-            Option<i64>,
-            Option<i64>,
-            Option<i64>,
-            Option<i64>,
-            Option<i64>,
-        )> = sqlx::query_as(
+        let interr_params: Option<InterrogationParams> = sqlx::query_as(
             "SELECT students_per_group_min, students_per_group_max,
                     groups_per_interrogation_min, groups_per_interrogation_max,
                     duration_minutes, take_duration_into_account,
@@ -1002,10 +1007,16 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
                 aiy_mws,
                 afab_mws,
             )) => {
-                let periodicity = read_periodicity(
-                    pool, subject_id, ep, ofeb_wpb, ofeb_mws, aiy_min, aiy_max, aiy_mws, afab_mws,
-                )
-                .await?;
+                let periodicity_data = SubjectPeriodicityData {
+                    ep_periodicity_in_weeks: ep,
+                    ofeb_weeks_per_block: ofeb_wpb,
+                    ofeb_minimum_week_separation: ofeb_mws,
+                    aiy_count_min: aiy_min,
+                    aiy_count_max: aiy_max,
+                    aiy_minimum_week_separation: aiy_mws,
+                    afab_minimum_week_separation: afab_mws,
+                };
+                let periodicity = read_periodicity(pool, subject_id, periodicity_data).await?;
 
                 Some(subjects::SubjectInterrogationParameters {
                     students_per_group: NonZeroU32::new(spg_min as u32).unwrap()
@@ -1036,9 +1047,7 @@ async fn read_subjects(pool: &SqlitePool) -> Result<subjects::Subjects, Error> {
     })
 }
 
-async fn read_periodicity(
-    pool: &SqlitePool,
-    subject_id: i64,
+struct SubjectPeriodicityData {
     ep_periodicity_in_weeks: Option<i64>,
     ofeb_weeks_per_block: Option<i64>,
     ofeb_minimum_week_separation: Option<i64>,
@@ -1046,31 +1055,42 @@ async fn read_periodicity(
     aiy_count_max: Option<i64>,
     aiy_minimum_week_separation: Option<i64>,
     afab_minimum_week_separation: Option<i64>,
+}
+
+async fn read_periodicity(
+    pool: &SqlitePool,
+    subject_id: i64,
+    periodicity_data: SubjectPeriodicityData,
 ) -> Result<subjects::SubjectPeriodicity, Error> {
     // Determine periodicity type from which column is set
-    if let Some(weeks) = ep_periodicity_in_weeks {
+    if let Some(weeks) = periodicity_data.ep_periodicity_in_weeks {
         return Ok(subjects::SubjectPeriodicity::ExactlyPeriodic {
             periodicity_in_weeks: NonZeroU32::new(weeks as u32).unwrap(),
         });
     }
 
-    if let (Some(wpb), Some(mws)) = (ofeb_weeks_per_block, ofeb_minimum_week_separation) {
+    if let (Some(wpb), Some(mws)) = (
+        periodicity_data.ofeb_weeks_per_block,
+        periodicity_data.ofeb_minimum_week_separation,
+    ) {
         return Ok(subjects::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
             weeks_per_block: NonZeroU32::new(wpb as u32).unwrap(),
             minimum_week_separation: NonZeroU32::new(mws as u32).unwrap(),
         });
     }
 
-    if let (Some(count_min), Some(count_max), Some(mws)) =
-        (aiy_count_min, aiy_count_max, aiy_minimum_week_separation)
-    {
+    if let (Some(count_min), Some(count_max), Some(mws)) = (
+        periodicity_data.aiy_count_min,
+        periodicity_data.aiy_count_max,
+        periodicity_data.aiy_minimum_week_separation,
+    ) {
         return Ok(subjects::SubjectPeriodicity::AmountInYear {
             interrogation_count_in_year: (count_min as u32)..=(count_max as u32),
             minimum_week_separation: mws as u32,
         });
     }
 
-    if let Some(mws) = afab_minimum_week_separation {
+    if let Some(mws) = periodicity_data.afab_minimum_week_separation {
         let block_rows: Vec<(i64, i64, i64, i64, i64)> = sqlx::query_as(
             "SELECT block_index, delay_in_weeks, size_in_weeks,
                     interrogation_count_min, interrogation_count_max
@@ -1218,8 +1238,10 @@ async fn read_week_patterns(
     Ok(week_patterns::WeekPatterns { week_pattern_map })
 }
 
+type SlotData = (i64, i64, i64, i64, i64, String, String, Option<i64>, i64);
+
 async fn read_slots(pool: &SqlitePool) -> Result<slots::Slots, Error> {
-    let slot_rows: Vec<(i64, i64, i64, i64, i64, String, String, Option<i64>, i64)> = sqlx::query_as(
+    let slot_rows: Vec<SlotData> = sqlx::query_as(
         "SELECT id, subject_id, position, teacher_id, day, start_time, extra_info, week_pattern_id, cost
          FROM slots ORDER BY subject_id, position",
     )
@@ -1451,15 +1473,27 @@ async fn read_assignments(pool: &SqlitePool) -> Result<assignments::Assignments,
     Ok(assignments::Assignments { period_map })
 }
 
+type GlobalSettings = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
+type SettingsRow = (
+    i64,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
 async fn read_settings(pool: &SqlitePool) -> Result<settings::Settings, Error> {
-    let global_row: Option<(
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-    )> = sqlx::query_as(
+    let global_row: Option<GlobalSettings> = sqlx::query_as(
         "SELECT interrogations_per_week_min_value, interrogations_per_week_min_soft,
                 interrogations_per_week_max_value, interrogations_per_week_max_soft,
                 max_interrogations_per_day_value, max_interrogations_per_day_soft
@@ -1495,15 +1529,7 @@ async fn read_settings(pool: &SqlitePool) -> Result<settings::Settings, Error> {
         None => settings::Limits::default(),
     };
 
-    let student_rows: Vec<(
-        i64,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-    )> = sqlx::query_as(
+    let student_rows: Vec<SettingsRow> = sqlx::query_as(
         "SELECT student_id,
                 interrogations_per_week_min_value, interrogations_per_week_min_soft,
                 interrogations_per_week_max_value, interrogations_per_week_max_soft,
@@ -1594,15 +1620,15 @@ async fn read_colloscope(
 
         // Check if we need to save the previous slot
         if current_period != Some(period_id) || current_slot != Some(slot_id) {
-            if let (Some(p), Some(s)) = (current_period, current_slot) {
-                if let Some(period) = period_map.get_mut(&p) {
-                    period.slot_map.insert(
-                        s,
-                        colloscopes::ColloscopeSlot {
-                            interrogations: std::mem::take(&mut current_interrogations),
-                        },
-                    );
-                }
+            if let (Some(p), Some(s)) = (current_period, current_slot)
+                && let Some(period) = period_map.get_mut(&p)
+            {
+                period.slot_map.insert(
+                    s,
+                    colloscopes::ColloscopeSlot {
+                        interrogations: std::mem::take(&mut current_interrogations),
+                    },
+                );
             }
             current_period = Some(period_id);
             current_slot = Some(slot_id);
@@ -1623,15 +1649,15 @@ async fn read_colloscope(
     }
 
     // Save the last slot
-    if let (Some(p), Some(s)) = (current_period, current_slot) {
-        if let Some(period) = period_map.get_mut(&p) {
-            period.slot_map.insert(
-                s,
-                colloscopes::ColloscopeSlot {
-                    interrogations: current_interrogations,
-                },
-            );
-        }
+    if let (Some(p), Some(s)) = (current_period, current_slot)
+        && let Some(period) = period_map.get_mut(&p)
+    {
+        period.slot_map.insert(
+            s,
+            colloscopes::ColloscopeSlot {
+                interrogations: current_interrogations,
+            },
+        );
     }
 
     // Read interrogation groups
@@ -1645,12 +1671,11 @@ async fn read_colloscope(
         let period_id = unsafe { PeriodId::new(period_id as u64) };
         let slot_id = unsafe { SlotId::new(slot_id as u64) };
 
-        if let Some(period) = period_map.get_mut(&period_id) {
-            if let Some(slot) = period.slot_map.get_mut(&slot_id) {
-                if let Some(Some(interr)) = slot.interrogations.get_mut(week_index as usize) {
-                    interr.assigned_groups.insert(group_number as u32);
-                }
-            }
+        if let Some(period) = period_map.get_mut(&period_id)
+            && let Some(slot) = period.slot_map.get_mut(&slot_id)
+            && let Some(Some(interr)) = slot.interrogations.get_mut(week_index as usize)
+        {
+            interr.assigned_groups.insert(group_number as u32);
         }
     }
 

@@ -516,22 +516,20 @@ impl Variable {
             return false;
         }
 
-        if self.is_integer() {
-            if !f64_equals(value, value.round()) {
-                return false;
-            }
+        if self.is_integer() && !f64_equals(value, value.round()) {
+            return false;
         }
 
-        if let Some(m) = self.max {
-            if value > m.0 {
-                return false;
-            }
+        if let Some(m) = self.max
+            && value > m.0
+        {
+            return false;
         }
 
-        if let Some(m) = self.min {
-            if value < m.0 {
-                return false;
-            }
+        if let Some(m) = self.min
+            && value < m.0
+        {
+            return false;
         }
 
         true
@@ -574,7 +572,7 @@ impl Variable {
 /// We represent this with 8 boolean variables.
 /// The variable `xij` is 1 if X is written in the cell on the line i and column j, 0 otherwise.
 /// The same pattern is used for `yij`.
-
+///
 /// We have three broad conditions :
 /// - We should not put an X and a Y in the same cell. But a cell can possibly be empty.
 ///   This means that for all i and j, we have `xij + yij <= 1`.
@@ -985,12 +983,9 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// Returns None if no problem is detected, otherwise returns the undeclared variable.
     fn check_variables_in_expr(&self, expr: &LinExpr<V>) -> Option<V> {
-        for var in expr.variables() {
-            if !self.variables.contains_key(&var) {
-                return Some(var);
-            }
-        }
-        None
+        expr.variables()
+            .into_iter()
+            .find(|var| !self.variables.contains_key(var))
     }
 }
 
@@ -1011,14 +1006,14 @@ impl<V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: Pr
     std::fmt::Display for Problem<V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "variables:\n")?;
+        writeln!(f, "variables:")?;
         for (i, (v, desc)) in self.variables.iter().enumerate() {
             write!(f, "{}) {}: {}", i, v, desc)?;
         }
 
-        write!(f, "constraints:\n")?;
+        writeln!(f, "constraints:")?;
         for (i, (c, desc)) in self.constraints.iter().enumerate() {
-            write!(f, "{}) {} ({})\n", i, c, desc)?;
+            writeln!(f, "{}) {} ({})", i, c, desc)?;
         }
 
         write!(f, "objective: {}", self.objective)?;
@@ -1152,6 +1147,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 /// - some variables (for the problem) might not have an associated value in the configuration
 /// - some variables in the configuration are not part of the problem
 /// - some variables, though part of the problem, do not conform to their type.
+///
 /// This report stores these problematic variables either as a result from a call
 /// to [Problem::check_config_data_variables] or as an error when calling
 /// [Problem::build_config].
@@ -1184,6 +1180,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// But it might not correspond to a given [Problem] for 2 major reasons:
     /// - some variables (for the problem) might not have an associated value in the configuration
     /// - some variables in the configuration are not part of the problem
+    ///
     /// This functions checks for this and returns a report (possibly empty - see [ConfigDataVarCheck::is_empty])
     /// in a structure of type [ConfigDataVarCheck].
     pub fn check_config_data_variables(
@@ -1238,6 +1235,8 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// Builds a [Config] for the problem from a [ConfigData] without checking first
     /// if the variables match.
     ///
+    /// # Safety
+    ///
     /// This is obviously unsafe. Unless you are sure that the [ConfigData] does indeed
     /// have the right variables, you should first check with [Problem::check_config_data_variables]
     /// or rather call [Problem::build_config] which will have a sanity check first.
@@ -1288,6 +1287,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 ///   A configuration is feasable if it satisfies all the hard
 ///   constraints of a problem. This of course depends on the problem
 ///   and assumes *some* compatibility between the problem and the configuration.
+///
 /// These two points imply that [ConfigData] can act as a builder type for [Config].
 /// You build a configuration from scratch and once all the variables are correctly set,
 /// you can convert it to a [Config] for a specific [Problem] using [Problem::build_config].
@@ -1724,15 +1724,15 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             let desc = &self.problem.variables[var];
             let v = value.into_inner();
 
-            if let Some(m) = desc.get_min() {
-                if v < m {
-                    return false;
-                }
+            if let Some(m) = desc.get_min()
+                && v < m
+            {
+                return false;
             }
-            if let Some(m) = desc.get_max() {
-                if v > m {
-                    return false;
-                }
+            if let Some(m) = desc.get_max()
+                && v > m
+            {
+                return false;
             }
         }
 
@@ -1768,6 +1768,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     }
 
     /// Turns a configuration into a feasable configuration
+    ///
+    /// # Safety
     ///
     /// This is the unchecked (and therefore unsafe) version of [Config::into_feasable].
     pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, C, P> {

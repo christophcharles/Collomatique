@@ -1,3 +1,5 @@
+#![allow(clippy::op_ref)]
+
 //! This module defines [LinExpr] and [Constraint].
 //! These structs are used to represent linear expressions and constraints for
 //! integer linear optimization problems within collomatique.
@@ -1663,7 +1665,7 @@ impl<V: UsableData> std::ops::Add<f64> for LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: f64) -> Self::Output {
-        &self + &rhs
+        &self + rhs
     }
 }
 
@@ -1695,7 +1697,7 @@ impl<V: UsableData> std::ops::Add<i32> for LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
-        &self + &rhs
+        &self + rhs
     }
 }
 
@@ -1783,7 +1785,7 @@ impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for f64 {
     type Output = LinExpr<V>;
 
     fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 
@@ -1815,7 +1817,7 @@ impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for i32 {
     type Output = LinExpr<V>;
 
     fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 
