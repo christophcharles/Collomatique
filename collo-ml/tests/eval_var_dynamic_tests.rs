@@ -173,6 +173,7 @@ impl ViewBuilder<DynamicEnv, SubjectId> for ObjectId {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(DynamicEnv)]
+#[object(ObjectId)]
 #[fix_with(0.0)]
 enum DynamicVar {
     // Test 1: Dynamic range from env
@@ -261,7 +262,7 @@ fn test_dynamic_range_vars_generation() {
     let env = DynamicEnv::test_env();
 
     // Test with max_week = 4 (range 0..4)
-    let vars = <DynamicVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <DynamicVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Count StudentInWeek vars: 3 students × 4 weeks = 12
     let student_in_week_count = vars
@@ -275,7 +276,7 @@ fn test_dynamic_range_vars_generation() {
 
     // Now test with shorter schedule
     let short_env = DynamicEnv::short_schedule_env();
-    let vars = <DynamicVar as EvalVar<ObjectId>>::vars(&short_env).expect("Should generate vars");
+    let vars = <DynamicVar as EvalVar>::vars(&short_env).expect("Should generate vars");
 
     // Count StudentInWeek vars: 3 students × 2 weeks = 6
     let student_in_week_count = vars
@@ -298,7 +299,7 @@ fn test_dynamic_range_fix() {
         week: 2,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         None,
         "Week 2 should be valid with max_week=4"
     );
@@ -309,7 +310,7 @@ fn test_dynamic_range_fix() {
         week: 5,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Week 5 should be fixed with max_week=4"
     );
@@ -321,7 +322,7 @@ fn test_dynamic_range_fix() {
         week: 3,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &short_env),
+        <DynamicVar as EvalVar>::fix(&var, &short_env),
         Some(0.0),
         "Week 3 should be fixed with max_week=2"
     );
@@ -341,14 +342,14 @@ fn test_dynamic_fix_with_env() {
 
     // Mandatory lunch → fix_with = 1.0
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(1.0),
         "Should use fix value 1.0 when lunch_mandatory=true"
     );
 
     // Relaxed lunch → fix_with = 0.5
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &relaxed),
+        <DynamicVar as EvalVar>::fix(&var, &relaxed),
         Some(0.5),
         "Should use fix value 0.5 when lunch_mandatory=false"
     );
@@ -360,7 +361,7 @@ fn test_dynamic_fix_with_env() {
         hour: 16, // Outside 8..15
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &short_env),
+        <DynamicVar as EvalVar>::fix(&var, &short_env),
         Some(1.0),
         "Should fix hour=16 when last_hour=15"
     );
@@ -370,7 +371,7 @@ fn test_dynamic_fix_with_env() {
 fn test_dynamic_range_with_vars_filtering() {
     let env = DynamicEnv::test_env(); // last_hour = 17
 
-    let vars = <DynamicVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <DynamicVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Check that TimeSlot vars only go up to hour 16 (range 8..17)
     let has_invalid_hour = vars
@@ -408,7 +409,7 @@ fn test_fix_with_field_values_named() {
         hour: 13, // Lunch hour
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(2.0),
         "Lunch hours should use fix value 2.0"
     );
@@ -419,7 +420,7 @@ fn test_fix_with_field_values_named() {
         hour: 10, // Not lunch
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Non-lunch hours should use fix value 0.0"
     );
@@ -427,7 +428,7 @@ fn test_fix_with_field_values_named() {
     // Within all ranges - no fix
     let var = DynamicVar::WorkSlot { day: 2, hour: 13 };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         None,
         "Valid values should not be fixed"
     );
@@ -440,7 +441,7 @@ fn test_fix_with_field_values_unnamed() {
     // Lunch hours (12-14) should get fix value 3.0
     let var = DynamicVar::UnnamedSlot(20, 13); // day outside range, hour in lunch
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(3.0),
         "Unnamed lunch hours should use fix value 3.0"
     );
@@ -448,7 +449,7 @@ fn test_fix_with_field_values_unnamed() {
     // Non-lunch hours should get fix value 0.0
     let var = DynamicVar::UnnamedSlot(20, 10);
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Unnamed non-lunch hours should use fix value 0.0"
     );
@@ -468,7 +469,7 @@ fn test_defer_fix_with_function() {
         week: 1,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(10.0),
         "Harry should be fixed (penalty 10.0) for week 1"
     );
@@ -479,7 +480,7 @@ fn test_defer_fix_with_function() {
         week: 2,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         None,
         "Harry should be available for week 2"
     );
@@ -490,7 +491,7 @@ fn test_defer_fix_with_function() {
         week: 2,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(10.0),
         "Ron should be fixed for week 2"
     );
@@ -501,7 +502,7 @@ fn test_defer_fix_with_function() {
         week: 1,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         None,
         "Hermione should always be available"
     );
@@ -517,7 +518,7 @@ fn test_defer_fix_with_inline_expression() {
         week: 3,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         Some(5.0),
         "Week 3 should have penalty"
     );
@@ -528,7 +529,7 @@ fn test_defer_fix_with_inline_expression() {
         week: 2,
     };
     assert_eq!(
-        <DynamicVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <DynamicVar as EvalVar>::fix(&var, &env),
         None,
         "Week 2 should not have penalty"
     );
@@ -538,7 +539,7 @@ fn test_defer_fix_with_inline_expression() {
 fn test_defer_fix_filters_vars() {
     let env = DynamicEnv::test_env();
 
-    let vars = <DynamicVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <DynamicVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // StudentAvailable should not include variables that would be fixed
     // Harry (0) should not have week 1
@@ -590,11 +591,11 @@ fn test_defer_fix_filters_vars() {
 fn test_complete_dynamic_scenario() {
     let env = DynamicEnv::test_env();
 
-    let vars = <DynamicVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <DynamicVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Verify no fixed variables are in the set
     for var in vars.keys() {
-        let fix_result = <DynamicVar as EvalVar<ObjectId>>::fix(var, &env);
+        let fix_result = <DynamicVar as EvalVar>::fix(var, &env);
         assert_eq!(
             fix_result, None,
             "Variable in vars() should not have a fix value. Found: {:?}",

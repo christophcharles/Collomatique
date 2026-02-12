@@ -9,7 +9,8 @@ async fn test_fix_forces_variable_values() {
         V(i32), // Parameter from 0 to 9
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([(
                 "V".to_string(),
@@ -17,7 +18,7 @@ async fn test_fix_forces_variable_values() {
             )])
         }
 
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::V(i) => {
                     // Fix all variables to 0 except V(7)
@@ -27,7 +28,7 @@ async fn test_fix_forces_variable_values() {
         }
 
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             let mut vars = BTreeMap::new();

@@ -13,7 +13,8 @@ async fn two_objectives_same_script() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -22,11 +23,11 @@ async fn two_objectives_same_script() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([
@@ -173,7 +174,8 @@ async fn two_objectives_different_scripts() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -182,11 +184,11 @@ async fn two_objectives_different_scripts() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([
@@ -346,7 +348,8 @@ async fn objectives_with_different_senses() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -355,11 +358,11 @@ async fn objectives_with_different_senses() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([

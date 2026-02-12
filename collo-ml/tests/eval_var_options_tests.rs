@@ -147,6 +147,8 @@ impl ViewBuilder<TestEnv, SubjectId> for ObjectId {
 // ============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[env(TestEnv)]
+#[object(ObjectId)]
 enum OptionVar {
     // Optional student - generates vars for None + each student
     OptionalStudent(Option<StudentId>),
@@ -200,7 +202,7 @@ use collo_ml::traits::SimpleFieldType;
 
 #[test]
 fn test_optional_field_schema() {
-    let schema = <OptionVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <OptionVar as EvalVar>::field_schema();
 
     // Check OptionalStudent: should have 1 field of type None | Student
     let opt_student_schema = schema.get("OptionalStudent").unwrap();
@@ -222,7 +224,7 @@ fn test_optional_field_schema() {
 
 #[test]
 fn test_optional_int_field_schema() {
-    let schema = <OptionVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <OptionVar as EvalVar>::field_schema();
 
     // Check OptionalWeek: should be None | Int
     let opt_week_schema = schema.get("OptionalWeek").unwrap();
@@ -237,7 +239,7 @@ fn test_optional_int_field_schema() {
 
 #[test]
 fn test_optional_bool_field_schema() {
-    let schema = <OptionVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <OptionVar as EvalVar>::field_schema();
 
     // Check OptionalFlag: should be None | Bool
     let opt_flag_schema = schema.get("OptionalFlag").unwrap();
@@ -252,7 +254,7 @@ fn test_optional_bool_field_schema() {
 
 #[test]
 fn test_mixed_optional_schema() {
-    let schema = <OptionVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <OptionVar as EvalVar>::field_schema();
 
     // Check StudentWithMentor: [Student, None | Student]
     let mentor_schema = schema.get("StuMentor").unwrap();
@@ -270,7 +272,7 @@ fn test_mixed_optional_schema() {
 
 #[test]
 fn test_multiple_optionals_schema() {
-    let schema = <OptionVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <OptionVar as EvalVar>::field_schema();
 
     // Check MultipleOptionals: all three fields should be optional
     let multi_schema = schema.get("MultipleOptionals").unwrap();
@@ -291,7 +293,7 @@ fn test_multiple_optionals_schema() {
 #[test]
 fn test_optional_student_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // OptionalStudent should generate: None + 3 students = 4 vars
     let opt_student_vars: Vec<_> = vars
@@ -323,7 +325,7 @@ fn test_optional_student_vars_generation() {
 #[test]
 fn test_optional_week_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // OptionalWeek with range 0..3 should generate: None + [0,1,2] = 4 vars
     let opt_week_vars: Vec<_> = vars
@@ -353,7 +355,7 @@ fn test_optional_week_vars_generation() {
 #[test]
 fn test_optional_bool_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // OptionalFlag should generate: None + true + false = 3 vars
     let opt_flag_vars: Vec<_> = vars
@@ -383,7 +385,7 @@ fn test_optional_bool_vars_generation() {
 #[test]
 fn test_student_with_optional_mentor_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // StudentWithMentor: 3 students x (None + 3 mentors) = 3 x 4 = 12 vars
     let mentor_vars: Vec<_> = vars
@@ -419,7 +421,7 @@ fn test_student_with_optional_mentor_vars_generation() {
 #[test]
 fn test_both_optional_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // BothOptional: (None + 3 students) x (None + 3 subjects) = 4 x 4 = 16 vars
     let both_opt_vars: Vec<_> = vars
@@ -460,7 +462,7 @@ fn test_both_optional_vars_generation() {
 #[test]
 fn test_multiple_optionals_vars_generation() {
     let env = TestEnv::simple_env();
-    let vars = <OptionVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible");
+    let vars = <OptionVar as EvalVar>::vars(&env).expect("Should be compatible");
 
     // MultipleOptionals: 4 students x 4 subjects x 4 weeks = 64 vars
     let multi_vars: Vec<_> = vars
@@ -495,7 +497,7 @@ fn test_optional_week_fix_none() {
 
     // None is always valid (no range check needed)
     let var = OptionVar::OptionalWeek(None);
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 }
 
 #[test]
@@ -504,13 +506,13 @@ fn test_optional_week_fix_within_range() {
 
     // Some(1) is within range 0..3
     let var = OptionVar::OptionalWeek(Some(1));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 
     let var = OptionVar::OptionalWeek(Some(0));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 
     let var = OptionVar::OptionalWeek(Some(2));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 }
 
 #[test]
@@ -519,13 +521,13 @@ fn test_optional_week_fix_outside_range() {
 
     // Some(5) is outside range 0..3
     let var = OptionVar::OptionalWeek(Some(5));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), Some(0.0));
 
     let var = OptionVar::OptionalWeek(Some(-1));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), Some(0.0));
 
     let var = OptionVar::OptionalWeek(Some(10));
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), Some(0.0));
 }
 
 #[test]
@@ -537,21 +539,21 @@ fn test_named_optional_week_fix() {
         student: StudentId(0),
         week: None,
     };
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 
     // Some(1) is valid
     let var = OptionVar::StudentInOptionalWeek {
         student: StudentId(0),
         week: Some(1),
     };
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), None);
 
     // Some(10) is invalid
     let var = OptionVar::StudentInOptionalWeek {
         student: StudentId(0),
         week: Some(10),
     };
-    assert_eq!(<OptionVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
+    assert_eq!(<OptionVar as EvalVar>::fix(&var, &env), Some(0.0));
 }
 
 // ============================================================================

@@ -66,6 +66,7 @@ impl ViewBuilder<EdgeCaseEnv, StudentId> for ObjectId {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
+#[object(ObjectId)]
 enum EmptyRangeVar {
     // When max_week = 0, range is 0..0 (empty)
     StudentInWeek {
@@ -79,7 +80,7 @@ enum EmptyRangeVar {
 fn test_empty_range() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <EmptyRangeVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <EmptyRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // With empty range and no students, should generate 0 variables
     assert_eq!(vars.len(), 0, "Empty range should produce no variables");
@@ -89,7 +90,7 @@ fn test_empty_range() {
 fn test_single_element_range() {
     let env = EdgeCaseEnv::single_student_env();
 
-    let vars = <EmptyRangeVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <EmptyRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // 1 student × 1 week (0..1) = 1 variable
     assert_eq!(
@@ -128,7 +129,7 @@ fn test_boundary_values_fix() {
     // Exactly at lower bound
     let var = BoundaryVar::TimeSlot { slot: 0 };
     assert_eq!(
-        <BoundaryVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <BoundaryVar as EvalVar>::fix(&var, &env),
         None,
         "Lower bound should be valid"
     );
@@ -136,7 +137,7 @@ fn test_boundary_values_fix() {
     // One before lower bound
     let var = BoundaryVar::TimeSlot { slot: -1 };
     assert_eq!(
-        <BoundaryVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <BoundaryVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Below lower bound should be fixed"
     );
@@ -144,7 +145,7 @@ fn test_boundary_values_fix() {
     // One before upper bound (9 is valid in 0..10)
     let var = BoundaryVar::TimeSlot { slot: 9 };
     assert_eq!(
-        <BoundaryVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <BoundaryVar as EvalVar>::fix(&var, &env),
         None,
         "One before upper bound should be valid"
     );
@@ -152,7 +153,7 @@ fn test_boundary_values_fix() {
     // Exactly at upper bound (10 is invalid in 0..10)
     let var = BoundaryVar::TimeSlot { slot: 10 };
     assert_eq!(
-        <BoundaryVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <BoundaryVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Upper bound should be fixed (exclusive)"
     );
@@ -160,7 +161,7 @@ fn test_boundary_values_fix() {
     // One past upper bound
     let var = BoundaryVar::TimeSlot { slot: 11 };
     assert_eq!(
-        <BoundaryVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <BoundaryVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Above upper bound should be fixed"
     );
@@ -183,7 +184,7 @@ enum NegativeRangeVar {
 fn test_negative_range() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <NegativeRangeVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <NegativeRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Range -10..10 = 20 values
     assert_eq!(vars.len(), 20, "Negative range should work correctly");
@@ -191,28 +192,28 @@ fn test_negative_range() {
     // Check boundaries
     let var = NegativeRangeVar::Temperature { celsius: -10 };
     assert_eq!(
-        <NegativeRangeVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <NegativeRangeVar as EvalVar>::fix(&var, &env),
         None,
         "Lower bound -10 should be valid"
     );
 
     let var = NegativeRangeVar::Temperature { celsius: -11 };
     assert_eq!(
-        <NegativeRangeVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <NegativeRangeVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Below -10 should be fixed"
     );
 
     let var = NegativeRangeVar::Temperature { celsius: 9 };
     assert_eq!(
-        <NegativeRangeVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <NegativeRangeVar as EvalVar>::fix(&var, &env),
         None,
         "9 should be valid in -10..10"
     );
 
     let var = NegativeRangeVar::Temperature { celsius: 10 };
     assert_eq!(
-        <NegativeRangeVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <NegativeRangeVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "10 should be fixed (exclusive)"
     );
@@ -260,7 +261,7 @@ fn test_multiple_field_fix_priority() {
     // First field out of range
     let var = MultiFieldVar::Slot1 { x: 10, y: 2 };
     assert_eq!(
-        <MultiFieldVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <MultiFieldVar as EvalVar>::fix(&var, &env),
         Some(1.0),
         "First field out of range should trigger fix"
     );
@@ -268,7 +269,7 @@ fn test_multiple_field_fix_priority() {
     // Second field out of range
     let var = MultiFieldVar::Slot2 { x: 2, y: 10 };
     assert_eq!(
-        <MultiFieldVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <MultiFieldVar as EvalVar>::fix(&var, &env),
         Some(2.0),
         "Second field out of range should trigger fix"
     );
@@ -276,7 +277,7 @@ fn test_multiple_field_fix_priority() {
     // Both fields out of range - returns the variant's fix value
     let var = MultiFieldVar::Slot3 { x: 10, y: 10 };
     assert_eq!(
-        <MultiFieldVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <MultiFieldVar as EvalVar>::fix(&var, &env),
         Some(3.0),
         "Multiple fields out of range should return variant fix value"
     );
@@ -284,7 +285,7 @@ fn test_multiple_field_fix_priority() {
     // Both in range
     let var = MultiFieldVar::Slot1 { x: 2, y: 2 };
     assert_eq!(
-        <MultiFieldVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <MultiFieldVar as EvalVar>::fix(&var, &env),
         None,
         "All fields in range should not fix"
     );
@@ -296,6 +297,7 @@ fn test_multiple_field_fix_priority() {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
+#[object(ObjectId)]
 enum AlwaysValidVar {
     #[defer_fix(None)]
     AlwaysValid {
@@ -309,7 +311,7 @@ enum AlwaysValidVar {
 fn test_defer_fix_always_none() {
     let env = EdgeCaseEnv::single_student_env();
 
-    let vars = <AlwaysValidVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <AlwaysValidVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Should generate all combinations since defer_fix always returns None
     // 1 student × 10 slots = 10 variables
@@ -322,7 +324,7 @@ fn test_defer_fix_always_none() {
     // Verify fix returns None for all
     for var in vars.keys() {
         assert_eq!(
-            <AlwaysValidVar as EvalVar<ObjectId>>::fix(var, &env),
+            <AlwaysValidVar as EvalVar>::fix(var, &env),
             None,
             "All variables should have fix = None"
         );
@@ -335,6 +337,7 @@ fn test_defer_fix_always_none() {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
+#[object(ObjectId)]
 enum AlwaysInvalidVar {
     #[defer_fix(Some(99.0))]
     AlwaysInvalid {
@@ -348,7 +351,7 @@ enum AlwaysInvalidVar {
 fn test_defer_fix_always_some() {
     let env = EdgeCaseEnv::single_student_env();
 
-    let vars = <AlwaysInvalidVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <AlwaysInvalidVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Should generate NO variables since defer_fix always returns Some
     assert_eq!(
@@ -389,7 +392,7 @@ fn test_complex_fix_with_expression() {
     // x * y > 10 case (out of range triggers check)
     let var = ComplexFixVar::ComplexLogic { x: 100, y: 2 };
     assert_eq!(
-        <ComplexFixVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <ComplexFixVar as EvalVar>::fix(&var, &env),
         Some(200.0),
         "x * y = 200 > 10, should return 200.0"
     );
@@ -397,7 +400,7 @@ fn test_complex_fix_with_expression() {
     // x + y > 5 but x * y <= 10 (out of range triggers check)
     let var = ComplexFixVar::ComplexLogic { x: 100, y: 0 };
     assert_eq!(
-        <ComplexFixVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <ComplexFixVar as EvalVar>::fix(&var, &env),
         Some(0.5),
         "x + y = 100 > 5 but x*y = 0, should return 0.5"
     );
@@ -405,7 +408,7 @@ fn test_complex_fix_with_expression() {
     // Neither condition (out of range triggers check)
     let var = ComplexFixVar::ComplexLogic { x: -1, y: 0 };
     assert_eq!(
-        <ComplexFixVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <ComplexFixVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "Neither condition met, should return 0.0"
     );
@@ -413,7 +416,7 @@ fn test_complex_fix_with_expression() {
     // In range - no fix
     let var = ComplexFixVar::ComplexLogic { x: 2, y: 2 };
     assert_eq!(
-        <ComplexFixVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <ComplexFixVar as EvalVar>::fix(&var, &env),
         None,
         "In range should not fix"
     );
@@ -424,6 +427,7 @@ fn test_complex_fix_with_expression() {
 // ============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[env(EdgeCaseEnv)]
 enum UnitVariantVar {
     #[fix_with(5.0)]
     NoFields,
@@ -436,7 +440,7 @@ enum UnitVariantVar {
 fn test_unit_variant() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <UnitVariantVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <UnitVariantVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // NoFields: should generate 1 var (no defer_fix or defer_fix returns None)
     // NoFieldsDefer: should NOT generate (defer_fix returns Some)
@@ -455,13 +459,13 @@ fn test_unit_variant() {
 
     // Verify fix behavior
     assert_eq!(
-        <UnitVariantVar as EvalVar<ObjectId>>::fix(&UnitVariantVar::NoFields, &env),
+        <UnitVariantVar as EvalVar>::fix(&UnitVariantVar::NoFields, &env),
         None,
         "Unit variant with no out-of-range fields should not fix"
     );
 
     assert_eq!(
-        <UnitVariantVar as EvalVar<ObjectId>>::fix(&UnitVariantVar::NoFieldsDefer, &env),
+        <UnitVariantVar as EvalVar>::fix(&UnitVariantVar::NoFieldsDefer, &env),
         Some(10.0),
         "Unit variant with defer_fix should return defer_fix value"
     );
@@ -485,7 +489,7 @@ enum BoolVar {
 fn test_boolean_field_enumeration() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <BoolVar as EvalVar<ObjectId>>::vars(&env).expect("Should generate vars");
+    let vars = <BoolVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // 2 values for x (0..2) × 2 values for bool = 4 variables
     assert_eq!(vars.len(), 4, "Should enumerate both true and false");
@@ -522,7 +526,7 @@ fn test_unnamed_fields_complex_fix() {
     // Out of range triggers complex expression
     let var = UnnamedComplexVar::UnnamedSlot(100, 5);
     assert_eq!(
-        <UnnamedComplexVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <UnnamedComplexVar as EvalVar>::fix(&var, &env),
         Some(105.0),
         "100 + 5 = 105 > 10, should return 105.0"
     );
@@ -530,7 +534,7 @@ fn test_unnamed_fields_complex_fix() {
     // Out of range but sum <= 10
     let var = UnnamedComplexVar::UnnamedSlot(-5, 3);
     assert_eq!(
-        <UnnamedComplexVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <UnnamedComplexVar as EvalVar>::fix(&var, &env),
         Some(0.0),
         "-5 + 3 = -2 <= 10, should return 0.0"
     );
@@ -538,7 +542,7 @@ fn test_unnamed_fields_complex_fix() {
     // In range, no fix
     let var = UnnamedComplexVar::UnnamedSlot(5, 3);
     assert_eq!(
-        <UnnamedComplexVar as EvalVar<ObjectId>>::fix(&var, &env),
+        <UnnamedComplexVar as EvalVar>::fix(&var, &env),
         None,
         "In range should not fix"
     );

@@ -22,7 +22,8 @@ async fn complete_interrogations_scheduling() {
         },
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([(
                 "StudentWithTeacher".to_string(),
@@ -34,7 +35,7 @@ async fn complete_interrogations_scheduling() {
             )])
         }
 
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::StudentWithTeacher {
                     student,
@@ -57,7 +58,7 @@ async fn complete_interrogations_scheduling() {
         }
 
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             let mut vars = BTreeMap::new();

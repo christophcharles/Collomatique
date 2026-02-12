@@ -11,15 +11,16 @@ async fn constraints_and_objectives_same_call() {
         W,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([

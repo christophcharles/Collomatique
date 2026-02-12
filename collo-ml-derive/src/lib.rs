@@ -412,21 +412,29 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 
 /// Derives the `EvalVar` trait for an enum of ILP variables.
 ///
-/// This macro generates the complete `EvalVar<T>` trait implementation, including field schema,
+/// This macro generates the complete `EvalVar` trait implementation, including field schema,
 /// variable enumeration, and fix value computation. The enum represents all possible variable
 /// types in your Integer Linear Programming problem.
 ///
 /// # Key Design
 ///
-/// The trait is **generic over the `EvalObject` type**, allowing the same variable definitions
-/// to work with different data sources. When using environment-dependent expressions, specify
-/// `#[env(EnvType)]` to enable access to environment fields.
+/// The trait uses an **associated type `Env`** to specify the environment. The `#[env(EnvType)]`
+/// attribute is required to set this associated type.
+///
+/// If the enum contains fields that reference object ID types (from an `EvalObject` enum),
+/// use `#[object(ObjectIdType)]` to specify which `EvalObject` to use for enumeration.
+///
+/// # Required Attributes
+///
+/// ## On the enum:
+///
+/// - `#[env(EnvType)]` - Specifies the environment type (sets `type Env = EnvType`)
 ///
 /// # Optional Attributes
 ///
 /// ## On the enum:
 ///
-/// - `#[env(EnvType)]` - Specifies the concrete environment type (required for env-dependent expressions)
+/// - `#[object(ObjectIdType)]` - Specifies the `EvalObject` type (required if any field is an object ID)
 /// - `#[fix_with(value)]` - Sets the default fix value for out-of-range variables (default: 0.0)
 ///
 /// ## On variants:
@@ -450,18 +458,20 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// - Must be applied to an enum
 /// - All `i32` fields must have `#[range(...)]` attribute
-/// - For object types, `IdType: TryFrom<T>` must be satisfied
+/// - For object types, `#[object(ObjectIdType)]` must be specified
 /// - The enum must implement standard derives: `Clone, PartialEq, Eq, PartialOrd, Ord`
 ///
 /// # Examples
 ///
-/// ## Basic usage (fully generic)
+/// ## Basic usage with objects
 ///
 /// ```ignore
 /// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]  // Required because StudentId/GroupId are object IDs
 /// enum Var {
 ///     StudentInGroup(StudentId, GroupId),
-///     
+///
 ///     TimeSlot {
 ///         #[range(0..7)]
 ///         day: i32,
@@ -475,6 +485,8 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[derive(EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[name("SiG")]  // Called "SiG" in DSL scripts
 ///     StudentInGroup(StudentId, GroupId),
@@ -485,7 +497,8 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[derive(EvalVar)]
-/// #[env(DynamicEnv)]  // Required for env access
+/// #[env(DynamicEnv)]
+/// #[object(ObjectId)]
 /// #[fix_with(0.0)]
 /// enum Var {
 ///     StudentInWeek {
@@ -501,6 +514,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[fix_with(if env.lunch_mandatory { 1.0 } else { 0.5 })]
 ///     TimeSlot {
@@ -548,6 +562,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[defer_fix(Self::check_availability(env, student, week))]
 ///     StudentAvailable {
@@ -578,6 +593,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[defer_fix({
 ///         if *week >= 3 {
@@ -598,13 +614,15 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[derive(EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[var(Variable::binary())]
 ///     IsSelected(TaskId),
-///     
+///
 ///     #[var(Variable::integer())]
 ///     Count(#[range(0..100)] i32),
-///     
+///
 ///     #[var(Variable::continuous().min(0.0).max(1.0))]
 ///     Proportion(ProjectId),
 /// }
@@ -614,6 +632,8 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[derive(EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     TaskEnabled {
 ///         task: TaskId,
@@ -624,51 +644,25 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// # Generated Code
 ///
-/// ## Without #[env(...)] - Fully Generic
+/// ## EvalVar Implementation
 ///
 /// ```ignore
-/// impl<__T: EvalObject> EvalVar<__T> for Var
-/// where
-///     StudentId: TryFrom<__T, Error = TypeConversionError>,
-///     GroupId: TryFrom<__T, Error = TypeConversionError>,
-/// {
+/// impl EvalVar for Var {
+///     type Env = DynamicEnv;
+///
 ///     fn field_schema() -> HashMap<String, Vec<FieldType>> {
 ///         // Maps DSL names to parameter types
 ///     }
-///     
-///     fn vars(env: &__T::Env) -> Result<BTreeMap<Self, Variable>, TypeId> {
-///         // Generates cartesian product of all parameter combinations
-///         // Returns Err(type_id) if an object type is unknown
-///     }
-///     
-///     fn fix(&self, env: &__T::Env) -> Option<f64> {
-///         // Returns Some(fix_value) if any i32 is out of range
-///     }
-/// }
-/// ```
 ///
-/// ## With #[env(EnvType)] - Environment-Specific
-///
-/// ```ignore
-/// impl<__T> EvalVar<__T> for Var
-/// where
-///     __T: EvalObject<Env = DynamicEnv>,  // Constrained to specific env!
-///     StudentId: TryFrom<__T, Error = TypeConversionError>,
-///     GroupId: TryFrom<__T, Error = TypeConversionError>,
-/// {
-///     fn field_schema() -> HashMap<String, Vec<FieldType>> {
-///         // Maps DSL names to parameter types
-///     }
-///     
 ///     fn vars(env: &DynamicEnv) -> Result<BTreeMap<Self, Variable>, TypeId> {
-///         // env is concrete &DynamicEnv - can access env.max_week!
 ///         // Generates cartesian product of all parameter combinations
+///         // Object types are enumerated via ObjectId::objects_with_typ()
 ///         // Variables with defer_fix returning Some are excluded
 ///     }
-///     
+///
 ///     fn fix(&self, env: &DynamicEnv) -> Option<f64> {
-///         // env is concrete &DynamicEnv - can access env.lunch_mandatory!
 ///         // Evaluates fix_with or defer_fix expressions
+///         // Returns Some(fix_value) if any i32 is out of range
 ///     }
 /// }
 /// ```
@@ -690,47 +684,11 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// # Usage with Different EvalObjects
-///
-/// ## Generic Variables (no #[env])
-///
-/// The fully generic design allows using the same `Var` with different data sources:
+/// # Usage
 ///
 /// ```ignore
-/// // Production use with real database
-/// let vars = <Var as EvalVar<ProductionObjectId>>::vars(&production_env)?;
-///
-/// // Testing with mock data
-/// let vars = <Var as EvalVar<MockObjectId>>::vars(&test_env)?;
-/// ```
-///
-/// ## Environment-Specific Variables (with #[env])
-///
-/// When using `#[env(EnvType)]`, the variable works with any `EvalObject` that has that environment:
-///
-/// ```ignore
-/// #[derive(EvalVar)]
-/// #[env(DynamicEnv)]
-/// enum DynamicVar {
-///     #[range(0..env.max_week)]
-///     StudentInWeek {
-///         student: StudentId,
-///         week: i32,
-///     },
-/// }
-///
-/// // Both ObjectId types use DynamicEnv
-/// #[derive(EvalObject)]
-/// #[env(DynamicEnv)]
-/// enum ObjectId { /* ... */ }
-///
-/// #[derive(EvalObject)]
-/// #[env(DynamicEnv)]
-/// enum MockObjectId { /* ... */ }
-///
-/// // DynamicVar works with BOTH!
-/// let vars1 = <DynamicVar as EvalVar<ObjectId>>::vars(&env)?;
-/// let vars2 = <DynamicVar as EvalVar<MockObjectId>>::vars(&env)?;
+/// let vars = <Var as EvalVar>::vars(&env)?;
+/// let fix = <Var as EvalVar>::fix(&var, &env);
 /// ```
 ///
 /// # Variable Enumeration
@@ -741,7 +699,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///   - Ranges can be static: `#[range(0..10)]`
 ///   - Or dynamic from environment: `#[range(0..env.max_week)]`
 /// - **bool**: Iterates through `[false, true]`
-/// - **Objects**: Calls `T::objects_with_typ(env, type_name)` and converts to the ID type
+/// - **Objects**: Calls `ObjectId::objects_with_typ(env, type_name)` (from `#[object(ObjectId)]`) and converts to the ID type
 ///
 /// **Filtering with defer_fix**: Variables where `defer_fix` returns `Some(_)` are automatically
 /// excluded from `vars()`.
@@ -802,12 +760,13 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// - A `bool` or object field has `#[range(...)]` attribute
 /// - A `Vec` type is used (lists cannot be enumerated)
 /// - Both `#[fix_with(...)]` and `#[defer_fix(...)]` are present on the same variant
-/// - `#[env(...)]` is missing but expressions reference `env` (compile error in generated code)
+/// - `#[env(...)]` is missing
+/// - Object-type fields exist but `#[object(...)]` is missing
 ///
 /// ## Runtime Errors
 ///
 /// `vars()` returns `Err(type_id)` if an object type's name cannot be resolved via
-/// `T::type_id_to_name()`. This typically indicates a mismatch between your variable
+/// `ObjectId::type_id_to_name()`. This typically indicates a mismatch between your variable
 /// definition and your `EvalObject` implementation.
 ///
 /// `TryFrom` returns `VarConversionError` if:
@@ -829,6 +788,8 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// // Rust definition
 /// #[derive(EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]
 /// enum Var {
 ///     #[name("SiG")]
 ///     StudentInGroup(StudentId, GroupId),
@@ -843,35 +804,36 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// # The #[env(...)] Attribute
 ///
-/// ## When to Use
-///
-/// Use `#[env(EnvType)]` when your variable definitions need to access environment fields:
-///
-/// - **Dynamic ranges**: `#[range(0..env.max_week)]`
-/// - **Environment-dependent fix values**: `#[fix_with(if env.flag { 1.0 } else { 0.0 })]`
-/// - **Complex environment checks**: `#[defer_fix(env.check_availability(...))]`
-///
-/// Without `#[env(...)]`, the environment type is generic (`&__T::Env`), preventing field access.
-///
-/// ## How It Works
+/// The `#[env(EnvType)]` attribute is **required** and sets the associated type `type Env = EnvType`.
+/// This allows the generated code to use `env` as a concrete typed reference.
 ///
 /// ```ignore
-/// // Without #[env] - Fully generic
-/// #[derive(EvalVar)]
-/// enum StaticVar {
-///     #[range(0..10)]  // Static range - works with any EvalObject
-///     Slot { slot: i32 },
-/// }
-/// // Generated: impl<__T: EvalObject> EvalVar<__T> for StaticVar
-///
-/// // With #[env] - Environment-specific
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
 /// enum DynamicVar {
 ///     #[range(0..env.max_week)]  // Can access env.max_week
 ///     Slot { slot: i32 },
 /// }
-/// // Generated: impl<__T: EvalObject<Env = DynamicEnv>> EvalVar<__T> for DynamicVar
+/// // Generated: impl EvalVar for DynamicVar { type Env = DynamicEnv; ... }
+/// ```
+///
+/// # The #[object(...)] Attribute
+///
+/// The `#[object(ObjectIdType)]` attribute is required when the enum has fields that are
+/// object ID types (anything other than `i32`, `bool`, or `Option<...>` thereof).
+/// It specifies which `EvalObject` enum to use for enumerating objects.
+///
+/// ```ignore
+/// #[derive(EvalVar)]
+/// #[env(MyEnv)]
+/// #[object(ObjectId)]  // Required because StudentId is an object ID
+/// enum Var {
+///     StudentSlot {
+///         student: StudentId,
+///         #[range(0..10)]
+///         slot: i32,
+///     },
+/// }
 /// ```
 ///
 /// # Variable Type Expressions
@@ -884,7 +846,10 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// #[var(Variable::continuous())]                // Continuous variable
 /// #[var(Variable::integer().min(0).max(100))]   // With bounds
 /// ```
-#[proc_macro_derive(EvalVar, attributes(name, var, range, fix_with, defer_fix, env))]
+#[proc_macro_derive(
+    EvalVar,
+    attributes(name, var, range, fix_with, defer_fix, env, object)
+)]
 pub fn derive_eval_var(input: TokenStream) -> TokenStream {
     eval_var::derive(input)
 }

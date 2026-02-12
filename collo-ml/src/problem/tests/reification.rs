@@ -11,7 +11,8 @@ async fn internal_reification() {
         X,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -19,11 +20,11 @@ async fn internal_reification() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([
@@ -145,15 +146,16 @@ async fn private_reification_does_not_leak() {
         W,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([
@@ -273,15 +275,16 @@ async fn three_module_chain_define_reify_use() {
         W,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([

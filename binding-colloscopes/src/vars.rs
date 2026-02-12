@@ -1,10 +1,11 @@
 use super::objects::InterrogationData;
 use super::tools::*;
-use super::views::Env;
+use super::views::{Env, ObjectId};
 use collo_ml::EvalVar;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(Env)]
+#[object(ObjectId)]
 pub enum Var {
     GroupInInterrogation {
         interrogation: InterrogationData,

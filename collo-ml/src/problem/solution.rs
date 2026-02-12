@@ -21,14 +21,14 @@ use std::collections::BTreeMap;
     PartialEq(bound = "T: EvalObject"),
     Eq(bound = "T: EvalObject")
 )]
-pub struct Problem<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+pub struct Problem<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
     problem: collomatique_ilp::Problem<ProblemVar<T, D, V>, ConstraintDesc<T, D>>,
     pub(crate) reification_problem_builder:
         collomatique_ilp::ProblemBuilder<ProblemVar<T, D, V>, ExtraDesc<T, D, V>>,
     pub(crate) original_var_list: BTreeMap<V, Variable>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> Problem<T, D, V> {
+impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
     pub(crate) fn new(
         problem: collomatique_ilp::Problem<ProblemVar<T, D, V>, ConstraintDesc<T, D>>,
         reification_problem_builder: collomatique_ilp::ProblemBuilder<
@@ -138,7 +138,7 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> Problem<T, D, V> {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = "T: EvalObject"), Clone(bound = "T: EvalObject"))]
-pub struct Solution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+pub struct Solution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> {
     config: collomatique_ilp::Config<
         'a,
         ProblemVar<T, D, V>,
@@ -147,7 +147,7 @@ pub struct Solution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
     >,
 }
 
-impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> Solution<'a, T, D, V> {
+impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> Solution<'a, T, D, V> {
     pub fn get_data(&self) -> ConfigData<V> {
         ConfigData::from(self.config.get_values().into_iter().filter_map(
             |(var, value)| match var {
@@ -178,7 +178,7 @@ impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> Solution<'a, T, D,
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = "T: EvalObject"), Clone(bound = "T: EvalObject"))]
-pub struct FeasableSolution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+pub struct FeasableSolution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> {
     feasable_config: collomatique_ilp::FeasableConfig<
         'a,
         ProblemVar<T, D, V>,
@@ -187,7 +187,7 @@ pub struct FeasableSolution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar
     >,
 }
 
-impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> FeasableSolution<'a, T, D, V> {
+impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> FeasableSolution<'a, T, D, V> {
     pub fn into_solution(self) -> Solution<'a, T, D, V> {
         Solution {
             config: self.feasable_config.into_inner(),

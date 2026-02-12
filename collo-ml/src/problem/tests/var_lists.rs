@@ -11,7 +11,8 @@ async fn list_constraint_reification() {
         X,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
@@ -19,11 +20,11 @@ async fn list_constraint_reification() {
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             Ok(BTreeMap::from([
@@ -131,7 +132,8 @@ async fn list_constraint_reification_exact_count_with_param() {
         X(i32), // Parameter from 0 to 99
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
         fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
             HashMap::from([(
                 "X".to_string(),
@@ -139,7 +141,7 @@ async fn list_constraint_reification_exact_count_with_param() {
             )])
         }
 
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::X(i) => {
                     // Fix to 0 (false) if out of valid range [0, 100)
@@ -149,7 +151,7 @@ async fn list_constraint_reification_exact_count_with_param() {
         }
 
         fn vars(
-            _env: &T::Env,
+            _env: &NoObjectEnv,
         ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
         {
             let mut vars = BTreeMap::new();

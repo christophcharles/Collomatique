@@ -41,7 +41,7 @@ pub struct ReifiedVar<T: EvalObject, D: DatabaseConnection> {
     Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
     Clone(bound = "T: EvalObject")
 )]
-pub enum ProblemVar<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+pub enum ProblemVar<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
     Base(V),
     Reified(ReifiedVar<T, D>),
     Helper(u64),
@@ -78,7 +78,7 @@ pub enum ConstraintDesc<T: EvalObject, D: DatabaseConnection> {
     PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
     Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
 )]
-pub enum ExtraDesc<T: EvalObject, D: DatabaseConnection, V: EvalVar<T>> {
+pub enum ExtraDesc<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
     Orig(ConstraintDesc<T, D>),
     InitCond(V),
 }

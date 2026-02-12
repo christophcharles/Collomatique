@@ -147,6 +147,8 @@ impl ViewBuilder<TestEnv, SubjectId> for ObjectId {
 // ============================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[env(TestEnv)]
+#[object(ObjectId)]
 enum SimpleVar {
     // Simple: student takes a subject
     StudentTakesSubject(StudentId, SubjectId),
@@ -173,7 +175,7 @@ use collo_ml::traits::SimpleFieldType;
 
 #[test]
 fn test_field_schema() {
-    let schema = <SimpleVar as EvalVar<ObjectId>>::field_schema();
+    let schema = <SimpleVar as EvalVar>::field_schema();
 
     // Check that all variants are present
     assert!(schema.contains_key("StudentTakesSubject"));
@@ -208,8 +210,7 @@ fn test_vars_generation() {
     let env = TestEnv::simple_env();
 
     // Now vars() takes the environment as a generic parameter
-    let vars =
-        <SimpleVar as EvalVar<ObjectId>>::vars(&env).expect("Should be compatible with ObjectId");
+    let vars = <SimpleVar as EvalVar>::vars(&env).expect("Should be compatible with ObjectId");
 
     // Should have variables for all combinations
     // 3 students × 3 subjects = 9 StudentTakesSubject vars
@@ -225,14 +226,14 @@ fn test_fix_within_range() {
     let env = TestEnv::simple_env();
 
     let var = SimpleVar::WeekUsed(1);
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<SimpleVar as EvalVar>::fix(&var, &env), None);
 
     let var = SimpleVar::StudentTakesSubjectInWeek {
         student: StudentId(0),
         subject: SubjectId(0),
         week: 2,
     };
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), None);
+    assert_eq!(<SimpleVar as EvalVar>::fix(&var, &env), None);
 }
 
 #[test]
@@ -240,17 +241,17 @@ fn test_fix_outside_range() {
     let env = TestEnv::simple_env();
 
     let var = SimpleVar::WeekUsed(5); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(1.0));
+    assert_eq!(<SimpleVar as EvalVar>::fix(&var, &env), Some(1.0));
 
     let var = SimpleVar::WeekUsed(-1); // Outside range 0..3
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(1.0));
+    assert_eq!(<SimpleVar as EvalVar>::fix(&var, &env), Some(1.0));
 
     let var = SimpleVar::StudentTakesSubjectInWeek {
         student: StudentId(0),
         subject: SubjectId(0),
         week: 10, // Outside range 0..3
     };
-    assert_eq!(<SimpleVar as EvalVar<ObjectId>>::fix(&var, &env), Some(0.0));
+    assert_eq!(<SimpleVar as EvalVar>::fix(&var, &env), Some(0.0));
 }
 
 #[test]

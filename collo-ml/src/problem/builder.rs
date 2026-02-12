@@ -26,7 +26,8 @@ use std::collections::{BTreeMap, HashMap};
 pub struct ProblemBuilder<
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar<Env = T::Env>
+        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     /// Compiled AST (all modules compiled together)
     pub(crate) ast: CheckedAST<T, D>,
@@ -58,7 +59,8 @@ pub(crate) struct EvalData<
     'a,
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar<Env = T::Env>
+        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     pub(crate) builder: ProblemBuilder<T, D, V>,
 
@@ -95,7 +97,8 @@ pub(crate) struct EvalData<
 impl<
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar<Env = T::Env>
+        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > ProblemBuilder<T, D, V>
 {
     fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T, D::Connection>> {
@@ -353,7 +356,8 @@ impl<
     'a,
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<T> + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar<Env = T::Env>
+        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > EvalData<'a, T, D, V>
 {
     fn generate_helper_var(&mut self) -> ProblemVar<T, D::Connection, V> {
