@@ -13,7 +13,7 @@ pub fn send_exit() {
     encoded_msg.send();
 }
 
-fn try_solve() -> Result<(), anyhow::Error> {
+async fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
 
     let data_msg =
@@ -27,22 +27,19 @@ fn try_solve() -> Result<(), anyhow::Error> {
     use collomatique_binding_colloscopes::scripts::{
         SqliteDatabaseDriver, default_problem_builder, get_default_main_module,
     };
-    let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let db_conn = rt.block_on(async {
-        let pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
-        collomatique_sqlite_state::create_schema(&pool)
-            .await
-            .map_err(|e| anyhow!("Error creating schema: {}", e))?;
-        collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-            .await
-            .map_err(|e| anyhow!("Error populating DB: {}", e))?;
-        SqliteDatabaseDriver::new_connection("collomatique", &pool)
-            .await
-            .map_err(|e| anyhow!("Error creating DB connection: {}", e))
-    })?;
+    let pool = sqlx::SqlitePool::connect(":memory:")
+        .await
+        .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
+    collomatique_sqlite_state::create_schema(&pool)
+        .await
+        .map_err(|e| anyhow!("Error creating schema: {}", e))?;
+    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+        .await
+        .map_err(|e| anyhow!("Error populating DB: {}", e))?;
+    let db_conn = SqliteDatabaseDriver::new_connection("collomatique", &pool)
+        .await
+        .map_err(|e| anyhow!("Error creating DB connection: {}", e))?;
 
     let colloscope = inner_data.colloscope;
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
@@ -51,16 +48,17 @@ fn try_solve() -> Result<(), anyhow::Error> {
         .main_script
         .as_deref()
         .unwrap_or(get_default_main_module());
-    let problem = match rt
-        .block_on(default_problem_builder::<SqliteDatabaseDriver>(main_script))
-        .map_err(|e| format!("{}", e))
-        .and_then(|b| {
-            rt.block_on(b.build(&env, Some(db_conn)))
-                .map_err(|e| format!("{}", e))
-        }) {
+    let b = match default_problem_builder::<SqliteDatabaseDriver>(main_script).await {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Script panic: {}", e);
+            return Ok(());
+        }
+    };
+    let problem = match b.build(&env, Some(db_conn)).await {
         Ok(p) => p,
-        Err(msg) => {
-            eprintln!("Script panic: {}", msg);
+        Err(e) => {
+            eprintln!("Script panic: {}", e);
             return Ok(());
         }
     };
@@ -128,7 +126,8 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             collomatique_python::run_python_script(script)?;
         }
         InitMsg::SolveColloscope => {
-            try_solve()?;
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(try_solve())?;
         }
     }
 
