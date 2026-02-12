@@ -53,7 +53,8 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
                     let group = *group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogation {
-                            interrogation,
+                            slot: interrogation.slot.inner() as i32,
+                            week: interrogation.week as i32,
                             group,
                         },
                         1.0,
@@ -144,7 +145,8 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
                     let group = group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogation {
-                            interrogation,
+                            slot: interrogation.slot.inner() as i32,
+                            week: interrogation.week as i32,
                             group,
                         },
                         0.0,
@@ -181,17 +183,16 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                         .insert(student_id, value as u32);
                 }
             }
-            Var::GroupInInterrogation {
-                interrogation,
-                group,
-            } => {
+            Var::GroupInInterrogation { slot, week, group } => {
                 if value < 0.5 {
                     continue;
                 }
+                let slot_id =
+                    unsafe { collomatique_state_colloscopes::ids::SlotId::new(slot as u64) };
                 let (period_id, num_in_period) =
-                    tools::week_to_period_id(&env.params, interrogation.week)?;
+                    tools::week_to_period_id(&env.params, week as usize)?;
                 let collo_period = colloscope.period_map.get_mut(&period_id)?;
-                let collo_slot = collo_period.slot_map.get_mut(&interrogation.slot)?;
+                let collo_slot = collo_period.slot_map.get_mut(&slot_id)?;
                 let collo_interrogation_opt = collo_slot.interrogations.get_mut(num_in_period)?;
 
                 let Some(collo_interrogation) = collo_interrogation_opt else {

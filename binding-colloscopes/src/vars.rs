@@ -1,15 +1,18 @@
 use super::objects::InterrogationData;
 use super::tools::*;
-use super::views::{Env, ObjectId};
+use super::views::Env;
 use collo_ml::EvalVar;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(Env)]
-#[object(ObjectId)]
 pub enum Var {
+    #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]
     GroupInInterrogation {
-        interrogation: InterrogationData,
-        #[range(Self::compute_group_range(env, interrogation))]
+        #[range(Self::compute_slot_range(env))]
+        slot: i32,
+        #[range(Self::compute_week_range(env, slot))]
+        week: i32,
+        #[range(Self::compute_group_range(env, slot, week))]
         group: i32,
     },
     #[defer_fix(Self::fix_student_group(env, student, group_list))]
@@ -34,7 +37,64 @@ impl Var {
         (group_list_data.params.group_names.len() as i32 - 1) as f64
     }
 
-    fn compute_group_range(env: &Env, interrogation: &InterrogationData) -> std::ops::Range<i32> {
+    fn compute_slot_range(env: &Env) -> std::ops::Range<i32> {
+        use collomatique_state_colloscopes::ids::Id;
+        let ids = env
+            .params
+            .slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots
+                    .ordered_slots
+                    .iter()
+                    .map(|(id, _)| id.inner() as i32)
+            });
+        Self::compute_range_from_iter(ids)
+    }
+
+    fn enumerate_weeks_for_slot(env: &Env, slot: &i32) -> Vec<i32> {
+        use collomatique_state_colloscopes::ids::Id;
+        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
+        let Some((subject_id, pos)) = env.params.slots.find_slot_subject_and_position(slot_id)
+        else {
+            return vec![];
+        };
+        let slot_desc = &env.params.slots.subject_map[&subject_id].ordered_slots[pos].1;
+        let subject_desc = env
+            .params
+            .subjects
+            .find_subject(subject_id)
+            .expect("Subject ID should be valid");
+
+        let week_pattern = crate::tools::extract_week_pattern(&env.params, slot_desc.week_pattern);
+        let mut output = vec![];
+        for (week, status) in week_pattern.into_iter().enumerate() {
+            if !status {
+                continue;
+            }
+            let (period, _) = crate::tools::week_to_period_id(&env.params, week)
+                .expect("Week should correspond to some period");
+            if subject_desc.excluded_periods.contains(&period) {
+                continue;
+            }
+            output.push(week as i32);
+        }
+
+        output
+    }
+
+    fn compute_week_range(env: &Env, slot: &i32) -> std::ops::Range<i32> {
+        let weeks = Self::enumerate_weeks_for_slot(env, slot);
+        Self::compute_range_from_iter(weeks.into_iter())
+    }
+
+    fn compute_group_range(env: &Env, slot: &i32, week: &i32) -> std::ops::Range<i32> {
+        use collomatique_state_colloscopes::ids::Id;
+        let interrogation = InterrogationData {
+            slot: unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) },
+            week: *week as usize,
+        };
         let default_range = 0..0;
         let subject_id = match env
             .params
@@ -159,5 +219,25 @@ impl Var {
         };
 
         Some(num as f64)
+    }
+
+    fn fix_group_in_interrogation(env: &Env, slot: &i32, week: &i32, group: &i32) -> Option<f64> {
+        use collomatique_state_colloscopes::ids::Id;
+        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
+        if env.params.slots.find_slot(slot_id).is_none() {
+            return Some(0.0); // Non existent slot, so obviously not in it
+        };
+
+        let weeks = Self::enumerate_weeks_for_slot(env, slot);
+        if !weeks.contains(week) {
+            return Some(0.0); // Invalid week
+        }
+
+        let group_range = Self::compute_group_range(env, slot, week);
+        if !group_range.contains(group) {
+            return Some(0.0); // Invalid group
+        }
+
+        None
     }
 }

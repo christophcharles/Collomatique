@@ -5,7 +5,7 @@ let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
     match interrogation.group_list {
         gl as GroupList {
             sum group in gl.groups {
-                $GroupInInterrogation(interrogation, group.num)
+                $GroupInInterrogation(interrogation.slot_id, interrogation.week.num, group.num)
             }
         }
         _ as None {

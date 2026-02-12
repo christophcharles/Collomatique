@@ -2,7 +2,7 @@ let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
     match interrogation.group_list {
         gl as GroupList {
             sum group in gl.groups {
-                $GroupInInterrogation(interrogation, group.num)
+                $GroupInInterrogation(interrogation.slot_id, interrogation.week.num, group.num)
             }
         }
         _ as None {
@@ -33,7 +33,7 @@ pub reify group_has_students as $GroupHasStudents;
 
 let student_at_interrogation_in_group(student: Student, interrogation: Interrogation, group: Group) -> Constraint =
     // Use inequalities to reduce the amount of helper variables
-    $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation, group.num) >== 1;
+    $StudentInGroup(student, group) >== 1 and $GroupInInterrogation(interrogation.slot_id, interrogation.week.num, group.num) >== 1;
 
 pub reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
 
@@ -54,7 +54,7 @@ let student_at_interrogation(student: Student, interrogation: Interrogation) -> 
         gl as GroupList {
             if gl.prefilled {
                 $GroupInInterrogation(
-                    interrogation,
+                    interrogation.slot_id, interrogation.week.num,
                     student_prefilled_group(student, gl)
                 )
             } else {

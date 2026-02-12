@@ -57,6 +57,7 @@ pub struct Interrogation {
     group_list: Option<GroupListId>,
     students: Vec<StudentId>,
     cost: i32,
+    slot_id: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -214,6 +215,7 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
     }
 
     fn build(env: &Env, id: &InterrogationData) -> Option<Self::Object> {
+        use collomatique_state_colloscopes::ids::Id;
         let (subject_id, _pos) = env.params.slots.find_slot_subject_and_position(id.slot)?;
         let (period_id, _) = week_to_period_id(&env.params, id.week)?;
         let period_associations = env
@@ -248,6 +250,7 @@ impl ViewBuilder<Env, InterrogationData> for ObjectId {
             group_list: group_list_id.cloned(),
             students,
             cost: slot.cost,
+            slot_id: id.slot.inner() as i32,
         })
     }
 }
