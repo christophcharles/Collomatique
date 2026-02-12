@@ -634,7 +634,7 @@ impl Colloscope {
             let env = collomatique_binding_colloscopes::views::Env::from(params);
             let rt = tokio::runtime::Runtime::new().unwrap();
             match rt
-                .block_on(builder.build(&env))
+                .block_on(builder.build(&env, None))
                 .map_err(|e| format!("{}", e))
             {
                 Ok(problem) => {

@@ -88,7 +88,10 @@ async fn simple_objective_selects_solution() {
         .add_objective("main", "maximize_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -194,7 +197,10 @@ async fn objective_direction_changes_solution() {
         .add_objective("main", "minimize_v", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

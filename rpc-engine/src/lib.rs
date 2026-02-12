@@ -35,13 +35,12 @@ fn try_solve() -> Result<(), anyhow::Error> {
         .unwrap_or(get_default_main_module());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let problem = match rt
-        .block_on(default_problem_builder::<SqliteDatabaseDriver>(
-            main_script,
-            None,
-        ))
+        .block_on(default_problem_builder::<SqliteDatabaseDriver>(main_script))
         .map_err(|e| format!("{}", e))
-        .and_then(|b| rt.block_on(b.build(&env)).map_err(|e| format!("{}", e)))
-    {
+        .and_then(|b| {
+            rt.block_on(b.build(&env, None))
+                .map_err(|e| format!("{}", e))
+        }) {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("Script panic: {}", msg);

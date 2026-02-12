@@ -37,15 +37,16 @@ pub struct ProblemBuilder<
     pub(crate) base_vars: HashMap<String, ArgsType>,
 
     /// Pending constraint function calls (validated but not yet evaluated)
-    /// Format: (module, fn_name, args)
-    pending_constraints: Vec<(String, String, Vec<ExprValue<T, D::Connection>>)>,
+    /// Format: (module, fn_name, args, needs_db)
+    pending_constraints: Vec<(String, String, Vec<ExprValue<T, D::Connection>>, bool)>,
 
     /// Pending objective function calls (validated but not yet evaluated)
-    /// Format: (module, fn_name, args, coefficient, sense)
+    /// Format: (module, fn_name, args, needs_db, coefficient, sense)
     pending_objectives: Vec<(
         String,
         String,
         Vec<ExprValue<T, D::Connection>>,
+        bool,
         ordered_float::OrderedFloat<f64>,
         ObjectiveSense,
     )>,
@@ -116,14 +117,16 @@ impl<
             .collect::<Result<_, _>>()
     }
 
-    /// Validate that a function exists with the correct signature
+    /// Validate that a function exists with the correct signature.
+    /// Returns `Ok(true)` if the first argument is a database schema (needs_db),
+    /// `Ok(false)` otherwise.
     fn validate_function(
         &self,
         module: &str,
         fn_name: &str,
         args: &[ExprValue<T, D::Connection>],
         expected_return: &ExprType,
-    ) -> Result<(), ProblemError<T, D::Connection>> {
+    ) -> Result<bool, ProblemError<T, D::Connection>> {
         let functions = self.ast.get_functions();
         let key = (module.to_string(), fn_name.to_string());
 
@@ -131,11 +134,18 @@ impl<
             .get(&key)
             .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
 
-        // Check argument count
-        if args_type.len() != args.len() {
+        // Determine if the first parameter is a database schema
+        let needs_db = !args_type.is_empty() && args_type[0].is_database_schema();
+        let expected_args = if needs_db {
+            args_type.len() - 1
+        } else {
+            args_type.len()
+        };
+
+        if args.len() != expected_args {
             return Err(ProblemError::ArgumentCountMismatch {
                 func: format!("{}::{}", module, fn_name),
-                expected: args_type.len(),
+                expected: expected_args,
                 found: args.len(),
             });
         }
@@ -151,7 +161,7 @@ impl<
             });
         }
 
-        Ok(())
+        Ok(needs_db)
     }
 
     pub async fn new(
@@ -214,11 +224,11 @@ impl<
             SimpleType::List(SimpleType::Constraint.into()),
         ]);
 
-        self.validate_function(module, fn_name, &args, &constraint_type)?;
+        let needs_db = self.validate_function(module, fn_name, &args, &constraint_type)?;
 
         // Store for later evaluation
         self.pending_constraints
-            .push((module.to_string(), fn_name.to_string(), args));
+            .push((module.to_string(), fn_name.to_string(), args, needs_db));
         Ok(())
     }
 
@@ -245,13 +255,14 @@ impl<
             ])),
         ]);
 
-        self.validate_function(module, fn_name, &args, &obj_types)?;
+        let needs_db = self.validate_function(module, fn_name, &args, &obj_types)?;
 
         // Store for later evaluation
         self.pending_objectives.push((
             module.to_string(),
             fn_name.to_string(),
             args,
+            needs_db,
             ordered_float::OrderedFloat(coefficient),
             sense,
         ));
@@ -261,9 +272,10 @@ impl<
     pub async fn build(
         self,
         env: &T::Env,
+        db_connection: Option<D::Connection>,
     ) -> Result<Problem<T, D::Connection, V>, ProblemError<T, D::Connection>> {
         // Evaluate all pending constraints and objectives
-        let mut eval_data = EvalData::new(self, env).await?;
+        let mut eval_data = EvalData::new(self, env, db_connection).await?;
 
         for (constraint, _desc) in eval_data.constraints.iter_mut() {
             let mut fixed_variables = BTreeMap::new();
@@ -693,6 +705,7 @@ impl<
     pub(crate) async fn new(
         builder: ProblemBuilder<T, D, V>,
         env: &'a T::Env,
+        db_connection: Option<D::Connection>,
     ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D::Connection>> {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
@@ -702,11 +715,24 @@ impl<
                 .start_eval_history_with_cache(env, T::Cache::default())
                 .expect("Environment should be compatible with AST");
 
+            let db_value = db_connection
+                .map(|conn| ExprValue::Database(crate::eval::database::DatabaseHandle::new(conn)));
+
             // Evaluate constraints
             let mut constraint_results = Vec::new();
-            for (module, fn_name, args) in builder.pending_constraints.iter() {
+            for (module, fn_name, args, needs_db) in builder.pending_constraints.iter() {
+                let eval_args = if *needs_db {
+                    let db_val = db_value.as_ref().ok_or_else(|| {
+                        ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
+                    })?;
+                    let mut full_args = vec![db_val.clone()];
+                    full_args.extend(args.clone());
+                    full_args
+                } else {
+                    args.clone()
+                };
                 let result = eval_history
-                    .eval_fn(module, fn_name, args.clone())
+                    .eval_fn(module, fn_name, eval_args)
                     .await
                     .map_err(|e| match e {
                         EvalError::Panic(v) => ProblemError::Panic(v),
@@ -720,9 +746,21 @@ impl<
 
             // Evaluate objectives
             let mut objective_results = Vec::new();
-            for (module, fn_name, args, coef, obj_sense) in builder.pending_objectives.iter() {
+            for (module, fn_name, args, needs_db, coef, obj_sense) in
+                builder.pending_objectives.iter()
+            {
+                let eval_args = if *needs_db {
+                    let db_val = db_value.as_ref().ok_or_else(|| {
+                        ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
+                    })?;
+                    let mut full_args = vec![db_val.clone()];
+                    full_args.extend(args.clone());
+                    full_args
+                } else {
+                    args.clone()
+                };
                 let result = eval_history
-                    .eval_fn(module, fn_name, args.clone())
+                    .eval_fn(module, fn_name, eval_args)
                     .await
                     .map_err(|e| match e {
                         EvalError::Panic(v) => ProblemError::Panic(v),

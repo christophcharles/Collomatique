@@ -946,6 +946,12 @@ impl ExprType {
         self.as_simple().map(|x| x.is_constraint()).unwrap_or(false)
     }
 
+    pub fn is_database_schema(&self) -> bool {
+        self.as_simple()
+            .map(|x| x.is_database_schema())
+            .unwrap_or(false)
+    }
+
     pub fn is_list_of_constraints(&self) -> bool {
         self.as_simple()
             .map(|x| x.is_list_of_constraints())

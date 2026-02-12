@@ -92,7 +92,10 @@ async fn constraints_and_objectives_same_call() {
         )
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

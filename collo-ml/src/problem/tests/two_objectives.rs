@@ -127,7 +127,10 @@ async fn two_objectives_same_script() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -297,7 +300,10 @@ async fn two_objectives_different_scripts() {
         .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add second objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -461,7 +467,10 @@ async fn objectives_with_different_senses() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

@@ -62,7 +62,10 @@ async fn single_constraint_problem() {
         .add_constraint("main", "f", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -170,7 +173,10 @@ async fn multiple_constraints_in_script() {
         .add_constraint("main", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -276,7 +282,10 @@ async fn multiple_function_calls() {
         .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -387,7 +396,10 @@ async fn constraints_from_different_modules() {
         .add_constraint("module2", "c2", vec![])
         .expect("Should add constraint from module2");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

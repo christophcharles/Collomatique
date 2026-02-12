@@ -106,6 +106,8 @@ pub enum ProblemError<T: EvalObject, D: DatabaseConnection> {
         returned: ExprType,
         expected: ExprType,
     },
+    #[error("Function \"{0}\" expects a database connection but none was provided")]
+    MissingDatabaseConnection(String),
     #[error("Panic: {0}")]
     Panic(Box<ExprValue<T, D>>),
 }

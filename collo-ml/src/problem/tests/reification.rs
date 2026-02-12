@@ -102,7 +102,10 @@ async fn internal_reification() {
         .add_constraint("reify_test", "exactly_one_and_force_w", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -231,7 +234,10 @@ async fn private_reification_does_not_leak() {
         .add_constraint("second_module", "use_r_again", vec![])
         .expect("Should add constraint from second_module");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -364,7 +370,10 @@ async fn three_module_chain_define_reify_use() {
         .add_constraint("main", "force_v", vec![])
         .expect("Should add force_v constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

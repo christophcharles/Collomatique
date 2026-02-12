@@ -183,7 +183,10 @@ async fn complete_interrogations_scheduling() {
         .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

@@ -1137,7 +1137,6 @@ impl EditorPanel {
             let rt = tokio::runtime::Runtime::new().unwrap();
             let result = rt.block_on(default_problem_builder::<collo_ml::SqliteDatabaseDriver>(
                 main_module,
-                None,
             ));
 
             EditorCommandOutput::MainScriptCompiled { source, result }

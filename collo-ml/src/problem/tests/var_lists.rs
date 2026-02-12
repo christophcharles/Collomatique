@@ -97,7 +97,10 @@ async fn list_constraint_reification() {
         .add_constraint("list_reify", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -211,7 +214,10 @@ async fn list_constraint_reification_exact_count_with_param() {
         .add_constraint("exact_count", "exactly_five", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).await.expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
