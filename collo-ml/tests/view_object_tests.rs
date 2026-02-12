@@ -28,7 +28,7 @@ impl EvalObject for TestObjectId {
     fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
         BTreeSet::new()
     }
-    fn typ_name(&self, _env: &Self::Env) -> String {
+    fn typ_name(&self) -> String {
         String::new()
     }
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {

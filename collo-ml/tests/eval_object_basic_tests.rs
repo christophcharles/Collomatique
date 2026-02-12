@@ -128,16 +128,11 @@ fn test_try_from_impls() {
 
 #[test]
 fn test_typ_name() {
-    let env = TestEnv {
-        students: HashMap::new(),
-        rooms: HashMap::new(),
-    };
-
     let student = ObjectId::Student(StudentId(1));
-    assert_eq!(student.typ_name(&env), "Student");
+    assert_eq!(student.typ_name(), "Student");
 
     let room = ObjectId::Room(RoomId(42));
-    assert_eq!(room.typ_name(&env), "Room");
+    assert_eq!(room.typ_name(), "Room");
 }
 
 #[test]

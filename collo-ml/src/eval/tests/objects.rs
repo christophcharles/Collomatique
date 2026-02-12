@@ -29,7 +29,7 @@ impl EvalObject for SimpleObject {
         }
     }
 
-    fn typ_name(&self, _env: &Self::Env) -> String {
+    fn typ_name(&self) -> String {
         match self {
             SimpleObject::Student1 | SimpleObject::Student2 => "Student".into(),
             SimpleObject::Room1 | SimpleObject::Room2 => "Room".into(),

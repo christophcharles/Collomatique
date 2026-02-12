@@ -215,7 +215,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             Self::String(_) => target.get_variants().contains(&SimpleType::String),
             Self::Object(obj) => target
                 .get_variants()
-                .contains(&SimpleType::Object(obj.typ_name(env))),
+                .contains(&SimpleType::Object(obj.typ_name())),
             // if we have an empty list, we just need to check that ExprType is a list
             Self::List(list) if list.is_empty() => target.has_list(),
             // if not empty, we have to check recursively for all list types in the sum
@@ -314,7 +314,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             (Self::LinExpr(_), SimpleType::LinExpr) => true,
             (Self::Constraint(_), SimpleType::Constraint) => true,
             (Self::String(_), SimpleType::String) => true,
-            (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name(env) == *name => true,
+            (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name() == *name => true,
             // Custom type conversions - semantic analysis has validated these
             // Enum variant can convert to root enum type (subtype relationship)
             (
@@ -549,7 +549,7 @@ impl EvalObject for NoObject {
         BTreeSet::new()
     }
 
-    fn typ_name(&self, _env: &Self::Env) -> String {
+    fn typ_name(&self) -> String {
         panic!("No object is defined for NoObject")
     }
 

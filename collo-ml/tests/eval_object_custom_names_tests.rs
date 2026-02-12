@@ -120,21 +120,15 @@ impl ViewBuilder<TestEnv, TeacherId> for CustomObjectId {
 
 #[test]
 fn test_custom_type_names() {
-    let env = TestEnv {
-        students: HashMap::new(),
-        rooms: HashMap::new(),
-        teachers: HashMap::new(),
-    };
-
     // Test typ_name uses custom names
     let student = CustomObjectId::Student(StudentId(1));
-    assert_eq!(student.typ_name(&env), "Student"); // No custom name, uses variant
+    assert_eq!(student.typ_name(), "Student"); // No custom name, uses variant
 
     let room = CustomObjectId::RoomNumber(RoomId(101));
-    assert_eq!(room.typ_name(&env), "Classroom"); // Custom name from #[name]
+    assert_eq!(room.typ_name(), "Classroom"); // Custom name from #[name]
 
     let teacher = CustomObjectId::Teacher(TeacherId(5));
-    assert_eq!(teacher.typ_name(&env), "Instructor"); // Custom name from #[name]
+    assert_eq!(teacher.typ_name(), "Instructor"); // Custom name from #[name]
 }
 
 #[test]

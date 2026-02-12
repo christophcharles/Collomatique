@@ -165,7 +165,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                         )
                                         .ok_or(EvalError::MissingObjectField {
                                             object: format!("{:?}", obj),
-                                            typ: obj.typ_name(eval_history.env),
+                                            typ: obj.typ_name(),
                                             field: field_name.clone(),
                                         })?;
                                 }

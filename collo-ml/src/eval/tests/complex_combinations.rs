@@ -739,7 +739,7 @@ async fn aggregation_with_filtering() {
         fn type_id_to_name(_type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
             panic!("Not implemented for the test")
         }
-        fn typ_name(&self, _env: &Self::Env) -> String {
+        fn typ_name(&self) -> String {
             "Student".into()
         }
         fn field_access<D: DatabaseConnection>(

@@ -335,7 +335,7 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
 ///         // Dispatch to ViewBuilder::enumerate based on type name
 ///     }
 ///     
-///     fn typ_name(&self, env: &Self::Env) -> String {
+///     fn typ_name(&self) -> String {
 ///         // Return type name based on variant
 ///     }
 ///     

@@ -267,7 +267,7 @@ fn generate_eval_object_impl(
                 }
             }
 
-            fn typ_name(&self, _env: &Self::Env) -> String {
+            fn typ_name(&self) -> String {
                 match self {
                     #(#typ_name_arms,)*
                 }

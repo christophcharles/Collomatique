@@ -149,7 +149,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
             let objects = T::objects_with_typ(env, typ.as_str());
 
             for object in &objects {
-                let returned_typ = object.typ_name(env);
+                let returned_typ = object.typ_name();
                 if returned_typ != *typ {
                     return Err(EvalError::ObjectWithBadTypeName(typ.clone(), returned_typ));
                 }

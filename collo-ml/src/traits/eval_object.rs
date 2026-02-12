@@ -59,7 +59,7 @@ use std::collections::{BTreeSet, HashMap};
 /// let age = student_obj.field_access(&env, &mut cache, "age");
 ///
 /// // Get the type name of an object
-/// let type_name = student_obj.typ_name(&env);
+/// let type_name = student_obj.typ_name();
 /// ```
 pub trait EvalObject: UsableData {
     /// The environment type that provides access to the underlying data.
@@ -98,14 +98,10 @@ pub trait EvalObject: UsableData {
 
     /// Returns the DSL type name of this object.
     ///
-    /// # Arguments
-    ///
-    /// * `env` - Reference to the environment (may not be needed but provided for consistency)
-    ///
     /// # Returns
     ///
     /// The type name as it appears in the DSL (e.g., "Student", "Room").
-    fn typ_name(&self, env: &Self::Env) -> String;
+    fn typ_name(&self) -> String;
 
     /// Accesses a field on this object and returns its value.
     ///
