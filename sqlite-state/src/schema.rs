@@ -205,6 +205,7 @@ CREATE TABLE incompat_slots (
     day INTEGER NOT NULL CHECK (day >= 0 AND day <= 6),
     start_time INTEGER NOT NULL CHECK (start_time >= 0 AND start_time < 1440),
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+    CHECK (start_time + duration_minutes <= 1440),
     PRIMARY KEY (incompat_id, slot_index)
 );
 

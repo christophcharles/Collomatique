@@ -93,6 +93,11 @@ pub enum ValidationError {
     #[error("Automatic group exclusion exists for prefilled group list {group_list_id}")]
     AutomaticExclusionForPrefilledGroupList { group_list_id: i64 },
 
+    #[error(
+        "Slot {slot_id} (subject {subject_id}) has start_time + duration exceeding day boundary"
+    )]
+    SlotTimeExceedsDay { slot_id: i64, subject_id: i64 },
+
     #[error("SQLite error during validation: {0}")]
     Sqlx(#[from] sqlx::Error),
 }
@@ -187,6 +192,9 @@ pub async fn validate_database(pool: &SqlitePool) -> Result<(), ValidationError>
 
     // 3. Group list filling type consistency
     validate_group_list_filling_consistency(pool).await?;
+
+    // 4. Slot time range: start_time + duration must not exceed 1440
+    validate_slot_time_ranges(pool).await?;
 
     Ok(())
 }
@@ -1810,6 +1818,25 @@ async fn validate_group_list_filling_consistency(pool: &SqlitePool) -> Result<()
     if let Some((group_list_id,)) = invalid_automatic.first() {
         return Err(ValidationError::AutomaticExclusionForPrefilledGroupList {
             group_list_id: *group_list_id,
+        });
+    }
+
+    Ok(())
+}
+
+async fn validate_slot_time_ranges(pool: &SqlitePool) -> Result<(), ValidationError> {
+    let invalid_slots: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT s.id, s.subject_id FROM slots s
+         INNER JOIN subject_interrogation_params sip ON s.subject_id = sip.subject_id
+         WHERE s.start_time + sip.duration_minutes > 1440",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if let Some((slot_id, subject_id)) = invalid_slots.first() {
+        return Err(ValidationError::SlotTimeExceedsDay {
+            slot_id: *slot_id,
+            subject_id: *subject_id,
         });
     }
 
