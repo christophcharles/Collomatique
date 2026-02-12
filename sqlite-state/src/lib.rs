@@ -513,7 +513,7 @@ async fn insert_slots(
         for (position, (slot_id, slot)) in subject_slots.ordered_slots.iter().enumerate() {
             let id = slot_id.inner() as i64;
             let weekday = slot.start_time.weekday.num_days_from_monday() as i64;
-            let start_time = slot.start_time.start_time.format("%H:%M").to_string();
+            let start_time = slot.start_time.start_time.minutes_from_midnight() as i64;
 
             sqlx::query(
                 "INSERT INTO slots (id, subject_id, position, teacher_id, day, start_time, extra_info, week_pattern_id, cost)
@@ -524,7 +524,7 @@ async fn insert_slots(
             .bind(position as i64)
             .bind(slot.teacher_id.inner() as i64)
             .bind(weekday)
-            .bind(&start_time)
+            .bind(start_time)
             .bind(&slot.extra_info)
             .bind(slot.week_pattern.map(|wp| wp.inner() as i64))
             .bind(slot.cost as i64)
@@ -557,7 +557,7 @@ async fn insert_incompats(
 
         for (slot_index, slot) in incompat.slots.iter().enumerate() {
             let weekday = slot.start().weekday.num_days_from_monday() as i64;
-            let start_time = slot.start().start_time.format("%H:%M").to_string();
+            let start_time = slot.start().start_time.minutes_from_midnight() as i64;
 
             sqlx::query(
                 "INSERT INTO incompat_slots (incompat_id, slot_index, day, start_time, duration_minutes)
@@ -566,7 +566,7 @@ async fn insert_incompats(
             .bind(id)
             .bind(slot_index as i64)
             .bind(weekday)
-            .bind(&start_time)
+            .bind(start_time)
             .bind(slot.duration().get().get() as i64)
             .execute(&mut **tx)
             .await?;
@@ -1238,7 +1238,7 @@ async fn read_week_patterns(
     Ok(week_patterns::WeekPatterns { week_pattern_map })
 }
 
-type SlotData = (i64, i64, i64, i64, i64, String, String, Option<i64>, i64);
+type SlotData = (i64, i64, i64, i64, i64, i64, String, Option<i64>, i64);
 
 async fn read_slots(pool: &SqlitePool) -> Result<slots::Slots, Error> {
     let slot_rows: Vec<SlotData> = sqlx::query_as(
@@ -1256,14 +1256,14 @@ async fn read_slots(pool: &SqlitePool) -> Result<slots::Slots, Error> {
         _position,
         teacher_id,
         day,
-        start_time_str,
+        start_time_minutes,
         extra_info,
         week_pattern_id,
         cost,
     ) in slot_rows
     {
         let weekday = weekday_from_i64(day)?;
-        let start_time = parse_time(&start_time_str)?;
+        let start_time = parse_time_minutes(start_time_minutes)?;
 
         let slot = slots::Slot {
             teacher_id: unsafe { TeacherId::new(teacher_id as u64) },
@@ -1301,7 +1301,7 @@ async fn read_incompats(pool: &SqlitePool) -> Result<incompats::Incompats, Error
     let mut incompat_map = BTreeMap::new();
 
     for (incompat_id, subject_id, name, min_free, week_pattern_id) in incompat_rows {
-        let slot_rows: Vec<(i64, i64, String, i64)> = sqlx::query_as(
+        let slot_rows: Vec<(i64, i64, i64, i64)> = sqlx::query_as(
             "SELECT slot_index, day, start_time, duration_minutes
              FROM incompat_slots WHERE incompat_id = ? ORDER BY slot_index",
         )
@@ -1310,9 +1310,9 @@ async fn read_incompats(pool: &SqlitePool) -> Result<incompats::Incompats, Error
         .await?;
 
         let mut incompat_slots = Vec::new();
-        for (_idx, day, start_time_str, duration) in slot_rows {
+        for (_idx, day, start_time_minutes, duration) in slot_rows {
             let weekday = weekday_from_i64(day)?;
-            let start_time = parse_time(&start_time_str)?;
+            let start_time = parse_time_minutes(start_time_minutes)?;
             let duration = NonZeroMinutes::new(duration as u32).unwrap();
 
             let slot = SlotWithDuration::new(
@@ -1834,10 +1834,15 @@ fn weekday_from_i64(day: i64) -> Result<Weekday, Error> {
     Ok(Weekday(chrono_weekday))
 }
 
-fn parse_time(time_str: &str) -> Result<WholeMinuteTime, Error> {
-    let naive_time = chrono::NaiveTime::parse_from_str(time_str, "%H:%M")
-        .map_err(|_| Error::InvalidTimeFormat(time_str.to_string()))?;
-    WholeMinuteTime::new(naive_time).ok_or_else(|| Error::InvalidTimeFormat(time_str.to_string()))
+fn parse_time_minutes(minutes: i64) -> Result<WholeMinuteTime, Error> {
+    if !(0..1440).contains(&minutes) {
+        return Err(Error::InvalidTimeFormat(minutes.to_string()));
+    }
+    let hours = (minutes / 60) as u32;
+    let mins = (minutes % 60) as u32;
+    let naive_time = chrono::NaiveTime::from_hms_opt(hours, mins, 0)
+        .ok_or_else(|| Error::InvalidTimeFormat(minutes.to_string()))?;
+    WholeMinuteTime::new(naive_time).ok_or_else(|| Error::InvalidTimeFormat(minutes.to_string()))
 }
 
 #[cfg(test)]

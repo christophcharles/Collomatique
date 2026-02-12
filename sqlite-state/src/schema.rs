@@ -180,7 +180,7 @@ CREATE TABLE slots (
     position INTEGER NOT NULL CHECK (position >= 0),
     teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE RESTRICT,
     day INTEGER NOT NULL CHECK (day >= 0 AND day <= 6),
-    start_time TEXT NOT NULL,
+    start_time INTEGER NOT NULL CHECK (start_time >= 0 AND start_time < 1440),
     extra_info TEXT NOT NULL DEFAULT '',
     week_pattern_id INTEGER REFERENCES week_patterns(id) ON DELETE RESTRICT,
     cost INTEGER NOT NULL DEFAULT 0,
@@ -203,7 +203,7 @@ CREATE TABLE incompat_slots (
     incompat_id INTEGER NOT NULL REFERENCES incompats(id) ON DELETE CASCADE,
     slot_index INTEGER NOT NULL CHECK (slot_index >= 0),
     day INTEGER NOT NULL CHECK (day >= 0 AND day <= 6),
-    start_time TEXT NOT NULL,
+    start_time INTEGER NOT NULL CHECK (start_time >= 0 AND start_time < 1440),
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
     PRIMARY KEY (incompat_id, slot_index)
 );
