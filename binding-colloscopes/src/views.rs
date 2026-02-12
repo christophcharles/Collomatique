@@ -76,6 +76,7 @@ pub struct GroupList {
     min_students_per_group: i32,
     max_students_per_group: i32,
     max_group_count: i32,
+    id: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ViewObject)]
@@ -120,6 +121,7 @@ pub struct Student {
     hard_min_interrogations_per_week: bool,
     min_interrogations_per_week: i32,
     periods: Vec<PeriodId>,
+    id: i32,
     #[hidden]
     firstname: String,
     #[hidden]
@@ -305,6 +307,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
             .into_iter()
             .collect();
 
+        use collomatique_state_colloscopes::ids::Id;
         Some(GroupList {
             groups: GroupList::enumerate_groups(env, id)?,
             prefilled,
@@ -312,6 +315,7 @@ impl ViewBuilder<Env, GroupListId> for ObjectId {
             min_students_per_group: group_list_data.params.students_per_group.start().get() as i32,
             max_students_per_group: group_list_data.params.students_per_group.end().get() as i32,
             max_group_count: group_list_data.params.group_names.len() as i32,
+            id: id.inner() as i32,
         })
     }
 }
@@ -461,6 +465,7 @@ impl ViewBuilder<Env, StudentId> for ObjectId {
                 None => (false, -1),
             };
 
+        use collomatique_state_colloscopes::ids::Id;
         Some(Student {
             firstname: student_data.desc.firstname.clone(),
             surname: student_data.desc.surname.clone(),
@@ -482,6 +487,7 @@ impl ViewBuilder<Env, StudentId> for ObjectId {
                     Some(*period_id)
                 })
                 .collect(),
+            id: id.inner() as i32,
         })
     }
 }

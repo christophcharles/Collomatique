@@ -2,6 +2,8 @@ use crate::{objects::InterrogationData, tools, views::Env};
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use super::vars::Var;
 
 pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
@@ -20,8 +22,8 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
         for (student_id, group) in &group_list.groups_for_students {
             config_data = config_data.set(
                 Var::StudentGroup {
-                    student: *student_id,
-                    group_list: *group_list_id,
+                    student: student_id.inner() as i32,
+                    group_list: group_list_id.inner() as i32,
                 },
                 *group as f64,
             );
@@ -84,8 +86,8 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
                 continue;
             }
             let var = Var::StudentGroup {
-                student: *student_id,
-                group_list: *group_list_id,
+                student: student_id.inner() as i32,
+                group_list: group_list_id.inner() as i32,
             };
             if config_data.get(var.clone()).is_some() {
                 continue;
@@ -167,10 +169,16 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                 group_list,
             } => {
                 if value >= -0.1 {
-                    let collo_group_list = colloscope.group_lists.get_mut(&group_list)?;
+                    let group_list_id = unsafe {
+                        collomatique_state_colloscopes::ids::GroupListId::new(group_list as u64)
+                    };
+                    let student_id = unsafe {
+                        collomatique_state_colloscopes::ids::StudentId::new(student as u64)
+                    };
+                    let collo_group_list = colloscope.group_lists.get_mut(&group_list_id)?;
                     collo_group_list
                         .groups_for_students
-                        .insert(student, value as u32);
+                        .insert(student_id, value as u32);
                 }
             }
             Var::GroupInInterrogation {

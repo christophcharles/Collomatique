@@ -16,7 +16,7 @@ let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
 pub reify interrogation_has_groups as $InterrogationHasGroups;
 
 let student_in_group(student: Student, group: Group) -> Constraint =
-    $StudentGroup(student, group.group_list) === group.num;
+    $StudentGroup(group.group_list.id, student.id) === group.num;
 
 pub reify student_in_group as $StudentInGroup;
 

@@ -2,7 +2,7 @@ import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let enforce_student_has_group(student: Student, group_list: GroupList) -> Constraint =
-    $StudentGroup(student, group_list) >== 0;
+    $StudentGroup(group_list.id, student.id) >== 0;
 
 let enforce_all_students_have_group(group: Group) -> Constraint =
     forall student in group.group_list.students {
