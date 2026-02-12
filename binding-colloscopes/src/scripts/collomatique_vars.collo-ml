@@ -1,3 +1,5 @@
+import "collomatique_db" as *;
+
 let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
     match interrogation.group_list {
         gl as GroupList {
@@ -20,12 +22,24 @@ let student_in_group(student: Int, group_list: Int, group: Int) -> Constraint =
 
 pub reify student_in_group as $StudentInGroup;
 
-let group_has_students(group: Group) -> Constraint =
-    if group.group_list.prefilled {
-        |group.prefilled_students| >== 1
+query group_list_filling(db: Db, group_list: Int) -> ?String =
+    "SELECT filling_type FROM group_lists WHERE id = ?";
+
+let group_list_is_prefilled(db: Db, group_list: Int) -> Bool =
+    group_list_filling(db, group_list) == "prefilled";
+
+query group_prefilled_student_count(db: Db, group_list: Int, group: Int) -> ?Int =
+    "SELECT COUNT(*) AS student_count FROM prefilled_group_students WHERE group_list_id = ? AND group_index = ?";
+
+query students_for_automatic_group_list(db: Db, group_list: Int) -> [Int] =
+    "SELECT id FROM students EXCEPT SELECT student_id AS id FROM automatic_group_excluded_students WHERE group_list_id = ?";
+
+let group_has_students(db: Db, group_list: Int, group: Int) -> Constraint =
+    if group_list_is_prefilled(db, group_list) {
+        (group_prefilled_student_count(db, group_list, group) ?? 0) >== 1
     } else {
-        sum student in group.group_list.students {
-            $StudentInGroup(student.id, group.group_list.id, group.num)
+        sum student in students_for_automatic_group_list(db, group_list) {
+            $StudentInGroup(student, group_list, group)
         } >== 1
     };
 

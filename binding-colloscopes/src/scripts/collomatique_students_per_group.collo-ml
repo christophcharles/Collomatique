@@ -10,15 +10,15 @@ let count_students_in_group(group: Group) -> LinExpr =
         }
     };
 
-let enforce_min_students_per_group(group: Group) -> Constraint =
+let enforce_min_students_per_group(db: Db, group: Group) -> Constraint =
     count_students_in_group(group) >==
-        group.group_list.min_students_per_group * $GroupHasStudents(group);
+        group.group_list.min_students_per_group * $GroupHasStudents(db, group.group_list.id, group.num);
 
 let enforce_max_students_per_group(group: Group) -> Constraint =
     count_students_in_group(group) <== group.group_list.max_students_per_group;
 
-pub let constraint(_db: Db) -> Constraint =
+pub let constraint(db: Db) -> Constraint =
     forall group in @[Group] {
-        enforce_min_students_per_group(group) and
+        enforce_min_students_per_group(db, group) and
         enforce_max_students_per_group(group)
     };
