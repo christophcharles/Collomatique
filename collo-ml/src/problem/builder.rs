@@ -185,6 +185,18 @@ impl<
         functions.get(&key).cloned()
     }
 
+    /// Get all public function signatures in a given module.
+    /// Returns a map from function name to (argument types, return type).
+    /// The map is empty if the module does not exist or has no public functions.
+    pub fn get_fn_from_module(&self, module: &str) -> BTreeMap<String, (ArgsType, ExprType)> {
+        self.ast
+            .get_functions()
+            .into_iter()
+            .filter(|((mod_name, _), _)| mod_name == module)
+            .map(|((_, fn_name), sig)| (fn_name, sig))
+            .collect()
+    }
+
     /// Add a constraint function to be evaluated at build time.
     ///
     /// Validates that the function exists and has the correct signature,
