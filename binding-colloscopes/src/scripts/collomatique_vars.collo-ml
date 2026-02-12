@@ -1,19 +1,60 @@
 import "collomatique_db" as *;
 
-let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
-    match interrogation.group_list {
-        gl as GroupList {
-            sum group in gl.groups {
-                $GroupInInterrogation(interrogation.slot_id, interrogation.week.num, group.num)
-            }
-        }
-        _ as None {
-            LinExpr(0)
-        }
+query groups_for_interrogation(db: Db, slot: Int, week: Int) -> [Int] = "
+WITH ordered_weeks AS (
+    -- Map each (period_id, week_index) to a global week number
+    -- by counting all weeks in periods that come before, plus the week_index itself
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        pw.has_interrogations,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+),
+slot_info AS (
+    SELECT s.subject_id, s.week_pattern_id
+    FROM slots s
+    WHERE s.id = ?  -- parameter
+),
+target_week AS (
+    -- Find the period_id and week_index for the given global week number
+    SELECT period_id, week_index, has_interrogations
+    FROM ordered_weeks
+    WHERE global_week_number = ?  -- parameter
+),
+week_is_disabled AS (
+    -- Check if the week is disabled via the slot's week_pattern
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    JOIN target_week tw ON tw.period_id = wpd.period_id AND tw.week_index = wpd.week_index
+    JOIN slot_info si ON si.week_pattern_id = wpd.week_pattern_id
+)
+SELECT glgn.group_index AS group_num
+FROM target_week tw
+JOIN slot_info si
+JOIN group_list_subject_associations glsa
+    ON glsa.period_id = tw.period_id
+   AND glsa.subject_id = si.subject_id
+JOIN group_list_group_names glgn
+    ON glgn.group_list_id = glsa.group_list_id
+WHERE tw.has_interrogations = 1
+  AND NOT EXISTS (SELECT 1 FROM week_is_disabled)
+";
+
+let count_groups_in_interrogation(db: Db, slot: Int, week: Int) -> LinExpr =
+    sum group in groups_for_interrogation(db, slot, week) {
+        $GroupInInterrogation(slot, week, group)
     };
 
-let interrogation_has_groups(interrogation: Interrogation) -> Constraint =
-    count_groups_in_interrogation(interrogation) >== 1;
+let interrogation_has_groups(db: Db, slot: Int, week: Int) -> Constraint =
+    count_groups_in_interrogation(db, slot, week) >== 1;
 
 pub reify interrogation_has_groups as $InterrogationHasGroups;
 

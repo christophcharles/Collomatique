@@ -16,13 +16,13 @@ let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
 let max_group_per_interrogation(interrogation: Interrogation) -> Constraint =
     count_groups_in_interrogation(interrogation) <== interrogation.subject.max_group_per_interrogation;
 
-let min_group_per_interrogation(interrogation: Interrogation) -> Constraint =
-    count_groups_in_interrogation(interrogation) >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(interrogation);
+let min_group_per_interrogation(db: Db, interrogation: Interrogation) -> Constraint =
+    count_groups_in_interrogation(interrogation) >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(db, interrogation.slot_id, interrogation.week.num);
 
-let enforce_group_count(interrogation: Interrogation) -> Constraint =
-    max_group_per_interrogation(interrogation) and min_group_per_interrogation(interrogation);
+let enforce_group_count(db: Db, interrogation: Interrogation) -> Constraint =
+    max_group_per_interrogation(interrogation) and min_group_per_interrogation(db, interrogation);
 
-pub let constraint(_db: Db) -> Constraint =
+pub let constraint(db: Db) -> Constraint =
     forall interrogation in @[Interrogation] {
-        enforce_group_count(interrogation)
+        enforce_group_count(db, interrogation)
     };
