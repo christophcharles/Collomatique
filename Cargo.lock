@@ -496,7 +496,9 @@ dependencies = [
  "collomatique-ops",
  "collomatique-python",
  "collomatique-rpc",
+ "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
+ "sqlx",
  "tokio",
 ]
 

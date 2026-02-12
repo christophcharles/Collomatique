@@ -629,17 +629,37 @@ impl Colloscope {
             .builder
             .clone();
         let params = self.params.clone();
+        let colloscope = self.colloscope.clone();
 
-        sender.spawn_oneshot_command(move || {
-            let env = collomatique_binding_colloscopes::views::Env::from(params);
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            match rt
-                .block_on(builder.build(&env, None))
-                .map_err(|e| format!("{}", e))
-            {
-                Ok(problem) => {
-                    ColloscopeCommandOutput::IlpProblemComputed(Ok(IlpProblem { env, problem }))
-                }
+        sender.oneshot_command(async move {
+            let result: Result<IlpProblem, String> = async {
+                let inner_data = collomatique_state_colloscopes::InnerData { params, colloscope };
+                let env =
+                    collomatique_binding_colloscopes::views::Env::from(inner_data.params.clone());
+
+                let pool = sqlx::SqlitePool::connect(":memory:")
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                collomatique_sqlite_state::create_schema(&pool)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                let db_conn = collo_ml::SqliteDatabaseDriver::new_connection("collomatique", &pool)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+
+                let problem = builder
+                    .build(&env, Some(db_conn))
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                Ok(IlpProblem { env, problem })
+            }
+            .await;
+
+            match result {
+                Ok(ilp_problem) => ColloscopeCommandOutput::IlpProblemComputed(Ok(ilp_problem)),
                 Err(msg) => ColloscopeCommandOutput::IlpProblemComputed(Err(msg)),
             }
         });

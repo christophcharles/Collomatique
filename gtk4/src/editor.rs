@@ -1125,7 +1125,7 @@ impl EditorPanel {
             .main_script
             .clone();
 
-        sender.spawn_oneshot_command(move || {
+        sender.oneshot_command(async move {
             use collomatique_binding_colloscopes::scripts::{
                 default_problem_builder, get_default_main_module,
             };
@@ -1134,10 +1134,8 @@ impl EditorPanel {
                 .as_deref()
                 .unwrap_or_else(|| get_default_main_module());
 
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let result = rt.block_on(default_problem_builder::<collo_ml::SqliteDatabaseDriver>(
-                main_module,
-            ));
+            let result =
+                default_problem_builder::<collo_ml::SqliteDatabaseDriver>(main_module).await;
 
             EditorCommandOutput::MainScriptCompiled { source, result }
         });
