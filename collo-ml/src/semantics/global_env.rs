@@ -633,6 +633,13 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             other => Some(vec![other.clone()]),
         }
     }
+
+    /// Check if a type resolves to a DatabaseSchema after unwrapping custom type aliases.
+    pub fn is_database_schema_deep(&self, typ: &ExprType) -> bool {
+        self.resolve_type_deep(typ)
+            .map(|types| types.len() == 1 && types[0].is_database_schema())
+            .unwrap_or(false)
+    }
 }
 
 impl TypeInfo {

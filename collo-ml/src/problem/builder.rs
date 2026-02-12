@@ -7,7 +7,7 @@
 use super::solution::Problem;
 use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
 use crate::database::DatabaseDriver;
-use crate::eval::{CheckedAST, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
+use crate::eval::{CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
 use crate::semantics::ArgsType;
 use crate::traits::{EvalObject, FieldConversionError, VarConversionError};
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
@@ -135,7 +135,8 @@ impl<
             .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
 
         // Determine if the first parameter is a database schema
-        let needs_db = !args_type.is_empty() && args_type[0].is_database_schema();
+        let needs_db =
+            !args_type.is_empty() && self.ast.global_env.is_database_schema_deep(&args_type[0]);
         let expected_args = if needs_db {
             args_type.len() - 1
         } else {
@@ -725,7 +726,15 @@ impl<
                     let db_val = db_value.as_ref().ok_or_else(|| {
                         ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
-                    let mut full_args = vec![db_val.clone()];
+                    let fn_key = (module.to_string(), fn_name.to_string());
+                    let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
+                    let wrapped = wrap_db_in_custom_layers::<T, D>(
+                        db_val.clone(),
+                        &fn_desc.typ.args[0],
+                        &builder.ast.global_env,
+                    )
+                    .expect("DB type wrapping should succeed for validated function");
+                    let mut full_args = vec![wrapped];
                     full_args.extend(args.clone());
                     full_args
                 } else {
@@ -753,7 +762,15 @@ impl<
                     let db_val = db_value.as_ref().ok_or_else(|| {
                         ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
-                    let mut full_args = vec![db_val.clone()];
+                    let fn_key = (module.to_string(), fn_name.to_string());
+                    let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
+                    let wrapped = wrap_db_in_custom_layers::<T, D>(
+                        db_val.clone(),
+                        &fn_desc.typ.args[0],
+                        &builder.ast.global_env,
+                    )
+                    .expect("DB type wrapping should succeed for validated function");
+                    let mut full_args = vec![wrapped];
                     full_args.extend(args.clone());
                     full_args
                 } else {
@@ -951,5 +968,36 @@ impl<
         }
 
         Ok(eval_data)
+    }
+}
+
+/// Wrap a database ExprValue in Custom type layers to match a declared parameter type.
+/// Recursively resolves Custom types until reaching DatabaseSchema, then wraps on the way back up.
+fn wrap_db_in_custom_layers<T: EvalObject, D: DatabaseDriver>(
+    db_value: ExprValue<T, D::Connection>,
+    declared_type: &ExprType,
+    global_env: &crate::semantics::GlobalEnv<D>,
+) -> Option<ExprValue<T, D::Connection>> {
+    let variants: Vec<_> = declared_type.get_variants().iter().cloned().collect();
+    if variants.len() != 1 {
+        return None;
+    }
+    match &variants[0] {
+        SimpleType::DatabaseSchema(_) => Some(db_value),
+        SimpleType::Custom(module, root, variant) => {
+            let qualified = match variant {
+                Some(v) => format!("{}::{}", root, v),
+                None => root.clone(),
+            };
+            let underlying = global_env.get_custom_type_underlying(module, &qualified)?;
+            let inner = wrap_db_in_custom_layers::<T, D>(db_value, underlying, global_env)?;
+            Some(ExprValue::Custom(Box::new(CustomValue {
+                module: module.clone(),
+                type_name: root.clone(),
+                variant: variant.clone(),
+                content: inner,
+            })))
+        }
+        _ => None,
     }
 }
