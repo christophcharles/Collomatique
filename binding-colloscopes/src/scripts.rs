@@ -2,7 +2,7 @@ use super::{vars::Var, views::ObjectId};
 use collo_ml::SqliteDatabaseDriver;
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::{SemError, SemWarning};
+use collo_ml::{ExprType, ExprValue, SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,6 +15,10 @@ pub enum SimpleProblemError {
         errors: Vec<SemError>,
         warnings: Vec<SemWarning>,
     },
+    UnsupportedParameter {
+        func_name: String,
+        params: Vec<(usize, ExprType)>,
+    },
 }
 
 impl fmt::Display for SimpleProblemError {
@@ -25,6 +29,16 @@ impl fmt::Display for SimpleProblemError {
             SimpleProblemError::SemanticErrors { errors, .. } => {
                 for err in errors {
                     write!(f, "{}", err)?;
+                }
+                Ok(())
+            }
+            SimpleProblemError::UnsupportedParameter { func_name, params } => {
+                for (i, ty) in params {
+                    write!(
+                        f,
+                        "Function \"{}\": parameter {} of type {} is unsupported",
+                        func_name, i, ty
+                    )?;
                 }
                 Ok(())
             }
@@ -92,6 +106,27 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 #[cfg(test)]
 mod tests;
 
+fn build_params(
+    fn_name: &str,
+    args_type: &[ExprType],
+) -> Result<
+    Vec<ExprValue<ObjectId, <SqliteDatabaseDriver as collo_ml::DatabaseDriver>::Connection>>,
+    SimpleProblemError,
+> {
+    if args_type.is_empty() {
+        Ok(vec![])
+    } else {
+        Err(SimpleProblemError::UnsupportedParameter {
+            func_name: fn_name.to_string(),
+            params: args_type
+                .iter()
+                .enumerate()
+                .map(|(i, ty)| (i, ty.clone()))
+                .collect(),
+        })
+    }
+}
+
 pub async fn default_problem_builder(
     main_module: &str,
 ) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseDriver, Var>, SimpleProblemError> {
@@ -116,13 +151,21 @@ pub async fn default_problem_builder(
             }
         })?;
 
-    builder
-        .add_constraint("main", "constraint", vec![])
-        .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+    let functions = builder.get_fn_from_module("main");
 
-    builder
-        .add_objective("main", "objective", vec![], 1.0, ObjectiveSense::Minimize)
-        .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+    for (fn_name, (args_type, _)) in &functions {
+        if fn_name == "constraint" || fn_name.starts_with("constraint_") {
+            let params = build_params(fn_name, args_type)?;
+            builder
+                .add_constraint("main", fn_name, params)
+                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+        } else if fn_name == "objective" || fn_name.starts_with("objective_") {
+            let params = build_params(fn_name, args_type)?;
+            builder
+                .add_objective("main", fn_name, params, 1.0, ObjectiveSense::Minimize)
+                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+        }
+    }
 
     Ok(builder)
 }

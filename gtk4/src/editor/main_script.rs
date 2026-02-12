@@ -320,6 +320,9 @@ impl Component for MainScript {
                                 )
                                 .collect(),
                         ),
+                        e @ SimpleProblemError::UnsupportedParameter { .. } => {
+                            Some(vec![ErrorMsg::Error(e.to_string())])
+                        }
                     },
                     Some(Ok(builder)) => Some(
                         builder
