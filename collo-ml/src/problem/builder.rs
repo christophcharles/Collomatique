@@ -176,6 +176,15 @@ impl<
         self.ast.get_warnings()
     }
 
+    /// Get the signature of a function by module and name.
+    /// Returns the list of argument types and the output type,
+    /// or `None` if the function does not exist.
+    pub fn get_fn_signature(&self, module: &str, fn_name: &str) -> Option<(ArgsType, ExprType)> {
+        let functions = self.ast.get_functions();
+        let key = (module.to_string(), fn_name.to_string());
+        functions.get(&key).cloned()
+    }
+
     /// Add a constraint function to be evaluated at build time.
     ///
     /// Validates that the function exists and has the correct signature,
