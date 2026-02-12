@@ -1,8 +1,9 @@
 use super::{vars::Var, views::ObjectId};
-use collo_ml::SqliteDatabaseDriver;
+pub use collo_ml::SqliteDatabaseDriver;
 use collo_ml::eval::CompileError;
+use collo_ml::eval::database::DatabaseHandle;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::{ExprType, ExprValue, SemError, SemWarning};
+use collo_ml::{DatabaseConnection, DatabaseDriver, ExprType, ExprValue, SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -113,15 +114,29 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 #[cfg(test)]
 mod tests;
 
-fn build_params(
+fn build_params<D: DatabaseConnection>(
     fn_name: &str,
     args_type: &[ExprType],
-) -> Result<
-    Vec<ExprValue<ObjectId, <SqliteDatabaseDriver as collo_ml::DatabaseDriver>::Connection>>,
-    SimpleProblemError,
-> {
+    db_connection: &Option<ExprValue<ObjectId, D>>,
+) -> Result<Vec<ExprValue<ObjectId, D>>, SimpleProblemError> {
     if args_type.is_empty() {
         Ok(vec![])
+    } else if args_type.len() == 1 {
+        if let Some(db_val) = db_connection {
+            if db_val.fits_in_typ(&args_type[0]) {
+                Ok(vec![db_val.clone()])
+            } else {
+                Err(SimpleProblemError::UnsupportedParameter {
+                    func_name: fn_name.to_string(),
+                    params: vec![(0, args_type[0].clone())],
+                })
+            }
+        } else {
+            Err(SimpleProblemError::UnsupportedParameter {
+                func_name: fn_name.to_string(),
+                params: vec![(0, args_type[0].clone())],
+            })
+        }
     } else {
         Err(SimpleProblemError::UnsupportedParameter {
             func_name: fn_name.to_string(),
@@ -134,13 +149,14 @@ fn build_params(
     }
 }
 
-pub async fn default_problem_builder(
+pub async fn default_problem_builder<T: DatabaseDriver>(
     main_module: &str,
-) -> Result<ProblemBuilder<ObjectId, SqliteDatabaseDriver, Var>, SimpleProblemError> {
+    db_connection: Option<T::Connection>,
+) -> Result<ProblemBuilder<ObjectId, T, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::<ObjectId, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut builder = ProblemBuilder::<ObjectId, T, Var>::new(&modules)
         .await
         .map_err(|e| {
             // Filter ProblemError into SimpleProblemError
@@ -158,16 +174,18 @@ pub async fn default_problem_builder(
             }
         })?;
 
+    let db_value = db_connection.map(|conn| ExprValue::Database(DatabaseHandle::new(conn)));
+
     let functions = builder.get_fn_from_module("main");
 
     for (fn_name, (args_type, _)) in &functions {
         if fn_name == "constraint" || fn_name.starts_with("constraint_") {
-            let params = build_params(fn_name, args_type)?;
+            let params = build_params(fn_name, args_type, &db_value)?;
             builder
                 .add_constraint("main", fn_name, params)
                 .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
         } else if fn_name == "objective" || fn_name.starts_with("objective_") {
-            let params = build_params(fn_name, args_type)?;
+            let params = build_params(fn_name, args_type, &db_value)?;
             builder
                 .add_objective("main", fn_name, params, 1.0, ObjectiveSense::Minimize)
                 .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;

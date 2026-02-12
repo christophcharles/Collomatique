@@ -25,7 +25,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
     eprintln!("Building ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::{
-        default_problem_builder, get_default_main_module,
+        SqliteDatabaseDriver, default_problem_builder, get_default_main_module,
     };
     let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
     let main_script = env
@@ -35,7 +35,10 @@ fn try_solve() -> Result<(), anyhow::Error> {
         .unwrap_or(get_default_main_module());
     let rt = tokio::runtime::Runtime::new().unwrap();
     let problem = match rt
-        .block_on(default_problem_builder(main_script))
+        .block_on(default_problem_builder::<SqliteDatabaseDriver>(
+            main_script,
+            None,
+        ))
         .map_err(|e| format!("{}", e))
         .and_then(|b| rt.block_on(b.build(&env)).map_err(|e| format!("{}", e)))
     {
