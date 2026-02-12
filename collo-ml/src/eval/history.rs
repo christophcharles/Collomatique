@@ -113,7 +113,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
-            if !arg.fits_in_typ(self.env, arg_typ) {
+            if !arg.fits_in_typ(arg_typ) {
                 return Err(EvalError::TypeMismatch {
                     param,
                     expected: arg_typ.clone(),

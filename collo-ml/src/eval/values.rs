@@ -204,7 +204,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         matches!(self, Self::Tuple(_))
     }
 
-    pub fn fits_in_typ(&self, env: &T::Env, target: &ExprType) -> bool {
+    pub fn fits_in_typ(&self, target: &ExprType) -> bool {
         match self {
             // for non-list, it is just of matter of checking that the typ is in the sum
             Self::None => target.get_variants().contains(&SimpleType::None),
@@ -225,7 +225,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                         continue;
                     };
 
-                    if list.iter().all(|x| x.fits_in_typ(env, inner_typ)) {
+                    if list.iter().all(|x| x.fits_in_typ(inner_typ)) {
                         return true;
                     }
                 }
@@ -243,7 +243,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     if elements
                         .iter()
                         .zip(target_elems.iter())
-                        .all(|(e, t)| e.fits_in_typ(env, t))
+                        .all(|(e, t)| e.fits_in_typ(t))
                     {
                         return true;
                     }
@@ -265,7 +265,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     if fields.iter().all(|(k, v)| {
                         target_fields
                             .get(k)
-                            .map(|t| v.fits_in_typ(env, t))
+                            .map(|t| v.fits_in_typ(t))
                             .unwrap_or(false)
                     }) {
                         return true;
@@ -305,7 +305,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         }
     }
 
-    pub fn can_convert_to(&self, env: &T::Env, target: &ConcreteType) -> bool {
+    pub fn can_convert_to(&self, target: &ConcreteType) -> bool {
         match (self, target.inner()) {
             // Can always convert to its own type
             (Self::None, SimpleType::None) => true,
@@ -328,8 +328,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             // Custom to underlying type - semantic analysis has validated this is allowed
             // The actual conversion happens by unwrapping and converting the content
             (Self::Custom(custom), target_typ) => {
-                custom.content.can_convert_to(env, target)
-                    || matches!(target_typ, SimpleType::String)
+                custom.content.can_convert_to(target) || matches!(target_typ, SimpleType::String)
                 // Everything converts to String
             }
             // Value to Custom type - semantic analysis has validated this
@@ -350,7 +349,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     .clone()
                     .into_concrete()
                     .expect("Type should be concrete");
-                list.iter().all(|x| x.can_convert_to(env, &concrete_inner))
+                list.iter().all(|x| x.can_convert_to(&concrete_inner))
             }
             // Special cases: we can convert from Int to LinExpr
             (Self::Int(_), SimpleType::LinExpr) => true,
@@ -368,7 +367,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                         .clone()
                         .into_concrete()
                         .expect("Type should be concrete");
-                    e.can_convert_to(env, &t_concrete)
+                    e.can_convert_to(&t_concrete)
                 })
             }
             // Structs: field-wise conversion
@@ -389,7 +388,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                                 .clone()
                                 .into_concrete()
                                 .expect("Type should be concrete");
-                            v.can_convert_to(env, &t_concrete)
+                            v.can_convert_to(&t_concrete)
                         })
                         .unwrap_or(false)
                 })
@@ -483,7 +482,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         cache: &mut T::Cache,
         target: &ConcreteType,
     ) -> Option<ExprValue<T, D>> {
-        if !self.can_convert_to(env, target) {
+        if !self.can_convert_to(target) {
             return None;
         }
 

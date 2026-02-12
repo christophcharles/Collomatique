@@ -324,7 +324,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
-                if value.fits_in_typ(eval_history.env, target_type) {
+                if value.fits_in_typ(target_type) {
                     value
                 } else {
                     ExprValue::None
@@ -336,7 +336,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let target_type = eval_history.ast.get_resolved_type(&typ.span);
 
                 // Check if value fits in target type
-                if value.fits_in_typ(eval_history.env, target_type) {
+                if value.fits_in_typ(target_type) {
                     value
                 } else {
                     return Err(EvalError::Panic(Box::new(ExprValue::String(format!(
@@ -886,7 +886,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     let does_typ_match = match &branch.as_typ {
                         Some(t) => {
                             let target_type = eval_history.ast.get_resolved_type(&t.span);
-                            value.fits_in_typ(eval_history.env, target_type)
+                            value.fits_in_typ(target_type)
                         }
                         None => true,
                     };
