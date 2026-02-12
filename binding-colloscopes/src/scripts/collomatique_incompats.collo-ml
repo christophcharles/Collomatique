@@ -6,41 +6,41 @@ let student_list_for_incompat_week(incompat_week: IncompatWeek) -> [Student] =
         period_data.students
     };
 
-let enforce_saturated_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+let enforce_saturated_incompat_week(db: Db, incompat_week: IncompatWeek) -> Constraint =
     forall student in student_list_for_incompat_week(incompat_week) {
         forall slot in incompat_week.slots {
             forall time_slot in slot.time_slots {
                 forall interrogation in time_slot.interrogations {
-                    $StudentAtInterrogation(student, interrogation) === 0
+                    $StudentAtInterrogation(db, student.id, interrogation.slot_id, interrogation.week.num) === 0
                 }
             }
         }
     };
 
-let student_not_at_incompat_slot(student: Student, slot: IncompatSlot) -> Constraint =
+let student_not_at_incompat_slot(db: Db, student: Student, slot: IncompatSlot) -> Constraint =
     forall time_slot in slot.time_slots {
         forall interrogation in time_slot.interrogations {
-            $StudentAtInterrogation(student, interrogation) === 0
+            $StudentAtInterrogation(db, student.id, interrogation.slot_id, interrogation.week.num) === 0
         }
     };
 
 reify student_not_at_incompat_slot as $StudentNotAtIncompatSlot;
 
-let enforce_non_saturated_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+let enforce_non_saturated_incompat_week(db: Db, incompat_week: IncompatWeek) -> Constraint =
     forall student in student_list_for_incompat_week(incompat_week) {
         sum slot in incompat_week.slots {
-            $StudentNotAtIncompatSlot(student, slot)
+            $StudentNotAtIncompatSlot(db, student, slot)
         } >== incompat_week.incompat.minimum_free_slots
     };
 
-let enforce_incompat_week(incompat_week: IncompatWeek) -> Constraint =
+let enforce_incompat_week(db: Db, incompat_week: IncompatWeek) -> Constraint =
     if |incompat_week.slots| == incompat_week.incompat.minimum_free_slots {
-        enforce_saturated_incompat_week(incompat_week)
+        enforce_saturated_incompat_week(db, incompat_week)
     } else {
-        enforce_non_saturated_incompat_week(incompat_week)
+        enforce_non_saturated_incompat_week(db, incompat_week)
     };
 
-pub let constraint(_db: Db) -> Constraint =
+pub let constraint(db: Db) -> Constraint =
     forall incompat_week in @[IncompatWeek] {
-        enforce_incompat_week(incompat_week)
+        enforce_incompat_week(db, incompat_week)
     };

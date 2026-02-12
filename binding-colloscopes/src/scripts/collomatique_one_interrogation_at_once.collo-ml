@@ -1,14 +1,14 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
-let at_most_one_interrogation(time_slot: TimeSlot, student: Student) -> Constraint =
+let at_most_one_interrogation(db: Db, time_slot: TimeSlot, student: Student) -> Constraint =
     sum interrogation in time_slot.interrogations where student in interrogation.students {
-        $StudentAtInterrogation(student, interrogation)
+        $StudentAtInterrogation(db, student.id, interrogation.slot_id, interrogation.week.num)
     } <== 1;
 
-pub let constraint(_db: Db) -> Constraint =
+pub let constraint(db: Db) -> Constraint =
     forall time_slot in @[TimeSlot] {
         forall student in @[Student] {
-            at_most_one_interrogation(time_slot, student)
+            at_most_one_interrogation(db, time_slot, student)
         }
     };
