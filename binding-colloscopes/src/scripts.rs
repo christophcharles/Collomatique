@@ -46,11 +46,18 @@ impl fmt::Display for SimpleProblemError {
     }
 }
 
+const DB_MODULE_SOURCE: &str = const_format::concatcp!(
+    "pub type Db = #{~\"",
+    collomatique_sqlite_state::SCHEMA_SQL,
+    "\"~};"
+);
+
 pub const MODULES: &[(&str, &str)] = &[
     (
         "collomatique",
         include_str!("scripts/collomatique.collo-ml"),
     ),
+    ("collomatique_db", DB_MODULE_SOURCE),
     (
         "collomatique_vars",
         include_str!("scripts/collomatique_vars.collo-ml"),
