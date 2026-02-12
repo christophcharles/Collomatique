@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let count_interrogations_in_day(student: Student, day: Day) -> LinExpr =
@@ -45,6 +46,6 @@ let min_per_week(hard: Bool) -> Constraint =
         min_per_week_for(student)
     };
 
-pub let constraint() -> Constraint = max_per_day(true) and max_per_week(true) and min_per_week(true);
+pub let constraint(_db: Db) -> Constraint = max_per_day(true) and max_per_week(true) and min_per_week(true);
 
-pub let objective() -> [Constraint] = [max_per_day(false), max_per_week(false), min_per_week(false)];
+pub let objective(_db: Db) -> [Constraint] = [max_per_day(false), max_per_week(false), min_per_week(false)];

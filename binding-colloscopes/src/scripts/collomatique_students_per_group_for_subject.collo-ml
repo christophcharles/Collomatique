@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let count_students_in_group(group: Group, subject_period: SubjectPeriod) -> LinExpr =
@@ -21,7 +22,7 @@ let enforce_min_students_per_group(group: Group, subject_period: SubjectPeriod) 
 let enforce_max_students_per_group(group: Group, subject_period: SubjectPeriod) -> Constraint =
     count_students_in_group(group, subject_period) <== subject_period.subject.max_students_per_group;
 
-pub let constraint() -> Constraint =
+pub let constraint(_db: Db) -> Constraint =
     forall subject_period in @[SubjectPeriod] where subject_period.group_list != none {
         match subject_period.group_list {
             group_list as GroupList {

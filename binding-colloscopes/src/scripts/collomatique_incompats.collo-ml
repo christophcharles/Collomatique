@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let student_list_for_incompat_week(incompat_week: IncompatWeek) -> [Student] =
@@ -39,7 +40,7 @@ let enforce_incompat_week(incompat_week: IncompatWeek) -> Constraint =
         enforce_non_saturated_incompat_week(incompat_week)
     };
 
-pub let constraint() -> Constraint =
+pub let constraint(_db: Db) -> Constraint =
     forall incompat_week in @[IncompatWeek] {
         enforce_incompat_week(incompat_week)
     };

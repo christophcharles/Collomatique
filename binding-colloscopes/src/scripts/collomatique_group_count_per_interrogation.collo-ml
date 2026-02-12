@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
@@ -21,7 +22,7 @@ let min_group_per_interrogation(interrogation: Interrogation) -> Constraint =
 let enforce_group_count(interrogation: Interrogation) -> Constraint =
     max_group_per_interrogation(interrogation) and min_group_per_interrogation(interrogation);
 
-pub let constraint() -> Constraint =
+pub let constraint(_db: Db) -> Constraint =
     forall interrogation in @[Interrogation] {
         enforce_group_count(interrogation)
     };

@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
 
 let enforce_student_has_group(student: Student, group_list: GroupList) -> Constraint =
@@ -8,7 +9,7 @@ let enforce_all_students_have_group(group: Group) -> Constraint =
         enforce_student_has_group(student, group.group_list)
     };
 
-pub let constraint() -> Constraint =
+pub let constraint(_db: Db) -> Constraint =
     forall group in @[Group] {
         enforce_all_students_have_group(group)
     };
