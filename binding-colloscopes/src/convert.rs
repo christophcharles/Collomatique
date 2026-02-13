@@ -52,7 +52,7 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
                     };
                     let group = *group_num as i32;
                     config_data = config_data.set(
-                        Var::GroupInInterrogation {
+                        Var::GroupInInterrogationInternal {
                             slot: interrogation.slot.inner() as i32,
                             week: interrogation.week as i32,
                             group,
@@ -144,7 +144,7 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
                     };
                     let group = group_num as i32;
                     config_data = config_data.set(
-                        Var::GroupInInterrogation {
+                        Var::GroupInInterrogationInternal {
                             slot: interrogation.slot.inner() as i32,
                             week: interrogation.week as i32,
                             group,
@@ -183,7 +183,7 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                         .insert(student_id, value as u32);
                 }
             }
-            Var::GroupInInterrogation { slot, week, group } => {
+            Var::GroupInInterrogationInternal { slot, week, group } => {
                 if value < 0.5 {
                     continue;
                 }

@@ -7,7 +7,7 @@ use collo_ml::EvalVar;
 #[env(Env)]
 pub enum Var {
     #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]
-    GroupInInterrogation {
+    GroupInInterrogationInternal {
         #[range(Self::compute_slot_range(env))]
         slot: i32,
         #[range(Self::compute_week_range(env, slot))]
