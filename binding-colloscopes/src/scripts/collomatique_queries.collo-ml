@@ -104,3 +104,33 @@ pub query group_prefilled_student_count(db: Db, group_list: GroupListId, group: 
 
 pub query students_for_automatic_group_list(db: Db, group_list: GroupListId) -> [StudentId] =
     "SELECT id FROM students EXCEPT SELECT student_id AS id FROM automatic_group_excluded_students WHERE group_list_id = ?";
+
+pub query interrogations(db: Db) -> [(SlotId, GlobalWeek)] = "
+WITH ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        pw.has_interrogations,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+)
+SELECT s.id AS slot_id, ow.global_week_number AS global_week
+FROM slots s
+JOIN ordered_weeks ow ON ow.has_interrogations = 1
+JOIN subject_interrogation_params sip ON sip.subject_id = s.subject_id
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    WHERE wpd.week_pattern_id = s.week_pattern_id
+      AND wpd.period_id = ow.period_id
+      AND wpd.week_index = ow.week_index
+)
+ORDER BY s.id, ow.global_week_number;
+";
