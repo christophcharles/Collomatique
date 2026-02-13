@@ -175,7 +175,7 @@ async fn list_constraint_reification_exact_count_with_param() {
                             found: value.params.len(),
                         });
                     }
-                    let param = match &value.params[0] {
+                    let param = match &*value.params[0] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {

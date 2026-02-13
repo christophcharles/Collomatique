@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Test that a simple constraint gets an origin when returned from a function
 #[tokio::test]
@@ -34,7 +35,7 @@ async fn simple_constraint_gets_origin() {
 
             // Verify arguments
             assert_eq!(origin.args.len(), 1);
-            assert_eq!(origin.args[0], ExprValue::Int(42));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(42)));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -74,7 +75,7 @@ async fn nested_function_origin_is_inner() {
 
             // The args should be from the inner function call: y + 1 = 11
             assert_eq!(origin.args.len(), 1);
-            assert_eq!(origin.args[0], ExprValue::Int(11));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(11)));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -109,7 +110,7 @@ async fn multiple_constraints_same_origin() {
                 let origin = constraint_with_origin.origin.as_ref().unwrap();
                 assert_eq!(origin.fn_name.node, "make_two");
                 assert_eq!(origin.args.len(), 1);
-                assert_eq!(origin.args[0], ExprValue::Int(5));
+                assert_eq!(origin.args[0], Arc::new(ExprValue::Int(5)));
             }
         }
         _ => panic!("Expected Constraint"),
@@ -149,9 +150,9 @@ async fn origin_with_multiple_params() {
 
             assert_eq!(origin.fn_name.node, "complex");
             assert_eq!(origin.args.len(), 3);
-            assert_eq!(origin.args[0], ExprValue::Int(1));
-            assert_eq!(origin.args[1], ExprValue::Int(2));
-            assert_eq!(origin.args[2], ExprValue::Int(3));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(1)));
+            assert_eq!(origin.args[1], Arc::new(ExprValue::Int(2)));
+            assert_eq!(origin.args[2], Arc::new(ExprValue::Int(3)));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -184,7 +185,7 @@ async fn reified_constraint_origin() {
                 if let Some(origin) = &c.origin {
                     origin.fn_name.node == "use_reified"
                         && origin.args.len() == 1
-                        && origin.args[0] == ExprValue::Int(7)
+                        && origin.args[0] == Arc::new(ExprValue::Int(7))
                 } else {
                     false
                 }
@@ -229,7 +230,7 @@ async fn forall_constraint_origin() {
                 let origin = constraint_with_origin.origin.as_ref().unwrap();
                 assert_eq!(origin.fn_name.node, "forall_constraints");
                 assert_eq!(origin.args.len(), 1);
-                assert_eq!(origin.args[0], ExprValue::Int(3));
+                assert_eq!(origin.args[0], Arc::new(ExprValue::Int(3)));
             }
         }
         _ => panic!("Expected Constraint"),
@@ -265,7 +266,7 @@ async fn combined_constraints_preserve_separate_origins() {
                 if let Some(origin) = &c.origin {
                     origin.fn_name.node == "c1"
                         && origin.args.len() == 1
-                        && origin.args[0] == ExprValue::Int(5)
+                        && origin.args[0] == Arc::new(ExprValue::Int(5))
                 } else {
                     false
                 }
@@ -276,7 +277,7 @@ async fn combined_constraints_preserve_separate_origins() {
                 if let Some(origin) = &c.origin {
                     origin.fn_name.node == "c2"
                         && origin.args.len() == 1
-                        && origin.args[0] == ExprValue::Int(5)
+                        && origin.args[0] == Arc::new(ExprValue::Int(5))
                 } else {
                     false
                 }
@@ -324,7 +325,7 @@ async fn origin_with_list_param() {
                 let origin = constraint_with_origin.origin.as_ref().unwrap();
                 assert_eq!(origin.fn_name.node, "list_constraint");
                 assert_eq!(origin.args.len(), 1);
-                assert_eq!(origin.args[0], list_arg);
+                assert_eq!(origin.args[0], Arc::new(list_arg.clone()));
             }
         }
         _ => panic!("Expected Constraint"),
@@ -365,7 +366,7 @@ async fn inner_function_origin_preserved() {
 
             // Args should be from helper call: y * 2 = 6
             assert_eq!(origin.args.len(), 1);
-            assert_eq!(origin.args[0], ExprValue::Int(6));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(6)));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -404,7 +405,7 @@ async fn deeply_nested_function_origin() {
 
             // Args should be from innermost call: (1 + 5) + 10 = 16
             assert_eq!(origin.args.len(), 1);
-            assert_eq!(origin.args[0], ExprValue::Int(16));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(16)));
         }
         _ => panic!("Expected Constraint"),
     }
@@ -443,7 +444,7 @@ async fn docstring_substitution_with_args() {
             let origin1 = constraint1.origin.as_ref().unwrap();
             assert_eq!(origin1.fn_name.node, "h");
             assert_eq!(origin1.args.len(), 1);
-            assert_eq!(origin1.args[0], ExprValue::Int(1));
+            assert_eq!(origin1.args[0], Arc::new(ExprValue::Int(1)));
             assert_eq!(origin1.pretty_docstring.len(), 1);
             assert_eq!(origin1.pretty_docstring[0], "1 must be smaller than 1.");
 
@@ -453,7 +454,7 @@ async fn docstring_substitution_with_args() {
             let origin2 = constraint2.origin.as_ref().unwrap();
             assert_eq!(origin2.fn_name.node, "h");
             assert_eq!(origin2.args.len(), 1);
-            assert_eq!(origin2.args[0], ExprValue::Int(2));
+            assert_eq!(origin2.args[0], Arc::new(ExprValue::Int(2)));
             assert_eq!(origin2.pretty_docstring.len(), 1);
             assert_eq!(origin2.pretty_docstring[0], "2 must be smaller than 1.");
         }
@@ -493,8 +494,8 @@ async fn multiline_docstring_multiple_params() {
 
             assert_eq!(origin.fn_name.node, "range_check");
             assert_eq!(origin.args.len(), 2);
-            assert_eq!(origin.args[0], ExprValue::Int(5));
-            assert_eq!(origin.args[1], ExprValue::Int(10));
+            assert_eq!(origin.args[0], Arc::new(ExprValue::Int(5)));
+            assert_eq!(origin.args[1], Arc::new(ExprValue::Int(10)));
 
             assert_eq!(origin.pretty_docstring.len(), 3);
             assert_eq!(origin.pretty_docstring[0], "Constraint on 5 and 10:");

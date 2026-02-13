@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // ========== External/Base Variable Calls ==========
 
@@ -45,7 +46,7 @@ async fn base_var_with_int_param() {
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(42)]
+            vec![Arc::new(ExprValue::Int(42))]
         ))))
     );
 }
@@ -69,7 +70,7 @@ async fn base_var_with_bool_param() {
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Bool(true)]
+            vec![Arc::new(ExprValue::Bool(true))]
         ))))
     );
 }
@@ -100,7 +101,11 @@ async fn base_var_with_multiple_params() {
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)]
+            vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3))
+            ]
         ))))
     );
 }
@@ -124,7 +129,7 @@ async fn base_var_with_function_param() {
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(42)]
+            vec![Arc::new(ExprValue::Int(42))]
         ))))
     );
 }
@@ -148,7 +153,7 @@ async fn base_var_with_expression_param() {
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(15)]
+            vec![Arc::new(ExprValue::Int(15))]
         ))))
     );
 }
@@ -261,7 +266,7 @@ async fn script_var_simple_reify() {
                     "main".to_string(),
                     "MyVar".into(),
                     None,
-                    vec![ExprValue::Int(5)],
+                    vec![Arc::new(ExprValue::Int(5))],
                 )))
             );
         }
@@ -297,7 +302,7 @@ async fn script_var_in_constraint() {
                     "main".to_string(),
                     "MyVar".into(),
                     None,
-                    vec![ExprValue::Int(10)],
+                    vec![Arc::new(ExprValue::Int(10))],
                 )))
                 .eq(&LinExpr::constant(0.))
             );
@@ -337,17 +342,17 @@ async fn script_var_with_sum() {
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(1)],
+                vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(3)],
+                vec![Arc::new(ExprValue::Int(3))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -414,7 +419,7 @@ async fn script_var_multiple_params() {
                     "main".to_string(),
                     "MyVar".into(),
                     None,
-                    vec![ExprValue::Int(3), ExprValue::Int(7)],
+                    vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
                 )))
             );
         }
@@ -482,7 +487,7 @@ async fn script_var_with_arithmetic() {
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(10)],
+                vec![Arc::new(ExprValue::Int(10))],
             ))) + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
@@ -520,12 +525,12 @@ async fn multiple_script_vars() {
                 "main".to_string(),
                 "MyVar1".into(),
                 None,
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVar2".into(),
                 None,
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -558,10 +563,10 @@ async fn script_var_and_base_var_mixed() {
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(10)],
+                vec![Arc::new(ExprValue::Int(10))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "BaseV".into(),
-                vec![ExprValue::Int(10)],
+                vec![Arc::new(ExprValue::Int(10))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -610,7 +615,7 @@ async fn var_list_simple_reify() {
                                 "main".to_string(),
                                 "MyVars".into(),
                                 Some(idx),
-                                vec![list.clone()],
+                                vec![Arc::new(list.clone())],
                             )))
                         );
                     }
@@ -651,12 +656,12 @@ async fn var_list_in_sum() {
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
-                    vec![list.clone()]
+                    vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
-                    vec![list.clone()]
+                    vec![Arc::new(list.clone())]
                 )))
             );
         }
@@ -699,17 +704,17 @@ async fn var_list_in_constraint() {
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
-                    vec![list.clone()]
+                    vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
-                    vec![list.clone()]
+                    vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                     "main".to_string(),
                     "MyVars".into(),
                     Some(2),
-                    vec![list.clone()]
+                    vec![Arc::new(list.clone())]
                 ))))
                 .leq(&LinExpr::constant(10.))
             );
@@ -748,7 +753,7 @@ async fn var_list_with_forall() {
                 "main".to_string(),
                 "MyVars".into(),
                 Some(0),
-                vec![list.clone()],
+                vec![Arc::new(list.clone())],
             )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));
@@ -757,7 +762,7 @@ async fn var_list_with_forall() {
                 "main".to_string(),
                 "MyVars".into(),
                 Some(1),
-                vec![list.clone()],
+                vec![Arc::new(list.clone())],
             )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));
@@ -825,7 +830,7 @@ async fn var_list_with_multiple_params() {
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
-                    vec![list.clone(), ExprValue::Int(10)],
+                    vec![Arc::new(list.clone()), Arc::new(ExprValue::Int(10))],
                 ))));
             assert!(linexprs.contains(&lin_expr1));
             let lin_expr2 =
@@ -833,7 +838,7 @@ async fn var_list_with_multiple_params() {
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
-                    vec![list.clone(), ExprValue::Int(10)],
+                    vec![Arc::new(list.clone()), Arc::new(ExprValue::Int(10))],
                 ))));
             assert!(linexprs.contains(&lin_expr2));
         }
@@ -990,7 +995,7 @@ async fn var_in_if_expression() {
                     "main".to_string(),
                     "MyVar".into(),
                     None,
-                    vec![ExprValue::Int(5)]
+                    vec![Arc::new(ExprValue::Int(5))]
                 )))
             );
         }

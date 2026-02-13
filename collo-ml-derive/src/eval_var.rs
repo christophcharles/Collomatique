@@ -828,7 +828,7 @@ fn generate_param_extraction(
                         quote! { *i }
                     };
                     quote! {
-                        let #param_name = match &value.params[#idx] {
+                        let #param_name = match &*value.params[#idx] {
                             #none_arm
                             ::collo_ml::ExprValue::Int(i) => #opt_output,
                             _ => {
@@ -848,7 +848,7 @@ fn generate_param_extraction(
                         quote! { *b }
                     };
                     quote! {
-                        let #param_name = match &value.params[#idx] {
+                        let #param_name = match &*value.params[#idx] {
                             #none_arm
                             ::collo_ml::ExprValue::Bool(b) => #opt_output,
                             _ => {
@@ -880,7 +880,7 @@ fn generate_param_extraction(
                         quote! { #output }
                     };
                     quote! {
-                        let #param_name = match &value.params[#idx] {
+                        let #param_name = match &*value.params[#idx] {
                             #none_arm
                             ::collo_ml::ExprValue::Object(obj) => {
                                 #opt_output

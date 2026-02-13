@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Basic Match Expression Tests ==========
@@ -184,7 +186,7 @@ async fn match_int_to_linexpr_conversion() {
             // After conversion, i is LinExpr(5.0), so $V(LinExpr(5.0))
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::LinExpr(LinExpr::constant(5.))],
+                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -223,7 +225,7 @@ async fn match_int_branch_with_conversion_in_body() {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::LinExpr(LinExpr::constant(5.))],
+                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -366,7 +368,7 @@ async fn match_where_with_original_variable() {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::LinExpr(LinExpr::constant(5.))],
+                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -703,7 +705,7 @@ async fn match_returning_linexpr() {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::LinExpr(LinExpr::constant(5.))],
+                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -750,7 +752,7 @@ async fn match_returning_constraint() {
             let constraints = strip_origins(&constraints);
             let var_expr = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::LinExpr(LinExpr::constant(5.))],
+                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
             )));
             let expected = var_expr.eq(&LinExpr::constant(0.));
             assert!(constraints.contains(&expected));

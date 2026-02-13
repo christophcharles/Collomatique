@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Basic Function Calls ==========
@@ -290,7 +292,7 @@ async fn fn_returning_linexpr() {
                 lin_expr,
                 LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                     "V".into(),
-                    vec![ExprValue::Int(10)]
+                    vec![Arc::new(ExprValue::Int(10))]
                 )))
             );
         }
@@ -669,7 +671,7 @@ async fn fn_using_base_var() {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(10)],
+                vec![Arc::new(ExprValue::Int(10))],
             ))) + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
@@ -703,7 +705,7 @@ async fn fn_using_reified_var() {
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             ))) + LinExpr::constant(10.);
             assert_eq!(lin_expr, expected);
         }
@@ -738,7 +740,7 @@ async fn fn_calling_fn_with_reified_var() {
                 "main".to_string(),
                 "MyVar".into(),
                 None,
-                vec![ExprValue::Int(10)],
+                vec![Arc::new(ExprValue::Int(10))],
             )));
             assert_eq!(lin_expr, expected);
         }

@@ -15,6 +15,7 @@ use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use derivative::Derivative;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(
@@ -918,7 +919,7 @@ impl<
                 module: var_module,
                 name: var_name,
                 from_list: None,
-                params: var_args,
+                params: var_args.into_iter().map(Arc::new).collect(),
             };
             let new_var = ProblemVar::Reified(reified_var);
 
@@ -940,7 +941,7 @@ impl<
                     module: var_list_module.clone(),
                     name: var_list_name.clone(),
                     from_list: Some(i),
-                    params: var_list_args.clone(),
+                    params: var_list_args.iter().map(|a| Arc::new(a.clone())).collect(),
                 };
                 let new_var = ProblemVar::Reified(reified_var);
 

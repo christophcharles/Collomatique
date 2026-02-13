@@ -1,5 +1,6 @@
 use collo_ml::{EvalObject, EvalVar, SqliteDatabaseConnection, ViewBuilder, ViewObject};
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 // ============================================================================
 // Test Environment and Data Structures
@@ -566,7 +567,9 @@ fn test_try_from_optional_student_none() {
 
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalStudent".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::None],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::None,
+        )],
     );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -580,7 +583,7 @@ fn test_try_from_optional_student_some() {
 
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalStudent".to_string(),
-        vec![ExprValue::Object(ObjectId::Student(StudentId(1)))],
+        vec![Arc::new(ExprValue::Object(ObjectId::Student(StudentId(1))))],
     );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -594,7 +597,9 @@ fn test_try_from_optional_week_none() {
 
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalWeek".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::None],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::None,
+        )],
     );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -608,7 +613,9 @@ fn test_try_from_optional_week_some() {
 
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalWeek".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(2)],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(2),
+        )],
     );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -623,7 +630,9 @@ fn test_try_from_optional_bool() {
     // None
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalFlag".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::None],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::None,
+        )],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -632,7 +641,9 @@ fn test_try_from_optional_bool() {
     // Some(true)
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalFlag".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Bool(true)],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::Bool(true),
+        )],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -641,7 +652,9 @@ fn test_try_from_optional_bool() {
     // Some(false)
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalFlag".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Bool(false)],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::Bool(false),
+        )],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
     assert!(var.is_ok());
@@ -656,8 +669,8 @@ fn test_try_from_student_with_mentor() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StuMentor".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(0))),
-            ExprValue::None,
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(0)))),
+            Arc::new(ExprValue::None),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -674,8 +687,8 @@ fn test_try_from_student_with_mentor() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StuMentor".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(0))),
-            ExprValue::Object(ObjectId::Student(StudentId(2))),
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(0)))),
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(2)))),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -697,8 +710,8 @@ fn test_try_from_both_optional() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "BothOptional".to_string(),
         vec![
-            ExprValue::<ObjectId, SqliteDatabaseConnection>::None,
-            ExprValue::None,
+            Arc::new(ExprValue::<ObjectId, SqliteDatabaseConnection>::None),
+            Arc::new(ExprValue::None),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -709,8 +722,8 @@ fn test_try_from_both_optional() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "BothOptional".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(1))),
-            ExprValue::None,
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(1)))),
+            Arc::new(ExprValue::None),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -724,8 +737,8 @@ fn test_try_from_both_optional() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "BothOptional".to_string(),
         vec![
-            ExprValue::None,
-            ExprValue::Object(ObjectId::Subject(SubjectId(2))),
+            Arc::new(ExprValue::None),
+            Arc::new(ExprValue::Object(ObjectId::Subject(SubjectId(2)))),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -739,8 +752,8 @@ fn test_try_from_both_optional() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "BothOptional".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(0))),
-            ExprValue::Object(ObjectId::Subject(SubjectId(1))),
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(0)))),
+            Arc::new(ExprValue::Object(ObjectId::Subject(SubjectId(1)))),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -759,9 +772,9 @@ fn test_try_from_multiple_optionals() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "MultipleOptionals".to_string(),
         vec![
-            ExprValue::<ObjectId, SqliteDatabaseConnection>::None,
-            ExprValue::None,
-            ExprValue::None,
+            Arc::new(ExprValue::<ObjectId, SqliteDatabaseConnection>::None),
+            Arc::new(ExprValue::None),
+            Arc::new(ExprValue::None),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -779,9 +792,9 @@ fn test_try_from_multiple_optionals() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "MultipleOptionals".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(1))),
-            ExprValue::Object(ObjectId::Subject(SubjectId(2))),
-            ExprValue::Int(1),
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(1)))),
+            Arc::new(ExprValue::Object(ObjectId::Subject(SubjectId(2)))),
+            Arc::new(ExprValue::Int(1)),
         ],
     );
     let var: Result<OptionVar, _> = (&extern_var).try_into();
@@ -804,7 +817,9 @@ fn test_try_from_optional_wrong_type() {
     // Passing Int when expecting Option<StudentId>
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "OptionalStudent".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(42)],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(42),
+        )],
     );
 
     let var: Result<OptionVar, _> = (&extern_var).try_into();

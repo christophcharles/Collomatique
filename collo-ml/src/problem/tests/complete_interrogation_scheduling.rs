@@ -93,7 +93,7 @@ async fn complete_interrogations_scheduling() {
                             found: value.params.len(),
                         });
                     }
-                    let student = match &value.params[0] {
+                    let student = match &*value.params[0] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
@@ -103,7 +103,7 @@ async fn complete_interrogations_scheduling() {
                             });
                         }
                     };
-                    let teacher = match &value.params[1] {
+                    let teacher = match &*value.params[1] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
@@ -113,7 +113,7 @@ async fn complete_interrogations_scheduling() {
                             });
                         }
                     };
-                    let week = match &value.params[2] {
+                    let week = match &*value.params[2] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {

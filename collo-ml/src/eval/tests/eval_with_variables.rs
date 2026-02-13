@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn eval_with_variables_simple_reified_var() {
@@ -53,7 +54,7 @@ async fn eval_with_variables_simple_reified_var() {
 
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V".into(),
-        vec![ExprValue::Int(5)],
+        vec![Arc::new(ExprValue::Int(5))],
     )))
     .eq(&LinExpr::constant(1.));
 
@@ -111,7 +112,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
     assert_eq!(my_var_3_constraints.len(), 1);
     let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V".into(),
-        vec![ExprValue::Int(3)],
+        vec![Arc::new(ExprValue::Int(3))],
     )))
     .eq(&LinExpr::constant(1.));
     assert!(my_var_3_constraints.contains(&expected_3));
@@ -126,7 +127,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
     assert_eq!(my_var_7_constraints.len(), 1);
     let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V".into(),
-        vec![ExprValue::Int(7)],
+        vec![Arc::new(ExprValue::Int(7))],
     )))
     .eq(&LinExpr::constant(1.));
     assert!(my_var_7_constraints.contains(&expected_7));
@@ -195,7 +196,7 @@ async fn eval_with_variables_in_forall() {
         assert_eq!(my_var_constraints.len(), 1);
         let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(i)],
+            vec![Arc::new(ExprValue::Int(i))],
         )))
         .eq(&LinExpr::constant(1.));
         assert!(my_var_constraints.contains(&expected));
@@ -266,7 +267,7 @@ async fn eval_with_variables_multiple_vars() {
         .0;
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V1".into(),
-        vec![ExprValue::Int(5)],
+        vec![Arc::new(ExprValue::Int(5))],
     )))
     .eq(&LinExpr::constant(1.));
     assert!(var1_constraints.contains(&expected1));
@@ -280,7 +281,7 @@ async fn eval_with_variables_multiple_vars() {
         .0;
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V2".into(),
-        vec![ExprValue::Int(10)],
+        vec![Arc::new(ExprValue::Int(10))],
     )))
     .eq(&LinExpr::constant(0.));
     assert!(var2_constraints.contains(&expected2));
@@ -342,7 +343,7 @@ async fn eval_with_variables_var_with_multiple_params() {
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V".into(),
-        vec![ExprValue::Int(3), ExprValue::Int(7)],
+        vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
     )))
     .eq(&LinExpr::constant(1.));
     assert!(my_var_constraints.contains(&expected));
@@ -414,13 +415,13 @@ async fn eval_with_variables_simple_var_list() {
         // Should be either $V(3, 7) === 1 or $V(3, 7) <== 10
         let c1 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(3), ExprValue::Int(7)],
+            vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
         .eq(&LinExpr::constant(1.));
 
         let c2 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
             "V".into(),
-            vec![ExprValue::Int(3), ExprValue::Int(7)],
+            vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
         .leq(&LinExpr::constant(10.));
 
@@ -571,7 +572,7 @@ async fn eval_with_variables_with_let_expr() {
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
         "V".into(),
-        vec![ExprValue::Int(10)],
+        vec![Arc::new(ExprValue::Int(10))],
     )))
     .eq(&LinExpr::constant(1.));
     assert!(my_var_constraints.contains(&expected));

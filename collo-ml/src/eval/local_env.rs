@@ -17,18 +17,22 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseDriver> {
-    scope: HashMap<String, ExprValue<T, D::Connection>>,
+    scope: HashMap<String, Arc<ExprValue<T, D::Connection>>>,
     parent: Option<Arc<LocalEvalEnv<T, D>>>,
     current_module: Arc<str>,
 }
 
 pub(crate) struct SubscopeBuilder<T: EvalObject, D: DatabaseDriver> {
-    identifiers: HashMap<String, ExprValue<T, D::Connection>>,
+    identifiers: HashMap<String, Arc<ExprValue<T, D::Connection>>>,
     parent: Arc<LocalEvalEnv<T, D>>,
 }
 
 impl<T: EvalObject, D: DatabaseDriver> SubscopeBuilder<T, D> {
-    pub(crate) fn register_identifier(&mut self, ident: &str, value: ExprValue<T, D::Connection>) {
+    pub(crate) fn register_identifier(
+        &mut self,
+        ident: &str,
+        value: Arc<ExprValue<T, D::Connection>>,
+    ) {
         assert!(!self.identifiers.contains_key(ident));
         self.identifiers.insert(ident.to_string(), value);
     }
@@ -62,9 +66,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         &self.current_module
     }
 
-    fn lookup_ident(&self, ident: &str) -> Option<ExprValue<T, D::Connection>> {
+    fn lookup_ident(&self, ident: &str) -> Option<Arc<ExprValue<T, D::Connection>>> {
         if let Some(value) = self.scope.get(ident) {
-            return Some(value.clone());
+            return Some(Arc::clone(value));
         }
         self.parent.as_ref().and_then(|p| p.lookup_ident(ident))
     }
@@ -80,13 +84,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         self: Arc<Self>,
         eval_history: &mut EvalHistory<'_, T, D>,
         expr: Arc<Spanned<crate::ast::Expr>>,
-    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
+    ) -> Result<Arc<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
         use crate::ast::Expr;
         Ok(match &expr.node {
-            Expr::None => ExprValue::None,
-            Expr::Boolean(val) => ExprValue::Bool(*val),
-            Expr::Number(val) => ExprValue::Int(*val),
-            Expr::StringLiteral(val) => ExprValue::String(val.clone()),
+            Expr::None => Arc::new(ExprValue::None),
+            Expr::Boolean(val) => Arc::new(ExprValue::Bool(*val)),
+            Expr::Number(val) => Arc::new(ExprValue::Int(*val)),
+            Expr::StringLiteral(val) => Arc::new(ExprValue::String(val.clone())),
             Expr::IdentPath(path) => {
                 // Use resolve_path for unified resolution
                 let resolved = resolve_path(
@@ -107,15 +111,15 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     ResolvedPathKind::Type(simple_type) => {
                         // Unit enum variant or None type
                         match simple_type {
-                            SimpleType::None => ExprValue::None,
+                            SimpleType::None => Arc::new(ExprValue::None),
                             SimpleType::Custom(module, root, Some(variant)) => {
                                 // Qualified unit value: Enum::UnitVariant
-                                ExprValue::Custom(Box::new(CustomValue {
+                                Arc::new(ExprValue::Custom(Box::new(CustomValue {
                                     module,
                                     type_name: root,
                                     variant: Some(variant),
                                     content: ExprValue::None,
-                                }))
+                                })))
                             }
                             _ => panic!("Unexpected type in IdentPath: {:?}", simple_type),
                         }
@@ -137,8 +141,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 use crate::ast::PathSegment;
                 assert!(!segments.is_empty());
 
-                let mut current_value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(object))).await?;
+                let mut current_value = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(object))).await?,
+                );
 
                 // Helper to unwrap Custom values for field/index access
                 fn unwrap_custom<T: EvalObject, D: DatabaseConnection>(
@@ -191,11 +196,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 .expect("Index should be valid after type checking");
                         }
                         PathSegment::ListIndexFallible(index_expr) => {
-                            let index = Box::pin(
+                            let index_arc = Box::pin(
                                 Arc::clone(&self).eval_expr(eval_history, Arc::clone(index_expr)),
                             )
                             .await?;
-                            let ExprValue::Int(i) = index else {
+                            let ExprValue::Int(i) = *index_arc else {
                                 panic!("Index should be Int after type checking");
                             };
 
@@ -213,11 +218,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             }
                         }
                         PathSegment::ListIndexPanic(index_expr) => {
-                            let index = Box::pin(
+                            let index_arc = Box::pin(
                                 Arc::clone(&self).eval_expr(eval_history, Arc::clone(index_expr)),
                             )
                             .await?;
-                            let ExprValue::Int(i) = index else {
+                            let ExprValue::Int(i) = *index_arc else {
                                 panic!("Index should be Int after type checking");
                             };
 
@@ -242,19 +247,19 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     }
                 }
 
-                current_value
+                Arc::new(current_value)
             }
             Expr::Cardinality(list_expr) => {
                 let list_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(list_expr)))
                         .await?;
-                let count = match list_value {
+                let count = match &*list_value {
                     ExprValue::List(list) => list.len(),
                     _ => panic!("Unexpected type for list expression"),
                 };
-                ExprValue::Int(
+                Arc::new(ExprValue::Int(
                     i32::try_from(count).expect("List length should not exceed i32 capacity"),
-                )
+                ))
             }
             Expr::ExplicitType { expr, typ: _ } => {
                 // we do nothing: the semantic analysis has already checked everything
@@ -267,22 +272,23 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 if args.len() != 1 {
                     panic!("ComplexTypeCast expects exactly one argument");
                 }
-                let value =
+                let value = Arc::unwrap_or_clone(
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
-                        .await?;
+                        .await?,
+                );
 
                 let orig_type = eval_history.ast.get_resolved_type(&typ.span);
                 let target_type = orig_type
                     .as_simple()
                     .expect("ComplexTypeCast should have a simple type as target");
 
-                unsafe {
+                Arc::new(unsafe {
                     value.convert_to_unchecked(
                         eval_history.env,
                         &mut eval_history.cache,
                         target_type,
                     )
-                }
+                })
             }
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
@@ -304,19 +310,20 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 // Evaluate all fields
                 let mut field_values = std::collections::BTreeMap::new();
                 for (name, expr) in fields {
-                    let value =
+                    let value = Arc::unwrap_or_clone(
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr)))
-                            .await?;
+                            .await?,
+                    );
                     field_values.insert(name.node.clone(), value);
                 }
 
                 // Wrap in custom type
-                ExprValue::Custom(Box::new(CustomValue {
+                Arc::new(ExprValue::Custom(Box::new(CustomValue {
                     module,
                     type_name,
                     variant: variant_name,
                     content: ExprValue::Struct(field_values),
-                }))
+                })))
             }
             Expr::CastFallible { expr, typ } => {
                 let value =
@@ -327,7 +334,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 if value.fits_in_typ(target_type) {
                     value
                 } else {
-                    ExprValue::None
+                    Arc::new(ExprValue::None)
                 }
             }
             Expr::CastPanic { expr, typ } => {
@@ -348,12 +355,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             Expr::ListLiteral { elements } => {
                 let mut element_values = Vec::with_capacity(elements.len());
                 for x in elements {
-                    element_values.push(
+                    element_values.push(Arc::unwrap_or_clone(
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?,
-                    );
+                    ));
                 }
 
-                ExprValue::List(element_values)
+                Arc::new(ExprValue::List(element_values))
             }
             Expr::ListRange { start, end } => {
                 let start_value =
@@ -361,16 +368,18 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let end_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(end))).await?;
 
-                let start_num = match start_value {
-                    ExprValue::Int(v) => v,
+                let start_num = match &*start_value {
+                    ExprValue::Int(v) => *v,
                     _ => panic!("Int expected"),
                 };
-                let end_num = match end_value {
-                    ExprValue::Int(v) => v,
+                let end_num = match &*end_value {
+                    ExprValue::Int(v) => *v,
                     _ => panic!("Int expected"),
                 };
 
-                ExprValue::List((start_num..end_num).map(ExprValue::Int).collect())
+                Arc::new(ExprValue::List(
+                    (start_num..end_num).map(ExprValue::Int).collect(),
+                ))
             }
             Expr::GlobalList(typ_name) => {
                 let expr_type = eval_history.ast.get_resolved_type(&typ_name.span);
@@ -385,7 +394,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     collection.extend(objects.into_iter().map(|x| ExprValue::Object(x)));
                 }
 
-                ExprValue::List(collection)
+                Arc::new(ExprValue::List(collection))
             }
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to
@@ -468,7 +477,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let mut eval_args = Vec::with_capacity(args.len());
+                let mut eval_args: Vec<Arc<ExprValue<T, D::Connection>>> =
+                    Vec::with_capacity(args.len());
                 for x in args {
                     eval_args.push(
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?,
@@ -482,15 +492,15 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     &eval_history.ast.global_env,
                     Some(&*self),
                 ) {
-                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
+                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => Arc::new(
                         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
                             eval_history.env,
                             &mut eval_history.cache,
                             &mut eval_history.var_str_cache,
                             ext_var_name,
                             args,
-                        ))))
-                    }
+                        )))),
+                    ),
                     Ok(ResolvedPathKind::InternalVariable {
                         module: var_module,
                         name: var_name,
@@ -513,14 +523,16 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             true,
                         ))
                         .await?;
-                        ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new(
-                            eval_history.env,
-                            &mut eval_history.cache,
-                            &mut eval_history.var_str_cache,
-                            var_module,
-                            var_name,
-                            None,
-                            args,
+                        Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                            ScriptVar::new(
+                                eval_history.env,
+                                &mut eval_history.cache,
+                                &mut eval_history.var_str_cache,
+                                var_module,
+                                var_name,
+                                None,
+                                args,
+                            ),
                         ))))
                     }
                     _ => panic!("Valid var expected (should have been caught by type checker)"),
@@ -530,7 +542,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let collection_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection)))
                         .await?;
-                let list = match collection_value {
+                let list = match &*collection_value {
                     ExprValue::List(list) => list,
                     _ => panic!("List expected"),
                 };
@@ -538,19 +550,21 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let item_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(item))).await?;
                 for elt in list {
-                    if item_value == elt {
-                        return Ok(ExprValue::Bool(true));
+                    if *item_value == *elt {
+                        return Ok(Arc::new(ExprValue::Bool(true)));
                     }
                 }
-                ExprValue::Bool(false)
+                Arc::new(ExprValue::Bool(false))
             }
             Expr::And(expr1, expr2) => {
                 let value1 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
+                let value1 = Arc::unwrap_or_clone(value1);
+                let value2 = Arc::unwrap_or_clone(value2);
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
                     (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
                         c1.reserve(c2.len());
@@ -561,46 +575,50 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         "Unexpected types for AND operand: {:?}, {:?}",
                         value1, value2
                     ),
-                }
+                })
             }
             Expr::Or(expr1, expr2) => {
                 let value1 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
+                let value1 = Arc::unwrap_or_clone(value1);
+                let value2 = Arc::unwrap_or_clone(value2);
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 || v2),
                     (value1, value2) => panic!(
                         "Unexpected types for OR operand: {:?}, {:?}",
                         value1, value2
                     ),
-                }
+                })
             }
             Expr::Not(not_expr) => {
                 let value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(not_expr)))
                         .await?;
 
-                match value {
+                Arc::new(match &*value {
                     ExprValue::Bool(v) => ExprValue::Bool(!v),
                     value => panic!("Unexpected type for NOT operand: {:?}", value),
-                }
+                })
             }
             Expr::NullCoalesce(lhs, rhs) => {
                 let lhs_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(lhs))).await?;
-                if lhs_value == ExprValue::None {
+                if *lhs_value == ExprValue::None {
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(rhs))).await?
                 } else {
                     lhs_value
                 }
             }
             Expr::ConstraintEq(expr1, expr2) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?,
+                );
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -621,13 +639,17 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     panic!("Should be a LinExpr result")
                 };
 
-                ExprValue::Constraint(Vec::from([lin_expr1.eq(&lin_expr2).into()]))
+                Arc::new(ExprValue::Constraint(Vec::from([lin_expr1
+                    .eq(&lin_expr2)
+                    .into()])))
             }
             Expr::ConstraintLe(expr1, expr2) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?,
+                );
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -648,13 +670,17 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     panic!("Should be a LinExpr result")
                 };
 
-                ExprValue::Constraint(Vec::from([lin_expr1.leq(&lin_expr2).into()]))
+                Arc::new(ExprValue::Constraint(Vec::from([lin_expr1
+                    .leq(&lin_expr2)
+                    .into()])))
             }
             Expr::ConstraintGe(expr1, expr2) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?,
+                );
 
                 let ExprValue::LinExpr(lin_expr1) = (unsafe {
                     value1.convert_to_unchecked(
@@ -675,21 +701,23 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     panic!("Should be a LinExpr result")
                 };
 
-                ExprValue::Constraint(Vec::from([lin_expr1.geq(&lin_expr2).into()]))
+                Arc::new(ExprValue::Constraint(Vec::from([lin_expr1
+                    .geq(&lin_expr2)
+                    .into()])))
             }
             Expr::Eq(expr1, expr2) => {
                 let value1 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
-                ExprValue::Bool(value1 == value2)
+                Arc::new(ExprValue::Bool(*value1 == *value2))
             }
             Expr::Ne(expr1, expr2) => {
                 let value1 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr1))).await?;
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
-                ExprValue::Bool(value1 != value2)
+                Arc::new(ExprValue::Bool(*value1 != *value2))
             }
             Expr::Lt(expr1, expr2) => {
                 let value1 =
@@ -697,12 +725,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                match (value1, value2) {
+                Arc::new(match (&*value1, &*value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 < v2),
                     (value1, value2) => {
                         panic!("Unexpected types for < operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::Le(expr1, expr2) => {
                 let value1 =
@@ -710,13 +738,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                match (value1, value2) {
+                Arc::new(match (&*value1, &*value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 <= v2),
                     (value1, value2) => panic!(
                         "Unexpected types for <= operand: {:?}, {:?}",
                         value1, value2
                     ),
-                }
+                })
             }
             Expr::Gt(expr1, expr2) => {
                 let value1 =
@@ -724,12 +752,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                match (value1, value2) {
+                Arc::new(match (&*value1, &*value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 > v2),
                     (value1, value2) => {
                         panic!("Unexpected types for > operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::Ge(expr1, expr2) => {
                 let value1 =
@@ -737,21 +765,23 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                match (value1, value2) {
+                Arc::new(match (&*value1, &*value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 >= v2),
                     (value1, value2) => panic!(
                         "Unexpected types for >= operand: {:?}, {:?}",
                         value1, value2
                     ),
-                }
+                })
             }
             Expr::Add(left, right) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?,
+                );
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                     (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
                     | (ExprValue::LinExpr(lin_expr_value), ExprValue::Int(int_value)) => {
@@ -768,15 +798,17 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     (value1, value2) => {
                         panic!("Unexpected types for + operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::Sub(left, right) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?,
+                );
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 - v2),
                     (ExprValue::Int(v1), ExprValue::LinExpr(v2)) => {
                         let new_lin_expr = LinExpr::constant(v1 as f64);
@@ -794,31 +826,35 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     (value1, value2) => {
                         panic!("Unexpected types for - operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::Neg(term) => {
-                let value =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(term))).await?;
+                let value = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(term))).await?,
+                );
 
-                match value {
+                Arc::new(match value {
                     ExprValue::Int(v) => ExprValue::Int(-v),
                     ExprValue::LinExpr(v) => ExprValue::LinExpr(-v),
                     value => panic!("Unexpected type for (-) operand: {:?}", value),
-                }
+                })
             }
             Expr::Panic(inner_expr) => {
-                let value =
+                let value = Arc::unwrap_or_clone(
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(inner_expr)))
-                        .await?;
+                        .await?,
+                );
                 return Err(EvalError::Panic(Box::new(value)));
             }
             Expr::Mul(left, right) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?,
+                );
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 * v2),
                     (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
                     | (ExprValue::LinExpr(lin_expr_value), ExprValue::Int(int_value)) => {
@@ -827,34 +863,38 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     (value1, value2) => {
                         panic!("Unexpected types for * operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::Div(left, right) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?,
+                );
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 / v2),
                     (value1, value2) => panic!(
                         "Unexpected types for // operand: {:?}, {:?}",
                         value1, value2
                     ),
-                }
+                })
             }
             Expr::Mod(left, right) => {
-                let value1 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?;
-                let value2 =
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?;
+                let value1 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(left))).await?,
+                );
+                let value2 = Arc::unwrap_or_clone(
+                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(right))).await?,
+                );
 
-                match (value1, value2) {
+                Arc::new(match (value1, value2) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 % v2),
                     (value1, value2) => {
                         panic!("Unexpected types for % operand: {:?}, {:?}", value1, value2)
                     }
-                }
+                })
             }
             Expr::If {
                 condition,
@@ -864,7 +904,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let cond_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(condition)))
                         .await?;
-                let ExprValue::Bool(cond) = cond_value else {
+                let ExprValue::Bool(cond) = *cond_value else {
                     panic!("Expected Bool for if condition");
                 };
 
@@ -899,7 +939,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                     // Let's add the identifier to a subscope
                     let mut builder = Self::start_subscope(Arc::clone(&self));
-                    builder.register_identifier(&branch.ident.node, value.clone());
+                    builder.register_identifier(&branch.ident.node, Arc::clone(&value));
                     let subscope = builder.build_subscope();
 
                     // Now we check the where clause
@@ -911,7 +951,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                     .eval_expr(eval_history, Arc::clone(filter_expr)),
                             )
                             .await?;
-                            let ExprValue::Bool(cond) = cond_value else {
+                            let ExprValue::Bool(cond) = *cond_value else {
                                 panic!("Expected Bool for where clause");
                             };
                             cond
@@ -941,8 +981,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let collection_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection)))
                         .await?;
-                let ExprValue::List(list) = collection_value else {
-                    panic!("Expected collection for sum. Got: {:?}", collection_value);
+                let list = match Arc::unwrap_or_clone(collection_value) {
+                    ExprValue::List(list) => list,
+                    other => panic!("Expected collection for sum. Got: {:?}", other),
                 };
 
                 let target = eval_history
@@ -961,7 +1002,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 for elem in list {
                     let mut builder = Self::start_subscope(Arc::clone(&self));
-                    builder.register_identifier(&var.node, elem);
+                    builder.register_identifier(&var.node, Arc::new(elem));
                     let subscope = builder.build_subscope();
 
                     let cond = match filter {
@@ -971,7 +1012,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(f)),
                             )
                             .await?;
-                            match filter_value {
+                            match *filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
                             }
@@ -979,10 +1020,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = Box::pin(
-                            Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(body)),
-                        )
-                        .await?;
+                        let new_value = Arc::unwrap_or_clone(
+                            Box::pin(
+                                Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(body)),
+                            )
+                            .await?,
+                        );
                         output = match (output, new_value) {
                             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                             (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
@@ -1009,7 +1052,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     }
                 }
 
-                output
+                Arc::new(output)
             }
             Expr::Fold {
                 var,
@@ -1023,8 +1066,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let collection_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection)))
                         .await?;
-                let ExprValue::List(mut list) = collection_value else {
-                    panic!("Expected collection for sum. Got: {:?}", collection_value);
+                let mut list = match Arc::unwrap_or_clone(collection_value) {
+                    ExprValue::List(list) => list,
+                    other => panic!("Expected collection for fold. Got: {:?}", other),
                 };
                 if *reversed {
                     list.reverse();
@@ -1036,8 +1080,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 for elem in list {
                     let mut builder = Self::start_subscope(Arc::clone(&self));
-                    builder.register_identifier(&var.node, elem);
-                    builder.register_identifier(&accumulator.node, output.clone());
+                    builder.register_identifier(&var.node, Arc::new(elem));
+                    builder.register_identifier(&accumulator.node, Arc::clone(&output));
                     let subscope = builder.build_subscope();
 
                     let cond = match filter {
@@ -1047,7 +1091,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(f)),
                             )
                             .await?;
-                            match filter_value {
+                            match *filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
                             }
@@ -1073,8 +1117,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let collection_value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection)))
                         .await?;
-                let ExprValue::List(list) = collection_value else {
-                    panic!("Expected collection for sum. Got: {:?}", collection_value);
+                let list = match Arc::unwrap_or_clone(collection_value) {
+                    ExprValue::List(list) => list,
+                    other => panic!("Expected collection for forall. Got: {:?}", other),
                 };
 
                 let target = eval_history
@@ -1091,7 +1136,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 for elem in list {
                     let mut builder = Self::start_subscope(Arc::clone(&self));
-                    builder.register_identifier(&var.node, elem);
+                    builder.register_identifier(&var.node, Arc::new(elem));
                     let subscope = builder.build_subscope();
 
                     let cond = match filter {
@@ -1101,7 +1146,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(f)),
                             )
                             .await?;
-                            match filter_value {
+                            match *filter_value {
                                 ExprValue::Bool(v) => v,
                                 _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
                             }
@@ -1109,10 +1154,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     };
 
                     if cond {
-                        let new_value = Box::pin(
-                            Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(body)),
-                        )
-                        .await?;
+                        let new_value = Arc::unwrap_or_clone(
+                            Box::pin(
+                                Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(body)),
+                            )
+                            .await?,
+                        );
                         output = match (output, new_value) {
                             (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
                             (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
@@ -1128,7 +1175,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     }
                 }
 
-                output
+                Arc::new(output)
             }
             Expr::VarListCall { module, name, args } => {
                 // Build NamespacePath with $[name] format
@@ -1152,7 +1199,8 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let mut evaluated_args = Vec::with_capacity(args.len());
+                let mut evaluated_args: Vec<Arc<ExprValue<T, D::Connection>>> =
+                    Vec::with_capacity(args.len());
                 for x in args {
                     evaluated_args.push(
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?,
@@ -1186,12 +1234,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             var_list_fn.clone(),
                         );
 
-                        let constraint_count = match constraints {
+                        let constraint_count = match &*constraints {
                             ExprValue::List(list) => list.len(),
                             _ => panic!("Expected [Constraint]"),
                         };
 
-                        ExprValue::List(
+                        Arc::new(ExprValue::List(
                             (0..constraint_count)
                                 .map(|i| {
                                     ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
@@ -1207,7 +1255,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                     )))
                                 })
                                 .collect(),
-                        )
+                        ))
                     }
                     _ => {
                         panic!("Valid var list expected (should have been caught by type checker)")
@@ -1227,7 +1275,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ))
                 .await?;
 
-                ExprValue::List(list)
+                Arc::new(ExprValue::List(list))
             }
             Expr::Let { var, value, body } => {
                 let value_value =
@@ -1245,12 +1293,12 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             Expr::TupleLiteral { elements } => {
                 let mut element_values = Vec::with_capacity(elements.len());
                 for x in elements {
-                    element_values.push(
+                    element_values.push(Arc::unwrap_or_clone(
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?,
-                    );
+                    ));
                 }
 
-                ExprValue::Tuple(element_values)
+                Arc::new(ExprValue::Tuple(element_values))
             }
 
             Expr::StructLiteral { fields } => {
@@ -1258,12 +1306,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 for (name, expr) in fields {
                     field_values.insert(
                         name.node.clone(),
-                        Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr)))
-                            .await?,
+                        Arc::unwrap_or_clone(
+                            Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr)))
+                                .await?,
+                        ),
                     );
                 }
 
-                ExprValue::Struct(field_values)
+                Arc::new(ExprValue::Struct(field_values))
             }
         })
     }
@@ -1274,7 +1324,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         eval_history: &mut EvalHistory<'_, T, D>,
         simple_type: &SimpleType,
         args: &Vec<Arc<Spanned<crate::ast::Expr>>>,
-    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
+    ) -> Result<Arc<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
         match simple_type {
             // Built-in type casts: Int(x), Bool(x), String(x), etc.
             SimpleType::Int
@@ -1288,16 +1338,17 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     args.len() == 1,
                     "Built-in type cast should have exactly 1 argument"
                 );
-                let value =
+                let value = Arc::unwrap_or_clone(
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
-                        .await?;
-                Ok(unsafe {
+                        .await?,
+                );
+                Ok(Arc::new(unsafe {
                     value.convert_to_unchecked(
                         eval_history.env,
                         &mut eval_history.cache,
                         simple_type,
                     )
-                })
+                }))
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)
@@ -1327,31 +1378,37 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     if args.is_empty() {
                         ExprValue::None
                     } else {
-                        Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
-                            .await?
+                        Arc::unwrap_or_clone(
+                            Box::pin(
+                                Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])),
+                            )
+                            .await?,
+                        )
                     }
                 } else if is_tuple {
                     // Tuple variant - evaluate all args
                     let mut values = Vec::with_capacity(args.len());
                     for x in args {
-                        values.push(
+                        values.push(Arc::unwrap_or_clone(
                             Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x)))
                                 .await?,
-                        );
+                        ));
                     }
                     ExprValue::Tuple(values)
                 } else {
                     // Single value variant
-                    Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
-                        .await?
+                    Arc::unwrap_or_clone(
+                        Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
+                            .await?,
+                    )
                 };
 
-                Ok(ExprValue::Custom(Box::new(CustomValue {
+                Ok(Arc::new(ExprValue::Custom(Box::new(CustomValue {
                     module: module.clone(),
                     type_name: root.clone(),
                     variant: variant_opt.clone(),
                     content,
-                })))
+                }))))
             }
 
             // Other types shouldn't appear in GenericCall
@@ -1372,7 +1429,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 Some(f) => {
                     let filter_value =
                         Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(f))).await?;
-                    match filter_value {
+                    match *filter_value {
                         ExprValue::Bool(v) => v,
                         _ => panic!("Expected Bool for filter. Got: {:?}", filter_value),
                     }
@@ -1380,9 +1437,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
             };
 
             return Ok(if cond {
-                Vec::from([
+                Vec::from([Arc::unwrap_or_clone(
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(body))).await?,
-                ])
+                )])
             } else {
                 Vec::new()
             });
@@ -1393,15 +1450,16 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection))).await?;
-        let ExprValue::List(list) = collection_value else {
-            panic!("Expected list. Got: {:?}", collection_value);
+        let list = match Arc::unwrap_or_clone(collection_value) {
+            ExprValue::List(list) => list,
+            other => panic!("Expected list. Got: {:?}", other),
         };
 
         let mut output = Vec::new();
 
         for elem in list {
             let mut builder = Self::start_subscope(Arc::clone(&self));
-            builder.register_identifier(&var.node, elem);
+            builder.register_identifier(&var.node, Arc::new(elem));
             let subscope = builder.build_subscope();
 
             let extension = Box::pin(subscope.build_naked_list_for_list_comprehension(

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Constraint Equality Tests (===) ==========
@@ -139,7 +141,7 @@ async fn constraint_eq_with_params() {
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             )))
             .eq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));

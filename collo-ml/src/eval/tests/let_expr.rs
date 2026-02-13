@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 #[tokio::test]
@@ -266,7 +268,7 @@ async fn let_expr_with_constraint_value() {
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             )))
             .eq(&LinExpr::constant(1.));
 
@@ -298,7 +300,7 @@ async fn let_expr_with_linexpr_arithmetic() {
 
             let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(3)],
+                vec![Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::constant(5.))
             .eq(&LinExpr::constant(10.));
 
@@ -331,7 +333,7 @@ async fn let_expr_with_constraint_combination() {
 
             let var = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(7)],
+                vec![Arc::new(ExprValue::Int(7))],
             )));
 
             let constraint_eq = var.clone().eq(&LinExpr::constant(1.));

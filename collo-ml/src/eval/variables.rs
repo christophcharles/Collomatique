@@ -29,7 +29,7 @@ pub struct ScriptVar<T: EvalObject, D: DatabaseConnection> {
     pub module: String,
     pub name: String,
     pub from_list: Option<usize>,
-    pub params: Vec<ExprValue<T, D>>,
+    pub params: Vec<Arc<ExprValue<T, D>>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
     params_str: Arc<str>,
 }
@@ -38,11 +38,11 @@ impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T, D>>, Arc<str>>,
+        var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
         module: String,
         name: String,
         from_list: Option<usize>,
-        params: Vec<ExprValue<T, D>>,
+        params: Vec<Arc<ExprValue<T, D>>>,
     ) -> Self {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
@@ -68,7 +68,7 @@ impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
         module: String,
         name: String,
         from_list: Option<usize>,
-        params: Vec<ExprValue<T, D>>,
+        params: Vec<Arc<ExprValue<T, D>>>,
     ) -> Self {
         let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
         ScriptVar {
@@ -105,7 +105,7 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D>
 )]
 pub struct ExternVar<T: EvalObject, D: DatabaseConnection> {
     pub name: String,
-    pub params: Vec<ExprValue<T, D>>,
+    pub params: Vec<Arc<ExprValue<T, D>>>,
     #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
     params_str: Arc<str>,
 }
@@ -114,9 +114,9 @@ impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
     pub fn new(
         env: &T::Env,
         cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T, D>>, Arc<str>>,
+        var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
         name: String,
-        params: Vec<ExprValue<T, D>>,
+        params: Vec<Arc<ExprValue<T, D>>>,
     ) -> Self {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
@@ -136,7 +136,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
         }
     }
 
-    pub fn new_no_env(name: String, params: Vec<ExprValue<T, D>>) -> Self {
+    pub fn new_no_env(name: String, params: Vec<Arc<ExprValue<T, D>>>) -> Self {
         let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
         ExternVar {
             name,
@@ -187,7 +187,7 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for IlpVar<T, D> {
 pub struct Origin<T: EvalObject, D: DatabaseConnection> {
     pub module: String,
     pub fn_name: Spanned<String>,
-    pub args: Vec<ExprValue<T, D>>,
+    pub args: Vec<Arc<ExprValue<T, D>>>,
     pub pretty_docstring: Vec<String>,
 }
 

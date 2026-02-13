@@ -12,6 +12,7 @@ use crate::eval::{ExprValue, Origin};
 use crate::traits::EvalObject;
 use crate::{EvalVar, ExprType};
 use derivative::Derivative;
+use std::sync::Arc;
 use thiserror::Error;
 
 use super::CompileError;
@@ -29,7 +30,7 @@ pub struct ReifiedVar<T: EvalObject, D: DatabaseConnection> {
     pub(crate) module: String,
     pub(crate) name: String,
     pub(crate) from_list: Option<usize>,
-    pub(crate) params: Vec<ExprValue<T, D>>,
+    pub(crate) params: Vec<Arc<ExprValue<T, D>>>,
 }
 
 #[derive(Derivative)]

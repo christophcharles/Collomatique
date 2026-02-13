@@ -1,5 +1,6 @@
 use collo_ml::{EvalObject, EvalVar, SqliteDatabaseConnection, ViewBuilder, ViewObject};
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 // ============================================================================
 // Test Environment and Data Structures
@@ -262,8 +263,8 @@ fn test_try_from_extern_var() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
         vec![
-            ExprValue::Object(ObjectId::Student(StudentId(0))),
-            ExprValue::Object(ObjectId::Subject(SubjectId(1))),
+            Arc::new(ExprValue::Object(ObjectId::Student(StudentId(0)))),
+            Arc::new(ExprValue::Object(ObjectId::Subject(SubjectId(1)))),
         ],
     );
 
@@ -277,7 +278,9 @@ fn test_try_from_extern_var() {
     // Test successful conversion for WeekUsed
     let extern_var = ExternVar::new_no_env(
         "WeekUsed".to_string(),
-        vec![ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(2)],
+        vec![Arc::new(
+            ExprValue::<ObjectId, SqliteDatabaseConnection>::Int(2),
+        )],
     );
 
     let var: Result<SimpleVar, _> = (&extern_var).try_into();
@@ -293,7 +296,7 @@ fn test_try_from_wrong_param_count() {
     // Wrong number of parameters
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
-        vec![ExprValue::Object(ObjectId::Student(StudentId(0)))], // Only 1, need 2
+        vec![Arc::new(ExprValue::Object(ObjectId::Student(StudentId(0))))], // Only 1, need 2
     );
 
     let var: Result<SimpleVar, _> = (&extern_var).try_into();
@@ -317,8 +320,8 @@ fn test_try_from_wrong_param_type() {
     let extern_var: ExternVar<_, SqliteDatabaseConnection> = ExternVar::new_no_env(
         "StudentTakesSubject".to_string(),
         vec![
-            ExprValue::Int(42), // Wrong type!
-            ExprValue::Object(ObjectId::Subject(SubjectId(1))),
+            Arc::new(ExprValue::Int(42)), // Wrong type!
+            Arc::new(ExprValue::Object(ObjectId::Subject(SubjectId(1)))),
         ],
     );
 

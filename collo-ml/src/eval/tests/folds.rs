@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== FOLD with Int Tests ==========
@@ -513,13 +515,13 @@ async fn fold_linexpr_simple() {
             // Should be: $V(0) + $V(1) + $V(2)
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(0)],
+                vec![Arc::new(ExprValue::Int(0))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(1)],
+                vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
                 "V".into(),
-                vec![ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2))],
             )));
             assert_eq!(lin_expr, expected);
         }

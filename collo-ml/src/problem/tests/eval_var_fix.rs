@@ -51,7 +51,7 @@ async fn test_fix_forces_variable_values() {
                             found: value.params.len(),
                         });
                     }
-                    let param = match &value.params[0] {
+                    let param = match &*value.params[0] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
