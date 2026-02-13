@@ -9,7 +9,7 @@ use super::local_env::LocalEvalEnv;
 use super::values::ExprValue;
 use super::variables::{IlpVar, Origin};
 use crate::ast::Spanned;
-use crate::database::{DatabaseConnection, DatabaseDriver};
+use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
@@ -30,6 +30,8 @@ pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
     pub(crate) var_lists:
         BTreeMap<(String, String, Vec<ExprValue<T, D::Connection>>), (String, String)>,
     pub(crate) var_str_cache: BTreeMap<Vec<ExprValue<T, D::Connection>>, Arc<str>>,
+    pub(crate) queries:
+        BTreeMap<(String, String, Vec<ExprValue<T, D::Connection>>), ExprValue<T, D::Connection>>,
 }
 
 impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
@@ -48,6 +50,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
             var_str_cache: BTreeMap::new(),
+            queries: BTreeMap::new(),
         })
     }
 
@@ -150,6 +153,61 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         );
 
         Ok((result, origin))
+    }
+
+    pub(crate) async fn add_query_to_call_history(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: Vec<ExprValue<T, D::Connection>>,
+    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
+        if let Some(cached) =
+            self.queries
+                .get(&(module.to_string(), name.to_string(), args.clone()))
+        {
+            return Ok(cached.clone());
+        }
+
+        let query_desc = self
+            .ast
+            .global_env
+            .get_queries()
+            .get(&(module.to_string(), name.to_string()))
+            .expect("Semantic analysis should have validated this query exists");
+        let sql = query_desc.query_string.node.clone();
+        let out_type = query_desc.typ.output.clone();
+
+        let db_handle = {
+            let mut val = &args[0];
+            loop {
+                match val {
+                    ExprValue::Database(h) => break h.clone(),
+                    ExprValue::Custom(c) => val = &c.content,
+                    _ => panic!(
+                        "First query argument must be a Database (semantic phase should have caught this)"
+                    ),
+                }
+            }
+        };
+
+        let params: Vec<ExprValue<T, D::Connection>> = args[1..].to_vec();
+        let global_env = &self.ast.global_env;
+
+        let result = db_handle.query(&sql, params, out_type, global_env).await;
+
+        match result {
+            Ok(value) => {
+                self.queries
+                    .insert((module.to_string(), name.to_string(), args), value.clone());
+                Ok(value)
+            }
+            Err(SqlQueryError::QueryFailed(msg)) => {
+                Err(EvalError::Panic(Box::new(ExprValue::String(msg))))
+            }
+            Err(other) => panic!(
+                "Unexpected query error (should have been caught in semantic phase): {other}"
+            ),
+        }
     }
 }
 

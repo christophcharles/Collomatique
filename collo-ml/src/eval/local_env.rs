@@ -426,13 +426,15 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         .await?
                     }
                     ResolvedPathKind::Query { module, name } => {
-                        Box::pin(Arc::clone(&self).eval_query_call(
-                            eval_history,
-                            &module,
-                            &name,
-                            args,
-                        ))
-                        .await?
+                        let mut eval_args = Vec::with_capacity(args.len());
+                        for x in args {
+                            eval_args.push(
+                                Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x)))
+                                    .await?,
+                            );
+                        }
+                        Box::pin(eval_history.add_query_to_call_history(&module, &name, eval_args))
+                            .await?
                     }
                     ResolvedPathKind::Module(_)
                     | ResolvedPathKind::ExternalVariable(_)
@@ -1264,62 +1266,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ExprValue::Struct(field_values)
             }
         })
-    }
-
-    /// Execute a query call by evaluating args, extracting the database handle,
-    /// and calling `DatabaseHandle::query`.
-    async fn eval_query_call(
-        self: Arc<Self>,
-        eval_history: &mut EvalHistory<'_, T, D>,
-        module: &str,
-        name: &str,
-        args: &[Arc<Spanned<crate::ast::Expr>>],
-    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
-        use crate::database::SqlQueryError;
-
-        let query_desc = eval_history
-            .ast
-            .global_env
-            .get_queries()
-            .get(&(module.to_string(), name.to_string()))
-            .expect("Semantic analysis should have validated this query exists");
-        let sql = query_desc.query_string.node.clone();
-        let out_type = query_desc.typ.output.clone();
-
-        let mut evaluated_args = Vec::with_capacity(args.len());
-        for x in args {
-            evaluated_args
-                .push(Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?);
-        }
-
-        let db_handle = {
-            let mut val = &evaluated_args[0];
-            loop {
-                match val {
-                    ExprValue::Database(h) => break h.clone(),
-                    ExprValue::Custom(c) => val = &c.content,
-                    _ => panic!(
-                        "First query argument must be a Database (semantic phase should have caught this)"
-                    ),
-                }
-            }
-        };
-
-        let params: Vec<ExprValue<T, D::Connection>> = evaluated_args[1..].to_vec();
-
-        let global_env = &eval_history.ast.global_env;
-
-        let result = db_handle.query(&sql, params, out_type, global_env).await;
-
-        match result {
-            Ok(value) => Ok(value),
-            Err(SqlQueryError::QueryFailed(msg)) => {
-                Err(EvalError::Panic(Box::new(ExprValue::String(msg))))
-            }
-            Err(other) => panic!(
-                "Unexpected query error (should have been caught in semantic phase): {other}"
-            ),
-        }
     }
 
     /// Helper for evaluating type casts in GenericCall expressions
