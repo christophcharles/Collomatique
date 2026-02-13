@@ -1156,6 +1156,22 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             }
         }
 
+        // --- Check for duplicate column names in SQL result ---
+        if let Some(columns) = &sql_columns {
+            let mut seen = std::collections::HashSet::new();
+            for (col_name, _) in columns {
+                if !seen.insert(col_name) {
+                    errors.push(SemError::QueryDuplicateColumnName {
+                        module: current_module.to_string(),
+                        query_name: name.node.clone(),
+                        column_name: col_name.clone(),
+                        span: query_string.span.clone(),
+                    });
+                    return;
+                }
+            }
+        }
+
         // --- Column validation: check SQL columns match declared output type ---
         if let Some(columns) = &sql_columns {
             match &output_inner_shape {

@@ -404,6 +404,16 @@ pub enum SemError {
         declared_type: String,
         span: Span,
     },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: duplicate column name \"{column_name}\" in SQL result"
+    )]
+    QueryDuplicateColumnName {
+        module: String,
+        query_name: String,
+        column_name: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

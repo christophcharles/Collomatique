@@ -1656,3 +1656,20 @@ async fn query_column_valid_optional_output_with_matching_type() {
         errors
     );
 }
+
+#[tokio::test]
+async fn query_duplicate_column_in_sql_result() {
+    let input = r#"
+        type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
+        query my_query(db: MyDb) -> [(Int, Int)] = "SELECT id, id FROM t";
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::QueryDuplicateColumnName { .. })),
+        "Should error on duplicate column name in SQL result: {:?}",
+        errors
+    );
+}
