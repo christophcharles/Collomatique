@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 let count_interrogations_in_day(db: Db, student: Student, day: Day) -> LinExpr =
     sum time_slot in day.time_slots {

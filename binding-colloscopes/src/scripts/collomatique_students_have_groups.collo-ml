@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 let enforce_student_has_group(student: Student, group_list: GroupList) -> Constraint =
     $StudentGroup(group_list.id, student.id) >== 0;

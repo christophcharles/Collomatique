@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 let group_is_not_empty_if_next_group_is_not_empty(db: Db, group: Group) -> Constraint =
     /* this works for last group too - because last+1 is never attributed, the

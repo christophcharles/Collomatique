@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 let count_students_in_group(group: Group, subject_period: SubjectPeriod) -> LinExpr =
     if group.group_list.prefilled {

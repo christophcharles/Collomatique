@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 pub let objective(db: Db) -> LinExpr =
     sum interrogation in @[Interrogation] where interrogation.cost != 0 {

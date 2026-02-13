@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
 let at_most_one_interrogation(db: Db, time_slot: TimeSlot, student: Student) -> Constraint =
     sum interrogation in time_slot.interrogations where student in interrogation.students {
