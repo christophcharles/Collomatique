@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // =============================================================================
 // TUPLE CONSTRUCTION
@@ -18,7 +19,10 @@ async fn tuple_construction_basic() {
 
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 }
 
@@ -37,9 +41,9 @@ async fn tuple_construction_three_elements() {
     assert_eq!(
         result,
         ExprValue::Tuple(vec![
-            ExprValue::Int(1),
-            ExprValue::Bool(false),
-            ExprValue::String("hello".to_string())
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Bool(false)),
+            Arc::new(ExprValue::String("hello".to_string()))
         ])
     );
 }
@@ -58,7 +62,10 @@ async fn tuple_construction_with_params() {
 
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(10), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 }
 
@@ -76,7 +83,10 @@ async fn tuple_construction_with_expressions() {
 
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(6), ExprValue::Int(10)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(10))
+        ])
     );
 }
 
@@ -96,8 +106,8 @@ async fn tuple_access_first_element() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(42),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
@@ -118,8 +128,8 @@ async fn tuple_access_second_element() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(42),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
@@ -140,9 +150,9 @@ async fn tuple_access_third_element() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(1),
-                ExprValue::Bool(false),
-                ExprValue::String("test".to_string()),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Bool(false)),
+                Arc::new(ExprValue::String("test".to_string())),
             ])],
         )
         .await
@@ -200,8 +210,11 @@ async fn nested_tuple_construction() {
     assert_eq!(
         result,
         ExprValue::Tuple(vec![
-            ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)]),
-            ExprValue::String("x".to_string())
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Bool(true))
+            ])),
+            Arc::new(ExprValue::String("x".to_string()))
         ])
     );
 }
@@ -218,8 +231,11 @@ async fn nested_tuple_access() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)]),
-                ExprValue::String("x".to_string()),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Bool(true)),
+                ])),
+                Arc::new(ExprValue::String("x".to_string())),
             ])],
         )
         .await
@@ -259,8 +275,8 @@ async fn tuple_elements_in_arithmetic() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(10),
-                ExprValue::Int(32),
+                Arc::new(ExprValue::Int(10)),
+                Arc::new(ExprValue::Int(32)),
             ])],
         )
         .await
@@ -280,7 +296,10 @@ async fn tuple_elements_in_multiplication() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::Tuple(vec![ExprValue::Int(6), ExprValue::Int(7)])],
+            vec![ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(6)),
+                Arc::new(ExprValue::Int(7)),
+            ])],
         )
         .await
         .expect("Should evaluate");
@@ -304,8 +323,8 @@ async fn tuple_elements_in_comparison() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(5),
-                ExprValue::Int(10),
+                Arc::new(ExprValue::Int(5)),
+                Arc::new(ExprValue::Int(10)),
             ])],
         )
         .await
@@ -325,7 +344,10 @@ async fn tuple_elements_equality() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::Tuple(vec![ExprValue::Int(5), ExprValue::Int(5)])],
+            vec![ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(5)),
+                Arc::new(ExprValue::Int(5)),
+            ])],
         )
         .await
         .expect("Should evaluate");
@@ -352,12 +374,12 @@ async fn tuple_containing_list() {
     assert_eq!(
         result,
         ExprValue::Tuple(vec![
-            ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3)
-            ]),
-            ExprValue::Bool(true)
+            Arc::new(ExprValue::List(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3))
+            ])),
+            Arc::new(ExprValue::Bool(true))
         ])
     );
 }
@@ -377,8 +399,14 @@ async fn list_of_tuples() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)]),
-            ExprValue::Tuple(vec![ExprValue::Int(2), ExprValue::Bool(false)])
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Bool(true))
+            ])),
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Bool(false))
+            ]))
         ])
     );
 }
@@ -395,8 +423,14 @@ async fn tuple_access_in_list_comprehension() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
-                ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(3)),
+                    Arc::new(ExprValue::Int(4)),
+                ])),
             ])],
         )
         .await
@@ -404,7 +438,10 @@ async fn tuple_access_in_list_comprehension() {
 
     assert_eq!(
         result,
-        ExprValue::List(vec![ExprValue::Int(3), ExprValue::Int(7)])
+        ExprValue::List(vec![
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(7))
+        ])
     );
 }
 
@@ -420,9 +457,9 @@ async fn tuple_creation_in_list_comprehension() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
             ])],
         )
         .await
@@ -431,9 +468,18 @@ async fn tuple_creation_in_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
-            ExprValue::Tuple(vec![ExprValue::Int(2), ExprValue::Int(4)]),
-            ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(6)])
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2))
+            ])),
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(4))
+            ])),
+            Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(3)),
+                Arc::new(ExprValue::Int(6))
+            ]))
         ])
     );
 }
@@ -456,7 +502,10 @@ async fn tuple_in_if_expression() {
 
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 }
 
@@ -474,7 +523,10 @@ async fn tuple_in_if_expression_else() {
 
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(2), ExprValue::Bool(false)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Bool(false))
+        ])
     );
 }
 
@@ -509,9 +561,18 @@ async fn tuple_access_in_sum() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
-                ExprValue::Tuple(vec![ExprValue::Int(2), ExprValue::Int(20)]),
-                ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(30)]),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(10)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(20)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(3)),
+                    Arc::new(ExprValue::Int(30)),
+                ])),
             ])],
         )
         .await
@@ -532,8 +593,14 @@ async fn tuple_access_in_forall() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
-                ExprValue::Tuple(vec![ExprValue::Int(5), ExprValue::Int(5)]),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(10)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(5)),
+                    Arc::new(ExprValue::Int(5)),
+                ])),
             ])],
         )
         .await
@@ -554,8 +621,14 @@ async fn tuple_access_in_forall_false() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(10)]),
-                ExprValue::Tuple(vec![ExprValue::Int(5), ExprValue::Int(5)]), // Not strictly less
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(10)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(5)),
+                    Arc::new(ExprValue::Int(5)),
+                ])), // Not strictly less
             ])],
         )
         .await
@@ -580,8 +653,8 @@ async fn tuple_to_string() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(42),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
@@ -602,9 +675,9 @@ async fn tuple_to_string_three_elements() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(1),
-                ExprValue::Bool(false),
-                ExprValue::String("hi".to_string()),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Bool(false)),
+                Arc::new(ExprValue::String("hi".to_string())),
             ])],
         )
         .await
@@ -626,8 +699,11 @@ async fn nested_tuple_to_string() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                ])),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
@@ -653,8 +729,14 @@ async fn tuple_in_fold() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
-                ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                ])),
+                Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(3)),
+                    Arc::new(ExprValue::Int(4)),
+                ])),
             ])],
         )
         .await
@@ -675,9 +757,9 @@ async fn tuple_as_fold_accumulator() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
+                Arc::new(ExprValue::Int(4)),
             ])],
         )
         .await
@@ -686,6 +768,9 @@ async fn tuple_as_fold_accumulator() {
     // sum: 0+2+3+4 = 9, product: 1*2*3*4 = 24
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Int(9), ExprValue::Int(24)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(9)),
+            Arc::new(ExprValue::Int(24))
+        ])
     );
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Narrowing Cast: cast? (fallible) ==========
@@ -104,13 +106,19 @@ async fn cast_fallible_list_type() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
+            vec![ExprValue::List(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+            ])],
         )
         .await
         .expect("Should evaluate");
     assert_eq!(
         result1,
-        ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])
+        ExprValue::List(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2))
+        ])
     );
 
     // Test with [Bool] list - should return none
@@ -118,7 +126,7 @@ async fn cast_fallible_list_type() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::List(vec![ExprValue::Bool(true)])],
+            vec![ExprValue::List(vec![Arc::new(ExprValue::Bool(true))])],
         )
         .await
         .expect("Should evaluate");
@@ -324,12 +332,15 @@ async fn cast_panic_list_type_success() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::List(vec![ExprValue::Bool(true)])],
+            vec![ExprValue::List(vec![Arc::new(ExprValue::Bool(true))])],
         )
         .await
         .expect("Should evaluate");
 
-    assert_eq!(result, ExprValue::List(vec![ExprValue::Bool(true)]));
+    assert_eq!(
+        result,
+        ExprValue::List(vec![Arc::new(ExprValue::Bool(true))])
+    );
 }
 
 #[tokio::test]
@@ -343,7 +354,11 @@ async fn cast_panic_list_type_failure() {
         .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::List(vec![ExprValue::Int(1)])])
+        .quick_eval_fn(
+            "main",
+            "f",
+            vec![ExprValue::List(vec![Arc::new(ExprValue::Int(1))])],
+        )
         .await;
 
     match result {
@@ -410,15 +425,18 @@ async fn cast_with_tuple() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(1),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
         .expect("Should evaluate");
     assert_eq!(
         result1,
-        ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 
     // Test with (Bool, Int) - should return none
@@ -427,8 +445,8 @@ async fn cast_with_tuple() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Bool(true),
-                ExprValue::Int(1),
+                Arc::new(ExprValue::Bool(true)),
+                Arc::new(ExprValue::Int(1)),
             ])],
         )
         .await
@@ -706,9 +724,9 @@ async fn null_coalesce_with_list() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ])
     );
 }
@@ -729,15 +747,18 @@ async fn null_coalesce_with_tuple() {
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Int(42),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
         .expect("Should evaluate");
     assert_eq!(
         result1,
-        ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 
     // With none
@@ -747,7 +768,10 @@ async fn null_coalesce_with_tuple() {
         .expect("Should evaluate");
     assert_eq!(
         result2,
-        ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Bool(false)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Bool(false))
+        ])
     );
 }
 
@@ -979,7 +1003,7 @@ async fn coercion_in_list_unification() {
             assert_eq!(list.len(), 2);
             assert!(
                 list.iter()
-                    .all(|x| matches!(x, ExprValue::LinExpr(_) | ExprValue::Int(_)))
+                    .all(|x| matches!(&**x, ExprValue::LinExpr(_) | ExprValue::Int(_)))
             );
         }
         _ => panic!("Expected List of Int | LinExpr"),
@@ -1004,7 +1028,7 @@ async fn coercion_in_list_comprehension() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::Int(_))));
+            assert!(list.iter().all(|x| matches!(&**x, ExprValue::Int(_))));
         }
         _ => panic!("Expected List of Int"),
     }
@@ -1138,7 +1162,7 @@ async fn explicit_cast_list_of_linexpr() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(&**x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -1374,7 +1398,7 @@ async fn conversion_with_collection_operations() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 4);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(&**x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -1619,9 +1643,9 @@ async fn cast_in_nested_list() {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
             assert!(list.iter().all(|inner| {
-                match inner {
+                match &**inner {
                     ExprValue::List(inner_list) => {
-                        inner_list.iter().all(|x| matches!(x, ExprValue::Int(_)))
+                        inner_list.iter().all(|x| matches!(&**x, ExprValue::Int(_)))
                     }
                     _ => false,
                 }

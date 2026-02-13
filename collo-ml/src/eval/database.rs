@@ -133,12 +133,12 @@ impl DbValue {
                     .get_custom_type_underlying(module, &qualified)
                     .ok_or(DbConversionError)?;
                 let inner = db_val.to_expr_value(env, underlying)?;
-                Ok(ExprValue::Custom(Box::new(super::values::CustomValue {
+                Ok(ExprValue::Custom(super::values::CustomValue {
                     module: module.clone(),
                     type_name: root.clone(),
                     variant: variant_name.clone(),
-                    content: inner,
-                })))
+                    content: Arc::new(inner),
+                }))
             }
             _ => Err(DbConversionError),
         }
@@ -154,7 +154,7 @@ impl<T: EvalObject, D: DatabaseConnection> TryFrom<ExprValue<T, D>> for DbValue 
             ExprValue::Int(v) => Ok(DbValue::Int(v)),
             ExprValue::Bool(v) => Ok(DbValue::Bool(v)),
             ExprValue::String(v) => Ok(DbValue::String(v)),
-            ExprValue::Custom(custom) => DbValue::try_from(custom.content),
+            ExprValue::Custom(custom) => DbValue::try_from((*custom.content).clone()),
             _ => Err(DbConversionError),
         }
     }
@@ -183,12 +183,12 @@ fn wrap_custom<T: EvalObject, D: DatabaseConnection>(
     variant: &Option<String>,
     inner: ExprValue<T, D>,
 ) -> ExprValue<T, D> {
-    ExprValue::Custom(Box::new(CustomValue {
+    ExprValue::Custom(CustomValue {
         module: module.to_string(),
         type_name: root.to_string(),
         variant: variant.clone(),
-        content: inner,
-    }))
+        content: Arc::new(inner),
+    })
 }
 
 /// Build the query result by walking `out_type` breadth-first, peeling one
@@ -231,7 +231,7 @@ fn build_query_result<T: EvalObject, D: DatabaseDriver>(
                     let mut list = Vec::with_capacity(rows.len());
                     for (i, row) in rows.iter().enumerate() {
                         let row_val = build_row_value(inner_type, row, columns, i, env)?;
-                        list.push(row_val);
+                        list.push(Arc::new(row_val));
                     }
                     Ok(ExprValue::List(list))
                 }
@@ -393,7 +393,7 @@ fn build_row_value<T: EvalObject, D: DatabaseDriver>(
                             column: col_name.clone(),
                         }
                     })?;
-                    struct_fields.insert(col_name.clone(), val);
+                    struct_fields.insert(col_name.clone(), Arc::new(val));
                 }
                 Ok(ExprValue::Struct(struct_fields))
             }
@@ -415,7 +415,7 @@ fn build_row_value<T: EvalObject, D: DatabaseDriver>(
                             column: col_name.clone(),
                         }
                     })?;
-                    values.push(val);
+                    values.push(Arc::new(val));
                 }
                 Ok(ExprValue::Tuple(values))
             }

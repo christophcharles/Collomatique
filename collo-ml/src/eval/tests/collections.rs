@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // ========== IN Operator Tests ==========
 
@@ -86,14 +87,20 @@ async fn in_with_param_list() {
         .await
         .expect("Should compile");
 
-    let list_with = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
+    let list_with = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
+    ]));
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![list_with])
         .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
-    let list_without = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(10)]));
+    let list_without = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(10)),
+    ]));
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![list_without])
         .await
@@ -112,9 +119,9 @@ async fn in_with_both_params() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result_true = checked_ast
@@ -212,12 +219,12 @@ async fn union_two_lists() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
-            ExprValue::Int(5),
-            ExprValue::Int(6),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(6)),
         ]))
     );
 }
@@ -239,12 +246,12 @@ async fn union_overlapping_lists() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
         ]))
     );
 }
@@ -266,9 +273,9 @@ async fn union_with_empty_list_left() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -290,9 +297,9 @@ async fn union_with_empty_list_right() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -324,8 +331,14 @@ async fn union_with_params() {
         .await
         .expect("Should compile");
 
-    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
+    let list1 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let list2 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list1, list2])
@@ -334,10 +347,10 @@ async fn union_with_params() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
         ]))
     );
 }
@@ -359,9 +372,9 @@ async fn union_chain() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -383,10 +396,10 @@ async fn union_with_ranges() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(5),
-            ExprValue::Int(6),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(6)),
         ]))
     );
 }
@@ -407,7 +420,10 @@ async fn union_bool_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Bool(true), ExprValue::Bool(false)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Bool(true)),
+            Arc::new(ExprValue::Bool(false))
+        ]))
     );
 }
 
@@ -430,9 +446,9 @@ async fn diff_disjoint_lists() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -453,7 +469,10 @@ async fn diff_overlapping_lists() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(4)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(4))
+        ]))
     );
 }
 
@@ -485,12 +504,15 @@ async fn diff_with_params() {
         .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
-        ExprValue::Int(4),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
     ]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
+    let list2 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list1, list2])
@@ -498,7 +520,10 @@ async fn diff_with_params() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(3)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(3))
+        ]))
     );
 }
 
@@ -518,7 +543,10 @@ async fn diff_partial_overlap() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2))
+        ]))
     );
 }
 
@@ -539,9 +567,9 @@ async fn diff_with_ranges() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(5)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(5))
         ]))
     );
 }
@@ -562,7 +590,10 @@ async fn diff_removing_single_element() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(3)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(3))
+        ]))
     );
 }
 
@@ -585,7 +616,10 @@ async fn union_then_diff() {
     // [1, 2, 3, 4] - [2, 3, 5] = [1, 4]
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(4)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(4))
+        ]))
     );
 }
 
@@ -608,12 +642,12 @@ async fn union_diff_combination() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(3),
-            ExprValue::Int(5),
-            ExprValue::Int(1),
-            ExprValue::Int(3),
-            ExprValue::Int(5)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(5))
         ]))
     );
 }
@@ -716,9 +750,9 @@ async fn collection_operations_with_if() {
     assert_eq!(
         result_true,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 
@@ -728,7 +762,7 @@ async fn collection_operations_with_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(Vec::from([ExprValue::Int(4)]))
+        ExprValue::List(Vec::from([Arc::new(ExprValue::Int(4))]))
     );
 }
 
@@ -927,9 +961,9 @@ async fn list_index_with_param() {
         .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Int(100),
-        ExprValue::Int(200),
-        ExprValue::Int(300),
+        Arc::new(ExprValue::Int(100)),
+        Arc::new(ExprValue::Int(200)),
+        Arc::new(ExprValue::Int(300)),
     ]);
 
     let result = checked_ast

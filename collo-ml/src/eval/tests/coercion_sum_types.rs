@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // =============================================================================
@@ -68,9 +70,9 @@ async fn option_list_with_value() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Int(2));
-            assert_eq!(list[2], ExprValue::Int(3));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Int(2));
+            assert_eq!(*list[2], ExprValue::Int(3));
         }
         _ => panic!("Expected List"),
     }
@@ -109,9 +111,9 @@ async fn list_of_option_values() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::None);
-            assert_eq!(list[2], ExprValue::Int(3));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::None);
+            assert_eq!(*list[2], ExprValue::Int(3));
         }
         _ => panic!("Expected List"),
     }
@@ -218,8 +220,8 @@ async fn list_of_sum_type_homogeneous() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Int(2));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Int(2));
         }
         _ => panic!("Expected List"),
     }
@@ -243,9 +245,9 @@ async fn list_of_sum_type_mixed() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Bool(true));
-            assert_eq!(list[2], ExprValue::Int(2));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Bool(true));
+            assert_eq!(*list[2], ExprValue::Int(2));
         }
         _ => panic!("Expected List"),
     }
@@ -267,8 +269,8 @@ async fn sum_of_list_types_returns_first() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Int(2));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Int(2));
         }
         _ => panic!("Expected List"),
     }
@@ -290,8 +292,8 @@ async fn sum_of_list_types_returns_second() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Bool(true));
-            assert_eq!(list[1], ExprValue::Bool(false));
+            assert_eq!(*list[0], ExprValue::Bool(true));
+            assert_eq!(*list[1], ExprValue::Bool(false));
         }
         _ => panic!("Expected List"),
     }
@@ -386,8 +388,8 @@ async fn explicit_cast_in_list_of_sum() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Bool(true));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Bool(true));
         }
         _ => panic!("Expected List"),
     }
@@ -573,8 +575,8 @@ async fn option_of_list_of_sum_evaluation() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Bool(true));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Bool(true));
         }
         _ => panic!("Expected List"),
     }
@@ -596,11 +598,11 @@ async fn nested_list_with_sum_types() {
     match result {
         ExprValue::List(outer_list) => {
             assert_eq!(outer_list.len(), 1);
-            match &outer_list[0] {
+            match &*outer_list[0] {
                 ExprValue::List(inner_list) => {
                     assert_eq!(inner_list.len(), 2);
-                    assert_eq!(inner_list[0], ExprValue::Int(1));
-                    assert_eq!(inner_list[1], ExprValue::Bool(true));
+                    assert_eq!(*inner_list[0], ExprValue::Int(1));
+                    assert_eq!(*inner_list[1], ExprValue::Bool(true));
                 }
                 _ => panic!("Expected inner List"),
             }

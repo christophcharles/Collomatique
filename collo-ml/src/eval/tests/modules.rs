@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 /// Helper to compile multiple modules
 async fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
@@ -72,10 +73,10 @@ async fn eval_cross_module_struct_creation() {
         ExprValue::Custom(custom) => {
             assert_eq!(custom.type_name, "Point");
             assert!(custom.variant.is_none());
-            match &custom.content {
+            match &*custom.content {
                 ExprValue::Struct(fields) => {
-                    assert_eq!(fields.get("x"), Some(&ExprValue::Int(0)));
-                    assert_eq!(fields.get("y"), Some(&ExprValue::Int(0)));
+                    assert_eq!(fields.get("x"), Some(&Arc::new(ExprValue::Int(0))));
+                    assert_eq!(fields.get("y"), Some(&Arc::new(ExprValue::Int(0))));
                 }
                 _ => panic!("Expected Struct content, got {:?}", custom.content),
             }
@@ -103,9 +104,9 @@ async fn eval_cross_module_enum_variant() {
         ExprValue::Custom(custom) => {
             assert_eq!(custom.type_name, "Option");
             assert_eq!(custom.variant, Some("Some".to_string()));
-            match &custom.content {
+            match &*custom.content {
                 ExprValue::Struct(fields) => {
-                    assert_eq!(fields.get("value"), Some(&ExprValue::Int(42)));
+                    assert_eq!(fields.get("value"), Some(&Arc::new(ExprValue::Int(42))));
                 }
                 _ => panic!("Expected Struct content, got {:?}", custom.content),
             }
@@ -160,7 +161,7 @@ async fn eval_cross_module_reified_variable_list() {
         ExprValue::List(items) => {
             assert_eq!(items.len(), 2);
             for item in &items {
-                match item {
+                match &**item {
                     ExprValue::LinExpr(_) => {}
                     _ => panic!("Expected LinExpr in list, got {:?}", item),
                 }

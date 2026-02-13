@@ -326,9 +326,9 @@ async fn script_var_with_sum() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -374,7 +374,10 @@ async fn script_var_with_forall() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list])
@@ -591,9 +594,9 @@ async fn var_list_simple_reify() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -607,7 +610,7 @@ async fn var_list_simple_reify() {
 
             // Verify the LinExprs are script vars with from_list set
             for (idx, linexpr) in linexprs.iter().enumerate() {
-                match linexpr {
+                match &**linexpr {
                     ExprValue::LinExpr(le) => {
                         assert_eq!(
                             le,
@@ -641,7 +644,10 @@ async fn var_list_in_sum() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "g", vec![list.clone()])
@@ -684,9 +690,9 @@ async fn var_list_in_constraint() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -737,7 +743,10 @@ async fn var_list_with_forall() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list.clone()])
@@ -786,9 +795,9 @@ async fn var_list_cardinality() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -815,7 +824,10 @@ async fn var_list_with_multiple_params() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list.clone(), ExprValue::Int(10)])
@@ -825,21 +837,23 @@ async fn var_list_with_multiple_params() {
     match result {
         ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
-            let lin_expr1 =
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let lin_expr1 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                ScriptVar::new_no_env(
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![Arc::new(list.clone()), Arc::new(ExprValue::Int(10))],
-                ))));
+                ),
+            ))));
             assert!(linexprs.contains(&lin_expr1));
-            let lin_expr2 =
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let lin_expr2 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                ScriptVar::new_no_env(
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![Arc::new(list.clone()), Arc::new(ExprValue::Int(10))],
-                ))));
+                ),
+            ))));
             assert!(linexprs.contains(&lin_expr2));
         }
         _ => panic!("Expected List of LinExpr"),
@@ -889,7 +903,10 @@ async fn var_list_in_list_comprehension() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list])
@@ -899,7 +916,11 @@ async fn var_list_in_list_comprehension() {
     match result {
         ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
-            assert!(linexprs.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(
+                linexprs
+                    .iter()
+                    .all(|x| matches!(&**x, ExprValue::LinExpr(_)))
+            );
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -919,8 +940,8 @@ async fn var_list_with_collection_ops() {
         .await
         .expect("Should compile");
 
-    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1)]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(2)]));
+    let list1 = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(1))]));
+    let list2 = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(2))]));
 
     let result = checked_ast
         .quick_eval_fn("main", "i", vec![list1, list2])
@@ -931,7 +952,11 @@ async fn var_list_with_collection_ops() {
         ExprValue::List(linexprs) => {
             // Union of two var lists
             assert!(linexprs.len() >= 2);
-            assert!(linexprs.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(
+                linexprs
+                    .iter()
+                    .all(|x| matches!(&**x, ExprValue::LinExpr(_)))
+            );
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -955,7 +980,7 @@ async fn nested_reification_usage() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1)]));
+    let list = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(1))]));
 
     let result = checked_ast
         .quick_eval_fn("main", "final", vec![list])

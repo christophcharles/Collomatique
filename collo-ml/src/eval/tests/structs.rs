@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 // =============================================================================
 // STRUCT CONSTRUCTION
@@ -18,8 +19,8 @@ async fn struct_construction_basic() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("x".to_string(), ExprValue::Int(42));
-    expected.insert("y".to_string(), ExprValue::Bool(true));
+    expected.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
+    expected.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -36,7 +37,7 @@ async fn struct_construction_single_field() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("value".to_string(), ExprValue::Int(100));
+    expected.insert("value".to_string(), Arc::new(ExprValue::Int(100)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -53,9 +54,12 @@ async fn struct_construction_three_fields() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("a".to_string(), ExprValue::Int(1));
-    expected.insert("b".to_string(), ExprValue::Bool(false));
-    expected.insert("c".to_string(), ExprValue::String("hello".to_string()));
+    expected.insert("a".to_string(), Arc::new(ExprValue::Int(1)));
+    expected.insert("b".to_string(), Arc::new(ExprValue::Bool(false)));
+    expected.insert(
+        "c".to_string(),
+        Arc::new(ExprValue::String("hello".to_string())),
+    );
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -72,8 +76,8 @@ async fn struct_construction_with_params() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("x".to_string(), ExprValue::Int(10));
-    expected.insert("y".to_string(), ExprValue::Bool(true));
+    expected.insert("x".to_string(), Arc::new(ExprValue::Int(10)));
+    expected.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -90,8 +94,8 @@ async fn struct_construction_with_expressions() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("total".to_string(), ExprValue::Int(6));
-    expected.insert("doubled".to_string(), ExprValue::Int(10));
+    expected.insert("total".to_string(), Arc::new(ExprValue::Int(6)));
+    expected.insert("doubled".to_string(), Arc::new(ExprValue::Int(10)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -128,8 +132,8 @@ async fn struct_field_order_in_literal() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("x".to_string(), ExprValue::Int(42));
-    expected.insert("y".to_string(), ExprValue::Bool(true));
+    expected.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
+    expected.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -145,8 +149,8 @@ async fn struct_access_first_field() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(42));
-    struct_val.insert("y".to_string(), ExprValue::Bool(true));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -164,8 +168,8 @@ async fn struct_access_second_field() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(42));
-    struct_val.insert("y".to_string(), ExprValue::Bool(true));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -222,9 +226,9 @@ async fn nested_struct_construction() {
         .expect("Should evaluate");
 
     let mut inner = BTreeMap::new();
-    inner.insert("x".to_string(), ExprValue::Int(42));
+    inner.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     let mut outer = BTreeMap::new();
-    outer.insert("inner".to_string(), ExprValue::Struct(inner));
+    outer.insert("inner".to_string(), Arc::new(ExprValue::Struct(inner)));
     assert_eq!(result, ExprValue::Struct(outer));
 }
 
@@ -236,9 +240,9 @@ async fn nested_struct_access() {
         .expect("Should compile");
 
     let mut inner = BTreeMap::new();
-    inner.insert("x".to_string(), ExprValue::Int(99));
+    inner.insert("x".to_string(), Arc::new(ExprValue::Int(99)));
     let mut outer = BTreeMap::new();
-    outer.insert("inner".to_string(), ExprValue::Struct(inner));
+    outer.insert("inner".to_string(), Arc::new(ExprValue::Struct(inner)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
@@ -275,8 +279,8 @@ async fn struct_fields_in_arithmetic() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(10));
-    struct_val.insert("y".to_string(), ExprValue::Int(32));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(10)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(32)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -294,8 +298,8 @@ async fn struct_fields_in_multiplication() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("a".to_string(), ExprValue::Int(6));
-    struct_val.insert("b".to_string(), ExprValue::Int(7));
+    struct_val.insert("a".to_string(), Arc::new(ExprValue::Int(6)));
+    struct_val.insert("b".to_string(), Arc::new(ExprValue::Int(7)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -317,8 +321,8 @@ async fn struct_fields_in_comparison() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(5));
-    struct_val.insert("y".to_string(), ExprValue::Int(10));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(10)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -336,8 +340,8 @@ async fn struct_fields_equality() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(5));
-    struct_val.insert("y".to_string(), ExprValue::Int(5));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(5)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -366,11 +370,11 @@ async fn struct_containing_list() {
     let mut expected = BTreeMap::new();
     expected.insert(
         "items".to_string(),
-        ExprValue::List(vec![
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-        ]),
+        Arc::new(ExprValue::List(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+        ])),
     );
     assert_eq!(result, ExprValue::Struct(expected));
 }
@@ -388,13 +392,16 @@ async fn list_of_structs() {
         .expect("Should evaluate");
 
     let mut s1 = BTreeMap::new();
-    s1.insert("x".to_string(), ExprValue::Int(1));
+    s1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
     let mut s2 = BTreeMap::new();
-    s2.insert("x".to_string(), ExprValue::Int(2));
+    s2.insert("x".to_string(), Arc::new(ExprValue::Int(2)));
 
     assert_eq!(
         result,
-        ExprValue::List(vec![ExprValue::Struct(s1), ExprValue::Struct(s2)])
+        ExprValue::List(vec![
+            Arc::new(ExprValue::Struct(s1)),
+            Arc::new(ExprValue::Struct(s2))
+        ])
     );
 }
 
@@ -406,19 +413,19 @@ async fn struct_field_access_in_list_comprehension() {
         .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
-    p1.insert("x".to_string(), ExprValue::Int(1));
-    p1.insert("y".to_string(), ExprValue::Int(2));
+    p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
+    p1.insert("y".to_string(), Arc::new(ExprValue::Int(2)));
     let mut p2 = BTreeMap::new();
-    p2.insert("x".to_string(), ExprValue::Int(3));
-    p2.insert("y".to_string(), ExprValue::Int(4));
+    p2.insert("x".to_string(), Arc::new(ExprValue::Int(3)));
+    p2.insert("y".to_string(), Arc::new(ExprValue::Int(4)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Struct(p1),
-                ExprValue::Struct(p2),
+                Arc::new(ExprValue::Struct(p1)),
+                Arc::new(ExprValue::Struct(p2)),
             ])],
         )
         .await
@@ -426,7 +433,10 @@ async fn struct_field_access_in_list_comprehension() {
 
     assert_eq!(
         result,
-        ExprValue::List(vec![ExprValue::Int(3), ExprValue::Int(7)])
+        ExprValue::List(vec![
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(7))
+        ])
     );
 }
 
@@ -442,27 +452,27 @@ async fn struct_creation_in_list_comprehension() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
             ])],
         )
         .await
         .expect("Should evaluate");
 
     let mut s1 = BTreeMap::new();
-    s1.insert("val".to_string(), ExprValue::Int(1));
+    s1.insert("val".to_string(), Arc::new(ExprValue::Int(1)));
     let mut s2 = BTreeMap::new();
-    s2.insert("val".to_string(), ExprValue::Int(2));
+    s2.insert("val".to_string(), Arc::new(ExprValue::Int(2)));
     let mut s3 = BTreeMap::new();
-    s3.insert("val".to_string(), ExprValue::Int(3));
+    s3.insert("val".to_string(), Arc::new(ExprValue::Int(3)));
 
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Struct(s1),
-            ExprValue::Struct(s2),
-            ExprValue::Struct(s3)
+            Arc::new(ExprValue::Struct(s1)),
+            Arc::new(ExprValue::Struct(s2)),
+            Arc::new(ExprValue::Struct(s3))
         ])
     );
 }
@@ -484,7 +494,7 @@ async fn struct_in_if_expression() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("x".to_string(), ExprValue::Int(1));
+    expected.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -501,7 +511,7 @@ async fn struct_in_if_expression_else() {
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("x".to_string(), ExprValue::Int(2));
+    expected.insert("x".to_string(), Arc::new(ExprValue::Int(2)));
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -532,23 +542,23 @@ async fn struct_access_in_sum() {
         .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
-    p1.insert("x".to_string(), ExprValue::Int(1));
-    p1.insert("y".to_string(), ExprValue::Int(10));
+    p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
+    p1.insert("y".to_string(), Arc::new(ExprValue::Int(10)));
     let mut p2 = BTreeMap::new();
-    p2.insert("x".to_string(), ExprValue::Int(2));
-    p2.insert("y".to_string(), ExprValue::Int(20));
+    p2.insert("x".to_string(), Arc::new(ExprValue::Int(2)));
+    p2.insert("y".to_string(), Arc::new(ExprValue::Int(20)));
     let mut p3 = BTreeMap::new();
-    p3.insert("x".to_string(), ExprValue::Int(3));
-    p3.insert("y".to_string(), ExprValue::Int(30));
+    p3.insert("x".to_string(), Arc::new(ExprValue::Int(3)));
+    p3.insert("y".to_string(), Arc::new(ExprValue::Int(30)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Struct(p1),
-                ExprValue::Struct(p2),
-                ExprValue::Struct(p3),
+                Arc::new(ExprValue::Struct(p1)),
+                Arc::new(ExprValue::Struct(p2)),
+                Arc::new(ExprValue::Struct(p3)),
             ])],
         )
         .await
@@ -566,19 +576,19 @@ async fn struct_access_in_forall() {
         .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
-    p1.insert("x".to_string(), ExprValue::Int(1));
-    p1.insert("y".to_string(), ExprValue::Int(10));
+    p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
+    p1.insert("y".to_string(), Arc::new(ExprValue::Int(10)));
     let mut p2 = BTreeMap::new();
-    p2.insert("x".to_string(), ExprValue::Int(5));
-    p2.insert("y".to_string(), ExprValue::Int(5));
+    p2.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
+    p2.insert("y".to_string(), Arc::new(ExprValue::Int(5)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Struct(p1),
-                ExprValue::Struct(p2),
+                Arc::new(ExprValue::Struct(p1)),
+                Arc::new(ExprValue::Struct(p2)),
             ])],
         )
         .await
@@ -595,19 +605,19 @@ async fn struct_access_in_forall_false() {
         .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
-    p1.insert("x".to_string(), ExprValue::Int(1));
-    p1.insert("y".to_string(), ExprValue::Int(10));
+    p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
+    p1.insert("y".to_string(), Arc::new(ExprValue::Int(10)));
     let mut p2 = BTreeMap::new();
-    p2.insert("x".to_string(), ExprValue::Int(5));
-    p2.insert("y".to_string(), ExprValue::Int(5)); // Not strictly less
+    p2.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
+    p2.insert("y".to_string(), Arc::new(ExprValue::Int(5))); // Not strictly less
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Struct(p1),
-                ExprValue::Struct(p2),
+                Arc::new(ExprValue::Struct(p1)),
+                Arc::new(ExprValue::Struct(p2)),
             ])],
         )
         .await
@@ -628,8 +638,8 @@ async fn struct_to_string() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(42));
-    struct_val.insert("y".to_string(), ExprValue::Bool(true));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
+    struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -648,9 +658,12 @@ async fn struct_to_string_three_fields() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("a".to_string(), ExprValue::Int(1));
-    struct_val.insert("b".to_string(), ExprValue::Bool(false));
-    struct_val.insert("c".to_string(), ExprValue::String("hi".to_string()));
+    struct_val.insert("a".to_string(), Arc::new(ExprValue::Int(1)));
+    struct_val.insert("b".to_string(), Arc::new(ExprValue::Bool(false)));
+    struct_val.insert(
+        "c".to_string(),
+        Arc::new(ExprValue::String("hi".to_string())),
+    );
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
@@ -672,9 +685,9 @@ async fn nested_struct_to_string() {
         .expect("Should compile");
 
     let mut inner = BTreeMap::new();
-    inner.insert("x".to_string(), ExprValue::Int(42));
+    inner.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     let mut outer = BTreeMap::new();
-    outer.insert("inner".to_string(), ExprValue::Struct(inner));
+    outer.insert("inner".to_string(), Arc::new(ExprValue::Struct(inner)));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
@@ -711,19 +724,19 @@ async fn struct_in_fold() {
         .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
-    p1.insert("x".to_string(), ExprValue::Int(1));
-    p1.insert("y".to_string(), ExprValue::Int(2));
+    p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
+    p1.insert("y".to_string(), Arc::new(ExprValue::Int(2)));
     let mut p2 = BTreeMap::new();
-    p2.insert("x".to_string(), ExprValue::Int(3));
-    p2.insert("y".to_string(), ExprValue::Int(4));
+    p2.insert("x".to_string(), Arc::new(ExprValue::Int(3)));
+    p2.insert("y".to_string(), Arc::new(ExprValue::Int(4)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Struct(p1),
-                ExprValue::Struct(p2),
+                Arc::new(ExprValue::Struct(p1)),
+                Arc::new(ExprValue::Struct(p2)),
             ])],
         )
         .await
@@ -744,17 +757,17 @@ async fn struct_as_fold_accumulator() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(4),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
+                Arc::new(ExprValue::Int(4)),
             ])],
         )
         .await
         .expect("Should evaluate");
 
     let mut expected = BTreeMap::new();
-    expected.insert("total".to_string(), ExprValue::Int(9)); // 0+2+3+4
-    expected.insert("prod".to_string(), ExprValue::Int(24)); // 1*2*3*4
+    expected.insert("total".to_string(), Arc::new(ExprValue::Int(9))); // 0+2+3+4
+    expected.insert("prod".to_string(), Arc::new(ExprValue::Int(24))); // 1*2*3*4
     assert_eq!(result, ExprValue::Struct(expected));
 }
 
@@ -777,7 +790,10 @@ async fn struct_containing_tuple() {
     let mut expected = BTreeMap::new();
     expected.insert(
         "point".to_string(),
-        ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
+        Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+        ])),
     );
     assert_eq!(result, ExprValue::Struct(expected));
 }
@@ -795,10 +811,13 @@ async fn tuple_containing_struct() {
         .expect("Should evaluate");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(42));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     assert_eq!(
         result,
-        ExprValue::Tuple(vec![ExprValue::Struct(struct_val), ExprValue::Bool(true)])
+        ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Struct(struct_val)),
+            Arc::new(ExprValue::Bool(true))
+        ])
     );
 }
 
@@ -812,7 +831,10 @@ async fn struct_field_then_tuple_access() {
     let mut struct_val = BTreeMap::new();
     struct_val.insert(
         "point".to_string(),
-        ExprValue::Tuple(vec![ExprValue::Int(10), ExprValue::Int(20)]),
+        Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(20)),
+        ])),
     );
 
     let result = checked_ast
@@ -831,15 +853,15 @@ async fn tuple_then_struct_field_access() {
         .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
-    struct_val.insert("x".to_string(), ExprValue::Int(99));
+    struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(99)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
-                ExprValue::Struct(struct_val),
-                ExprValue::Bool(true),
+                Arc::new(ExprValue::Struct(struct_val)),
+                Arc::new(ExprValue::Bool(true)),
             ])],
         )
         .await
@@ -867,19 +889,19 @@ async fn named_struct_field_access() {
         .expect("Should compile");
 
     let mut point = BTreeMap::new();
-    point.insert("x".to_string(), ExprValue::Int(3));
-    point.insert("y".to_string(), ExprValue::Int(7));
+    point.insert("x".to_string(), Arc::new(ExprValue::Int(3)));
+    point.insert("y".to_string(), Arc::new(ExprValue::Int(7)));
 
     let result = checked_ast
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::Custom(Box::new(CustomValue {
+            vec![ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "Point".to_string(),
                 variant: None,
-                content: ExprValue::Struct(point),
-            }))],
+                content: Arc::new(ExprValue::Struct(point)),
+            })],
         )
         .await
         .expect("Should evaluate");

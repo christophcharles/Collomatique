@@ -98,9 +98,9 @@ async fn let_expr_with_list_value() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -123,11 +123,11 @@ async fn let_expr_with_list_range() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(0),
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4)
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4))
         ]))
     );
 }
@@ -143,9 +143,9 @@ async fn let_expr_with_membership_test() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result_true = checked_ast
@@ -364,10 +364,10 @@ async fn let_expr_with_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(0),
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6)
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6))
         ]))
     );
 }
@@ -383,9 +383,9 @@ async fn let_expr_with_cardinality() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -406,8 +406,14 @@ async fn let_expr_with_collection_union() {
         .await
         .expect("Should compile");
 
-    let list_a = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let list_b = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
+    let list_a = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let list_b = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list_a, list_b])
@@ -417,10 +423,10 @@ async fn let_expr_with_collection_union() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -540,9 +546,9 @@ async fn let_expr_returning_list_from_if() {
     assert_eq!(
         result_true,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 
@@ -552,6 +558,9 @@ async fn let_expr_returning_list_from_if() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(5)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5))
+        ]))
     );
 }

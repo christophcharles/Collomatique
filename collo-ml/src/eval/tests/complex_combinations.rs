@@ -18,9 +18,9 @@ async fn forall_with_reified_var_and_filter() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(1),
-        ExprValue::Int(2),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
     ]));
 
     let result = checked_ast
@@ -72,8 +72,14 @@ async fn sum_with_var_list_and_comprehension() {
         .await
         .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -88,40 +94,40 @@ async fn sum_with_var_list_and_comprehension() {
                 "MyVars".into(),
                 Some(0),
                 vec![Arc::new(ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVars".into(),
                 Some(1),
                 vec![Arc::new(ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVars".into(),
                 Some(2),
                 vec![Arc::new(ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
                 "main".to_string(),
                 "MyVars".into(),
                 Some(3),
                 vec![Arc::new(ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(3)),
                 ])))],
             )));
             assert_eq!(lin_expr, expected);
@@ -148,11 +154,14 @@ async fn nested_quantifiers_with_filters() {
         .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(15)]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -181,10 +190,10 @@ async fn list_comp_with_function_calls_and_filters() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(2),
-        ExprValue::Int(5),
-        ExprValue::Int(15),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
     ]));
 
     let result = checked_ast
@@ -195,7 +204,10 @@ async fn list_comp_with_function_calls_and_filters() {
     // Valid: 2, 5 → squared: 4, 25
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(25)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(25))
+        ]))
     );
 }
 
@@ -220,8 +232,14 @@ async fn nested_list_comp_with_reified_vars() {
         .await
         .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -232,26 +250,32 @@ async fn nested_list_comp_with_reified_vars() {
         ExprValue::List(list) => {
             // (1,2), (1,3), (2,3) - 3 pairs where x != y
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(&**x, ExprValue::LinExpr(_))));
 
             let expected_vars = Vec::from([
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new_no_env(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        None,
+                        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
+                    ),
                 )))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new_no_env(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        None,
+                        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
+                    ),
                 )))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new_no_env(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        None,
+                        vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
+                    ),
                 )))),
             ]);
             assert_eq!(list, expected_vars);
@@ -275,12 +299,15 @@ async fn list_comp_with_collection_ops_in_body() {
         .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(5),
-        ExprValue::Int(15),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
     ]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(8)]));
-    let lists = ExprValue::List(Vec::from([list1, list2]));
+    let list2 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(8)),
+    ]));
+    let lists = ExprValue::List(Vec::from([Arc::new(list1), Arc::new(list2)]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![lists])
@@ -291,7 +318,10 @@ async fn list_comp_with_collection_ops_in_body() {
     // list2 - [1..10]: [] → |0|
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(0)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(0))
+        ]))
     );
 }
 
@@ -315,9 +345,9 @@ async fn if_with_quantifier_in_condition() {
         .expect("Should compile");
 
     let all_positive = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
     let result_positive = checked_ast
         .quick_eval_fn("main", "f", vec![all_positive])
@@ -325,7 +355,10 @@ async fn if_with_quantifier_in_condition() {
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Int(6));
 
-    let has_negative = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(-2)]));
+    let has_negative = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(-2)),
+    ]));
     let result_negative = checked_ast
         .quick_eval_fn("main", "f", vec![has_negative])
         .await
@@ -350,7 +383,10 @@ async fn if_with_collection_check() {
         .await
         .expect("Should compile");
 
-    let valid_set = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
+    let valid_set = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
+    ]));
 
     let result_in_and_positive = checked_ast
         .quick_eval_fn("main", "f", vec![ExprValue::Int(5), valid_set.clone()])
@@ -435,9 +471,9 @@ async fn function_returning_constraint_system() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
@@ -509,7 +545,10 @@ async fn function_composition_with_reified_vars() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list, ExprValue::Int(5)])
@@ -571,8 +610,14 @@ async fn assignment_constraint_pattern() {
         .await
         .expect("Should compile");
 
-    let students = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let slots = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let students = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let slots = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![students, slots, ExprValue::Int(1)])
@@ -769,10 +814,13 @@ async fn aggregation_with_filtering() {
             .expect("Should compile");
 
     let students = ExprValue::List(Vec::from([
-        ExprValue::Object(Student::Student1),
-        ExprValue::Object(Student::Student2),
+        Arc::new(ExprValue::Object(Student::Student1)),
+        Arc::new(ExprValue::Object(Student::Student2)),
     ]));
-    let times = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let times = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let env = Env {};
     let result = checked_ast
@@ -816,11 +864,14 @@ async fn dynamic_set_construction() {
         .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(3),
-        ExprValue::Int(5),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(5)),
     ]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -853,11 +904,11 @@ async fn set_operations_with_comprehensions() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-2),
-        ExprValue::Int(1),
-        ExprValue::Int(3),
-        ExprValue::Int(5),
-        ExprValue::Int(10),
+        Arc::new(ExprValue::Int(-2)),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
     ]));
 
     let result = checked_ast
@@ -871,9 +922,9 @@ async fn set_operations_with_comprehensions() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(9),
-            ExprValue::Int(25),
-            ExprValue::Int(100),
+            Arc::new(ExprValue::Int(9)),
+            Arc::new(ExprValue::Int(25)),
+            Arc::new(ExprValue::Int(100)),
         ]))
     );
 }
@@ -894,8 +945,14 @@ async fn union_of_var_lists() {
         .await
         .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -938,7 +995,10 @@ async fn empty_list_propagation() {
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
 
-    let non_empty = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let non_empty = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
     let result_non_empty = checked_ast
         .quick_eval_fn("main", "f", vec![non_empty])
         .await
@@ -987,7 +1047,10 @@ async fn mixed_coercion_in_complex_expression() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list])
@@ -1088,8 +1151,14 @@ async fn all_features_combined() {
         .await
         .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])
@@ -1208,8 +1277,14 @@ async fn all_features_combined_with_let() {
         .await
         .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![xs, ys])

@@ -335,16 +335,16 @@ fn test_list_of_options_field_access_mixed() {
 
         // First element: Some(Student(1))
         assert!(matches!(
-            values[0],
+            &*values[0],
             ExprValue::Object(OptionObjectId::Student(StudentId(1)))
         ));
 
         // Second element: None
-        assert!(matches!(values[1], ExprValue::None));
+        assert!(matches!(&*values[1], ExprValue::None));
 
         // Third element: Some(Student(2))
         assert!(matches!(
-            values[2],
+            &*values[2],
             ExprValue::Object(OptionObjectId::Student(StudentId(2)))
         ));
     } else {
@@ -378,7 +378,7 @@ fn test_list_of_options_all_none() {
     // Should be a List with 3 None values
     if let Some(ExprValue::List(values)) = members_field {
         assert_eq!(values.len(), 3);
-        assert!(values.iter().all(|v| matches!(v, ExprValue::None)));
+        assert!(values.iter().all(|v| matches!(&**v, ExprValue::None)));
     } else {
         panic!("Expected List of Nones");
     }
@@ -433,7 +433,7 @@ fn test_list_of_options_all_some() {
     // Should be a List with 3 Student objects
     if let Some(ExprValue::List(values)) = members_field {
         assert_eq!(values.len(), 3);
-        assert!(values.iter().all(|v| matches!(v, ExprValue::Object(_))));
+        assert!(values.iter().all(|v| matches!(&**v, ExprValue::Object(_))));
     } else {
         panic!("Expected List of Objects");
     }
@@ -605,15 +605,15 @@ fn test_option_of_vec_field_access_some() {
     if let Some(ExprValue::List(values)) = teams_field {
         assert_eq!(values.len(), 3);
         assert!(matches!(
-            values[0],
+            &*values[0],
             ExprValue::Object(OptionObjectId::Student(StudentId(1)))
         ));
         assert!(matches!(
-            values[1],
+            &*values[1],
             ExprValue::Object(OptionObjectId::Student(StudentId(2)))
         ));
         assert!(matches!(
-            values[2],
+            &*values[2],
             ExprValue::Object(OptionObjectId::Student(StudentId(3)))
         ));
     } else {
@@ -757,9 +757,9 @@ fn test_combined_optional_patterns() {
     let members = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "members");
     if let Some(ExprValue::List(values)) = members {
         assert_eq!(values.len(), 3);
-        assert!(matches!(values[0], ExprValue::Object(_)));
-        assert!(matches!(values[1], ExprValue::None));
-        assert!(matches!(values[2], ExprValue::Object(_)));
+        assert!(matches!(&*values[0], ExprValue::Object(_)));
+        assert!(matches!(&*values[1], ExprValue::None));
+        assert!(matches!(&*values[2], ExprValue::Object(_)));
     } else {
         panic!("Expected List for members");
     }
@@ -768,7 +768,7 @@ fn test_combined_optional_patterns() {
     let teams = project.field_access::<SqliteDatabaseConnection>(&env, &mut cache, "teams");
     if let Some(ExprValue::List(values)) = teams {
         assert_eq!(values.len(), 3);
-        assert!(values.iter().all(|v| matches!(v, ExprValue::Object(_))));
+        assert!(values.iter().all(|v| matches!(&**v, ExprValue::Object(_))));
     } else {
         panic!("Expected List for teams");
     }

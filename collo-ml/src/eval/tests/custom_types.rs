@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // =============================================================================
 // CUSTOM TYPE BASIC OPERATIONS
@@ -23,12 +24,12 @@ async fn custom_type_wrap_and_unwrap() {
 
     assert_eq!(
         wrapped,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 
     // Test unwrapping
@@ -79,12 +80,15 @@ async fn custom_type_with_tuple() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Point".to_string(),
             variant: None,
-            content: ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
-        }))
+            content: Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(3)),
+                Arc::new(ExprValue::Int(4))
+            ])),
+        })
     );
 }
 
@@ -105,16 +109,16 @@ async fn custom_type_with_list() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "IntList".to_string(),
             variant: None,
-            content: ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3)
-            ]),
-        }))
+            content: Arc::new(ExprValue::List(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3))
+            ])),
+        })
     );
 }
 
@@ -133,12 +137,15 @@ async fn custom_type_tuple_field_access() {
         .await
         .expect("Should compile");
 
-    let point = ExprValue::Custom(Box::new(CustomValue {
+    let point = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Point".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![ExprValue::Int(10), ExprValue::Int(20)]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(20)),
+        ])),
+    });
 
     let x = checked_ast
         .quick_eval_fn("main", "get_x", vec![point.clone()])
@@ -164,20 +171,23 @@ async fn custom_type_nested_tuple_field_access() {
         .await
         .expect("Should compile");
 
-    let named_point = ExprValue::Custom(Box::new(CustomValue {
+    let named_point = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "NamedPoint".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![
-            ExprValue::String("origin".to_string()),
-            ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::String("origin".to_string())),
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "Point".to_string(),
                 variant: None,
-                content: ExprValue::Tuple(vec![ExprValue::Int(0), ExprValue::Int(0)]),
+                content: Arc::new(ExprValue::Tuple(vec![
+                    Arc::new(ExprValue::Int(0)),
+                    Arc::new(ExprValue::Int(0)),
+                ])),
             })),
-        ]),
-    }));
+        ])),
+    });
 
     let x = checked_ast
         .quick_eval_fn("main", "get_x", vec![named_point])
@@ -208,23 +218,23 @@ async fn custom_type_in_list() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(1),
+                content: Arc::new(ExprValue::Int(1)),
             })),
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(2),
+                content: Arc::new(ExprValue::Int(2)),
             })),
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(3),
+                content: Arc::new(ExprValue::Int(3)),
             })),
         ])
     );
@@ -241,23 +251,23 @@ async fn sum_over_custom_type_list() {
         .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
+            content: Arc::new(ExprValue::Int(1)),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(2),
+            content: Arc::new(ExprValue::Int(2)),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(3),
+            content: Arc::new(ExprValue::Int(3)),
         })),
     ]);
 
@@ -289,12 +299,12 @@ async fn custom_type_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
-        }))
+            content: Arc::new(ExprValue::Int(1)),
+        })
     );
 
     let result_false = checked_ast
@@ -303,12 +313,12 @@ async fn custom_type_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(0),
-        }))
+            content: Arc::new(ExprValue::Int(0)),
+        })
     );
 }
 
@@ -344,12 +354,12 @@ async fn custom_type_to_string() {
         .await
         .expect("Should compile");
 
-    let value = ExprValue::Custom(Box::new(CustomValue {
+    let value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyInt".to_string(),
         variant: None,
-        content: ExprValue::Int(42),
-    }));
+        content: Arc::new(ExprValue::Int(42)),
+    });
 
     let result = checked_ast
         .quick_eval_fn("main", "to_str", vec![value])
@@ -369,12 +379,15 @@ async fn custom_type_tuple_to_string() {
         .await
         .expect("Should compile");
 
-    let value = ExprValue::Custom(Box::new(CustomValue {
+    let value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Point".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![ExprValue::Int(3), ExprValue::Int(4)]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
+        ])),
+    });
 
     let result = checked_ast
         .quick_eval_fn("main", "to_str", vec![value])
@@ -412,21 +425,21 @@ async fn multiple_custom_types() {
     // Even though both are Int underneath, they should be different custom types
     assert_eq!(
         a,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "TypeA".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
-        }))
+            content: Arc::new(ExprValue::Int(1)),
+        })
     );
     assert_eq!(
         b,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "TypeB".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
-        }))
+            content: Arc::new(ExprValue::Int(1)),
+        })
     );
     assert_ne!(a, b);
 }
@@ -449,25 +462,25 @@ async fn custom_type_referencing_another() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Outer".to_string(),
             variant: None,
-            content: ExprValue::List(vec![
-                ExprValue::Custom(Box::new(CustomValue {
+            content: Arc::new(ExprValue::List(vec![
+                Arc::new(ExprValue::Custom(CustomValue {
                     module: "main".to_string(),
                     type_name: "Inner".to_string(),
                     variant: None,
-                    content: ExprValue::Int(1),
+                    content: Arc::new(ExprValue::Int(1)),
                 })),
-                ExprValue::Custom(Box::new(CustomValue {
+                Arc::new(ExprValue::Custom(CustomValue {
                     module: "main".to_string(),
                     type_name: "Inner".to_string(),
                     variant: None,
-                    content: ExprValue::Int(2),
+                    content: Arc::new(ExprValue::Int(2)),
                 })),
-            ]),
-        }))
+            ])),
+        })
     );
 }
 
@@ -486,23 +499,23 @@ async fn custom_type_in_fold() {
         .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
+            content: Arc::new(ExprValue::Int(1)),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(2),
+            content: Arc::new(ExprValue::Int(2)),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(3),
+            content: Arc::new(ExprValue::Int(3)),
         })),
     ]);
 
@@ -529,17 +542,17 @@ async fn custom_type_in_list_comprehension() {
         .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(1),
+            content: Arc::new(ExprValue::Int(1)),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(2),
+            content: Arc::new(ExprValue::Int(2)),
         })),
     ]);
 
@@ -551,17 +564,17 @@ async fn custom_type_in_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(2),
+                content: Arc::new(ExprValue::Int(2)),
             })),
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(4),
+                content: Arc::new(ExprValue::Int(4)),
             })),
         ])
     );
@@ -583,12 +596,15 @@ async fn custom_type_wrapping_union_tuple_index() {
         .expect("Should compile");
 
     // Test with first variant (Int, Bool)
-    let value1 = ExprValue::Custom(Box::new(CustomValue {
+    let value1 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Bool(true)),
+        ])),
+    });
     let result1 = checked_ast
         .quick_eval_fn("main", "get_second", vec![value1])
         .await
@@ -596,15 +612,15 @@ async fn custom_type_wrapping_union_tuple_index() {
     assert_eq!(result1, ExprValue::Bool(true));
 
     // Test with second variant (String, Bool)
-    let value2 = ExprValue::Custom(Box::new(CustomValue {
+    let value2 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![
-            ExprValue::String("hello".to_string()),
-            ExprValue::Bool(false),
-        ]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::String("hello".to_string())),
+            Arc::new(ExprValue::Bool(false)),
+        ])),
+    });
     let result2 = checked_ast
         .quick_eval_fn("main", "get_second", vec![value2])
         .await
@@ -624,12 +640,15 @@ async fn custom_type_wrapping_union_tuple_index_returns_union() {
         .expect("Should compile");
 
     // Test with first variant (Int, Bool)
-    let value1 = ExprValue::Custom(Box::new(CustomValue {
+    let value1 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Bool(true)),
+        ])),
+    });
     let result1 = checked_ast
         .quick_eval_fn("main", "get_first", vec![value1])
         .await
@@ -637,15 +656,15 @@ async fn custom_type_wrapping_union_tuple_index_returns_union() {
     assert_eq!(result1, ExprValue::Int(42));
 
     // Test with second variant (String, Bool)
-    let value2 = ExprValue::Custom(Box::new(CustomValue {
+    let value2 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyType".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![
-            ExprValue::String("hello".to_string()),
-            ExprValue::Bool(false),
-        ]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::String("hello".to_string())),
+            Arc::new(ExprValue::Bool(false)),
+        ])),
+    });
     let result2 = checked_ast
         .quick_eval_fn("main", "get_first", vec![value2])
         .await
@@ -666,17 +685,20 @@ async fn custom_type_wrapping_nested_custom_type_union() {
         .expect("Should compile");
 
     // Test with A variant (wrapped in B)
-    let value1 = ExprValue::Custom(Box::new(CustomValue {
+    let value1 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "B".to_string(),
         variant: None,
-        content: ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "A".to_string(),
             variant: None,
-            content: ExprValue::Tuple(vec![ExprValue::Int(1), ExprValue::Int(2)]),
+            content: Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+            ])),
         })),
-    }));
+    });
     let result1 = checked_ast
         .quick_eval_fn("main", "get_second", vec![value1])
         .await
@@ -684,15 +706,15 @@ async fn custom_type_wrapping_nested_custom_type_union() {
     assert_eq!(result1, ExprValue::Int(2));
 
     // Test with (String, Int) variant
-    let value2 = ExprValue::Custom(Box::new(CustomValue {
+    let value2 = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "B".to_string(),
         variant: None,
-        content: ExprValue::Tuple(vec![
-            ExprValue::String("test".to_string()),
-            ExprValue::Int(99),
-        ]),
-    }));
+        content: Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::String("test".to_string())),
+            Arc::new(ExprValue::Int(99)),
+        ])),
+    });
     let result2 = checked_ast
         .quick_eval_fn("main", "get_second", vec![value2])
         .await

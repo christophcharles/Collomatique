@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 use collo_ml::{
     EvalObject, ExprValue, SimpleType, SqliteDatabaseConnection, ViewBuilder, ViewObject,
@@ -169,13 +170,13 @@ fn test_collection_field_access() {
     if let Some(ExprValue::List(values)) = students_field {
         assert_eq!(values.len(), 2);
         assert!(
-            values.contains(&ExprValue::Object(CollectionObjectId::Student(StudentId(
-                1
+            values.contains(&Arc::new(ExprValue::Object(CollectionObjectId::Student(
+                StudentId(1)
             ))))
         );
         assert!(
-            values.contains(&ExprValue::Object(CollectionObjectId::Student(StudentId(
-                2
+            values.contains(&Arc::new(ExprValue::Object(CollectionObjectId::Student(
+                StudentId(2)
             ))))
         );
     } else {
@@ -263,11 +264,11 @@ fn test_nested_collection_field_access() {
         assert_eq!(outer_values.len(), 2);
 
         // Check that we have nested lists
-        for value in outer_values {
-            if let ExprValue::List(inner_values) = value {
+        for value in &outer_values {
+            if let ExprValue::List(inner_values) = &**value {
                 inner_values
                     .iter()
-                    .all(|x| matches!(x, ExprValue::Object(CollectionObjectId::Student(_))));
+                    .all(|x| matches!(&**x, ExprValue::Object(CollectionObjectId::Student(_))));
             } else {
                 panic!("Expected nested List");
             }

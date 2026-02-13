@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn simple_string() {
@@ -136,9 +137,9 @@ async fn boolean_list() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Bool(true),
-            ExprValue::Bool(false),
-            ExprValue::Bool(true),
+            Arc::new(ExprValue::Bool(true)),
+            Arc::new(ExprValue::Bool(false)),
+            Arc::new(ExprValue::Bool(true)),
         ]))
     );
 }
@@ -160,9 +161,9 @@ async fn number_list() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(0),
-            ExprValue::Int(42),
-            ExprValue::Int(-1)
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Int(-1))
         ]))
     );
 }
@@ -199,9 +200,9 @@ async fn cardinality_of_list_in_param() {
             "main",
             "f",
             vec![ExprValue::List(Vec::from([
-                ExprValue::Int(0),
-                ExprValue::Int(42),
-                ExprValue::Int(-1),
+                Arc::new(ExprValue::Int(0)),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Int(-1)),
             ]))],
         )
         .await
@@ -226,11 +227,11 @@ async fn range() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(-3),
-            ExprValue::Int(-2),
-            ExprValue::Int(-1),
-            ExprValue::Int(0),
-            ExprValue::Int(1),
+            Arc::new(ExprValue::Int(-3)),
+            Arc::new(ExprValue::Int(-2)),
+            Arc::new(ExprValue::Int(-1)),
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(1)),
         ]))
     );
 }
@@ -283,5 +284,8 @@ async fn range_with_one_element() {
         .quick_eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(Vec::from([ExprValue::Int(4)])));
+    assert_eq!(
+        result,
+        ExprValue::List(Vec::from([Arc::new(ExprValue::Int(4))]))
+    );
 }

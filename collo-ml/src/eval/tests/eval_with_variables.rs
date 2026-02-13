@@ -39,13 +39,13 @@ async fn eval_with_variables_simple_reified_var() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(5)]
+        vec![Arc::new(ExprValue::Int(5))]
     )));
 
     let my_var_constraints = &var_defs.vars[&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(5)],
+        vec![Arc::new(ExprValue::Int(5))],
     )]
         .0;
 
@@ -94,19 +94,19 @@ async fn eval_with_variables_multiple_calls_same_var() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(3)]
+        vec![Arc::new(ExprValue::Int(3))]
     )));
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(7)]
+        vec![Arc::new(ExprValue::Int(7))]
     )));
 
     // Verify constraints for MyVar(3)
     let my_var_3_constraints = &var_defs.vars[&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(3)],
+        vec![Arc::new(ExprValue::Int(3))],
     )]
         .0;
     assert_eq!(my_var_3_constraints.len(), 1);
@@ -121,7 +121,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
     let my_var_7_constraints = &var_defs.vars[&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(7)],
+        vec![Arc::new(ExprValue::Int(7))],
     )]
         .0;
     assert_eq!(my_var_7_constraints.len(), 1);
@@ -172,17 +172,17 @@ async fn eval_with_variables_in_forall() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(0)]
+        vec![Arc::new(ExprValue::Int(0))]
     )));
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(1)]
+        vec![Arc::new(ExprValue::Int(1))]
     )));
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(2)]
+        vec![Arc::new(ExprValue::Int(2))]
     )));
 
     // Verify each has the correct constraint
@@ -190,7 +190,7 @@ async fn eval_with_variables_in_forall() {
         let my_var_constraints = &var_defs.vars[&(
             "main".to_string(),
             "MyVar".to_string(),
-            vec![ExprValue::Int(i)],
+            vec![Arc::new(ExprValue::Int(i))],
         )]
             .0;
         assert_eq!(my_var_constraints.len(), 1);
@@ -250,19 +250,19 @@ async fn eval_with_variables_multiple_vars() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "Var1".to_string(),
-        vec![ExprValue::Int(5)]
+        vec![Arc::new(ExprValue::Int(5))]
     )));
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "Var2".to_string(),
-        vec![ExprValue::Int(10)]
+        vec![Arc::new(ExprValue::Int(10))]
     )));
 
     // Verify Var1 constraint
     let var1_constraints = &var_defs.vars[&(
         "main".to_string(),
         "Var1".to_string(),
-        vec![ExprValue::Int(5)],
+        vec![Arc::new(ExprValue::Int(5))],
     )]
         .0;
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
@@ -276,7 +276,7 @@ async fn eval_with_variables_multiple_vars() {
     let var2_constraints = &var_defs.vars[&(
         "main".to_string(),
         "Var2".to_string(),
-        vec![ExprValue::Int(10)],
+        vec![Arc::new(ExprValue::Int(10))],
     )]
         .0;
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
@@ -331,13 +331,13 @@ async fn eval_with_variables_var_with_multiple_params() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(3), ExprValue::Int(7)]
+        vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))]
     )));
 
     let my_var_constraints = &var_defs.vars[&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(3), ExprValue::Int(7)],
+        vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
     )]
         .0;
     assert_eq!(my_var_constraints.len(), 1);
@@ -394,13 +394,13 @@ async fn eval_with_variables_simple_var_list() {
     assert!(var_defs.var_lists.contains_key(&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(3), ExprValue::Int(7)]
+        vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))]
     )));
 
     let var_list_constraints = &var_defs.var_lists[&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(3), ExprValue::Int(7)],
+        vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
     )]
         .0;
 
@@ -456,12 +456,12 @@ async fn eval_with_variables_var_list_in_nested_forall() {
     let env = NoObjectEnv {};
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::<NoObject, SqliteDatabaseConnection>::Int(1),
-        ExprValue::Int(2),
+        Arc::new(ExprValue::<NoObject, SqliteDatabaseConnection>::Int(1)),
+        Arc::new(ExprValue::Int(2)),
     ]));
     let ys = ExprValue::List(Vec::from([
-        ExprValue::<NoObject, SqliteDatabaseConnection>::Int(10),
-        ExprValue::Int(20),
+        Arc::new(ExprValue::<NoObject, SqliteDatabaseConnection>::Int(10)),
+        Arc::new(ExprValue::Int(20)),
     ]));
 
     let (result, var_defs) = checked_ast
@@ -484,29 +484,29 @@ async fn eval_with_variables_var_list_in_nested_forall() {
     assert!(var_defs.var_lists.contains_key(&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(1), ExprValue::Int(10)]
+        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(10))]
     )));
     assert!(var_defs.var_lists.contains_key(&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(1), ExprValue::Int(20)]
+        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(20))]
     )));
     assert!(var_defs.var_lists.contains_key(&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(2), ExprValue::Int(10)]
+        vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(10))]
     )));
     assert!(var_defs.var_lists.contains_key(&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(2), ExprValue::Int(20)]
+        vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(20))]
     )));
 
     // Verify one of them has the correct structure
     let var_list_1_10 = &var_defs.var_lists[&(
         "main".to_string(),
         "MyVarList".to_string(),
-        vec![ExprValue::Int(1), ExprValue::Int(10)],
+        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(10))],
     )]
         .0;
 
@@ -560,13 +560,13 @@ async fn eval_with_variables_with_let_expr() {
     assert!(var_defs.vars.contains_key(&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(10)]
+        vec![Arc::new(ExprValue::Int(10))]
     )));
 
     let my_var_constraints = &var_defs.vars[&(
         "main".to_string(),
         "MyVar".to_string(),
-        vec![ExprValue::Int(10)],
+        vec![Arc::new(ExprValue::Int(10))],
     )]
         .0;
     assert_eq!(my_var_constraints.len(), 1);

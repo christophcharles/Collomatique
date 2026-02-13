@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use super::*;
 use crate::database::{DbValue, SqlQueryError, SqliteDatabaseConnection, SqliteDatabaseDriver};
@@ -166,12 +167,12 @@ async fn to_expr_value_custom_type_wraps_int() {
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
-        Ok(ExprValue::Custom(Box::new(CustomValue {
+        Ok(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Int(42),
-        })))
+            content: Arc::new(ExprValue::Int(42)),
+        }))
     );
 }
 
@@ -200,12 +201,12 @@ async fn to_expr_value_custom_nullable_int() {
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
-        Ok(ExprValue::Custom(Box::new(CustomValue {
+        Ok(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MaybeInt".to_string(),
             variant: None,
-            content: ExprValue::Int(42),
-        })))
+            content: Arc::new(ExprValue::Int(42)),
+        }))
     );
 }
 
@@ -221,12 +222,12 @@ async fn to_expr_value_custom_nullable_null() {
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
-        Ok(ExprValue::Custom(Box::new(CustomValue {
+        Ok(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MaybeInt".to_string(),
             variant: None,
-            content: ExprValue::None,
-        })))
+            content: Arc::new(ExprValue::None),
+        }))
     );
 }
 
@@ -246,17 +247,17 @@ async fn to_expr_value_nested_custom_types() {
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
-        Ok(ExprValue::Custom(Box::new(CustomValue {
+        Ok(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Deep".to_string(),
             variant: None,
-            content: ExprValue::Custom(Box::new(CustomValue {
+            content: Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyInt".to_string(),
                 variant: None,
-                content: ExprValue::Int(42),
+                content: Arc::new(ExprValue::Int(42)),
             })),
-        })))
+        }))
     );
 }
 
@@ -276,12 +277,12 @@ async fn to_expr_value_enum_variant() {
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
-        Ok(ExprValue::Custom(Box::new(CustomValue {
+        Ok(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Wrapper".to_string(),
             variant: Some("A".to_string()),
-            content: ExprValue::Int(42),
-        })))
+            content: Arc::new(ExprValue::Int(42)),
+        }))
     );
 }
 
@@ -318,30 +319,28 @@ async fn try_from_expr_value_none() {
 
 #[tokio::test]
 async fn try_from_expr_value_custom_unwraps() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::Custom(Box::new(CustomValue {
-            module: "main".to_string(),
-            type_name: "MyInt".to_string(),
-            variant: None,
-            content: ExprValue::Int(42),
-        }));
+    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
+        module: "main".to_string(),
+        type_name: "MyInt".to_string(),
+        variant: None,
+        content: Arc::new(ExprValue::Int(42)),
+    });
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Int(42)));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_nested_custom_unwraps() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::Custom(Box::new(CustomValue {
+    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
+        module: "main".to_string(),
+        type_name: "Deep".to_string(),
+        variant: None,
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
-            type_name: "Deep".to_string(),
+            type_name: "MyInt".to_string(),
             variant: None,
-            content: ExprValue::Custom(Box::new(CustomValue {
-                module: "main".to_string(),
-                type_name: "MyInt".to_string(),
-                variant: None,
-                content: ExprValue::Int(42),
-            })),
-        }));
+            content: Arc::new(ExprValue::Int(42)),
+        })),
+    });
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Int(42)));
 }
 
@@ -352,21 +351,24 @@ async fn try_from_expr_value_nested_custom_unwraps() {
 #[tokio::test]
 async fn try_from_expr_value_list_rejected() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::List(vec![ExprValue::Int(1)]);
+        ExprValue::List(vec![Arc::new(ExprValue::Int(1))]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_tuple_rejected() {
     let val: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::Tuple(vec![ExprValue::Int(1)]);
+        ExprValue::Tuple(vec![Arc::new(ExprValue::Int(1))]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_struct_rejected() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::Struct([("x".to_string(), ExprValue::Int(1))].into_iter().collect());
+    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Struct(
+        [("x".to_string(), Arc::new(ExprValue::Int(1)))]
+            .into_iter()
+            .collect(),
+    );
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
@@ -671,22 +673,28 @@ async fn typed_query_list_of_structs() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::Struct(
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(1)),
-                ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Alice".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
-        ExprValue::Struct(
+        )),
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(2)),
-                ("name".to_string(), ExprValue::String("Bob".to_string())),
+                ("id".to_string(), Arc::new(ExprValue::Int(2))),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Bob".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
+        )),
     ]);
     assert_eq!(result, expected);
 }
@@ -723,8 +731,11 @@ async fn typed_query_optional_struct_found() {
 
     let expected = ExprValue::Struct(
         [
-            ("id".to_string(), ExprValue::Int(1)),
-            ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ("id".to_string(), Arc::new(ExprValue::Int(1))),
+            (
+                "name".to_string(),
+                Arc::new(ExprValue::String("Alice".to_string())),
+            ),
         ]
         .into_iter()
         .collect(),
@@ -817,31 +828,37 @@ async fn typed_query_custom_wrapped_rows() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Row".to_string(),
             variant: None,
-            content: ExprValue::Struct(
+            content: Arc::new(ExprValue::Struct(
                 [
-                    ("id".to_string(), ExprValue::Int(1)),
-                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                    ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                    (
+                        "name".to_string(),
+                        Arc::new(ExprValue::String("Alice".to_string())),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
-            ),
+            )),
         })),
-        ExprValue::Custom(Box::new(CustomValue {
+        Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Row".to_string(),
             variant: None,
-            content: ExprValue::Struct(
+            content: Arc::new(ExprValue::Struct(
                 [
-                    ("id".to_string(), ExprValue::Int(2)),
-                    ("name".to_string(), ExprValue::String("Bob".to_string())),
+                    ("id".to_string(), Arc::new(ExprValue::Int(2))),
+                    (
+                        "name".to_string(),
+                        Arc::new(ExprValue::String("Bob".to_string())),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
-            ),
+            )),
         })),
     ]);
     assert_eq!(result, expected);
@@ -882,38 +899,44 @@ async fn typed_query_custom_wrapped_fields() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::Struct(
+        Arc::new(ExprValue::Struct(
             [
                 (
                     "id".to_string(),
-                    ExprValue::Custom(Box::new(CustomValue {
+                    Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "MyInt".to_string(),
                         variant: None,
-                        content: ExprValue::Int(1),
+                        content: Arc::new(ExprValue::Int(1)),
                     })),
                 ),
-                ("name".to_string(), ExprValue::String("Alice".to_string())),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Alice".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
-        ExprValue::Struct(
+        )),
+        Arc::new(ExprValue::Struct(
             [
                 (
                     "id".to_string(),
-                    ExprValue::Custom(Box::new(CustomValue {
+                    Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "MyInt".to_string(),
                         variant: None,
-                        content: ExprValue::Int(2),
+                        content: Arc::new(ExprValue::Int(2)),
                     })),
                 ),
-                ("name".to_string(), ExprValue::String("Bob".to_string())),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Bob".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
+        )),
     ]);
     assert_eq!(result, expected);
 }
@@ -1011,14 +1034,17 @@ async fn typed_query_param_conversion() {
         .await
         .unwrap();
 
-    let expected = ExprValue::List(vec![ExprValue::Struct(
+    let expected = ExprValue::List(vec![Arc::new(ExprValue::Struct(
         [
-            ("id".to_string(), ExprValue::Int(1)),
-            ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ("id".to_string(), Arc::new(ExprValue::Int(1))),
+            (
+                "name".to_string(),
+                Arc::new(ExprValue::String("Alice".to_string())),
+            ),
         ]
         .into_iter()
         .collect(),
-    )]);
+    ))]);
     assert_eq!(result, expected);
 }
 
@@ -1046,14 +1072,14 @@ async fn typed_query_tuple_output() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::Tuple(vec![
-            ExprValue::Int(1),
-            ExprValue::String("Alice".to_string()),
-        ]),
-        ExprValue::Tuple(vec![
-            ExprValue::Int(2),
-            ExprValue::String("Bob".to_string()),
-        ]),
+        Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::String("Alice".to_string())),
+        ])),
+        Arc::new(ExprValue::Tuple(vec![
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::String("Bob".to_string())),
+        ])),
     ]);
     assert_eq!(result, expected);
 }
@@ -1091,8 +1117,11 @@ async fn typed_query_optional_takes_first_row() {
     // Should return first row (Alice), ignoring Bob
     let expected = ExprValue::Struct(
         [
-            ("id".to_string(), ExprValue::Int(1)),
-            ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ("id".to_string(), Arc::new(ExprValue::Int(1))),
+            (
+                "name".to_string(),
+                Arc::new(ExprValue::String("Alice".to_string())),
+            ),
         ]
         .into_iter()
         .collect(),
@@ -1145,29 +1174,35 @@ async fn typed_query_custom_list_type() {
         .await
         .unwrap();
 
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyList".to_string(),
         variant: None,
-        content: ExprValue::List(vec![
-            ExprValue::Struct(
+        content: Arc::new(ExprValue::List(vec![
+            Arc::new(ExprValue::Struct(
                 [
-                    ("id".to_string(), ExprValue::Int(1)),
-                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                    ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                    (
+                        "name".to_string(),
+                        Arc::new(ExprValue::String("Alice".to_string())),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
-            ),
-            ExprValue::Struct(
+            )),
+            Arc::new(ExprValue::Struct(
                 [
-                    ("id".to_string(), ExprValue::Int(2)),
-                    ("name".to_string(), ExprValue::String("Bob".to_string())),
+                    ("id".to_string(), Arc::new(ExprValue::Int(2))),
+                    (
+                        "name".to_string(),
+                        Arc::new(ExprValue::String("Bob".to_string())),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
-            ),
-        ]),
-    }));
+            )),
+        ])),
+    });
     assert_eq!(result, expected);
 }
 
@@ -1195,19 +1230,22 @@ async fn typed_query_custom_optional_type() {
         .await
         .unwrap();
 
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyOption".to_string(),
         variant: None,
-        content: ExprValue::Struct(
+        content: Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(1)),
-                ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Alice".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
-    }));
+        )),
+    });
     assert_eq!(result, expected);
 }
 
@@ -1236,24 +1274,27 @@ async fn typed_query_custom_enum_type() {
         .unwrap();
 
     // Double-wrapped: outer Custom is the enum root, inner Custom is the Element variant
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyEnum".to_string(),
         variant: None,
-        content: ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyEnum".to_string(),
             variant: Some("Element".to_string()),
-            content: ExprValue::Struct(
+            content: Arc::new(ExprValue::Struct(
                 [
-                    ("id".to_string(), ExprValue::Int(1)),
-                    ("name".to_string(), ExprValue::String("Alice".to_string())),
+                    ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                    (
+                        "name".to_string(),
+                        Arc::new(ExprValue::String("Alice".to_string())),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
-            ),
+            )),
         })),
-    }));
+    });
     assert_eq!(result, expected);
 }
 
@@ -1275,34 +1316,40 @@ async fn eval_query_call_list() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
     let expected = ExprValue::List(vec![
-        ExprValue::Struct(
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(1)),
-                ("name".to_string(), ExprValue::String("Alice".to_string())),
+                ("id".to_string(), Arc::new(ExprValue::Int(1))),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Alice".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
-        ExprValue::Struct(
+        )),
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(2)),
-                ("name".to_string(), ExprValue::String("Bob".to_string())),
+                ("id".to_string(), Arc::new(ExprValue::Int(2))),
+                (
+                    "name".to_string(),
+                    Arc::new(ExprValue::String("Bob".to_string())),
+                ),
             ]
             .into_iter()
             .collect(),
-        ),
+        )),
     ]);
     assert_eq!(result, expected);
 }
@@ -1321,12 +1368,12 @@ async fn eval_query_call_optional_found() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
         .await
@@ -1334,8 +1381,11 @@ async fn eval_query_call_optional_found() {
 
     let expected = ExprValue::Struct(
         [
-            ("id".to_string(), ExprValue::Int(1)),
-            ("name".to_string(), ExprValue::String("Alice".to_string())),
+            ("id".to_string(), Arc::new(ExprValue::Int(1))),
+            (
+                "name".to_string(),
+                Arc::new(ExprValue::String("Alice".to_string())),
+            ),
         ]
         .into_iter()
         .collect(),
@@ -1357,12 +1407,12 @@ async fn eval_query_call_optional_not_found() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
         .await
@@ -1428,7 +1478,10 @@ async fn typed_query_list_of_ints() {
         .await
         .unwrap();
 
-    let expected = ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)]);
+    let expected = ExprValue::List(vec![
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]);
     assert_eq!(result, expected);
 }
 
@@ -1453,8 +1506,8 @@ async fn typed_query_list_of_strings() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::String("Alice".to_string()),
-        ExprValue::String("Bob".to_string()),
+        Arc::new(ExprValue::String("Alice".to_string())),
+        Arc::new(ExprValue::String("Bob".to_string())),
     ]);
     assert_eq!(result, expected);
 }
@@ -1590,18 +1643,21 @@ async fn eval_query_call_primitive_list() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
-    let expected = ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)]);
+    let expected = ExprValue::List(vec![
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]);
     assert_eq!(result, expected);
 }
 
@@ -1618,12 +1674,12 @@ async fn eval_query_call_optional_primitive_found() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
         .await
@@ -1645,12 +1701,12 @@ async fn eval_query_call_optional_primitive_not_found() {
     let handle = test_handle(&pool).await;
 
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
         .await
@@ -1689,12 +1745,12 @@ async fn typed_query_nullable_custom_nullable_string_found() {
         .unwrap();
 
     // Should be Custom(NullableString, String("Alice"))
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "NullableString".to_string(),
         variant: None,
-        content: ExprValue::String("Alice".to_string()),
-    }));
+        content: Arc::new(ExprValue::String("Alice".to_string())),
+    });
     assert_eq!(result, expected);
 }
 
@@ -1751,12 +1807,12 @@ async fn typed_query_nullable_custom_nullable_string_null_value() {
         .unwrap();
 
     // Row exists → goes through data branch (NullableString), NULL in column → None inside NullableString
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "NullableString".to_string(),
         variant: None,
-        content: ExprValue::None,
-    }));
+        content: Arc::new(ExprValue::None),
+    });
     assert_eq!(result, expected);
 }
 
@@ -1795,42 +1851,42 @@ async fn typed_query_deeply_nested_enum_with_value() {
         .unwrap();
 
     // Expected: MyWrapper(MyOuterEnum(MyOuterEnum::Row(MyOuter(MyInnerEnum(MyInnerEnum::Int(MyInt(1)))))))
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyWrapper".to_string(),
         variant: None,
-        content: ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyOuterEnum".to_string(),
             variant: None,
-            content: ExprValue::Custom(Box::new(CustomValue {
+            content: Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyOuterEnum".to_string(),
                 variant: Some("Row".to_string()),
-                content: ExprValue::Custom(Box::new(CustomValue {
+                content: Arc::new(ExprValue::Custom(CustomValue {
                     module: "main".to_string(),
                     type_name: "MyOuter".to_string(),
                     variant: None,
-                    content: ExprValue::Custom(Box::new(CustomValue {
+                    content: Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "MyInnerEnum".to_string(),
                         variant: None,
-                        content: ExprValue::Custom(Box::new(CustomValue {
+                        content: Arc::new(ExprValue::Custom(CustomValue {
                             module: "main".to_string(),
                             type_name: "MyInnerEnum".to_string(),
                             variant: Some("Int".to_string()),
-                            content: ExprValue::Custom(Box::new(CustomValue {
+                            content: Arc::new(ExprValue::Custom(CustomValue {
                                 module: "main".to_string(),
                                 type_name: "MyInt".to_string(),
                                 variant: None,
-                                content: ExprValue::Int(1),
+                                content: Arc::new(ExprValue::Int(1)),
                             })),
                         })),
                     })),
                 })),
             })),
         })),
-    }));
+    });
     assert_eq!(result, expected);
 }
 
@@ -1869,27 +1925,27 @@ async fn typed_query_deeply_nested_enum_empty() {
         .unwrap();
 
     // Expected: MyWrapper(MyOuterEnum(MyOuterEnum::None(MyNone(None))))
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyWrapper".to_string(),
         variant: None,
-        content: ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyOuterEnum".to_string(),
             variant: None,
-            content: ExprValue::Custom(Box::new(CustomValue {
+            content: Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyOuterEnum".to_string(),
                 variant: Some("None".to_string()),
-                content: ExprValue::Custom(Box::new(CustomValue {
+                content: Arc::new(ExprValue::Custom(CustomValue {
                     module: "main".to_string(),
                     type_name: "MyNone".to_string(),
                     variant: None,
-                    content: ExprValue::None,
+                    content: Arc::new(ExprValue::None),
                 })),
             })),
         })),
-    }));
+    });
     assert_eq!(result, expected);
 }
 
@@ -1938,38 +1994,38 @@ async fn typed_query_list_with_nullable_custom_fields() {
         .unwrap();
 
     let expected = ExprValue::List(vec![
-        ExprValue::Struct(
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(1)),
+                ("id".to_string(), Arc::new(ExprValue::Int(1))),
                 (
                     "val".to_string(),
-                    ExprValue::Custom(Box::new(CustomValue {
+                    Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "NullableString".to_string(),
                         variant: None,
-                        content: ExprValue::String("hello".to_string()),
+                        content: Arc::new(ExprValue::String("hello".to_string())),
                     })),
                 ),
             ]
             .into_iter()
             .collect(),
-        ),
-        ExprValue::Struct(
+        )),
+        Arc::new(ExprValue::Struct(
             [
-                ("id".to_string(), ExprValue::Int(2)),
+                ("id".to_string(), Arc::new(ExprValue::Int(2))),
                 (
                     "val".to_string(),
-                    ExprValue::Custom(Box::new(CustomValue {
+                    Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "NullableString".to_string(),
                         variant: None,
-                        content: ExprValue::None,
+                        content: Arc::new(ExprValue::None),
                     })),
                 ),
             ]
             .into_iter()
             .collect(),
-        ),
+        )),
     ]);
     assert_eq!(result, expected);
 }
@@ -1996,23 +2052,23 @@ async fn eval_query_nullable_custom_type() {
 
     let handle = test_handle(&pool).await;
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "NullableString".to_string(),
         variant: None,
-        content: ExprValue::String("hello".to_string()),
-    }));
+        content: Arc::new(ExprValue::String("hello".to_string())),
+    });
     assert_eq!(result, expected);
 }
 
@@ -2034,12 +2090,12 @@ async fn eval_query_nullable_custom_type_not_found() {
 
     let handle = test_handle(&pool).await;
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
         .await
@@ -2075,53 +2131,53 @@ async fn eval_query_deeply_nested_enum() {
 
     let handle = test_handle(&pool).await;
     let ast = checked(input).await;
-    let db_arg = ExprValue::Custom(Box::new(CustomValue {
+    let db_arg = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Db".to_string(),
         variant: None,
-        content: ExprValue::Database(handle),
-    }));
+        content: Arc::new(ExprValue::Database(handle)),
+    });
     let result = ast
         .quick_eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
     // MyWrapper(MyOuterEnum(MyOuterEnum::Row(MyOuter(MyInnerEnum(MyInnerEnum::Int(MyInt(1)))))))
-    let expected = ExprValue::Custom(Box::new(CustomValue {
+    let expected = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyWrapper".to_string(),
         variant: None,
-        content: ExprValue::Custom(Box::new(CustomValue {
+        content: Arc::new(ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyOuterEnum".to_string(),
             variant: None,
-            content: ExprValue::Custom(Box::new(CustomValue {
+            content: Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "MyOuterEnum".to_string(),
                 variant: Some("Row".to_string()),
-                content: ExprValue::Custom(Box::new(CustomValue {
+                content: Arc::new(ExprValue::Custom(CustomValue {
                     module: "main".to_string(),
                     type_name: "MyOuter".to_string(),
                     variant: None,
-                    content: ExprValue::Custom(Box::new(CustomValue {
+                    content: Arc::new(ExprValue::Custom(CustomValue {
                         module: "main".to_string(),
                         type_name: "MyInnerEnum".to_string(),
                         variant: None,
-                        content: ExprValue::Custom(Box::new(CustomValue {
+                        content: Arc::new(ExprValue::Custom(CustomValue {
                             module: "main".to_string(),
                             type_name: "MyInnerEnum".to_string(),
                             variant: Some("Int".to_string()),
-                            content: ExprValue::Custom(Box::new(CustomValue {
+                            content: Arc::new(ExprValue::Custom(CustomValue {
                                 module: "main".to_string(),
                                 type_name: "MyInt".to_string(),
                                 variant: None,
-                                content: ExprValue::Int(1),
+                                content: Arc::new(ExprValue::Int(1)),
                             })),
                         })),
                     })),
                 })),
             })),
         })),
-    }));
+    });
     assert_eq!(result, expected);
 }

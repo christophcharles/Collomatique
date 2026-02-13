@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Equality Tests (==) ==========
@@ -220,8 +222,14 @@ async fn eq_lists_with_params() {
         .await
         .expect("Should compile");
 
-    let list1 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list1 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let list2 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list1, list2])

@@ -305,9 +305,9 @@ async fn origin_with_list_param() {
         .expect("Should compile");
 
     let mut list_items = Vec::new();
-    list_items.push(ExprValue::Int(1));
-    list_items.push(ExprValue::Int(2));
-    list_items.push(ExprValue::Int(3));
+    list_items.push(Arc::new(ExprValue::Int(1)));
+    list_items.push(Arc::new(ExprValue::Int(2)));
+    list_items.push(Arc::new(ExprValue::Int(3)));
 
     let list_arg = ExprValue::List(list_items.clone());
 

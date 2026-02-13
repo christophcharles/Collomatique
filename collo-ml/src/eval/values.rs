@@ -15,6 +15,7 @@ use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use crate::traits::{EvalObject, FieldConversionError};
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(
@@ -33,14 +34,17 @@ pub enum ExprValue<T: EvalObject, D: DatabaseConnection> {
     Constraint(Vec<ConstraintWithOrigin<T, D>>),
     String(String),
     Object(T),
-    List(Vec<ExprValue<T, D>>),
-    Tuple(Vec<ExprValue<T, D>>),
-    Struct(BTreeMap<String, ExprValue<T, D>>),
-    Custom(Box<CustomValue<T, D>>),
+    List(Vec<Arc<ExprValue<T, D>>>),
+    Tuple(Vec<Arc<ExprValue<T, D>>>),
+    Struct(BTreeMap<String, Arc<ExprValue<T, D>>>),
+    Custom(CustomValue<T, D>),
     Database(DatabaseHandle<D>),
 }
 
-/// Data for custom type values (boxed to keep ExprValue enum small)
+/// Data for custom type values.
+///
+/// The `content` field uses `Arc<ExprValue>` to provide both recursion-breaking
+/// indirection and cheap cloning.
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = "T: EvalObject"),
@@ -57,7 +61,7 @@ pub struct CustomValue<T: EvalObject, D: DatabaseConnection> {
     pub type_name: String,
     /// The variant name if this is an enum variant (e.g., Some("Ok") for Result::Ok)
     pub variant: Option<String>,
-    pub content: ExprValue<T, D>,
+    pub content: Arc<ExprValue<T, D>>,
 }
 
 impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExprValue<T, D> {
@@ -169,18 +173,29 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     })
                     .collect(),
             ),
-            ExprValue::List(list) => {
-                ExprValue::List(list.iter().map(|x| x.with_origin(origin)).collect())
-            }
-            ExprValue::Tuple(elements) => {
-                ExprValue::Tuple(elements.iter().map(|x| x.with_origin(origin)).collect())
-            }
+            ExprValue::List(list) => ExprValue::List(
+                list.iter()
+                    .map(|x| Arc::new(x.with_origin(origin)))
+                    .collect(),
+            ),
+            ExprValue::Tuple(elements) => ExprValue::Tuple(
+                elements
+                    .iter()
+                    .map(|x| Arc::new(x.with_origin(origin)))
+                    .collect(),
+            ),
             ExprValue::Struct(fields) => ExprValue::Struct(
                 fields
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.with_origin(origin)))
+                    .map(|(k, v)| (k.clone(), Arc::new(v.with_origin(origin))))
                     .collect(),
             ),
+            ExprValue::Custom(custom) => ExprValue::Custom(CustomValue {
+                module: custom.module.clone(),
+                type_name: custom.type_name.clone(),
+                variant: custom.variant.clone(),
+                content: Arc::new(custom.content.with_origin(origin)),
+            }),
             _ => self.clone(),
         }
     }
@@ -403,7 +418,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
     }
 
     pub unsafe fn convert_to_unchecked(
-        self,
+        &self,
         env: &T::Env,
         cache: &mut T::Cache,
         target: &SimpleType,
@@ -415,23 +430,25 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     .as_simple()
                     .expect("Inner list target type should have already been checked");
                 Self::List(
-                    list.into_iter()
-                        .map(|x| unsafe { x.convert_to_unchecked(env, cache, inner_target) })
+                    list.iter()
+                        .map(|x| {
+                            Arc::new(unsafe { x.convert_to_unchecked(env, cache, inner_target) })
+                        })
                         .collect(),
                 )
             }
-            (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(val as f64)),
+            (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(*val as f64)),
             // Conversion to string
-            (Self::String(v), SimpleType::String) => Self::String(v),
+            (Self::String(v), SimpleType::String) => Self::String(v.clone()),
             (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
             // Tuple conversion: element-wise
             (Self::Tuple(elements), SimpleType::Tuple(target_elems)) => {
                 let converted = elements
-                    .into_iter()
+                    .iter()
                     .zip(target_elems.iter())
                     .map(|(e, t)| {
                         let target_type = t.as_simple().expect("Type should be concrete");
-                        unsafe { e.convert_to_unchecked(env, cache, target_type) }
+                        Arc::new(unsafe { e.convert_to_unchecked(env, cache, target_type) })
                     })
                     .collect();
                 Self::Tuple(converted)
@@ -439,45 +456,38 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             // Structs: field-wise conversion
             (Self::Struct(fields), SimpleType::Struct(target_fields)) => {
                 let converted = fields
-                    .into_iter()
+                    .iter()
                     .map(|(k, v)| {
-                        let target_type = target_fields.get(&k).expect("Field should exist");
+                        let target_type = target_fields.get(k).expect("Field should exist");
                         let inner_target =
                             target_type.as_simple().expect("Type should be concrete");
                         let converted_v =
-                            unsafe { v.convert_to_unchecked(env, cache, inner_target) };
-                        (k, converted_v)
+                            Arc::new(unsafe { v.convert_to_unchecked(env, cache, inner_target) });
+                        (k.clone(), converted_v)
                     })
                     .collect();
                 Self::Struct(converted)
             }
             // Custom type conversions
             // Converting TO a Custom type: wrap the value
-            (value, SimpleType::Custom(module, type_name, variant)) => {
-                Self::Custom(Box::new(CustomValue {
-                    module: module.clone(),
-                    type_name: type_name.clone(),
-                    variant: variant.clone(),
-                    content: value,
-                }))
-            }
+            (value, SimpleType::Custom(module, type_name, variant)) => Self::Custom(CustomValue {
+                module: module.clone(),
+                type_name: type_name.clone(),
+                variant: variant.clone(),
+                content: Arc::new(value.clone()),
+            }),
             // Converting FROM a Custom type: unwrap and convert the content
             (Self::Custom(custom), target_typ) => {
                 // Recursively convert the inner content to the target type
-                unsafe {
-                    custom
-                        .content
-                        .clone()
-                        .convert_to_unchecked(env, cache, target_typ)
-                }
+                unsafe { custom.content.convert_to_unchecked(env, cache, target_typ) }
             }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
-            (orig, _) => orig,
+            (_, _) => self.clone(),
         }
     }
 
     pub fn convert_to(
-        self,
+        &self,
         env: &T::Env,
         cache: &mut T::Cache,
         target: &ConcreteType,

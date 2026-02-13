@@ -139,9 +139,9 @@ async fn sum_with_param_list() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(10),
-        ExprValue::Int(20),
-        ExprValue::Int(30),
+        Arc::new(ExprValue::Int(10)),
+        Arc::new(ExprValue::Int(20)),
+        Arc::new(ExprValue::Int(30)),
     ]));
 
     let result = checked_ast
@@ -563,9 +563,9 @@ async fn forall_bool_with_param_list() {
         .expect("Should compile");
 
     let all_positive = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![all_positive])
@@ -574,9 +574,9 @@ async fn forall_bool_with_param_list() {
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let has_negative = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(-2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(-2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![has_negative])

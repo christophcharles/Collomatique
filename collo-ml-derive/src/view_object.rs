@@ -224,7 +224,7 @@ fn generate_field_value(
                         );
                         return quote! {
                             ::collo_ml::ExprValue::List(
-                                #field_name.iter().map(|x| #inner).collect(),
+                                #field_name.iter().map(|x| ::std::sync::Arc::new(#inner)).collect(),
                             ),
                         };
                     }

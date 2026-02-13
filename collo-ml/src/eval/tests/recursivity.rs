@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // =============================================================================
 // FUNCTION FORWARD REFERENCES
@@ -469,7 +470,7 @@ async fn recursive_function_with_recursive_type() {
         .expect("Should evaluate");
 
     // Create a parent node with value 10 and two children
-    let children = ExprValue::List(vec![leaf5, leaf3]);
+    let children = ExprValue::List(vec![Arc::new(leaf5), Arc::new(leaf3)]);
     let parent = checked_ast
         .quick_eval_fn("main", "node", vec![ExprValue::Int(10), children])
         .await
@@ -601,7 +602,7 @@ async fn recursion_with_list_processing() {
 
     // Note: This is a quirky way to compute length that removes first element each time
     // For unique lists it works correctly
-    let empty = ExprValue::List(vec![]);
+    let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result0 = checked_ast
         .quick_eval_fn("main", "list_length", vec![empty])
         .await
@@ -622,7 +623,7 @@ async fn recursion_with_accumulator_pattern() {
         .await
         .expect("Should compile");
 
-    let empty = ExprValue::List(vec![]);
+    let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result_empty = checked_ast
         .quick_eval_fn("main", "list_sum", vec![empty])
         .await
@@ -630,9 +631,9 @@ async fn recursion_with_accumulator_pattern() {
     assert_eq!(result_empty, ExprValue::Int(0));
 
     let list123 = ExprValue::List(vec![
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]);
     let result123 = checked_ast
         .quick_eval_fn("main", "list_sum", vec![list123])

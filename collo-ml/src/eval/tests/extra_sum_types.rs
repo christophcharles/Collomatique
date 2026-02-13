@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // =============================================================================
@@ -458,8 +460,8 @@ async fn function_sum_return_list_types() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 2);
-            assert_eq!(list[0], ExprValue::Int(1));
-            assert_eq!(list[1], ExprValue::Int(2));
+            assert_eq!(*list[0], ExprValue::Int(1));
+            assert_eq!(*list[1], ExprValue::Int(2));
         }
         _ => panic!("Expected List"),
     }
@@ -615,9 +617,9 @@ async fn nested_option_list_through_functions() {
     match result {
         ExprValue::List(outer_list) => {
             assert_eq!(outer_list.len(), 3);
-            assert_eq!(outer_list[0], ExprValue::Int(1));
-            assert_eq!(outer_list[1], ExprValue::None);
-            assert_eq!(outer_list[2], ExprValue::Int(3));
+            assert_eq!(*outer_list[0], ExprValue::Int(1));
+            assert_eq!(*outer_list[1], ExprValue::None);
+            assert_eq!(*outer_list[2], ExprValue::Int(3));
         }
         _ => panic!("Expected List"),
     }
@@ -644,7 +646,7 @@ async fn function_sum_type_with_list_variants() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert_eq!(list[0], ExprValue::Int(1));
+            assert_eq!(*list[0], ExprValue::Int(1));
         }
         _ => panic!("Expected List"),
     }

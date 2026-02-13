@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== If Expression Tests ==========
@@ -138,9 +140,9 @@ async fn if_returning_list() {
     assert_eq!(
         result_true,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 
@@ -150,7 +152,10 @@ async fn if_returning_list() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(5)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5))
+        ]))
     );
 }
 
@@ -314,7 +319,10 @@ async fn if_with_empty_list() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2))
+        ]))
     );
 
     let result_false = checked_ast

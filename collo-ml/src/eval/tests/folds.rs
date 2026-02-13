@@ -222,9 +222,9 @@ async fn fold_with_param_list() {
         .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Int(10),
-        ExprValue::Int(20),
-        ExprValue::Int(30),
+        Arc::new(ExprValue::Int(10)),
+        Arc::new(ExprValue::Int(20)),
+        Arc::new(ExprValue::Int(30)),
     ]);
 
     let result = checked_ast
@@ -308,9 +308,9 @@ async fn fold_building_list() {
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 3);
-            assert_eq!(elements[0], ExprValue::Int(1));
-            assert_eq!(elements[1], ExprValue::Int(2));
-            assert_eq!(elements[2], ExprValue::Int(3));
+            assert_eq!(*elements[0], ExprValue::Int(1));
+            assert_eq!(*elements[1], ExprValue::Int(2));
+            assert_eq!(*elements[2], ExprValue::Int(3));
         }
         _ => panic!("Expected List"),
     }
@@ -335,10 +335,10 @@ async fn fold_reverse_list() {
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
-            assert_eq!(elements[0], ExprValue::Int(4));
-            assert_eq!(elements[1], ExprValue::Int(3));
-            assert_eq!(elements[2], ExprValue::Int(2));
-            assert_eq!(elements[3], ExprValue::Int(1));
+            assert_eq!(*elements[0], ExprValue::Int(4));
+            assert_eq!(*elements[1], ExprValue::Int(3));
+            assert_eq!(*elements[2], ExprValue::Int(2));
+            assert_eq!(*elements[3], ExprValue::Int(1));
         }
         _ => panic!("Expected List"),
     }
@@ -362,8 +362,8 @@ async fn fold_filter_list() {
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
-            assert_eq!(elements[0], ExprValue::Int(2));
-            assert_eq!(elements[1], ExprValue::Int(4));
+            assert_eq!(*elements[0], ExprValue::Int(2));
+            assert_eq!(*elements[1], ExprValue::Int(4));
         }
         _ => panic!("Expected List"),
     }
@@ -392,8 +392,8 @@ async fn fold_conditional_list_building() {
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
-            assert_eq!(elements[0], ExprValue::Int(2));
-            assert_eq!(elements[1], ExprValue::Int(4));
+            assert_eq!(*elements[0], ExprValue::Int(2));
+            assert_eq!(*elements[1], ExprValue::Int(4));
         }
         _ => panic!("Expected List"),
     }
@@ -668,10 +668,10 @@ async fn rfold_list_building() {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
             // Processes right to left, so builds [4, 3, 2, 1]
-            assert_eq!(elements[0], ExprValue::Int(4));
-            assert_eq!(elements[1], ExprValue::Int(3));
-            assert_eq!(elements[2], ExprValue::Int(2));
-            assert_eq!(elements[3], ExprValue::Int(1));
+            assert_eq!(*elements[0], ExprValue::Int(4));
+            assert_eq!(*elements[1], ExprValue::Int(3));
+            assert_eq!(*elements[2], ExprValue::Int(2));
+            assert_eq!(*elements[3], ExprValue::Int(1));
         }
         _ => panic!("Expected List"),
     }
@@ -833,8 +833,8 @@ async fn fold_flatten_nested_list() {
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 6);
-            assert_eq!(elements[0], ExprValue::Int(1));
-            assert_eq!(elements[5], ExprValue::Int(6));
+            assert_eq!(*elements[0], ExprValue::Int(1));
+            assert_eq!(*elements[5], ExprValue::Int(6));
         }
         _ => panic!("Expected List"),
     }

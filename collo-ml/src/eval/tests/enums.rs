@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // =============================================================================
 // BASIC ENUM DECLARATION AND CONSTRUCTION
@@ -22,12 +23,12 @@ async fn enum_basic_construction() {
 
     assert_eq!(
         ok_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 
     let error_result = checked_ast
@@ -41,12 +42,12 @@ async fn enum_basic_construction() {
 
     assert_eq!(
         error_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Error".to_string()),
-            content: ExprValue::String("oops".to_string()),
-        }))
+            content: Arc::new(ExprValue::String("oops".to_string())),
+        })
     );
 }
 
@@ -68,12 +69,12 @@ async fn enum_unit_variant() {
 
     assert_eq!(
         some_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("Some".to_string()),
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 
     let none_result = checked_ast
@@ -83,12 +84,12 @@ async fn enum_unit_variant() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: ExprValue::None,
-        }))
+            content: Arc::new(ExprValue::None),
+        })
     );
 }
 
@@ -109,12 +110,12 @@ async fn enum_unit_variant_with_empty_parens() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: ExprValue::None,
-        }))
+            content: Arc::new(ExprValue::None),
+        })
     );
 }
 
@@ -135,12 +136,12 @@ async fn enum_unit_variant_with_explicit_none() {
 
     assert_eq!(
         none_result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Option".to_string(),
             variant: Some("None".to_string()),
-            content: ExprValue::None,
-        }))
+            content: Arc::new(ExprValue::None),
+        })
     );
 }
 
@@ -166,12 +167,12 @@ async fn enum_variant_as_return_type() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 }
 
@@ -194,12 +195,12 @@ async fn enum_variant_subtype_of_root() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 }
 
@@ -228,12 +229,15 @@ async fn enum_tuple_variant() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyEnum".to_string(),
             variant: Some("TupleCase".to_string()),
-            content: ExprValue::Tuple(vec![ExprValue::Int(42), ExprValue::Bool(true)]),
-        }))
+            content: Arc::new(ExprValue::Tuple(vec![
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Bool(true))
+            ])),
+        })
     );
 }
 
@@ -262,19 +266,19 @@ async fn enum_struct_variant() {
 
     assert_eq!(
         result,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "MyEnum".to_string(),
             variant: Some("StructCase".to_string()),
-            content: ExprValue::Struct(
+            content: Arc::new(ExprValue::Struct(
                 [
-                    ("x".to_string(), ExprValue::Int(42)),
-                    ("y".to_string(), ExprValue::Bool(true))
+                    ("x".to_string(), Arc::new(ExprValue::Int(42))),
+                    ("y".to_string(), Arc::new(ExprValue::Bool(true)))
                 ]
                 .into_iter()
                 .collect()
-            ),
-        }))
+            )),
+        })
     );
 }
 
@@ -295,24 +299,24 @@ async fn enum_match_expression() {
         .await
         .expect("Should compile");
 
-    let ok_value = ExprValue::Custom(Box::new(CustomValue {
+    let ok_value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Ok".to_string()),
-        content: ExprValue::Int(42),
-    }));
+        content: Arc::new(ExprValue::Int(42)),
+    });
     let result1 = checked_ast
         .quick_eval_fn("main", "extract", vec![ok_value])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(42));
 
-    let error_value = ExprValue::Custom(Box::new(CustomValue {
+    let error_value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Error".to_string()),
-        content: ExprValue::String("oops".to_string()),
-    }));
+        content: Arc::new(ExprValue::String("oops".to_string())),
+    });
     let result2 = checked_ast
         .quick_eval_fn("main", "extract", vec![error_value])
         .await
@@ -340,12 +344,12 @@ async fn enum_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_true,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: ExprValue::Int(1),
-        }))
+            content: Arc::new(ExprValue::Int(1)),
+        })
     );
 
     let result_false = checked_ast
@@ -354,12 +358,12 @@ async fn enum_in_if_expression() {
         .expect("Should evaluate");
     assert_eq!(
         result_false,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Error".to_string()),
-            content: ExprValue::String("no".to_string()),
-        }))
+            content: Arc::new(ExprValue::String("no".to_string())),
+        })
     );
 }
 
@@ -377,12 +381,12 @@ async fn qualified_type_in_function_param() {
         .await
         .expect("Should compile");
 
-    let value = ExprValue::Custom(Box::new(CustomValue {
+    let value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Result".to_string(),
         variant: Some("Ok".to_string()),
-        content: ExprValue::Int(42),
-    }));
+        content: Arc::new(ExprValue::Int(42)),
+    });
 
     let result = checked_ast
         .quick_eval_fn("main", "extract_ok", vec![value])
@@ -410,17 +414,17 @@ async fn qualified_type_in_list() {
     assert_eq!(
         result,
         ExprValue::List(vec![
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "Result".to_string(),
                 variant: Some("Ok".to_string()),
-                content: ExprValue::Int(1),
+                content: Arc::new(ExprValue::Int(1)),
             })),
-            ExprValue::Custom(Box::new(CustomValue {
+            Arc::new(ExprValue::Custom(CustomValue {
                 module: "main".to_string(),
                 type_name: "Result".to_string(),
                 variant: Some("Ok".to_string()),
-                content: ExprValue::Int(2),
+                content: Arc::new(ExprValue::Int(2)),
             }))
         ])
     );
@@ -442,12 +446,12 @@ async fn qualified_type_maybe() {
         .expect("Should evaluate");
     assert_eq!(
         result_some,
-        ExprValue::Custom(Box::new(CustomValue {
+        ExprValue::Custom(CustomValue {
             module: "main".to_string(),
             type_name: "Result".to_string(),
             variant: Some("Ok".to_string()),
-            content: ExprValue::Int(42),
-        }))
+            content: Arc::new(ExprValue::Int(42)),
+        })
     );
 
     let result_none = checked_ast

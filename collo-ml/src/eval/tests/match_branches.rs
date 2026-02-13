@@ -263,9 +263,9 @@ async fn match_emptylist_to_list_conversion() {
     assert_eq!(
         result_list,
         ExprValue::List(vec![
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ])
     );
 }
@@ -411,9 +411,9 @@ async fn match_list_vs_int() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
             ])],
         )
         .await
@@ -452,7 +452,10 @@ async fn match_emptylist_separately() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
+            vec![ExprValue::List(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+            ])],
         )
         .await
         .expect("Should evaluate");
@@ -479,7 +482,10 @@ async fn match_list_with_filter() {
         .quick_eval_fn(
             "main",
             "f",
-            vec![ExprValue::List(vec![ExprValue::Int(1), ExprValue::Int(2)])],
+            vec![ExprValue::List(vec![
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+            ])],
         )
         .await
         .expect("Should evaluate");
@@ -617,9 +623,9 @@ async fn match_with_sum_in_branch() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
             ])],
         )
         .await
@@ -653,9 +659,9 @@ async fn match_with_list_comprehension_in_branch() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(1),
-                ExprValue::Int(2),
-                ExprValue::Int(3),
+                Arc::new(ExprValue::Int(1)),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
             ])],
         )
         .await
@@ -663,9 +669,9 @@ async fn match_with_list_comprehension_in_branch() {
     assert_eq!(
         result_list,
         ExprValue::List(vec![
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6)
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6))
         ])
     );
 
@@ -673,7 +679,10 @@ async fn match_with_list_comprehension_in_branch() {
         .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
-    assert_eq!(result_int, ExprValue::List(vec![ExprValue::Int(10)]));
+    assert_eq!(
+        result_int,
+        ExprValue::List(vec![Arc::new(ExprValue::Int(10))])
+    );
 }
 
 // ========== Match with LinExpr and Constraints ==========
@@ -811,9 +820,9 @@ async fn match_complex_type_dispatch() {
             "main",
             "f",
             vec![ExprValue::List(vec![
-                ExprValue::Int(2),
-                ExprValue::Int(3),
-                ExprValue::Int(5),
+                Arc::new(ExprValue::Int(2)),
+                Arc::new(ExprValue::Int(3)),
+                Arc::new(ExprValue::Int(5)),
             ])],
         )
         .await
@@ -903,9 +912,9 @@ async fn match_returning_list() {
     assert_eq!(
         result_int,
         ExprValue::List(vec![
-            ExprValue::Int(5),
-            ExprValue::Int(10),
-            ExprValue::Int(15)
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(15))
         ])
     );
 

@@ -829,10 +829,12 @@ impl<
             let constraints = match constraints_expr {
                 ExprValue::Constraint(constraints) => constraints,
                 ExprValue::List(list)
-                    if list.iter().all(|x| matches!(x, ExprValue::Constraint(_))) =>
+                    if list
+                        .iter()
+                        .all(|x| matches!(&**x, ExprValue::Constraint(_))) =>
                 {
                     list.into_iter()
-                        .flat_map(|x| match x {
+                        .flat_map(|x| match Arc::unwrap_or_clone(x) {
                             ExprValue::Constraint(constraints) => constraints.into_iter(),
                             _ => unreachable!(),
                         })
@@ -858,13 +860,15 @@ impl<
 
         // Phase 3: Process objective results
         for (module, fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
-            let mut values_list = vec![];
+            let mut values_list: Vec<ExprValue<T, D::Connection>> = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
                 ExprValue::Constraint(constraint) => {
                     values_list.push(ExprValue::Constraint(constraint))
                 }
-                ExprValue::List(list) => values_list.extend(list),
+                ExprValue::List(list) => {
+                    values_list.extend(list.into_iter().map(Arc::unwrap_or_clone))
+                }
                 _ => panic!(
                     "Function {}::{} returned {:?} instead of LinExpr",
                     module, fn_name, fn_result
@@ -919,7 +923,7 @@ impl<
                 module: var_module,
                 name: var_name,
                 from_list: None,
-                params: var_args.into_iter().map(Arc::new).collect(),
+                params: var_args,
             };
             let new_var = ProblemVar::Reified(reified_var);
 
@@ -941,7 +945,7 @@ impl<
                     module: var_list_module.clone(),
                     name: var_list_name.clone(),
                     from_list: Some(i),
-                    params: var_list_args.iter().map(|a| Arc::new(a.clone())).collect(),
+                    params: var_list_args.clone(),
                 };
                 let new_var = ProblemVar::Reified(reified_var);
 
@@ -996,12 +1000,12 @@ fn wrap_db_in_custom_layers<T: EvalObject, D: DatabaseDriver>(
             };
             let underlying = global_env.get_custom_type_underlying(module, &qualified)?;
             let inner = wrap_db_in_custom_layers::<T, D>(db_value, underlying, global_env)?;
-            Some(ExprValue::Custom(Box::new(CustomValue {
+            Some(ExprValue::Custom(CustomValue {
                 module: module.clone(),
                 type_name: root.clone(),
                 variant: variant.clone(),
-                content: inner,
-            })))
+                content: Arc::new(inner),
+            }))
         }
         _ => None,
     }

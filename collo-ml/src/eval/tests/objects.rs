@@ -6,6 +6,7 @@ use crate::eval::{
 use crate::semantics::SimpleType;
 use crate::traits::FieldConversionError;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum SimpleObject {
@@ -59,17 +60,17 @@ impl EvalObject for SimpleObject {
             },
             SimpleObject::Room1 => match field {
                 "num" => Some(ExprValue::Int(406)),
-                "students" => Some(ExprValue::List(Vec::from([ExprValue::Object(
+                "students" => Some(ExprValue::List(Vec::from([Arc::new(ExprValue::Object(
                     SimpleObject::Student1,
-                )]))),
+                ))]))),
                 "first_student" => Some(ExprValue::Object(SimpleObject::Student1)),
                 _ => None,
             },
             SimpleObject::Room2 => match field {
                 "num" => Some(ExprValue::Int(406)),
                 "students" => Some(ExprValue::List(Vec::from([
-                    ExprValue::Object(SimpleObject::Student1),
-                    ExprValue::Object(SimpleObject::Student2),
+                    Arc::new(ExprValue::Object(SimpleObject::Student1)),
+                    Arc::new(ExprValue::Object(SimpleObject::Student2)),
                 ]))),
                 "first_student" => Some(ExprValue::Object(SimpleObject::Student2)),
                 _ => None,
@@ -174,8 +175,8 @@ async fn global_list() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Object(SimpleObject::Student1),
-            ExprValue::Object(SimpleObject::Student2),
+            Arc::new(ExprValue::Object(SimpleObject::Student1)),
+            Arc::new(ExprValue::Object(SimpleObject::Student2)),
         ]))
     );
 }

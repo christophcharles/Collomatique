@@ -153,7 +153,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             pretty_docstring,
         };
 
-        let result = Arc::new(Arc::unwrap_or_clone(naked_result).with_origin(&origin));
+        let result = Arc::new(naked_result.with_origin(&origin));
         self.funcs.insert(
             (module.to_string(), fn_name.to_string(), args),
             (Arc::clone(&result), origin.clone()),
@@ -198,7 +198,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         };
 
         let params: Vec<ExprValue<T, D::Connection>> =
-            args[1..].iter().map(|a| ExprValue::clone(a)).collect();
+            args[1..].iter().map(|a| (**a).clone()).collect();
         let global_env = &self.ast.global_env;
 
         let result = db_handle.query(&sql, params, out_type, global_env).await;
@@ -299,11 +299,9 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                     fn_call_result
                 ),
             };
-            let unwrapped_args = v_args.into_iter().map(Arc::unwrap_or_clone).collect();
-            var_def.vars.insert(
-                (v_module, v_name, unwrapped_args),
-                (constraint, new_origin.clone()),
-            );
+            var_def
+                .vars
+                .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
         }
 
         for ((vl_module, vl_name, vl_args), (fn_module, fn_name)) in self.var_lists {
@@ -312,9 +310,11 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                 .get(&(fn_module.clone(), fn_name.clone(), vl_args.clone()))
                 .expect("Fn call should be valid");
             let constraints: Vec<_> = match &**fn_call_result {
-                ExprValue::List(cs) if cs.iter().all(|x| matches!(x, ExprValue::Constraint(_))) => {
+                ExprValue::List(cs)
+                    if cs.iter().all(|x| matches!(&**x, ExprValue::Constraint(_))) =>
+                {
                     cs.iter()
-                        .map(|c| match c {
+                        .map(|c| match &**c {
                             ExprValue::Constraint(c) => c
                                 .iter()
                                 .map(|c_with_o| c_with_o.constraint.clone())
@@ -331,9 +331,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                     fn_call_result
                 ),
             };
-            let unwrapped_args = vl_args.into_iter().map(Arc::unwrap_or_clone).collect();
             var_def.var_lists.insert(
-                (vl_module, vl_name, unwrapped_args),
+                (vl_module, vl_name, vl_args),
                 (constraints, new_origin.clone()),
             );
         }
@@ -350,11 +349,11 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
 #[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
 pub struct VariableDefinitions<T: EvalObject, D: DatabaseConnection> {
     pub vars: BTreeMap<
-        (String, String, Vec<ExprValue<T, D>>),
+        (String, String, Vec<Arc<ExprValue<T, D>>>),
         (Vec<Constraint<IlpVar<T, D>>>, Origin<T, D>),
     >,
     pub var_lists: BTreeMap<
-        (String, String, Vec<ExprValue<T, D>>),
+        (String, String, Vec<Arc<ExprValue<T, D>>>),
         (Vec<Vec<Constraint<IlpVar<T, D>>>>, Origin<T, D>),
     >,
 }

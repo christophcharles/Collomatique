@@ -124,7 +124,10 @@ async fn fn_multi_call() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(0), ExprValue::Int(42)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(42))
+        ]))
     );
 }
 
@@ -260,10 +263,10 @@ async fn fn_returning_list() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
         ]))
     );
 }
@@ -347,7 +350,7 @@ async fn fn_returning_list_of_linexpr() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(**x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -612,9 +615,9 @@ async fn fn_with_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(4),
-            ExprValue::Int(9)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(9))
         ]))
     );
 }
@@ -640,9 +643,9 @@ async fn fn_with_collection_operations() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6)
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6))
         ]))
     );
 }
@@ -793,9 +796,9 @@ async fn helper_fn_for_transformation() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(3),
-            ExprValue::Int(5),
-            ExprValue::Int(7)
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(7))
         ]))
     );
 }
@@ -943,9 +946,9 @@ async fn fn_call_in_quantifier() {
         .expect("Should compile");
 
     let all_valid = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(5),
-        ExprValue::Int(9),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(9)),
     ]));
     let result_true = checked_ast
         .quick_eval_fn("main", "f", vec![all_valid])
@@ -953,7 +956,10 @@ async fn fn_call_in_quantifier() {
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
-    let has_invalid = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(15)]));
+    let has_invalid = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(15)),
+    ]));
     let result_false = checked_ast
         .quick_eval_fn("main", "f", vec![has_invalid])
         .await
@@ -975,9 +981,9 @@ async fn fn_call_in_list_comprehension() {
         .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(2),
-        ExprValue::Int(3),
-        ExprValue::Int(4),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
     ]));
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list])
@@ -986,9 +992,9 @@ async fn fn_call_in_list_comprehension() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(4),
-            ExprValue::Int(9),
-            ExprValue::Int(16)
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(9)),
+            Arc::new(ExprValue::Int(16))
         ]))
     );
 }

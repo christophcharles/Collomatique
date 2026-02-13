@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== Simple List Comprehensions ==========
@@ -19,9 +21,9 @@ async fn list_comp_simple_identity() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -43,9 +45,9 @@ async fn list_comp_with_arithmetic() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6)
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6))
         ]))
     );
 }
@@ -67,9 +69,9 @@ async fn list_comp_with_addition() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(11),
-            ExprValue::Int(12),
-            ExprValue::Int(13)
+            Arc::new(ExprValue::Int(11)),
+            Arc::new(ExprValue::Int(12)),
+            Arc::new(ExprValue::Int(13))
         ]))
     );
 }
@@ -92,10 +94,10 @@ async fn list_comp_with_range() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(4),
-            ExprValue::Int(9),
-            ExprValue::Int(16),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(9)),
+            Arc::new(ExprValue::Int(16)),
         ]))
     );
 }
@@ -110,7 +112,10 @@ async fn list_comp_with_param() {
         .await
         .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
+    ]));
 
     let result = checked_ast
         .quick_eval_fn("main", "f", vec![list])
@@ -118,7 +123,10 @@ async fn list_comp_with_param() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(10), ExprValue::Int(20)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(20))
+        ]))
     );
 }
 
@@ -139,10 +147,10 @@ async fn list_comp_boolean_expression() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Bool(false),
-            ExprValue::Bool(false),
-            ExprValue::Bool(true),
-            ExprValue::Bool(true)
+            Arc::new(ExprValue::Bool(false)),
+            Arc::new(ExprValue::Bool(false)),
+            Arc::new(ExprValue::Bool(true)),
+            Arc::new(ExprValue::Bool(true))
         ]))
     );
 }
@@ -165,9 +173,9 @@ async fn list_comp_constant_body() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(42),
-            ExprValue::Int(42),
-            ExprValue::Int(42)
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Int(42))
         ]))
     );
 }
@@ -190,7 +198,10 @@ async fn list_comp_with_simple_filter() {
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(5)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5))
+        ]))
     );
 }
 
@@ -211,10 +222,10 @@ async fn list_comp_filter_even_numbers() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6),
-            ExprValue::Int(8),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(8)),
         ]))
     );
 }
@@ -237,11 +248,11 @@ async fn list_comp_filter_with_transformation() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(6),
-            ExprValue::Int(10),
-            ExprValue::Int(14),
-            ExprValue::Int(18),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(14)),
+            Arc::new(ExprValue::Int(18)),
         ]))
     );
 }
@@ -280,9 +291,9 @@ async fn list_comp_filter_all_match() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(3)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3))
         ]))
     );
 }
@@ -304,9 +315,9 @@ async fn list_comp_filter_complex_condition() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(4),
-            ExprValue::Int(5),
-            ExprValue::Int(6),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(6)),
         ]))
     );
 }
@@ -328,10 +339,10 @@ async fn list_comp_filter_with_param() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(6),
-            ExprValue::Int(7),
-            ExprValue::Int(8),
-            ExprValue::Int(9),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(7)),
+            Arc::new(ExprValue::Int(8)),
+            Arc::new(ExprValue::Int(9)),
         ]))
     );
 }
@@ -356,10 +367,10 @@ async fn list_comp_two_vars_simple() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(11),
-            ExprValue::Int(21),
-            ExprValue::Int(12),
-            ExprValue::Int(22),
+            Arc::new(ExprValue::Int(11)),
+            Arc::new(ExprValue::Int(21)),
+            Arc::new(ExprValue::Int(12)),
+            Arc::new(ExprValue::Int(22)),
         ]))
     );
 }
@@ -382,10 +393,10 @@ async fn list_comp_two_vars_multiplication() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(8),
-            ExprValue::Int(10),
-            ExprValue::Int(12),
-            ExprValue::Int(15),
+            Arc::new(ExprValue::Int(8)),
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(12)),
+            Arc::new(ExprValue::Int(15)),
         ]))
     );
 }
@@ -408,10 +419,10 @@ async fn list_comp_two_vars_with_ranges() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(11),
-            ExprValue::Int(12),
-            ExprValue::Int(12),
-            ExprValue::Int(13)
+            Arc::new(ExprValue::Int(11)),
+            Arc::new(ExprValue::Int(12)),
+            Arc::new(ExprValue::Int(12)),
+            Arc::new(ExprValue::Int(13))
         ]))
     );
 }
@@ -436,16 +447,16 @@ async fn list_comp_two_vars_with_filter() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
-            ExprValue::Int(5),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
-            ExprValue::Int(5),
-            ExprValue::Int(4),
-            ExprValue::Int(5),
-            ExprValue::Int(5)
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(5))
         ]))
     );
 }
@@ -469,10 +480,10 @@ async fn list_comp_two_vars_filter_on_first() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(3),
-            ExprValue::Int(6),
-            ExprValue::Int(4),
-            ExprValue::Int(8),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(8)),
         ]))
     );
 }
@@ -496,10 +507,10 @@ async fn list_comp_two_vars_filter_on_second() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(3),
-            ExprValue::Int(5),
-            ExprValue::Int(4),
-            ExprValue::Int(6),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(5)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6)),
         ]))
     );
 }
@@ -524,10 +535,10 @@ async fn list_comp_two_vars_filter_on_both() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(3),
-            ExprValue::Int(6),
-            ExprValue::Int(4),
-            ExprValue::Int(8),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(8)),
         ]))
     );
 }
@@ -551,10 +562,10 @@ async fn list_comp_cartesian_product() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(2)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(2))
         ]))
     );
 }
@@ -576,10 +587,10 @@ async fn list_comp_with_dependent_limit() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(3),
-            ExprValue::Int(4),
-            ExprValue::Int(5)
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(3)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(5))
         ]))
     );
 }
@@ -603,10 +614,10 @@ async fn list_comp_over_union() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(2),
-            ExprValue::Int(4),
-            ExprValue::Int(6),
-            ExprValue::Int(8),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(8)),
         ]))
     );
 }
@@ -628,7 +639,10 @@ async fn list_comp_over_difference() {
     // [1, 3] * 2 = [2, 6]
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(6)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(6))
+        ]))
     );
 }
 
@@ -652,7 +666,7 @@ async fn list_comp_linexpr_simple() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(**x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -676,7 +690,7 @@ async fn list_comp_linexpr_with_coefficient() {
     match result {
         ExprValue::List(list) => {
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(**x, ExprValue::LinExpr(_))));
             // Could verify each LinExpr is coef * $V()
         }
         _ => panic!("Expected List of LinExpr"),
@@ -702,7 +716,7 @@ async fn list_comp_linexpr_with_filter() {
         ExprValue::List(list) => {
             // Even numbers in [1..6): 2, 4
             assert_eq!(list.len(), 2);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(**x, ExprValue::LinExpr(_))));
         }
         _ => panic!("Expected List of LinExpr"),
     }
@@ -769,10 +783,10 @@ async fn list_comp_with_if_expression_body() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(6),
-            ExprValue::Int(8),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(6)),
+            Arc::new(ExprValue::Int(8)),
         ]))
     );
 }
@@ -813,12 +827,12 @@ async fn list_comp_two_vars_one_used() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(1),
-            ExprValue::Int(1),
-            ExprValue::Int(1),
-            ExprValue::Int(2),
-            ExprValue::Int(2),
-            ExprValue::Int(2)
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(2)),
+            Arc::new(ExprValue::Int(2))
         ]))
     );
 }
@@ -843,9 +857,9 @@ async fn list_comp_with_multiple_operations() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(8),
-            ExprValue::Int(10),
-            ExprValue::Int(10)
+            Arc::new(ExprValue::Int(8)),
+            Arc::new(ExprValue::Int(10)),
+            Arc::new(ExprValue::Int(10))
         ]))
     );
 }

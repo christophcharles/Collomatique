@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 use collo_ml::traits::{FieldConversionError, SimpleFieldType};
 use collo_ml::{
@@ -190,9 +191,9 @@ fn test_collections_of_ints() {
 
     if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("grades") {
         assert_eq!(values.len(), 3);
-        assert!(values.contains(&ExprValue::Int(85)));
-        assert!(values.contains(&ExprValue::Int(90)));
-        assert!(values.contains(&ExprValue::Int(78)));
+        assert!(values.contains(&Arc::new(ExprValue::Int(85))));
+        assert!(values.contains(&Arc::new(ExprValue::Int(90))));
+        assert!(values.contains(&Arc::new(ExprValue::Int(78))));
     } else {
         panic!("Expected List of Ints");
     }
@@ -220,8 +221,8 @@ fn test_collections_of_bools() {
 
     if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("flags") {
         assert_eq!(values.len(), 2);
-        assert!(values.contains(&ExprValue::Bool(true)));
-        assert!(values.contains(&ExprValue::Bool(false)));
+        assert!(values.contains(&Arc::new(ExprValue::Bool(true))));
+        assert!(values.contains(&Arc::new(ExprValue::Bool(false))));
     } else {
         panic!("Expected List of Bools");
     }
@@ -255,8 +256,8 @@ fn test_collections_of_objects() {
     if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("courses")
     {
         assert_eq!(values.len(), 2);
-        assert_eq!(values[0], ExprValue::Object(TestObjectId));
-        assert_eq!(values[1], ExprValue::Object(TestObjectId));
+        assert_eq!(*values[0], ExprValue::Object(TestObjectId));
+        assert_eq!(*values[1], ExprValue::Object(TestObjectId));
     } else {
         panic!("Expected List of Objects");
     }
@@ -495,17 +496,17 @@ fn test_get_field_for_recursive_vecs() {
     {
         assert_eq!(values.len(), 2);
         assert_eq!(
-            values[0],
+            *values[0],
             ExprValue::List(Vec::from([
-                ExprValue::Object(TestObjectId),
-                ExprValue::Object(TestObjectId)
+                Arc::new(ExprValue::Object(TestObjectId)),
+                Arc::new(ExprValue::Object(TestObjectId))
             ]),)
         );
         assert_eq!(
-            values[1],
+            *values[1],
             ExprValue::List(Vec::from([
-                ExprValue::Object(TestObjectId),
-                ExprValue::Object(TestObjectId)
+                Arc::new(ExprValue::Object(TestObjectId)),
+                Arc::new(ExprValue::Object(TestObjectId))
             ]),)
         );
     } else {

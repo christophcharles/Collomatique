@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 // ========== Panic Expression Tests ==========
 
@@ -169,9 +170,9 @@ async fn panic_with_list() {
             assert_eq!(
                 *value,
                 ExprValue::List(vec![
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3)
+                    Arc::new(ExprValue::Int(1)),
+                    Arc::new(ExprValue::Int(2)),
+                    Arc::new(ExprValue::Int(3))
                 ])
             );
         }
