@@ -173,10 +173,20 @@ impl PanelNumbers {
     }
 }
 
+#[derive(Clone)]
+enum MainScriptAst {
+    /// No compilation has been attempted yet
+    Uninitialized,
+    /// Compilation is in progress (async task running)
+    Compiling,
+    /// Compilation completed with a result
+    Ready(Result<ProblemBuilder, SimpleProblemError>),
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data, Desc>,
-    main_script_ast: Option<Result<ProblemBuilder, SimpleProblemError>>,
+    main_script_ast: MainScriptAst,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
@@ -417,6 +427,10 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        let ast_option = match &self.main_script_ast {
+            MainScriptAst::Ready(result) => Some(result.clone()),
+            _ => None,
+        };
         self.main_script
             .sender()
             .send(main_script::MainScriptInput::Update(
@@ -426,7 +440,7 @@ impl EditorPanel {
                     .params
                     .main_script
                     .clone(),
-                self.main_script_ast.clone(),
+                ast_option.clone(),
             ))
             .unwrap();
         self.colloscope
@@ -434,7 +448,7 @@ impl EditorPanel {
             .send(colloscope::ColloscopeInput::Update(
                 self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
-                self.main_script_ast.clone(),
+                ast_option,
             ))
             .unwrap();
     }
@@ -746,7 +760,7 @@ impl Component for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
-            main_script_ast: None,
+            main_script_ast: MainScriptAst::Uninitialized,
             dirty: false,
             toast_info: None,
             pages_names,
@@ -1033,7 +1047,7 @@ impl Component for EditorPanel {
                 }
 
                 // Update the AST field
-                self.main_script_ast = Some(result);
+                self.main_script_ast = MainScriptAst::Ready(result);
 
                 // Trigger interface update
                 self.send_msg_for_interface_update(sender);
@@ -1108,13 +1122,13 @@ impl EditorPanel {
         }
 
         if (self.data.get_data().get_inner_data().params.main_script == previous_script)
-            && self.main_script_ast.is_some()
+            && !matches!(self.main_script_ast, MainScriptAst::Uninitialized)
         {
             return;
         }
 
-        // Set to None to indicate compilation in progress
-        self.main_script_ast = None;
+        // Set to Compiling to indicate compilation in progress
+        self.main_script_ast = MainScriptAst::Compiling;
 
         // Get the current main script source
         let source = self
