@@ -1,10 +1,11 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
 
 let group_is_not_empty_if_next_group_is_not_empty(db: Db, group: Group) -> Constraint =
     /* this works for last group too - because last+1 is never attributed, the
        corresponding reified variable will always be zero */
-    $GroupHasStudents(db, group.group_list.id, group.num) >== $GroupHasStudents(db, group.group_list.id, group.num+1);
+    $GroupHasStudents(db, GroupListId(group.group_list.id), GroupNum(group.num)) >== $GroupHasStudents(db, GroupListId(group.group_list.id), GroupNum(group.num+1));
 
 pub let constraint(db: Db) -> Constraint =
     forall group in @[Group] where !group.group_list.prefilled {

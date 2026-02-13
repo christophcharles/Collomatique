@@ -1,0 +1,5 @@
+pub type SlotId = Int;
+pub type StudentId = Int;
+pub type GroupListId = Int;
+pub type GlobalWeek = Int;
+pub type GroupNum = Int;

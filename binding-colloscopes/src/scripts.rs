@@ -45,6 +45,10 @@ pub const MODULES: &[(&str, &str)] = &[
     ),
     ("collomatique_db", DB_MODULE_SOURCE),
     (
+        "collomatique_types",
+        include_str!("scripts/collomatique_types.collo-ml"),
+    ),
+    (
         "collomatique_vars",
         include_str!("scripts/collomatique_vars.collo-ml"),
     ),

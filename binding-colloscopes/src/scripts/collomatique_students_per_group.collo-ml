@@ -1,18 +1,19 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
 
 let count_students_in_group(group: Group) -> LinExpr =
     if group.group_list.prefilled {
         LinExpr(|group.prefilled_students|)
     } else {
         sum student in group.group_list.students {
-            $StudentInGroup(student.id, group.group_list.id, group.num)
+            $StudentInGroup(StudentId(student.id), GroupListId(group.group_list.id), GroupNum(group.num))
         }
     };
 
 let enforce_min_students_per_group(db: Db, group: Group) -> Constraint =
     count_students_in_group(group) >==
-        group.group_list.min_students_per_group * $GroupHasStudents(db, group.group_list.id, group.num);
+        group.group_list.min_students_per_group * $GroupHasStudents(db, GroupListId(group.group_list.id), GroupNum(group.num));
 
 let enforce_max_students_per_group(group: Group) -> Constraint =
     count_students_in_group(group) <== group.group_list.max_students_per_group;

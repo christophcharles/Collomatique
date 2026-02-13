@@ -1,5 +1,6 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
 
 let count_groups_in_interrogation(interrogation: Interrogation) -> LinExpr =
     match interrogation.group_list {
@@ -17,7 +18,7 @@ let max_group_per_interrogation(interrogation: Interrogation) -> Constraint =
     count_groups_in_interrogation(interrogation) <== interrogation.subject.max_group_per_interrogation;
 
 let min_group_per_interrogation(db: Db, interrogation: Interrogation) -> Constraint =
-    count_groups_in_interrogation(interrogation) >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(db, interrogation.slot_id, interrogation.week.num);
+    count_groups_in_interrogation(interrogation) >== interrogation.subject.min_group_per_interrogation * $InterrogationHasGroups(db, SlotId(interrogation.slot_id), GlobalWeek(interrogation.week.num));
 
 let enforce_group_count(db: Db, interrogation: Interrogation) -> Constraint =
     max_group_per_interrogation(interrogation) and min_group_per_interrogation(db, interrogation);

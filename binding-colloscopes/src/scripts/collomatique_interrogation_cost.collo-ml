@@ -1,7 +1,8 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
 
 pub let objective(db: Db) -> LinExpr =
     sum interrogation in @[Interrogation] where interrogation.cost != 0 {
-        interrogation.cost * $InterrogationHasGroups(db, interrogation.slot_id, interrogation.week.num)
+        interrogation.cost * $InterrogationHasGroups(db, SlotId(interrogation.slot_id), GlobalWeek(interrogation.week.num))
     };

@@ -1,9 +1,10 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
 
 let at_most_one_interrogation(db: Db, time_slot: TimeSlot, student: Student) -> Constraint =
     sum interrogation in time_slot.interrogations where student in interrogation.students {
-        $StudentAtInterrogation(db, student.id, interrogation.slot_id, interrogation.week.num)
+        $StudentAtInterrogation(db, StudentId(student.id), SlotId(interrogation.slot_id), GlobalWeek(interrogation.week.num))
     } <== 1;
 
 pub let constraint(db: Db) -> Constraint =
