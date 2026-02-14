@@ -171,3 +171,43 @@ WHERE
 
 pub let get_slots_for_student_during(db: Db, student_id: StudentId, desc: TimeSlotDesc) -> [SlotId] =
     get_slots_for_student_during_internal(db, student_id, desc.period_id, desc.week, desc.day, desc.start_time, desc.duration);
+
+query time_resolution_internal(db: Db) -> ?Duration = "
+WITH RECURSIVE
+all_times(val) AS (
+    SELECT start_time FROM slots WHERE start_time > 0
+    UNION ALL
+    SELECT duration_minutes FROM subject_interrogation_params
+    UNION ALL
+    SELECT start_time FROM incompat_slots WHERE start_time > 0
+    UNION ALL
+    SELECT duration_minutes FROM incompat_slots
+    UNION ALL
+    SELECT 1440
+),
+numbered AS (
+    SELECT val, ROW_NUMBER() OVER () AS rn,
+           COUNT(*) OVER () AS total
+    FROM all_times
+),
+euclid(step, a, b) AS (
+    SELECT 2,
+           (SELECT val FROM numbered WHERE rn = 1),
+           (SELECT val FROM numbered WHERE rn = 2)
+    UNION ALL
+    SELECT
+        CASE WHEN b = 0 THEN step + 1 ELSE step END,
+        CASE WHEN b = 0 THEN (SELECT val FROM numbered WHERE rn = step + 1) ELSE b END,
+        CASE WHEN b = 0 THEN a ELSE a % b END
+    FROM euclid
+    WHERE NOT (b = 0 AND step >= (SELECT total FROM numbered LIMIT 1))
+)
+SELECT COALESCE(a, 60) AS time_resolution
+FROM euclid
+WHERE b = 0
+ORDER BY step DESC
+LIMIT 1;
+";
+
+pub let time_resolution(db: Db) -> Duration =
+    time_resolution_internal(db) ?? Duration(60);
