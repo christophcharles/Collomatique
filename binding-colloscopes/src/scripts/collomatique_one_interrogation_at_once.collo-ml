@@ -15,6 +15,7 @@ pub let constraint(db: Db) -> Constraint =
         at_most_one_interrogation(db, data)
     };
 
+/// L'élève `data.student_id` ne peut avoir plus d'une colle la semaine `data.global_week` le jour `data.day` à `data.start_time` pendant `time_resolution(db)`
 let at_most_one_interrogation(db: Db, data: TimeSlotStudentData) -> Constraint =
     let desc = TimeSlotDesc {
         period_id: data.period_id cast! PeriodId, // panic if for some reason we got NULL
