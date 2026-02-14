@@ -17,3 +17,5 @@ pub type TimeSlotDesc = {
     start_time: Time,
     duration: Duration,
 };
+
+pub let days() -> [WeekdayNum] = [WeekdayNum(day) for day in [0..7]];

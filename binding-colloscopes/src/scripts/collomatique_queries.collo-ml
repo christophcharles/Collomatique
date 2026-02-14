@@ -172,6 +172,37 @@ WHERE
 pub let get_slots_for_student_during(db: Db, student_id: StudentId, desc: TimeSlotDesc) -> [SlotId] =
     get_slots_for_student_during_internal(db, student_id, desc.period_id, desc.week, desc.day, desc.start_time, desc.duration);
 
+query get_counted_slots_for_student_during_internal(db: Db, student_id: StudentId, period_id: PeriodId, week: LocalWeek, day: WeekdayNum, start_time: Time, duration: Duration) -> [SlotId] = "
+SELECT s.id AS slot_id
+FROM slots s
+JOIN subject_interrogation_params sip ON sip.subject_id = s.subject_id
+WHERE
+    sip.take_duration_into_account = 1
+    AND s.day = ?4
+    AND s.start_time < (?5 + ?6)
+    AND (s.start_time + sip.duration_minutes) > ?5
+    AND NOT EXISTS (
+        SELECT 1 FROM student_excluded_periods sep
+        WHERE sep.student_id = ?1 AND sep.period_id = ?2
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM subject_excluded_periods sxp
+        WHERE sxp.subject_id = s.subject_id AND sxp.period_id = ?2
+    )
+    AND (
+        s.week_pattern_id IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM week_pattern_disabled_weeks wpdw
+            WHERE wpdw.week_pattern_id = s.week_pattern_id
+              AND wpdw.period_id = ?2
+              AND wpdw.week_index = ?3
+        )
+    );
+";
+
+pub let get_counted_slots_for_student_during(db: Db, student_id: StudentId, desc: TimeSlotDesc) -> [SlotId] =
+    get_counted_slots_for_student_during_internal(db, student_id, desc.period_id, desc.week, desc.day, desc.start_time, desc.duration);
+
 query time_resolution_internal(db: Db) -> ?Duration = "
 WITH RECURSIVE
 all_times(val) AS (
