@@ -53,8 +53,7 @@ WHERE NOT EXISTS (
     WHERE wpd.week_pattern_id = s.week_pattern_id
       AND wpd.period_id = ow.period_id
       AND wpd.week_index = ow.week_index
-)
-ORDER BY s.id, ow.global_week_number;";
+);";
 
 let enforce_group_count(db: Db, interrogation_data: InterrogationData) -> Constraint =
     if interrogation_data.min_group_count > 0 {

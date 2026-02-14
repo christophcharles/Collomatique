@@ -132,7 +132,6 @@ WHERE NOT EXISTS (
       AND wpd.period_id = ow.period_id
       AND wpd.week_index = ow.week_index
 )
-ORDER BY s.id, ow.global_week_number;
 ";
 
 query get_slots_for_student_during_internal(db: Db, student_id: StudentId, period_id: PeriodId, week: LocalWeek, day: WeekdayNum, start_time: Time, duration: Duration) -> [SlotId] = "
