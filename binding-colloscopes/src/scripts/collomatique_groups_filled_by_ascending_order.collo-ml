@@ -25,6 +25,7 @@ AND group_index < (
 )
 "~;
 
+/// Groupe `group_data.group_num` de la liste `group_data.group_list` doit être rempli avant le groupe `next(group_data.group_num)`
 let group_is_not_empty_if_next_group_is_not_empty(db: Db, group_data: GroupData) -> Constraint =
     $GroupHasStudents(db, group_data.group_list, group_data.group_num) >== $GroupHasStudents(db, group_data.group_list, next(group_data.group_num));
 
