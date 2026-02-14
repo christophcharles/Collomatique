@@ -5,6 +5,7 @@ pub type IncompatId = Int;
 pub type PeriodId = Int;
 pub type GlobalWeek = Int;
 pub type LocalWeek = Int;
+pub type SubjectId = Int;
 pub type GroupNum = Int;
 pub type WeekdayNum = Int;
 pub type Time = Int;
