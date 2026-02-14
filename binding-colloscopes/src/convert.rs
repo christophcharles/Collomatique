@@ -1,4 +1,4 @@
-use crate::{objects::InterrogationData, tools, views::Env};
+use crate::{tools, views::Env};
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 
@@ -46,15 +46,11 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
                 let week = first_week_in_period + week_num;
 
                 for group_num in &interrogation.assigned_groups {
-                    let interrogation = InterrogationData {
-                        slot: *slot_id,
-                        week,
-                    };
                     let group = *group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogationInternal {
-                            slot: interrogation.slot.inner() as i32,
-                            week: interrogation.week as i32,
+                            slot: slot_id.inner() as i32,
+                            week: week as i32,
                             group,
                         },
                         1.0,
@@ -138,15 +134,11 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
                     if interrogation.assigned_groups.contains(&group_num) {
                         continue;
                     }
-                    let interrogation = InterrogationData {
-                        slot: *slot_id,
-                        week,
-                    };
                     let group = group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogationInternal {
-                            slot: interrogation.slot.inner() as i32,
-                            week: interrogation.week as i32,
+                            slot: slot_id.inner() as i32,
+                            week: week as i32,
                             group,
                         },
                         0.0,

@@ -1,4 +1,3 @@
-use super::objects::InterrogationData;
 use super::tools::*;
 use super::views::Env;
 use collo_ml::EvalVar;
@@ -91,20 +90,14 @@ impl Var {
 
     fn compute_group_range(env: &Env, slot: &i32, week: &i32) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
-        let interrogation = InterrogationData {
-            slot: unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) },
-            week: *week as usize,
-        };
+        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
+        let week_num = *week as usize;
         let default_range = 0..0;
-        let subject_id = match env
-            .params
-            .slots
-            .find_slot_subject_and_position(interrogation.slot)
-        {
+        let subject_id = match env.params.slots.find_slot_subject_and_position(slot_id) {
             Some((subject_id, _pos)) => subject_id,
             None => return default_range,
         };
-        let period_id = match week_to_period_id(&env.params, interrogation.week) {
+        let period_id = match week_to_period_id(&env.params, week_num) {
             Some((id, _)) => id,
             None => return default_range,
         };
