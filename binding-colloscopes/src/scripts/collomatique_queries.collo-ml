@@ -105,6 +105,24 @@ pub query group_prefilled_student_count(db: Db, group_list: GroupListId, group: 
 pub query students_for_automatic_group_list(db: Db, group_list: GroupListId) -> [StudentId] =
     "SELECT id FROM students EXCEPT SELECT student_id AS id FROM automatic_group_excluded_students WHERE group_list_id = ?";
 
+pub query students_for_group_list(db: Db, group_list: GroupListId) -> [StudentId] = "
+SELECT s.id AS student_id
+FROM students s
+WHERE
+  (
+    EXISTS (SELECT 1 FROM group_lists gl WHERE gl.id = ?1 AND gl.filling_type = 'automatic')
+    AND NOT EXISTS (
+      SELECT 1 FROM automatic_group_excluded_students ages
+      WHERE ages.group_list_id = ?1 AND ages.student_id = s.id
+    )
+  )
+  OR
+  EXISTS (
+    SELECT 1 FROM prefilled_group_students pgs
+    WHERE pgs.group_list_id = ?1 AND pgs.student_id = s.id
+  )
+";
+
 pub query interrogations(db: Db) -> [(SlotId, GlobalWeek)] = "
 WITH ordered_weeks AS (
     SELECT
