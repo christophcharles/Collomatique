@@ -131,9 +131,8 @@ async fn if_returning_bool() {
 
 #[tokio::test]
 async fn simple_forall() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { 0 <== 1 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Simple forall should work: {:?}", errors);
 }
@@ -173,12 +172,11 @@ async fn forall_body_must_be_bool_or_constraint() {
 
 #[tokio::test]
 async fn forall_with_where_clause() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] where s.age > 18 { 0 <== 1 };
+        pub let f(students: [{age: Int}]) -> Constraint =
+            forall s in students where s.age > 18 { 0 <== 1 };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -189,28 +187,26 @@ async fn forall_with_where_clause() {
 
 #[tokio::test]
 async fn forall_where_must_be_bool() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] where 5 { 0 <== 1 };
+        pub let f(students: [Int]) -> Constraint =
+            forall s in students where 5 { 0 <== 1 };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Forall where clause must be Bool");
 }
 
 #[tokio::test]
 async fn nested_forall() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s1 in @[Student] { 
-                forall s2 in @[Student] { 
-                    0 <== 1 
-                } 
+        pub let f(students: [Int]) -> Constraint =
+            forall s1 in students {
+                forall s2 in students {
+                    0 <== 1
+                }
             };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested forall should work: {:?}", errors);
 }
@@ -326,14 +322,13 @@ async fn sum_where_must_be_bool() {
 }
 
 #[tokio::test]
-async fn sum_over_global_collection() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Int = sum s in @[Student] { 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn sum_over_list_parameter() {
+    let input = "pub let f(students: [Int]) -> Int = sum s in students { 1 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Sum over global collection should work: {:?}",
+        "Sum over list parameter should work: {:?}",
         errors
     );
 }
@@ -374,12 +369,11 @@ async fn nested_sum() {
 
 #[tokio::test]
 async fn sum_with_field_access() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f(students: [Student]) -> Int = 
+        pub let f(students: [{age: Int}]) -> Int =
             sum s in students { s.age };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

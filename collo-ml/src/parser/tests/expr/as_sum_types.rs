@@ -526,7 +526,7 @@ fn type_annotation_realistic_sum_type_examples() {
         // Type annotation in complex expressions
         "if flag { compute() as Int | LinExpr } else { 0 as Int | LinExpr }",
         // Glob list coercion
-        "@[Student | Teacher] as [Student | Teacher]",
+        "people as [Student | Teacher]",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

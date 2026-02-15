@@ -142,13 +142,13 @@ async fn field_access_through_custom_type_with_tuple() {
 }
 
 #[tokio::test]
-async fn field_access_through_custom_type_with_object() {
+async fn field_access_through_custom_type_with_struct() {
     let input = r#"
+        type Student = {age: Int};
         type MyStudent = Student;
         let get_age(s: MyStudent) -> Int = s.age;
     "#;
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let (_, errors, _warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -174,20 +174,20 @@ async fn nested_custom_type_field_access() {
 // implemented as a defense-in-depth measure but cannot be triggered from valid syntax.
 
 #[tokio::test]
-async fn error_shadowing_object_type() {
+async fn error_shadowing_previous_custom_type_simple() {
     let input = r#"
+        type Student = {age: Int};
         type Student = Int;
     "#;
-    let types = simple_object("Student");
-    let (_, errors, _warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
     assert!(
         !errors.is_empty(),
-        "Should error when shadowing object type"
+        "Should error when shadowing custom type"
     );
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::TypeShadowsObject { .. }))
+            .any(|e| matches!(e, SemError::TypeShadowsCustomType { .. }))
     );
 }
 

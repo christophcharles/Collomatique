@@ -15,6 +15,7 @@ use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use crate::traits::{EvalObject, FieldConversionError};
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Derivative)]
@@ -33,12 +34,13 @@ pub enum ExprValue<T: EvalObject, D: DatabaseConnection> {
     LinExpr(LinExpr<IlpVar<T, D>>),
     Constraint(Vec<ConstraintWithOrigin<T, D>>),
     String(String),
-    Object(T),
     List(Vec<Arc<ExprValue<T, D>>>),
     Tuple(Vec<Arc<ExprValue<T, D>>>),
     Struct(BTreeMap<String, Arc<ExprValue<T, D>>>),
     Custom(CustomValue<T, D>),
     Database(DatabaseHandle<D>),
+    #[doc(hidden)]
+    _Phantom(std::convert::Infallible, PhantomData<T>),
 }
 
 /// Data for custom type values.
@@ -88,7 +90,6 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExprValue<T, D>
                     closing_delim
                 )
             }
-            ExprValue::Object(obj) => write!(f, "{:?}", obj),
             ExprValue::List(list) => {
                 let strs: Vec<_> = list.iter().map(|x| x.to_string()).collect();
                 write!(f, "[{}]", strs.join(", "))
@@ -117,6 +118,7 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExprValue<T, D>
                 ),
             },
             ExprValue::Database(db) => write!(f, "{}", db),
+            ExprValue::_Phantom(..) => unreachable!(),
         }
     }
 }
@@ -155,10 +157,6 @@ impl<T: EvalObject, D: DatabaseConnection> From<ConstraintWithOrigin<T, D>> for 
 }
 
 impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
-    pub fn from_obj(obj: T) -> Self {
-        ExprValue::Object(obj)
-    }
-
     pub fn with_origin(&self, origin: &Origin<T, D>) -> ExprValue<T, D> {
         match self {
             ExprValue::Constraint(constraints) => ExprValue::Constraint(
@@ -228,9 +226,6 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             Self::LinExpr(_) => target.get_variants().contains(&SimpleType::LinExpr),
             Self::Constraint(_) => target.get_variants().contains(&SimpleType::Constraint),
             Self::String(_) => target.get_variants().contains(&SimpleType::String),
-            Self::Object(obj) => target
-                .get_variants()
-                .contains(&SimpleType::Object(obj.typ_name())),
             // if we have an empty list, we just need to check that ExprType is a list
             Self::List(list) if list.is_empty() => target.has_list(),
             // if not empty, we have to check recursively for all list types in the sum
@@ -317,6 +312,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     false
                 }
             }
+            Self::_Phantom(..) => unreachable!(),
         }
     }
 
@@ -329,7 +325,6 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             (Self::LinExpr(_), SimpleType::LinExpr) => true,
             (Self::Constraint(_), SimpleType::Constraint) => true,
             (Self::String(_), SimpleType::String) => true,
-            (Self::Object(obj), SimpleType::Object(name)) if obj.typ_name() == *name => true,
             // Custom type conversions - semantic analysis has validated these
             // Enum variant can convert to root enum type (subtype relationship)
             (
@@ -501,10 +496,6 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
 
     pub(crate) fn convert_to_string(&self, env: &T::Env, cache: &mut T::Cache) -> String {
         match self {
-            Self::Object(obj) => match obj.pretty_print(env, cache) {
-                Some(v) => v,
-                None => format!("{:?}", obj),
-            },
             Self::List(list) => {
                 let inners: Vec<_> = list
                     .iter()

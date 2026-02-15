@@ -185,9 +185,12 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                     }
                     panic!("Vec must have a type parameter");
                 }
+                "String" => quote! { ::collo_ml::traits::SimpleFieldType::String.into() },
                 _ => {
-                    // Assume this is an object
-                    quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#type_name>()).into() }
+                    panic!(
+                        "Unsupported field type '{}' in ViewObject derive. Supported types: i32, bool, String, Vec<T>, Option<T>",
+                        type_name_str
+                    )
                 }
             }
         }
@@ -262,11 +265,14 @@ fn generate_field_value(
                     }
                     panic!("Vec must have a type parameter");
                 }
+                "String" => quote! {
+                    ::collo_ml::ExprValue::String(#field_name.clone()),
+                },
                 _ => {
-                    // It's an object ID - convert using Into
-                    quote! {
-                        ::collo_ml::ExprValue::Object(#field_name.clone().into()),
-                    }
+                    panic!(
+                        "Unsupported field type '{}' in ViewObject derive. Supported types: i32, bool, String, Vec<T>, Option<T>",
+                        type_name
+                    )
                 }
             }
         }

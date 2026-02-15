@@ -2241,34 +2241,6 @@ impl LocalCheckEnv {
             }
 
             // ========== Collections ==========
-            Expr::GlobalList(type_name) => {
-                let typ = match global_env.resolve_type(type_name, self.current_module()) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        errors.push(e);
-                        return None;
-                    }
-                };
-                if !global_env.validate_type(&typ) {
-                    errors.push(SemError::UnknownType {
-                        module: self.current_module().to_string(),
-                        typ: typ.to_string(),
-                        span: type_name.span.clone(),
-                    });
-                    None
-                } else if !typ.is_sum_of_objects() {
-                    errors.push(SemError::GlobalCollectionsMustBeAListOfObjects {
-                        typ: typ.to_string(),
-                        span: type_name.span.clone(),
-                    });
-                    None
-                } else {
-                    // Cache the resolved type for use during evaluation
-                    resolved_types.insert(type_name.span.clone(), typ.clone());
-                    Some(SimpleType::List(typ).into())
-                }
-            }
-
             Expr::ListLiteral { elements } => {
                 if elements.is_empty() {
                     return Some(SimpleType::EmptyList.into());
@@ -3150,22 +3122,6 @@ impl LocalCheckEnv {
                     let mut variants = BTreeSet::new();
                     for resolved_variant in resolved_variants {
                         match resolved_variant {
-                            SimpleType::Object(type_name) => {
-                                // Look up the field in this object type
-                                match global_env.lookup_field(&type_name, field_name) {
-                                    Some(field_type) => {
-                                        variants.extend(field_type.into_variants());
-                                    }
-                                    None => {
-                                        errors.push(SemError::UnknownField {
-                                            object_type: type_name.clone(),
-                                            field: field_name.clone(),
-                                            span: segment.span.clone(),
-                                        });
-                                        return None;
-                                    }
-                                }
-                            }
                             SimpleType::Struct(fields) => {
                                 // Look up the field in this struct type
                                 match fields.get(field_name) {

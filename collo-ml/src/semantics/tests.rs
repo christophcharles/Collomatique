@@ -1,7 +1,7 @@
-use super::global_env::ObjectFields;
 use super::*;
 use crate::database::SqliteDatabaseDriver;
 use crate::parser::{ColloMLParser, Rule};
+use crate::semantics::global_env::ObjectFields;
 use pest::Parser;
 use std::collections::{BTreeMap, HashMap};
 
@@ -64,27 +64,6 @@ pub(crate) async fn analyze(
             .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
-}
-
-/// Helper to create a simple object type with no fields
-pub(crate) fn simple_object(name: &str) -> HashMap<String, ObjectFields> {
-    let mut types = HashMap::new();
-    types.insert(name.to_string(), HashMap::new());
-    types
-}
-
-/// Helper to create an object type with fields
-pub(crate) fn object_with_fields(
-    name: &str,
-    fields: Vec<(&str, SimpleType)>,
-) -> HashMap<String, ObjectFields> {
-    let mut types = HashMap::new();
-    let mut field_map = HashMap::new();
-    for (field_name, field_type) in fields {
-        field_map.insert(field_name.to_string(), ExprType::simple(field_type));
-    }
-    types.insert(name.to_string(), field_map);
-    types
 }
 
 /// Helper to create a variable with specific argument types

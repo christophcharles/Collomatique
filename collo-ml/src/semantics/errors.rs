@@ -116,10 +116,6 @@ pub enum SemError {
     },
     #[error("Option marker '?' is forbidden on None (at {0:?})")]
     OptionMarkerOnNone(Span),
-    #[error(
-        "Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections"
-    )]
-    GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" in module \"{module}\" is already defined ({here:?}).")]
     ParameterAlreadyDefined {
         module: String,

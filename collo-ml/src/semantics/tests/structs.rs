@@ -511,31 +511,35 @@ async fn named_struct_nested() {
 }
 
 // =============================================================================
-// STRUCTS WITH OBJECTS
+// STRUCTS WITH CUSTOM TYPES
 // =============================================================================
 
 #[tokio::test]
-async fn struct_with_object_field() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> {student: Student, age: Int} = {student: s, age: 20};";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn struct_with_custom_type_field() {
+    let input = r#"
+        type Student = {name: String};
+        pub let f(s: Student) -> {student: Student, age: Int} = {student: s, age: 20};
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Struct with object field should work: {:?}",
+        "Struct with custom type field should work: {:?}",
         errors
     );
 }
 
 #[tokio::test]
-async fn struct_field_then_object_field() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(data: {student: Student}) -> Int = data.student.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn struct_field_then_nested_struct_field() {
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(data: {student: Student}) -> Int = data.student.age;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Struct field then object field access should work: {:?}",
+        "Struct field then nested struct field access should work: {:?}",
         errors
     );
 }

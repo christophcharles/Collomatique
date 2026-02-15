@@ -101,7 +101,7 @@ fn collection_accepts_lists_range_with_numbers() {
 
 #[test]
 fn collection_accepts_lists_range_with_expr() {
-    let input = "let f() -> [Int] = [f(x)..|@[Student]|];";
+    let input = "let f() -> [Int] = [f(x)..|students|];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -121,7 +121,7 @@ fn collection_accepts_lists_range_with_expr() {
 
 #[test]
 fn parse_simple_list_comprehension() {
-    let input = "let f() -> [Int] = [x for x in @[Student]];";
+    let input = "let f() -> [Int] = [x for x in students];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -136,7 +136,7 @@ fn parse_simple_list_comprehension() {
                 assert_eq!(vars_and_collections.len(), 1);
                 let (var, collection) = &vars_and_collections[0];
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
                 assert!(filter.is_none());
             }
             _ => panic!("Expected ListComprehension"),
@@ -147,7 +147,7 @@ fn parse_simple_list_comprehension() {
 
 #[test]
 fn parse_list_comprehension_with_expression() {
-    let input = "let f() -> [Int] = [x * 2 for x in @[Student]];";
+    let input = "let f() -> [Int] = [x * 2 for x in students];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -164,7 +164,7 @@ fn parse_list_comprehension_with_expression() {
 
 #[test]
 fn parse_list_comprehension_with_field_access() {
-    let input = "let f() -> [Int] = [s.age for s in @[Student]];";
+    let input = "let f() -> [Int] = [s.age for s in students];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -194,7 +194,7 @@ fn parse_list_comprehension_with_field_access() {
 
 #[test]
 fn parse_list_comprehension_with_filter() {
-    let input = "let f() -> [Int] = [s.age for s in @[Student] where s.age > 18];";
+    let input = "let f() -> [Int] = [s.age for s in students where s.age > 18];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -215,7 +215,7 @@ fn parse_list_comprehension_with_filter() {
 
 #[test]
 fn parse_list_comprehension_with_complex_filter() {
-    let input = "let f() -> [Student] = [s for s in @[Student] where s.age > 18 and s.grade > 10];";
+    let input = "let f() -> [Student] = [s for s in students where s.age > 18 and s.grade > 10];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -233,7 +233,7 @@ fn parse_list_comprehension_with_complex_filter() {
 
 #[test]
 fn parse_nested_list_comprehension() {
-    let input = "let f() -> [[Int]] = [[y for y in x] for x in @[Class]];";
+    let input = "let f() -> [[Int]] = [[y for y in x] for x in classes];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -250,7 +250,7 @@ fn parse_nested_list_comprehension() {
 
 #[test]
 fn parse_list_comprehension_with_multiple_for() {
-    let input = "let f() -> [Int] = [x.age + y.num for x in @[Student] for y in @[Class]];";
+    let input = "let f() -> [Int] = [x.age + y.num for x in students for y in classes];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -267,7 +267,7 @@ fn parse_list_comprehension_with_multiple_for() {
 
 #[test]
 fn parse_list_comprehension_with_multiple_dependant_for() {
-    let input = "let f() -> [Int] = [x.num for x in y.room for y in @[Class]];";
+    let input = "let f() -> [Int] = [x.num for x in y.room for y in classes];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -284,7 +284,7 @@ fn parse_list_comprehension_with_multiple_dependant_for() {
 
 #[test]
 fn parse_list_comprehension_with_multiple_for_and_where_clause() {
-    let input = "let f() -> [Int] = [x.age + y.num for x in @[Student] for y in @[Class] where x in y.students];";
+    let input = "let f() -> [Int] = [x.age + y.num for x in students for y in classes where x in y.students];";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -302,76 +302,19 @@ fn parse_list_comprehension_with_multiple_for_and_where_clause() {
     }
 }
 
-// ============= Global Collections =============
-
-#[test]
-fn parse_global_collection() {
-    let input = "let f() -> [Student] = @[Student];";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => match &body.node {
-            Expr::GlobalList(name) => {
-                assert_eq!(name.node.types.len(), 1);
-                assert_eq!(name.node.types[0].node.maybe_count, 0);
-                assert!(name.node.types[0].node.inner.matches_str("Student"));
-            }
-            _ => panic!("Expected GlobalList"),
-        },
-        _ => panic!("Expected Let statement"),
-    }
-}
-
-#[test]
-fn parse_global_collection_with_builtin_type() {
-    let input = "let f() -> [Int] = @[Int];";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => match &body.node {
-            Expr::GlobalList(name) => {
-                assert_eq!(name.node.types.len(), 1);
-                assert_eq!(name.node.types[0].node.maybe_count, 0);
-                assert!(name.node.types[0].node.inner.matches_str("Int"));
-            }
-            _ => panic!("Expected GlobalList"),
-        },
-        _ => panic!("Expected Let statement"),
-    }
-}
-
-#[test]
-fn parse_global_collection_in_expression() {
-    let input = "let f() -> Int = |@[Student]|;";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    match &file.statements[0].node {
-        Statement::Let { body, .. } => match &body.node {
-            Expr::Cardinality(coll) => {
-                assert!(matches!(coll.node, Expr::GlobalList(_)));
-            }
-            _ => panic!("Expected Cardinality"),
-        },
-        _ => panic!("Expected Let statement"),
-    }
-}
-
 // ============= Set Operations =============
 
 #[test]
 fn parse_union_operation() {
-    let input = "let f() -> [Student] = @[Student] + @[Teacher];";
+    let input = "let f() -> [Student] = students + teachers;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Add(left, right) => {
-                assert!(matches!(left.node, Expr::GlobalList(_)));
-                assert!(matches!(right.node, Expr::GlobalList(_)));
+                assert!(matches!(left.node, Expr::IdentPath(_)));
+                assert!(matches!(right.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Union"),
         },
@@ -381,14 +324,14 @@ fn parse_union_operation() {
 
 #[test]
 fn parse_difference_operation() {
-    let input = "let f() -> [Student] = @[Student] - excluded;";
+    let input = "let f() -> [Student] = students - excluded;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Sub(left, right) => {
-                assert!(matches!(left.node, Expr::GlobalList(_)));
+                assert!(matches!(left.node, Expr::IdentPath(_)));
                 assert!(matches!(right.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Diff"),
@@ -431,7 +374,7 @@ fn parse_mixed_set_operations() {
 
 #[test]
 fn parse_in_operator() {
-    let input = "let f() -> Bool = x in @[Student];";
+    let input = "let f() -> Bool = x in students;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -439,7 +382,7 @@ fn parse_in_operator() {
         Statement::Let { body, .. } => match &body.node {
             Expr::In { item, collection } => {
                 assert!(matches!(item.node, Expr::IdentPath(_)));
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected In"),
         },
@@ -467,7 +410,7 @@ fn parse_in_with_list_literal() {
 
 #[test]
 fn parse_in_with_complex_collection() {
-    let input = "let f() -> Bool = x in @[Student] + @[Teacher];";
+    let input = "let f() -> Bool = x in students + teachers;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -485,15 +428,15 @@ fn parse_in_with_complex_collection() {
 // ============= Cardinality =============
 
 #[test]
-fn parse_cardinality_of_global_list() {
-    let input = "let f() -> Int = |@[Student]|;";
+fn parse_cardinality_of_variable() {
+    let input = "let f() -> Int = |students|;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
             Expr::Cardinality(coll) => {
-                assert!(matches!(coll.node, Expr::GlobalList(_)));
+                assert!(matches!(coll.node, Expr::IdentPath(_)));
             }
             _ => panic!("Expected Cardinality"),
         },
@@ -520,7 +463,7 @@ fn parse_cardinality_of_list_literal() {
 
 #[test]
 fn parse_cardinality_of_difference() {
-    let input = "let f() -> Int = |@[Student] - excluded|;";
+    let input = "let f() -> Int = |students - excluded|;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -537,7 +480,7 @@ fn parse_cardinality_of_difference() {
 
 #[test]
 fn parse_cardinality_of_list_comprehension() {
-    let input = "let f() -> Int = |[s for s in @[Student] where s.age > 18]|;";
+    let input = "let f() -> Int = |[s for s in students where s.age > 18]|;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -554,7 +497,7 @@ fn parse_cardinality_of_list_comprehension() {
 
 #[test]
 fn parse_cardinality_in_arithmetic() {
-    let input = "let f() -> Int = |@[Student]| + |@[Teacher]|;";
+    let input = "let f() -> Int = |students| + |teachers|;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

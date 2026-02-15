@@ -35,7 +35,7 @@ mod tests;
 /// Represents a type that appears in a sum type
 ///
 /// These can be primitive types (Int, Bool, LinExpr, etc)
-/// or objects, custom types, or even lists
+/// or custom types, lists, tuples, structs, etc.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleType {
     Never,
@@ -47,7 +47,6 @@ pub enum SimpleType {
     String,
     EmptyList,
     List(ExprType),
-    Object(String),
     /// Custom type with optional variant: Custom(module, root, variant)
     /// - Custom("main", "MyType", None) for simple custom types
     /// - Custom("main", "Result", Some("Ok")) for enum variants like Result::Ok
@@ -133,26 +132,8 @@ impl SimpleType {
         }
     }
 
-    pub fn is_object(&self) -> bool {
-        matches!(self, SimpleType::Object(_))
-    }
-
     pub fn is_custom(&self) -> bool {
         matches!(self, SimpleType::Custom(_, _, _))
-    }
-
-    pub fn get_inner_object_type(&self) -> Option<&String> {
-        match self {
-            SimpleType::Object(typ) => Some(typ),
-            _ => None,
-        }
-    }
-
-    pub fn to_inner_object_type(self) -> Option<String> {
-        match self {
-            SimpleType::Object(typ) => Some(typ),
-            _ => None,
-        }
     }
 
     pub fn get_inner_custom_type(&self) -> Option<(&String, &String, &Option<String>)> {
@@ -393,9 +374,6 @@ impl SimpleType {
             | (SimpleType::Constraint, SimpleType::Constraint)
             | (SimpleType::String, SimpleType::String) => true,
 
-            // Same object type overlaps
-            (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
-
             // Custom types overlap if:
             // - Same module, root, and variant (exact match)
             // - One is a variant and the other is the root enum (variant overlaps with root)
@@ -468,8 +446,6 @@ impl SimpleType {
             | (_, SimpleType::LinExpr)
             | (SimpleType::Constraint, _)
             | (_, SimpleType::Constraint)
-            | (SimpleType::Object(_), _)
-            | (_, SimpleType::Object(_))
             | (SimpleType::Custom(_, _, _), _)
             | (_, SimpleType::Custom(_, _, _))
             | (SimpleType::String, _)
@@ -515,7 +491,6 @@ impl std::fmt::Display for SimpleType {
             SimpleType::String => write!(f, "String"),
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
-            SimpleType::Object(typ) => write!(f, "{}", typ),
             SimpleType::Custom(_, root, None) => write!(f, "{}", root),
             SimpleType::Custom(_, root, Some(variant)) => write!(f, "{}::{}", root, variant),
             SimpleType::Tuple(elements) => {
@@ -902,24 +877,6 @@ impl ExprType {
 
     pub fn is_none(&self) -> bool {
         self.as_simple().map(|x| x.is_none()).unwrap_or(false)
-    }
-
-    pub fn is_sum_of_objects(&self) -> bool {
-        self.variants
-            .iter()
-            .all(|x| matches!(x, SimpleType::Object(_)))
-    }
-
-    pub fn get_inner_object_type(&self) -> Option<&String> {
-        self.as_simple().and_then(|x| x.get_inner_object_type())
-    }
-
-    pub fn to_inner_object_type(self) -> Option<String> {
-        self.to_simple().and_then(|x| x.to_inner_object_type())
-    }
-
-    pub fn is_object(&self) -> bool {
-        self.as_simple().map(|x| x.is_object()).unwrap_or(false)
     }
 
     pub fn contains(&self, typ: &SimpleType) -> bool {

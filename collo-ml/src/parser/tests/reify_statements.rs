@@ -397,7 +397,7 @@ fn reify_statement_rejects_inline_expressions() {
     // Reify only accepts identifiers, not inline constraint expressions
     let cases = vec![
         "reify ($V() <= 10) as $MyVar;",
-        "reify (forall x in @[X] { $V(x) >= 0 }) as $Check;",
+        "reify (forall x in x_list { $V(x) >= 0 }) as $Check;",
         "reify $V() == 1 as $IsOne;",
         "reify 5 + 3 as $Result;",
     ];

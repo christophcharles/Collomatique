@@ -121,7 +121,6 @@ pub enum Expr {
         collection: Arc<Spanned<Expr>>,
     },
 
-    GlobalList(Spanned<TypeName>),
     ListLiteral {
         elements: Vec<Arc<Spanned<Expr>>>,
     },

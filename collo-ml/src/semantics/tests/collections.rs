@@ -108,12 +108,11 @@ async fn collection_accepts_lists_range_with_numbers() {
 
 #[tokio::test]
 async fn collection_accepts_lists_range_with_expr() {
-    let types = object_with_fields("Student", vec![]);
     let input = r#"
     let count() -> Int = 32;
-    pub let f() -> [Int] = [count()..|@[Student]|];
+    pub let f(students: [Int]) -> [Int] = [count()..|students|];
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -187,10 +186,9 @@ async fn list_comprehension_type_transformation() {
 }
 
 #[tokio::test]
-async fn list_comprehension_with_object_fields() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn list_comprehension_with_struct_fields() {
+    let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -201,10 +199,8 @@ async fn list_comprehension_with_object_fields() {
 
 #[tokio::test]
 async fn list_comprehension_where_uses_field() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input =
-        "pub let f(students: [Student]) -> [Student] = [s for s in students where s.age > 18];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(students: [{age: Int}]) -> [{age: Int}] = [s for s in students where s.age > 18];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -230,38 +226,17 @@ async fn nested_list_comprehension() {
 
 #[tokio::test]
 async fn list_comprehension_multiple_for_typechecks_correctly() {
-    let mut types = HashMap::new();
-    types.insert(
-        "Student".to_string(),
-        HashMap::from([
-            ("age".to_string(), ExprType::simple(SimpleType::Int)),
-            ("enroled".to_string(), ExprType::simple(SimpleType::Bool)),
-        ]),
-    );
-    types.insert(
-        "Class".to_string(),
-        HashMap::from([
-            ("num".to_string(), ExprType::simple(SimpleType::Int)),
-            (
-                "students".to_string(),
-                ExprType::simple(SimpleType::List(
-                    SimpleType::Object("Student".into()).into(),
-                ))
-                .try_into()
-                .unwrap(),
-            ),
-        ]),
-    );
-
     let input = r#"
-        pub let cross_ages(classes: [Class]) -> [Int] = 
-            [x.age + y.num 
-             for x in @[Student] 
-             for y in classes 
+        type Student = {age: Int, enroled: Bool};
+        type Class = {num: Int, students: [Student]};
+        pub let cross_ages(classes: [Class], all_students: [Student]) -> [Int] =
+            [x.age + y.num
+             for x in all_students
+             for y in classes
              where x in y.students];
     "#;
 
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -272,26 +247,9 @@ async fn list_comprehension_multiple_for_typechecks_correctly() {
 
 #[tokio::test]
 async fn list_comprehension_where_can_reference_all_for_variables() {
-    let mut types = HashMap::new();
-    types.insert(
-        "Person".to_string(),
-        HashMap::from([
-            ("id".to_string(), ExprType::simple(SimpleType::Int)),
-            ("active".to_string(), ExprType::simple(SimpleType::Bool)),
-        ]),
-    );
-    types.insert(
-        "Group".to_string(),
-        HashMap::from([
-            (
-                "members".to_string(),
-                SimpleType::List(SimpleType::Object("Person".into()).into()).into(),
-            ),
-            ("min_age".to_string(), ExprType::simple(SimpleType::Int)),
-        ]),
-    );
-
     let input = r#"
+        type Person = {id: Int, active: Bool};
+        type Group = {members: [Person], min_age: Int};
         pub let active_pairs(groups: [Group]) -> [Bool] =
             [p1.active and p2.active
              for g in groups
@@ -300,7 +258,7 @@ async fn list_comprehension_where_can_reference_all_for_variables() {
              where p1.id < p2.id and g.min_age > 18];
     "#;
 
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -311,118 +269,15 @@ async fn list_comprehension_where_can_reference_all_for_variables() {
 
 #[tokio::test]
 async fn list_comprehension_rejects_non_iterable_in_second_for() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-
     let input = "
-        let f(s: Student) -> [Int] = [x for y in s.age for x in @[Student]];
+        let f(s: {age: Int}, students: [Int]) -> [Int] = [x for y in s.age for x in students];
     ";
 
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
         "Second for loop over non-iterable (Int) should fail"
-    );
-}
-
-// ========== Global Collections ==========
-
-#[tokio::test]
-async fn global_collection_int() {
-    let input = "pub let f() -> [Int] = @[Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of Int should not work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_bool() {
-    let input = "pub let f() -> [Bool] = @[Bool];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of Bool should not work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_linexpr() {
-    let input = "pub let f() -> [LinExpr] = @[LinExpr];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of LinExpr should not work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_list() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [[Student]] = @[[Student]];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of [Student] should not work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_object() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [Student] = @[Student];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Global collection of objects should work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_unknown_type() {
-    let input = "pub let f() -> [UnknownType] = @[UnknownType];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of unknown type should fail"
-    );
-}
-
-#[tokio::test]
-async fn global_collection_in_forall() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Global collection in forall should work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_in_sum() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Int = sum s in @[Student] { 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Global collection in sum should work: {:?}",
-        errors
     );
 }
 
@@ -469,14 +324,13 @@ async fn chained_collection_operations() {
 }
 
 #[tokio::test]
-async fn collection_operation_with_objects() {
-    let types = simple_object("Student");
-    let input = "pub let f(a: [Student], b: [Student]) -> [Student] = a + b;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn collection_operation_with_structs() {
+    let input = "pub let f(a: [{x: Int}], b: [{x: Int}]) -> [{x: Int}] = a + b;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Collection ops with objects should work: {:?}",
+        "Collection ops with structs should work: {:?}",
         errors
     );
 }
@@ -520,19 +374,6 @@ async fn cardinality_of_comprehension() {
 }
 
 #[tokio::test]
-async fn cardinality_of_global_collection() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Int = |@[Student]|;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Cardinality of global collection should work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
 async fn cardinality_in_comparison() {
     let input = "pub let f(xs: [Int]) -> Bool = |xs| > 10;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
@@ -566,19 +407,6 @@ async fn element_in_list() {
     assert!(
         errors.is_empty(),
         "Membership test should work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn element_in_global_collection() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> Bool = s in @[Student];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Membership in global collection should work: {:?}",
         errors
     );
 }

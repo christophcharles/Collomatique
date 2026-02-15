@@ -1,11 +1,10 @@
-use std::any::TypeId;
-use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use collo_ml::traits::{FieldConversionError, SimpleFieldType};
 use collo_ml::{
     DatabaseConnection, EvalObject, ExprType, ExprValue, SqliteDatabaseConnection, ViewObject,
 };
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -34,26 +33,6 @@ impl EvalObject for TestObjectId {
     }
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()
-    }
-}
-
-// Dummy ID types for testing object references
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-struct RoomId(usize);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-struct CourseId(usize);
-
-// Implement From for TestObjectId to allow conversion
-impl From<RoomId> for TestObjectId {
-    fn from(_: RoomId) -> Self {
-        TestObjectId
-    }
-}
-
-impl From<CourseId> for TestObjectId {
-    fn from(_: CourseId) -> Self {
-        TestObjectId
     }
 }
 
@@ -129,39 +108,6 @@ fn test_hidden_fields() {
     assert_eq!(student.secret, "hidden data");
 }
 
-// Test 3: Object references
-#[test]
-fn test_object_references() {
-    #[derive(ViewObject)]
-    #[eval_object(TestObjectId)]
-    struct StudentWithRoom {
-        age: i32,
-        room: RoomId,
-    }
-
-    let schema = StudentWithRoom::field_schema();
-    assert_eq!(schema.len(), 2);
-    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
-    assert_eq!(
-        schema.get("room"),
-        Some(&SimpleFieldType::Object(TypeId::of::<RoomId>()).into())
-    );
-
-    let student = StudentWithRoom {
-        age: 20,
-        room: RoomId(42),
-    };
-
-    assert_eq!(
-        student.get_field::<SqliteDatabaseConnection>("age"),
-        Some(ExprValue::Int(20))
-    );
-    assert_eq!(
-        student.get_field::<SqliteDatabaseConnection>("room"),
-        Some(ExprValue::Object(TestObjectId))
-    );
-}
-
 // Test 4: Collections of basic types
 #[test]
 fn test_collections_of_ints() {
@@ -228,41 +174,6 @@ fn test_collections_of_bools() {
     }
 }
 
-// Test 5: Collections of object references
-#[test]
-fn test_collections_of_objects() {
-    #[derive(ViewObject)]
-    #[eval_object(TestObjectId)]
-    struct StudentWithCourses {
-        age: i32,
-        courses: Vec<CourseId>,
-    }
-
-    let schema = StudentWithCourses::field_schema();
-    assert_eq!(schema.len(), 2);
-    assert_eq!(
-        schema.get("courses"),
-        Some(
-            &SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into()).into()
-        )
-    );
-
-    let mut courses = Vec::new();
-    courses.push(CourseId(101));
-    courses.push(CourseId(102));
-
-    let student = StudentWithCourses { age: 20, courses };
-
-    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("courses")
-    {
-        assert_eq!(values.len(), 2);
-        assert_eq!(*values[0], ExprValue::Object(TestObjectId));
-        assert_eq!(*values[1], ExprValue::Object(TestObjectId));
-    } else {
-        panic!("Expected List of Objects");
-    }
-}
-
 // Test 6: Pretty printing with format string
 #[test]
 fn test_pretty_print_with_format() {
@@ -324,46 +235,6 @@ fn test_default_pretty_print() {
 
     let student = StudentNoPretty { age: 20 };
     assert_eq!(student.pretty_print(), None);
-}
-
-// Test 9: Complex nested structure
-#[test]
-fn test_complex_structure() {
-    #[derive(ViewObject)]
-    #[eval_object(TestObjectId)]
-    struct ComplexStudent {
-        age: i32,
-        enrolled: bool,
-        room: RoomId,
-        courses: Vec<CourseId>,
-        grades: Vec<i32>,
-        #[hidden]
-        _internal_id: usize,
-    }
-
-    let schema = ComplexStudent::field_schema();
-
-    // Should have 5 visible fields
-    assert_eq!(schema.len(), 5);
-    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
-    assert_eq!(schema.get("enrolled"), Some(&SimpleFieldType::Bool.into()));
-    assert_eq!(
-        schema.get("room"),
-        Some(&SimpleFieldType::Object(TypeId::of::<RoomId>()).into())
-    );
-    assert_eq!(
-        schema.get("courses"),
-        Some(
-            &SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into()).into()
-        )
-    );
-    assert_eq!(
-        schema.get("grades"),
-        Some(&SimpleFieldType::List(SimpleFieldType::Int.into()).into())
-    );
-
-    // Hidden field should not be in schema
-    assert!(!schema.contains_key("_internal_id"));
 }
 
 // Test 10: Empty struct (edge case)
@@ -439,20 +310,18 @@ fn test_pretty_print_with_debug_output() {
     assert!(!schema.contains_key("name"));
 }
 
-// Test 13: Recursive Vec
+// Test 13: Recursive Vec of primitives
 #[test]
 fn test_schemas_for_recursive_vecs() {
     #[derive(ViewObject)]
     #[eval_object(TestObjectId)]
     struct ComplexStudent {
         ages: Vec<Vec<i32>>,
-        courses: Vec<Vec<CourseId>>,
     }
 
     let schema = ComplexStudent::field_schema();
 
-    // Should have 5 visible fields
-    assert_eq!(schema.len(), 2);
+    assert_eq!(schema.len(), 1);
     assert_eq!(
         schema.get("ages"),
         Some(
@@ -460,56 +329,40 @@ fn test_schemas_for_recursive_vecs() {
                 .into()
         )
     );
-    assert_eq!(
-        schema.get("courses"),
-        Some(
-            &SimpleFieldType::List(
-                SimpleFieldType::List(SimpleFieldType::Object(TypeId::of::<CourseId>()).into())
-                    .into()
-            )
-            .into()
-        )
-    );
 }
 
-// Test 14: Recursive Vec
+// Test 14: Recursive Vec get_field
 #[test]
 fn test_get_field_for_recursive_vecs() {
     #[derive(ViewObject)]
     #[eval_object(TestObjectId)]
     struct ComplexStudent {
         ages: Vec<Vec<i32>>,
-        courses: Vec<Vec<CourseId>>,
     }
-
-    let mut courses = Vec::new();
-    courses.push(Vec::from([CourseId(101), CourseId(201)]));
-    courses.push(Vec::from([CourseId(102), CourseId(202)]));
 
     let mut ages = Vec::new();
     ages.push(Vec::from([20, 35]));
     ages.push(Vec::from([50, 75]));
 
-    let student = ComplexStudent { ages, courses };
+    let student = ComplexStudent { ages };
 
-    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("courses")
-    {
+    if let Some(ExprValue::List(values)) = student.get_field::<SqliteDatabaseConnection>("ages") {
         assert_eq!(values.len(), 2);
         assert_eq!(
             *values[0],
             ExprValue::List(Vec::from([
-                Arc::new(ExprValue::Object(TestObjectId)),
-                Arc::new(ExprValue::Object(TestObjectId))
+                Arc::new(ExprValue::Int(20)),
+                Arc::new(ExprValue::Int(35))
             ]),)
         );
         assert_eq!(
             *values[1],
             ExprValue::List(Vec::from([
-                Arc::new(ExprValue::Object(TestObjectId)),
-                Arc::new(ExprValue::Object(TestObjectId))
+                Arc::new(ExprValue::Int(50)),
+                Arc::new(ExprValue::Int(75))
             ]),)
         );
     } else {
-        panic!("Expected List of Objects");
+        panic!("Expected List of Ints");
     }
 }

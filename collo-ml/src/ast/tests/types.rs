@@ -155,7 +155,7 @@ fn parse_list_of_bool() {
 
 #[test]
 fn parse_list_of_object() {
-    let input = "let f() -> [Student] = @[Student];";
+    let input = "let f() -> [Student] = students;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

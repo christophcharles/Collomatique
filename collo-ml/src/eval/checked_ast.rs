@@ -144,17 +144,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         })
     }
 
-    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T, D::Connection>> {
-        for typ in self.global_env.get_types().keys() {
-            let objects = T::objects_with_typ(env, typ.as_str());
-
-            for object in &objects {
-                let returned_typ = object.typ_name();
-                if returned_typ != *typ {
-                    return Err(EvalError::ObjectWithBadTypeName(typ.clone(), returned_typ));
-                }
-            }
-        }
+    pub(crate) fn check_env(&self, _env: &T::Env) -> Result<(), EvalError<T, D::Connection>> {
         Ok(())
     }
 

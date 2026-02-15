@@ -231,7 +231,6 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             ExprValue::LinExpr(_) => true,
             ExprValue::Constraint(_) => true,
             ExprValue::String(_) => true,
-            ExprValue::Object(obj) => self.ast.global_env.validate_object_type(&obj.typ_name()),
             ExprValue::List(list) => {
                 for elem in list {
                     if !self.validate_value(elem) {
@@ -255,6 +254,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                     && self.validate_value(&custom.content)
             }
             ExprValue::Database(_) => true,
+            ExprValue::_Phantom(..) => unreachable!(),
         }
     }
 

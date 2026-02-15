@@ -83,9 +83,6 @@ pub fn resolve_path<D: DatabaseDriver>(
     // 2. Check external entities (single segment only, treated like primitives)
     if segments.len() == 1 {
         let name = segments[0];
-        if global_env.object_types.contains_key(name) {
-            return Ok(ResolvedPathKind::Type(SimpleType::Object(name.to_string())));
-        }
         if !name.is_empty() {
             let first_symbol = name.chars().next().unwrap();
             if first_symbol == '$' {

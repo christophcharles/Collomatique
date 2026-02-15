@@ -1184,7 +1184,6 @@ impl Expr {
             Rule::list_comprehension => Self::from_list_comprehension(inner),
             Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
-            Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
             Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::generic_call => Self::from_generic_call(inner),
@@ -1213,7 +1212,7 @@ impl Expr {
                 Self::from_pest(inner)
             }
             _ => Err(AstError::UnexpectedRule {
-                expected: "if_expr match_expr sum cardinality list_comprehension list_literal global_collection var_call fn_call string_literal boolean number path expr",
+                expected: "if_expr match_expr sum cardinality list_comprehension list_literal var_call fn_call string_literal boolean number path expr",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
@@ -1641,22 +1640,6 @@ impl Expr {
             vars_and_collections,
             filter,
         })
-    }
-
-    fn from_global_collection(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // global_collection = { "@" ~ "[" ~ primitive_type ~ "]" }
-        let span = Span::from_pest(&pair);
-
-        // Find the primitive_type inside
-        let type_pair = pair
-            .into_inner()
-            .next()
-            .ok_or(AstError::MissingTypeName(span.clone()))?;
-
-        let type_span = Span::from_pest(&type_pair);
-        let type_name = TypeName::from_pest(type_pair)?;
-
-        Ok(Expr::GlobalList(Spanned::new(type_name, type_span)))
     }
 
     fn from_var_call(pair: Pair<Rule>) -> Result<Self, AstError> {

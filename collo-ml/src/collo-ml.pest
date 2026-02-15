@@ -186,7 +186,6 @@ primary_expr = {
     list_comprehension |  // Must come before list_literal to parse correctly
     list_range | // Must come before list_literal to parse correctly
     list_literal |
-    global_collection |
     var_call |
     var_list_call |
     generic_call |   // path(args) - unifies fn_call + qualified_type_cast
@@ -239,7 +238,6 @@ empty_typed_list = { "[" ~ "<" ~ type_name ~ ">" ~ "]" }
 list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
 list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
-global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { (ident ~ "::")? ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
 var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 // Note: fn_call, qualified_type_cast, struct_type_cast, qualified_struct_cast, qualified_unit_value

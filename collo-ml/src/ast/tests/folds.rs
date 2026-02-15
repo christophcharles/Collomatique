@@ -6,7 +6,7 @@ use pest::Parser;
 
 #[test]
 fn parse_simple_fold() {
-    let input = "let f() -> Int = fold x in @[Student] with acc = 0 { acc + x.grade };";
+    let input = "let f() -> Int = fold x in students with acc = 0 { acc + x.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -22,7 +22,7 @@ fn parse_simple_fold() {
                 reversed,
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
                 assert_eq!(accumulator.node, "acc");
                 assert!(matches!(init_value.node, Expr::Number(0)));
                 assert!(filter.is_none());
@@ -109,7 +109,7 @@ fn parse_fold_with_function_call_init_value() {
 #[test]
 fn parse_fold_with_filter() {
     let input =
-        "let f() -> Int = fold x in @[Student] with acc = 0 where x.age > 18 { acc + x.grade };";
+        "let f() -> Int = fold x in students with acc = 0 where x.age > 18 { acc + x.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -127,7 +127,7 @@ fn parse_fold_with_filter() {
 
 #[test]
 fn parse_fold_with_complex_filter() {
-    let input = "let f() -> Int = fold s in @[Student] with acc = 0 where s.age > 18 and s.grade >= 10 { acc + s.grade };";
+    let input = "let f() -> Int = fold s in students with acc = 0 where s.age > 18 and s.grade >= 10 { acc + s.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -163,7 +163,7 @@ fn parse_fold_with_list_literal() {
 
 #[test]
 fn parse_fold_with_list_comprehension() {
-    let input = "let f() -> Int = fold x in [s for s in @[Student] where s.active] with acc = 0 { acc + x.grade };";
+    let input = "let f() -> Int = fold x in [s for s in students where s.active] with acc = 0 { acc + x.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -197,7 +197,7 @@ fn parse_fold_with_path_collection() {
 
 #[test]
 fn parse_nested_fold() {
-    let input = "let f() -> Int = fold x in @[Student] with acc1 = 0 { fold y in @[Course] with acc2 = 0 { acc2 + x.grade + y.credits } };";
+    let input = "let f() -> Int = fold x in students with acc1 = 0 { fold y in courses with acc2 = 0 { acc2 + x.grade + y.credits } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -214,7 +214,7 @@ fn parse_nested_fold() {
 
 #[test]
 fn parse_fold_with_complex_body() {
-    let input = "let f() -> Int = fold x in @[Student] with acc = 0 { acc + x.grade * 2 + 5 };";
+    let input = "let f() -> Int = fold x in students with acc = 0 { acc + x.grade * 2 + 5 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -250,7 +250,7 @@ fn parse_fold_with_if_in_body() {
 
 #[test]
 fn parse_fold_with_set_operation_collection() {
-    let input = "let f() -> Int = fold x in @[Student] + @[Teacher] with acc = 0 { acc + x.age };";
+    let input = "let f() -> Int = fold x in students + teachers with acc = 0 { acc + x.age };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -267,7 +267,7 @@ fn parse_fold_with_set_operation_collection() {
 
 #[test]
 fn parse_fold_in_arithmetic_expression() {
-    let input = "let f() -> Int = fold x in @[Student] with acc = 0 { acc + x.grade } + 10;";
+    let input = "let f() -> Int = fold x in students with acc = 0 { acc + x.grade } + 10;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -287,7 +287,7 @@ fn parse_fold_in_arithmetic_expression() {
 
 #[test]
 fn parse_simple_rfold() {
-    let input = "let f() -> Int = rfold x in @[Student] with acc = 0 { acc + x.grade };";
+    let input = "let f() -> Int = rfold x in students with acc = 0 { acc + x.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -303,7 +303,7 @@ fn parse_simple_rfold() {
                 reversed,
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
                 assert_eq!(accumulator.node, "acc");
                 assert!(matches!(init_value.node, Expr::Number(0)));
                 assert!(filter.is_none());
@@ -319,7 +319,7 @@ fn parse_simple_rfold() {
 #[test]
 fn parse_rfold_with_filter() {
     let input =
-        "let f() -> Int = rfold x in @[Student] with acc = 0 where x.age > 18 { acc + x.grade };";
+        "let f() -> Int = rfold x in students with acc = 0 where x.age > 18 { acc + x.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -340,7 +340,7 @@ fn parse_rfold_with_filter() {
 
 #[test]
 fn parse_rfold_with_complex_body() {
-    let input = "let f() -> Int = rfold x in @[Student] with acc = 0 { acc + x.grade * 2 };";
+    let input = "let f() -> Int = rfold x in students with acc = 0 { acc + x.grade * 2 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -358,7 +358,7 @@ fn parse_rfold_with_complex_body() {
 
 #[test]
 fn parse_nested_rfold() {
-    let input = "let f() -> Int = rfold x in @[Student] with acc1 = 0 { rfold y in @[Course] with acc2 = 0 { acc2 + x.grade } };";
+    let input = "let f() -> Int = rfold x in students with acc1 = 0 { rfold y in courses with acc2 = 0 { acc2 + x.grade } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -400,7 +400,7 @@ fn parse_rfold_with_list_literal() {
 
 #[test]
 fn parse_fold_with_sum_in_body() {
-    let input = "let f() -> Int = fold s in @[Student] with acc = 0 { acc + sum c in @[Course] { c.credits } };";
+    let input = "let f() -> Int = fold s in students with acc = 0 { acc + sum c in courses { c.credits } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -420,7 +420,7 @@ fn parse_fold_with_sum_in_body() {
 
 #[test]
 fn parse_sum_with_fold_in_body() {
-    let input = "let f() -> Int = sum x in @[Student] { fold y in x.courses with acc = 0 { acc + y.credits } };";
+    let input = "let f() -> Int = sum x in students { fold y in x.courses with acc = 0 { acc + y.credits } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -437,7 +437,7 @@ fn parse_sum_with_fold_in_body() {
 
 #[test]
 fn parse_forall_with_fold_in_body() {
-    let input = "let f() -> Constraint = forall s in @[Student] { fold c in s.courses with acc = 0 { acc + c.credits } >= 30 };";
+    let input = "let f() -> Constraint = forall s in students { fold c in s.courses with acc = 0 { acc + c.credits } >= 30 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -457,7 +457,7 @@ fn parse_forall_with_fold_in_body() {
 
 #[test]
 fn parse_fold_with_forall_in_filter() {
-    let input = "let f() -> Int = fold s in @[Student] with acc = 0 where forall c in s.courses { c.passed } { acc + s.grade };";
+    let input = "let f() -> Int = fold s in students with acc = 0 where forall c in s.courses { c.passed } { acc + s.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

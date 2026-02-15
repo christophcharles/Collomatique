@@ -145,7 +145,7 @@ fn qualified_var_call_in_expression() {
     let cases = vec![
         "mod::$Var(x) === 1",
         "mod::$Var(x) + other::$Var(y)",
-        "sum i in @[Int] { mod::$Assigned(i) }",
+        "sum i in numbers { mod::$Assigned(i) }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

@@ -449,41 +449,37 @@ async fn match_list_conversion() {
     );
 }
 
-// ========== Object Types ==========
+// ========== Custom/Struct Types ==========
 
 #[tokio::test]
-async fn match_with_object_types() {
-    let types = {
-        let mut map = HashMap::new();
-        map.insert("Student".to_string(), HashMap::new());
-        map.insert("Teacher".to_string(), HashMap::new());
-        map
-    };
+async fn match_with_custom_types() {
     let input = r#"
-        pub let f(x: Student | Teacher) -> Int = match x { 
-            s as Student { 1 } 
-            t as Teacher { 2 } 
+        type Student = {name: String};
+        type Teacher = {subject: String};
+        pub let f(x: Student | Teacher) -> Int = match x {
+            s as Student { 1 }
+            t as Teacher { 2 }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Match with object types should work: {:?}",
+        "Match with custom types should work: {:?}",
         errors
     );
 }
 
 #[tokio::test]
 async fn match_with_field_access_in_branch() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f(x: Student | Int) -> Int = match x { 
-            s as Student { s.age } 
-            i as Int { i } 
+        type Student = {age: Int};
+        pub let f(x: Student | Int) -> Int = match x {
+            s as Student { s.age }
+            i as Int { i }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -677,14 +673,14 @@ async fn match_with_filtered_branches() {
 
 #[tokio::test]
 async fn match_optional_handling() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f(student: Student | None) -> Int = match student { 
-            s as Student { s.age } 
-            n as None { 0 } 
+        type Student = {age: Int};
+        pub let f(student: Student | None) -> Int = match student {
+            s as Student { s.age }
+            n as None { 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

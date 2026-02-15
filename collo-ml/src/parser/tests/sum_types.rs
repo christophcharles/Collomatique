@@ -44,7 +44,7 @@ fn let_statement_with_option_custom_types() {
 fn let_statement_with_option_list_types() {
     let cases = vec![
         "let f() -> ?[Int] = [1, 2, 3];",
-        "let g() -> ?[Student] = @[Student];",
+        "let g() -> ?[Student] = students;",
         "let h() -> ?[[Int]] = [[1], [2]];",
         "let i(x: ?[Bool]) -> Int = 0;",
     ];
@@ -121,7 +121,7 @@ fn let_statement_with_sum_type_including_none() {
 fn let_statement_with_sum_of_list_types() {
     let cases = vec![
         "let f() -> [Int] | [Bool] = [1, 2];",
-        "let g() -> [Student] | [Teacher] = @[Student];",
+        "let g() -> [Student] | [Teacher] = students;",
         "let h(x: [Int] | [Bool] | [LinExpr]) -> Int = 0;",
     ];
     for case in cases {
@@ -216,10 +216,10 @@ fn let_statement_with_complex_nested_types() {
 #[test]
 fn let_statement_with_glob_list_of_sum_types() {
     let cases = vec![
-        "let f() -> [Student | Teacher] = @[Student | Teacher];",
-        "let g() -> [Int] = @[Person | Room];", // Type mismatch but syntactically valid
-        "let h() -> Bool = x in @[Student | Teacher];",
-        "let i() -> LinExpr = sum p in @[Student | Teacher] { $V(p) };",
+        "let f() -> [Student | Teacher] = people;",
+        "let g() -> [Int] = people;", // Type mismatch but syntactically valid
+        "let h() -> Bool = x in people;",
+        "let i() -> LinExpr = sum p in people { $V(p) };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -331,9 +331,9 @@ fn let_statement_realistic_sum_type_examples() {
         // Optional result
         "let get_room(id: Int) -> ?Room = find_room(id);",
         // List of mixed entities
-        "let all_people() -> [Student | Teacher] = @[Student | Teacher];",
+        "let all_people() -> [Student | Teacher] = people;",
         // Complex aggregation
-        "let count_all() -> Int = |@[Student | Teacher]|;",
+        "let count_all() -> Int = |people|;",
         // Working with optional lists
         "let get_students(week: ?Week) -> [Student] = if week == none { [] } else { get_for_week(week) };",
     ];

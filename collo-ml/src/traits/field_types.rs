@@ -5,14 +5,12 @@ use std::collections::BTreeSet;
 /// Represents a simple (non-sum) field type in a view object.
 ///
 /// This is an intermediate representation used as a building block for [`FieldType`], which may
-/// represent sum types. It captures field types without requiring knowledge of the DSL type names
-/// for object references (those are resolved later using `TypeId`).
+/// represent sum types.
 ///
 /// # Variants
 ///
 /// - `Int`: An integer field (`i32`)
 /// - `Bool`: A boolean field
-/// - `Object(TypeId)`: A reference to another object, identified by its Rust type's `TypeId`
 /// - `List(Box<FieldType>)`: A collection (typically `Vec`) of values - note the inner type is
 ///   [`FieldType`], which allows lists of sum types like `[Int | Bool]`
 ///
@@ -26,12 +24,6 @@ use std::collections::BTreeSet;
 /// - `SimpleFieldType::Int` converts to `FieldType` with one variant: `{Int}`
 /// - A sum type like `Int | Bool` is represented as `FieldType` with two `SimpleFieldType` variants: `{Int, Bool}`
 ///
-/// # Type Resolution
-///
-/// `Object` variants store a `TypeId` which is later mapped to DSL type names through
-/// [`convert_to_simple_type`](SimpleFieldType::convert_to_simple_type), which uses
-/// `EvalObject::type_id_to_name()`. This allows view objects to be defined without knowledge
-/// of the complete object hierarchy.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleFieldType {
     /// A none field
@@ -40,8 +32,6 @@ pub enum SimpleFieldType {
     Int,
     /// A boolean field
     Bool,
-    /// A reference to another object, identified by the Rust type's TypeId
-    Object(std::any::TypeId),
     /// A collection of values of the specified type
     List(FieldType),
 }
@@ -53,9 +43,6 @@ impl SimpleFieldType {
             SimpleFieldType::Bool => Ok(SimpleType::Bool),
             SimpleFieldType::Int => Ok(SimpleType::Int),
             SimpleFieldType::List(typ) => Ok(SimpleType::List(typ.convert_to_expr_type::<T>()?)),
-            SimpleFieldType::Object(type_id) => {
-                Ok(SimpleType::Object(T::type_id_to_name(type_id)?))
-            }
         }
     }
 }
@@ -67,7 +54,6 @@ impl std::fmt::Display for SimpleFieldType {
             SimpleFieldType::Bool => write!(f, "Bool"),
             SimpleFieldType::Int => write!(f, "Int"),
             SimpleFieldType::List(typ) => write!(f, "[{}]", typ),
-            SimpleFieldType::Object(type_id) => write!(f, "Object({:?})", type_id),
         }
     }
 }
@@ -118,8 +104,7 @@ impl std::fmt::Display for SimpleFieldType {
 /// `FieldType` is converted to [`ExprType`] via [`convert_to_expr_type`](FieldType::convert_to_expr_type),
 /// which:
 /// 1. Converts each `SimpleFieldType` variant to a `SimpleType`
-/// 2. Resolves object `TypeId`s to type name strings
-/// 3. Creates an `ExprType` with the resulting set of `SimpleType` variants
+/// 2. Creates an `ExprType` with the resulting set of `SimpleType` variants
 ///
 /// This maintains the sum type structure through the conversion process.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

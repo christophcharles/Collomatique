@@ -160,22 +160,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                             // Unwrap Custom types for field access
                             let unwrapped = unwrap_custom(current_value);
                             match &*unwrapped {
-                                ExprValue::Object(obj) => {
-                                    current_value = Arc::new(
-                                        obj.field_access::<D::Connection>(
-                                            eval_history.env,
-                                            &mut eval_history.cache,
-                                            field_name,
-                                        )
-                                        .ok_or(
-                                            EvalError::MissingObjectField {
-                                                object: format!("{:?}", obj),
-                                                typ: obj.typ_name(),
-                                                field: field_name.clone(),
-                                            },
-                                        )?,
-                                    );
-                                }
                                 ExprValue::Struct(fields) => {
                                     current_value = Arc::clone(
                                         fields
@@ -183,7 +167,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                             .expect("Field should exist after type checking"),
                                     );
                                 }
-                                _ => panic!("Object or Struct expected for field access"),
+                                _ => panic!("Struct expected for field access"),
                             }
                         }
                         PathSegment::TupleIndex(index) => {
@@ -381,21 +365,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         .map(|i| Arc::new(ExprValue::Int(i)))
                         .collect(),
                 ))
-            }
-            Expr::GlobalList(typ_name) => {
-                let expr_type = eval_history.ast.get_resolved_type(&typ_name.span);
-
-                let mut collection = vec![];
-                for variant in expr_type.get_variants() {
-                    let typ_as_str = match &variant {
-                        SimpleType::Object(obj) => obj.clone(),
-                        _ => panic!("Object expected"),
-                    };
-                    let objects = T::objects_with_typ(eval_history.env, &typ_as_str);
-                    collection.extend(objects.into_iter().map(|x| Arc::new(ExprValue::Object(x))));
-                }
-
-                Arc::new(ExprValue::List(collection))
             }
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to

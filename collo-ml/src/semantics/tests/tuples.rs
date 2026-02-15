@@ -370,27 +370,31 @@ async fn tuple_element_to_string_conversion() {
 }
 
 // =============================================================================
-// TUPLES WITH OBJECTS
+// TUPLES WITH STRUCTS
 // =============================================================================
 
 #[tokio::test]
-async fn tuple_with_object() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> (Student, Int) = (s, 42);";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn tuple_with_struct() {
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(s: Student) -> (Student, Int) = (s, 42);
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Tuple with object should work: {:?}",
+        "Tuple with struct should work: {:?}",
         errors
     );
 }
 
 #[tokio::test]
 async fn tuple_access_then_field_access() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(t: (Student, Int)) -> Int = t.0.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(t: (Student, Int)) -> Int = t.0.age;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -401,19 +405,11 @@ async fn tuple_access_then_field_access() {
 
 #[tokio::test]
 async fn field_access_then_tuple_access() {
-    let mut types = HashMap::new();
-    let mut student_fields = HashMap::new();
-    student_fields.insert(
-        "coords".to_string(),
-        ExprType::simple(SimpleType::Tuple(vec![
-            ExprType::simple(SimpleType::Int),
-            ExprType::simple(SimpleType::Int),
-        ])),
-    );
-    types.insert("Student".to_string(), student_fields);
-
-    let input = "pub let f(s: Student) -> Int = s.coords.0;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {coords: (Int, Int)};
+        pub let f(s: Student) -> Int = s.coords.0;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

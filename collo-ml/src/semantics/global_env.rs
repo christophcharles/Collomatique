@@ -142,10 +142,6 @@ impl std::fmt::Display for GenericType {
 }
 
 impl<D: DatabaseDriver> GlobalEnv<D> {
-    pub fn validate_object_type(&self, obj_name: &str) -> bool {
-        self.object_types.contains_key(obj_name)
-    }
-
     pub fn validate_simple_type(&self, typ: &SimpleType) -> bool {
         match typ {
             SimpleType::Never => true,
@@ -157,7 +153,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             SimpleType::String => true,
             SimpleType::EmptyList => true,
             SimpleType::List(sub_typ) => self.validate_type(sub_typ),
-            SimpleType::Object(typ_name) => self.validate_object_type(typ_name),
             SimpleType::Custom(module, root, variant) => {
                 let name = match variant {
                     None => root.clone(),
@@ -265,10 +260,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
     pub fn get_var_lists(&self) -> &HashMap<(String, String), VariableDesc> {
         &self.variable_lists
-    }
-
-    pub fn get_types(&self) -> &HashMap<String, ObjectFields> {
-        &self.object_types
     }
 
     pub(crate) fn lookup_fn(&self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
@@ -465,10 +456,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         );
 
         type_info.types.insert(span, args_typ.into());
-    }
-
-    pub(crate) fn lookup_field(&self, obj_type: &str, field: &str) -> Option<ExprType> {
-        self.object_types.get(obj_type)?.get(field).cloned()
     }
 
     pub(crate) fn module_exists(&self, module: &str) -> bool {

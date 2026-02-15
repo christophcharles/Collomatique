@@ -125,14 +125,13 @@ async fn fold_over_parameter() {
 }
 
 #[tokio::test]
-async fn fold_over_global_collection() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Int = fold s in @[Student] with acc = 0 { acc + 1 };";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn fold_over_list_parameter() {
+    let input = "pub let f(students: [Int]) -> Int = fold s in students with acc = 0 { acc + 1 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Fold over global collection should work: {:?}",
+        "Fold over list parameter should work: {:?}",
         errors
     );
 }
@@ -154,12 +153,11 @@ async fn fold_over_list_comprehension() {
 
 #[tokio::test]
 async fn fold_with_field_access() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f(students: [Student]) -> Int = 
+        pub let f(students: [{age: Int}]) -> Int =
             fold s in students with acc = 0 { acc + s.age };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -542,17 +540,16 @@ async fn fold_building_list() {
 }
 
 #[tokio::test]
-async fn fold_with_object_type() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
+async fn fold_with_struct_type() {
     let input = r#"
-        pub let f(students: [Student], count: Int) -> Int = 
+        pub let f(students: [{age: Int}], count: Int) -> Int =
             fold s in students with acc = count { acc + 1 };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Fold with object type should work: {:?}",
+        "Fold with struct type should work: {:?}",
         errors
     );
 }

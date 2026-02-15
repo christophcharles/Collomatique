@@ -36,8 +36,6 @@ pub use crate::traits::EvalObject;
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
-pub(crate) use crate::traits::FieldConversionError;
-#[cfg(test)]
 pub(crate) use collomatique_ilp::LinExpr;
 #[cfg(test)]
-pub(crate) use std::collections::{BTreeSet, HashMap};
+pub(crate) use std::collections::HashMap;

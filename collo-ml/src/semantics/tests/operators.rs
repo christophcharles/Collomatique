@@ -964,15 +964,8 @@ async fn list_index_chained() {
 
 #[tokio::test]
 async fn list_index_with_field_access() {
-    let types = HashMap::from([(
-        "Student".to_string(),
-        HashMap::from([(
-            "scores".to_string(),
-            ExprType::simple(SimpleType::List(SimpleType::Int.into())),
-        )]),
-    )]);
-    let input = "pub let f(s: Student) -> ?Int = s.scores[0]?;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(s: {scores: [Int]}) -> ?Int = s.scores[0]?;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

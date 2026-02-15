@@ -1,110 +1,17 @@
-use collo_ml::{EvalObject, EvalVar, ViewBuilder, ViewObject};
-use std::collections::{BTreeSet, HashMap};
+use collo_ml::EvalVar;
 
 // ============================================================================
 // Test Environment
 // ============================================================================
 
 struct EdgeCaseEnv {
-    students: HashMap<u64, String>,
     max_week: i32,
 }
 
 impl EdgeCaseEnv {
     fn empty_env() -> Self {
-        EdgeCaseEnv {
-            students: HashMap::new(),
-            max_week: 0,
-        }
+        EdgeCaseEnv { max_week: 0 }
     }
-
-    fn single_student_env() -> Self {
-        EdgeCaseEnv {
-            students: HashMap::from([(0, "Student".to_string())]),
-            max_week: 1,
-        }
-    }
-}
-
-// ============================================================================
-// Object IDs
-// ============================================================================
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-struct StudentId(u64);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, EvalObject)]
-#[env(EdgeCaseEnv)]
-enum ObjectId {
-    Student(StudentId),
-}
-
-#[derive(Clone, ViewObject)]
-#[eval_object(ObjectId)]
-#[pretty("Student {name}")]
-struct Student {
-    #[hidden]
-    name: String,
-}
-
-impl ViewBuilder<EdgeCaseEnv, StudentId> for ObjectId {
-    type Object = Student;
-
-    fn enumerate(env: &EdgeCaseEnv) -> BTreeSet<StudentId> {
-        env.students.keys().map(|&id| StudentId(id)).collect()
-    }
-
-    fn build(env: &EdgeCaseEnv, id: &StudentId) -> Option<Self::Object> {
-        let name = env.students.get(&id.0)?;
-        Some(Student { name: name.clone() })
-    }
-}
-
-// ============================================================================
-// Test 1: Edge Case - Empty Range
-// ============================================================================
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
-#[env(EdgeCaseEnv)]
-#[object(ObjectId)]
-enum EmptyRangeVar {
-    // When max_week = 0, range is 0..0 (empty)
-    StudentInWeek {
-        student: StudentId,
-        #[range(0..env.max_week)]
-        week: i32,
-    },
-}
-
-#[test]
-fn test_empty_range() {
-    let env = EdgeCaseEnv::empty_env();
-
-    let vars = <EmptyRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
-
-    // With empty range and no students, should generate 0 variables
-    assert_eq!(vars.len(), 0, "Empty range should produce no variables");
-}
-
-#[test]
-fn test_single_element_range() {
-    let env = EdgeCaseEnv::single_student_env();
-
-    let vars = <EmptyRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
-
-    // 1 student × 1 week (0..1) = 1 variable
-    assert_eq!(
-        vars.len(),
-        1,
-        "Single element range should produce 1 variable"
-    );
-
-    // Verify the variable
-    let expected = EmptyRangeVar::StudentInWeek {
-        student: StudentId(0),
-        week: 0,
-    };
-    assert!(vars.contains_key(&expected));
 }
 
 // ============================================================================
@@ -297,11 +204,9 @@ fn test_multiple_field_fix_priority() {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
-#[object(ObjectId)]
 enum AlwaysValidVar {
     #[defer_fix(None)]
     AlwaysValid {
-        student: StudentId,
         #[range(0..10)]
         slot: i32,
     },
@@ -309,12 +214,12 @@ enum AlwaysValidVar {
 
 #[test]
 fn test_defer_fix_always_none() {
-    let env = EdgeCaseEnv::single_student_env();
+    let env = EdgeCaseEnv::empty_env();
 
     let vars = <AlwaysValidVar as EvalVar>::vars(&env).expect("Should generate vars");
 
     // Should generate all combinations since defer_fix always returns None
-    // 1 student × 10 slots = 10 variables
+    // 10 slots = 10 variables
     assert_eq!(
         vars.len(),
         10,
@@ -337,11 +242,9 @@ fn test_defer_fix_always_none() {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
-#[object(ObjectId)]
 enum AlwaysInvalidVar {
     #[defer_fix(Some(99.0))]
     AlwaysInvalid {
-        student: StudentId,
         #[range(0..10)]
         slot: i32,
     },
@@ -349,7 +252,7 @@ enum AlwaysInvalidVar {
 
 #[test]
 fn test_defer_fix_always_some() {
-    let env = EdgeCaseEnv::single_student_env();
+    let env = EdgeCaseEnv::empty_env();
 
     let vars = <AlwaysInvalidVar as EvalVar>::vars(&env).expect("Should generate vars");
 

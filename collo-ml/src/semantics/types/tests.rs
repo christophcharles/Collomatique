@@ -13,7 +13,6 @@ fn simple_type_is_primitive_type() {
 
     assert!(!SimpleType::EmptyList.is_primitive_type());
     assert!(!SimpleType::List(ExprType::simple(SimpleType::Int)).is_primitive_type());
-    assert!(!SimpleType::Object("Student".to_string()).is_primitive_type());
 }
 
 #[test]
@@ -32,7 +31,6 @@ fn simple_type_is_list() {
 
     assert!(!SimpleType::Int.is_list());
     assert!(!SimpleType::Bool.is_list());
-    assert!(!SimpleType::Object("Student".to_string()).is_list());
 }
 
 #[test]
@@ -89,30 +87,6 @@ fn simple_type_to_inner_list_type() {
 
     assert_eq!(SimpleType::Int.to_inner_list_type(), None);
     assert_eq!(SimpleType::EmptyList.to_inner_list_type(), None);
-}
-
-#[test]
-fn simple_type_is_object() {
-    assert!(SimpleType::Object("Student".to_string()).is_object());
-
-    assert!(!SimpleType::Int.is_object());
-    assert!(!SimpleType::List(ExprType::simple(SimpleType::Int)).is_object());
-}
-
-#[test]
-fn simple_type_get_inner_object_type() {
-    let obj = SimpleType::Object("Student".to_string());
-    assert_eq!(obj.get_inner_object_type(), Some(&"Student".to_string()));
-
-    assert_eq!(SimpleType::Int.get_inner_object_type(), None);
-}
-
-#[test]
-fn simple_type_to_inner_object_type() {
-    let obj = SimpleType::Object("Student".to_string());
-    assert_eq!(obj.to_inner_object_type(), Some("Student".to_string()));
-
-    assert_eq!(SimpleType::Int.to_inner_object_type(), None);
 }
 
 #[test]
@@ -264,20 +238,6 @@ fn different_primitives_dont_overlap() {
     assert!(!SimpleType::Int.overlaps_with(&SimpleType::Bool));
     assert!(!SimpleType::Int.overlaps_with(&SimpleType::None));
     assert!(!SimpleType::Bool.overlaps_with(&SimpleType::LinExpr));
-}
-
-#[test]
-fn same_objects_overlap() {
-    let student1 = SimpleType::Object("Student".to_string());
-    let student2 = SimpleType::Object("Student".to_string());
-    assert!(student1.overlaps_with(&student2));
-}
-
-#[test]
-fn different_objects_dont_overlap() {
-    let student = SimpleType::Object("Student".to_string());
-    let teacher = SimpleType::Object("Teacher".to_string());
-    assert!(!student.overlaps_with(&teacher));
 }
 
 #[test]
@@ -475,22 +435,6 @@ fn expr_type_is_specific_types() {
 
     let union = ExprType::sum([SimpleType::Int, SimpleType::Bool]).unwrap();
     assert!(!union.is_int());
-}
-
-#[test]
-fn expr_type_is_sum_of_objects() {
-    let student = SimpleType::Object("Student".to_string());
-    let teacher = SimpleType::Object("Teacher".to_string());
-
-    let single = ExprType::simple(student.clone());
-    assert!(single.is_sum_of_objects());
-
-    let union = ExprType::sum([student, teacher]).unwrap();
-    assert!(union.is_sum_of_objects());
-
-    let mixed =
-        ExprType::sum([SimpleType::Object("Student".to_string()), SimpleType::Int]).unwrap();
-    assert!(!mixed.is_sum_of_objects());
 }
 
 #[test]
@@ -767,9 +711,6 @@ fn simple_type_display() {
 
     let list_int = SimpleType::List(ExprType::simple(SimpleType::Int));
     assert_eq!(format!("{}", list_int), "[Int]");
-
-    let obj = SimpleType::Object("Student".to_string());
-    assert_eq!(format!("{}", obj), "Student");
 }
 
 #[test]

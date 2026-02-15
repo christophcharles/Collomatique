@@ -49,11 +49,10 @@ async fn parameter_not_accessible_in_other_function() {
 
 #[tokio::test]
 async fn forall_variable_accessible_in_body() {
-    let types = simple_object("Student");
-    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
 
-    let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };";
-    let (_, errors, _) = analyze(input, types, vars).await;
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { $V(s) >== 0 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -64,11 +63,10 @@ async fn forall_variable_accessible_in_body() {
 
 #[tokio::test]
 async fn forall_variable_not_accessible_outside() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Int = forall s in @[Student] { 0 <== 1 } and s;
+        pub let f(students: [Int]) -> Int = forall s in students { 0 <== 1 } and s;
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -83,28 +81,26 @@ async fn forall_variable_not_accessible_outside() {
 
 #[tokio::test]
 async fn nested_forall_with_different_variables() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s1 in @[Student] { 
-                forall s2 in @[Student] { 
-                    0 <== 1 
-                } 
+        pub let f(students: [Int]) -> Constraint =
+            forall s1 in students {
+                forall s2 in students {
+                    0 <== 1
+                }
             };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested forall should work: {:?}", errors);
 }
 
 #[tokio::test]
 async fn forall_variable_shadows_parameter() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f(s: Student) -> Constraint = 
-            forall s in @[Student] { 0 <== 1 };
+        pub let f(s: Int, students: [Int]) -> Constraint =
+            forall s in students { 0 <== 1 };
     "#;
-    let (_, errors, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     // Should have a shadowing warning
     assert!(
@@ -125,12 +121,11 @@ async fn forall_variable_shadows_parameter() {
 
 #[tokio::test]
 async fn forall_where_clause_can_access_variable() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] where s.age > 18 { 0 <== 1 };
+        pub let f(students: [{age: Int}]) -> Constraint =
+            forall s in students where s.age > 18 { 0 <== 1 };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -143,11 +138,10 @@ async fn forall_where_clause_can_access_variable() {
 
 #[tokio::test]
 async fn sum_variable_accessible_in_body() {
-    let types = simple_object("Student");
-    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
 
-    let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };";
-    let (_, errors, _) = analyze(input, types, vars).await;
+    let input = "pub let f(students: [Int]) -> LinExpr = sum s in students { $V(s) };";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
@@ -158,11 +152,10 @@ async fn sum_variable_accessible_in_body() {
 
 #[tokio::test]
 async fn sum_variable_not_accessible_outside() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> LinExpr = (sum s in @[Student] { 5 }) + s;
+        pub let f(students: [Int]) -> LinExpr = (sum s in students { 5 }) + s;
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Sum variable should not leak outside");
     assert!(
@@ -174,12 +167,11 @@ async fn sum_variable_not_accessible_outside() {
 
 #[tokio::test]
 async fn sum_where_clause_can_access_variable() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f() -> LinExpr = 
-            sum s in @[Student] where s.age > 18 { LinExpr(1) };
+        pub let f(students: [{age: Int}]) -> LinExpr =
+            sum s in students where s.age > 18 { LinExpr(1) };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -190,14 +182,13 @@ async fn sum_where_clause_can_access_variable() {
 
 #[tokio::test]
 async fn nested_sum() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Int = 
-            sum s1 in @[Student] { 
-                sum s2 in @[Student] { 1 } 
+        pub let f(students: [Int]) -> Int =
+            sum s1 in students {
+                sum s2 in students { 1 }
             };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested sum should work: {:?}", errors);
 }
@@ -242,10 +233,9 @@ async fn list_comprehension_where_clause() {
 }
 
 #[tokio::test]
-async fn list_comprehension_with_object_field_access() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn list_comprehension_with_struct_field_access() {
+    let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -300,16 +290,15 @@ async fn list_comprehension_shadows_parameter() {
 
 #[tokio::test]
 async fn nested_forall_shadows_outer_variable() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] { 
-                forall s in @[Student] { 
-                    0 <== 1 
-                } 
+        pub let f(students: [Int]) -> Constraint =
+            forall s in students {
+                forall s in students {
+                    0 <== 1
+                }
             };
     "#;
-    let (_, errors, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -344,12 +333,11 @@ async fn multiple_scopes_with_same_name_in_sequence() {
 
 #[tokio::test]
 async fn nested_different_construct_scopes() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f(students: [Student]) -> Int = 
+        pub let f(students: [{age: Int}]) -> Int =
             sum s in students where (forall t in students { t.age > 0 }) { s.age };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

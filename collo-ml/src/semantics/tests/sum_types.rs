@@ -29,14 +29,16 @@ async fn option_bool_type_valid() {
 }
 
 #[tokio::test]
-async fn option_custom_object_valid() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: ?Student) -> ?Student = s;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn option_custom_type_valid() {
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(s: ?Student) -> ?Student = s;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Option custom object should be valid: {:?}",
+        "Option custom type should be valid: {:?}",
         errors
     );
 }
@@ -188,16 +190,17 @@ async fn sum_type_with_none_valid() {
 }
 
 #[tokio::test]
-async fn sum_type_custom_objects_valid() {
-    let mut types = simple_object("Student");
-    types.extend(simple_object("Teacher"));
-
-    let input = "pub let f(p: Student | Teacher) -> Student | Teacher = p;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn sum_type_custom_types_valid() {
+    let input = r#"
+        type Student = {age: Int};
+        type Teacher = {subject: String};
+        pub let f(p: Student | Teacher) -> Student | Teacher = p;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Sum of custom objects should be valid: {:?}",
+        "Sum of custom types should be valid: {:?}",
         errors
     );
 }
@@ -247,9 +250,11 @@ async fn duplicate_types_in_sum_error() {
 
 #[tokio::test]
 async fn triplicate_types_in_sum_error() {
-    let types = simple_object("Student");
-    let input = "pub let f(x: Student) -> Student | Student | Student = x;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(x: Student) -> Student | Student | Student = x;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Triplicate types in sum should error");
     assert!(
@@ -263,9 +268,11 @@ async fn triplicate_types_in_sum_error() {
 
 #[tokio::test]
 async fn triplicate_types_in_sum_error_with_extra_error() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Student | Student | Student = get();";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {age: Int};
+        pub let f() -> Student | Student | Student = get();
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Triplicate types in sum should error");
     assert!(
@@ -330,82 +337,6 @@ async fn option_with_none_in_sum_error() {
             .iter()
             .any(|e| matches!(e, SemError::MultipleTypeInSum { .. })),
         "Should have MultipleTypeInSum error: {:?}",
-        errors
-    );
-}
-
-// =============================================================================
-// GLOBAL COLLECTIONS WITH SUM TYPES
-// =============================================================================
-
-#[tokio::test]
-async fn global_collection_of_sum_of_objects_valid() {
-    let mut types = simple_object("Student");
-    types.extend(simple_object("Teacher"));
-
-    let input = "pub let f() -> [Student | Teacher] = @[Student | Teacher];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Global collection of object sum should be valid: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_of_sum_with_primitives_error() {
-    let input = "pub let f() -> [Int | Bool] = @[Int | Bool];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of primitive sum should error"
-    );
-    assert!(
-        errors
-            .iter()
-            .any(|e| matches!(e, SemError::GlobalCollectionsMustBeAListOfObjects { .. })),
-        "Should have GlobalCollectionsMustBeAListOfObjects error: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_of_mixed_sum_error() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [Student | Int] = @[Student | Int];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of mixed sum should error"
-    );
-    assert!(
-        errors
-            .iter()
-            .any(|e| matches!(e, SemError::GlobalCollectionsMustBeAListOfObjects { .. })),
-        "Should have GlobalCollectionsMustBeAListOfObjects error: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_of_option_object_error() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [?Student] = @[?Student];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of option object should error"
-    );
-    // ?Student is sugar for None | Student, which includes None (not an object)
-    assert!(
-        errors
-            .iter()
-            .any(|e| matches!(e, SemError::GlobalCollectionsMustBeAListOfObjects { .. })),
-        "Should have GlobalCollectionsMustBeAListOfObjects error: {:?}",
         errors
     );
 }
@@ -535,11 +466,11 @@ async fn deeply_nested_types_valid() {
 
 #[tokio::test]
 async fn field_access_on_sum_type_error() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-
-    // Cannot access field on sum type directly
-    let input = "pub let f(p: Student | Int) -> Int = p.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(p: Student | Int) -> Int = p.age;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -549,11 +480,11 @@ async fn field_access_on_sum_type_error() {
 
 #[tokio::test]
 async fn field_access_on_option_type_error() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-
-    // Cannot access field on option type directly
-    let input = "pub let f(s: ?Student) -> Int = s.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Student = {age: Int};
+        pub let f(s: ?Student) -> Int = s.age;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -650,12 +581,12 @@ async fn unknown_type_in_option_error() {
 
 #[tokio::test]
 async fn realistic_option_return_type() {
-    let types = simple_object("Student");
     let input = r#"
+        type Student = {age: Int};
         pub let find_student(id: Int) -> ?Student = none;
         pub let process() -> ?Student = find_student(5);
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -666,13 +597,12 @@ async fn realistic_option_return_type() {
 
 #[tokio::test]
 async fn realistic_sum_type_for_mixed_entities() {
-    let mut types = simple_object("Student");
-    types.extend(simple_object("Teacher"));
-
     let input = r#"
-        pub let count_all() -> Int = |@[Student | Teacher]|;
+        type Student = {age: Int};
+        type Teacher = {subject: String};
+        pub let count_all(entities: [Student | Teacher]) -> Int = |entities|;
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

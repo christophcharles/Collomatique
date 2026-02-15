@@ -389,8 +389,10 @@ fn generate_field_type_expr_core(ty: &Type) -> proc_macro2::TokenStream {
                 "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
                 "Option" => panic!("Should not reach here - Option should be handled by caller"),
                 _ => {
-                    // It's an object type - use TypeId
-                    quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into() }
+                    panic!(
+                        "Unsupported field type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }
@@ -542,7 +544,7 @@ fn generate_field_loop(
 fn generate_field_iterator(
     ty: &Type,
     range: &Option<syn::Expr>,
-    object_type: Option<&syn::Type>,
+    _object_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
     // Get the core type (unwrap Option if present)
     let core_ty = get_core_type(ty);
@@ -570,23 +572,10 @@ fn generate_field_iterator(
                     panic!("Should not reach here - Option should be handled by caller")
                 }
                 _ => {
-                    if range.is_some() {
-                        panic!("#[range(...)] attribute is not supported for object types");
-                    }
-                    let object_ty = object_type.expect(
-                        "EvalVar derive requires #[object(ObjectType)] attribute when enum has object-type fields",
-                    );
-                    // It's an object type - use the concrete #[object(Type)]
-                    quote! {
-                        {
-                            let type_id = ::std::any::TypeId::of::<#core_ty>();
-                            let type_name = <#object_ty as ::collo_ml::EvalObject>::type_id_to_name(type_id.clone())
-                                .map_err(|_| type_id)?;
-                            <#object_ty as ::collo_ml::EvalObject>::objects_with_typ(env, &type_name)
-                                .into_iter()
-                                .map(|obj| <#core_ty>::try_from(obj).expect("Consistent TryFrom implementation with type_id_to_name"))
-                        }
-                    }
+                    panic!(
+                        "Unsupported field type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }
@@ -865,35 +854,10 @@ fn generate_param_extraction(
                     panic!("Should not reach here - Option should be handled by caller")
                 }
                 _ => {
-                    // It's an object type
-                    let output = quote! {
-                        <#core_ty>::try_from(obj.clone())
-                            .map_err(|_| ::collo_ml::traits::VarConversionError::WrongParameterType {
-                                name: #dsl_name.into(),
-                                param: #idx,
-                                expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
-                            })?
-                    };
-                    let opt_output = if is_option {
-                        quote! { Some(#output) }
-                    } else {
-                        quote! { #output }
-                    };
-                    quote! {
-                        let #param_name = match &*value.params[#idx] {
-                            #none_arm
-                            ::collo_ml::ExprValue::Object(obj) => {
-                                #opt_output
-                            }
-                            _ => {
-                                return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
-                                    name: #dsl_name.into(),
-                                    param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
-                                })
-                            }
-                        };
-                    }
+                    panic!(
+                        "Unsupported parameter type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }

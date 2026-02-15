@@ -163,9 +163,8 @@ async fn parameter_used_in_nested_expression() {
 
 #[tokio::test]
 async fn unused_forall_variable() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Constraint = forall s in @[Student] { 0 <== 1 };";
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { 0 <== 1 };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -178,11 +177,10 @@ async fn unused_forall_variable() {
 
 #[tokio::test]
 async fn no_warning_when_forall_variable_used() {
-    let types = simple_object("Student");
-    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
 
-    let input = "pub let f() -> Constraint = forall s in @[Student] { $V(s) >== 0 };";
-    let (_, _, warnings) = analyze(input, types, vars).await;
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { $V(s) >== 0 };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         !warnings
@@ -195,12 +193,11 @@ async fn no_warning_when_forall_variable_used() {
 
 #[tokio::test]
 async fn forall_variable_used_in_where_clause() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] where s.age > 18 { 0 <== 1 };
+        pub let f(students: [{age: Int}]) -> Constraint =
+            forall s in students where s.age > 18 { 0 <== 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -215,9 +212,8 @@ async fn forall_variable_used_in_where_clause() {
 
 #[tokio::test]
 async fn unused_sum_variable() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> Int = sum s in @[Student] { 5 };";
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(students: [Int]) -> Int = sum s in students { 5 };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -230,11 +226,10 @@ async fn unused_sum_variable() {
 
 #[tokio::test]
 async fn no_warning_when_sum_variable_used() {
-    let types = simple_object("Student");
-    let vars = var_with_args("V", vec![SimpleType::Object("Student".to_string())]);
+    let vars = var_with_args("V", vec![SimpleType::Int]);
 
-    let input = "pub let f() -> LinExpr = sum s in @[Student] { $V(s) };";
-    let (_, _, warnings) = analyze(input, types, vars).await;
+    let input = "pub let f(students: [Int]) -> LinExpr = sum s in students { $V(s) };";
+    let (_, _, warnings) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         !warnings
@@ -247,12 +242,11 @@ async fn no_warning_when_sum_variable_used() {
 
 #[tokio::test]
 async fn sum_variable_used_in_where_clause() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
     let input = r#"
-        pub let f() -> LinExpr = 
-            sum s in @[Student] where s.age > 18 { 1 };
+        pub let f(students: [{age: Int}]) -> LinExpr =
+            sum s in students where s.age > 18 { 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         !warnings
@@ -391,12 +385,11 @@ async fn function_used_in_reify() {
 
 #[tokio::test]
 async fn shadowing_parameter_with_forall() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f(s: Student) -> Constraint = 
-            forall s in @[Student] { 0 <== 1 };
+        pub let f(s: Int, students: [Int]) -> Constraint =
+            forall s in students { 0 <== 1 };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -425,14 +418,13 @@ async fn shadowing_parameter_with_sum() {
 
 #[tokio::test]
 async fn shadowing_in_nested_forall() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let f() -> Constraint = 
-            forall s in @[Student] { 
-                forall s in @[Student] { 0 <== 1 } 
+        pub let f(students: [Int]) -> Constraint =
+            forall s in students {
+                forall s in students { 0 <== 1 }
             };
     "#;
-    let (_, _, warnings) = analyze(input, types, HashMap::new()).await;
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         warnings
@@ -447,17 +439,13 @@ async fn shadowing_in_nested_forall() {
 
 #[tokio::test]
 async fn no_warnings_for_well_written_code() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let vars = var_with_args(
-        "StudentVar",
-        vec![SimpleType::Object("Student".to_string())],
-    );
+    let vars = var_with_args("StudentVar", vec![SimpleType::Int]);
 
     let input = r#"
-        pub let compute_total(students: [Student]) -> LinExpr =
-            sum s in students where s.age > 18 { $StudentVar(s) };
+        pub let compute_total(students: [{age: Int}]) -> LinExpr =
+            sum s in students where s.age > 18 { $StudentVar(s.age) };
     "#;
-    let (_, _, warnings) = analyze(input, types, vars).await;
+    let (_, _, warnings) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         warnings.is_empty(),

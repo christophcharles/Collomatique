@@ -158,14 +158,13 @@ async fn let_expr_with_function_call() {
 }
 
 #[tokio::test]
-async fn let_expr_with_object_field_access() {
-    let input = "pub let f(s: Student) -> Int = let age = s.age { age + 1 };";
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn let_expr_with_struct_field_access() {
+    let input = "pub let f(s: {age: Int}) -> Int = let age = s.age { age + 1 };";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Let with object field access should work: {:?}",
+        "Let with struct field access should work: {:?}",
         errors
     );
 }

@@ -34,12 +34,11 @@ async fn reify_constraint_list() {
 
 #[tokio::test]
 async fn reify_function_with_parameters() {
-    let types = simple_object("Student");
     let input = r#"
-        pub let constraint(s: Student) -> Constraint = 0 === 1;
+        pub let constraint(s: Int) -> Constraint = 0 === 1;
         reify constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -259,33 +258,25 @@ async fn using_predefined_variable() {
 }
 
 #[tokio::test]
-async fn predefined_variable_with_object_type() {
-    let types = simple_object("Student");
-    let vars = var_with_args(
-        "StudentVar",
-        vec![SimpleType::Object("Student".to_string())],
-    );
+async fn predefined_variable_with_struct_type() {
+    let vars = var_with_args("StudentVar", vec![SimpleType::Int]);
 
-    let input = "pub let f(s: Student) -> Constraint = $StudentVar(s) === 0;";
-    let (_, errors, _) = analyze(input, types, vars).await;
+    let input = "pub let f(s: Int) -> Constraint = $StudentVar(s) === 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),
-        "Predefined variable with object type should work: {:?}",
+        "Predefined variable with Int type should work: {:?}",
         errors
     );
 }
 
 #[tokio::test]
 async fn predefined_variable_with_multiple_args() {
-    let types = simple_object("Student");
-    let vars = var_with_args(
-        "MultiVar",
-        vec![SimpleType::Object("Student".to_string()), SimpleType::Int],
-    );
+    let vars = var_with_args("MultiVar", vec![SimpleType::Int, SimpleType::Int]);
 
-    let input = "pub let f(s: Student, x: Int) -> Constraint = $MultiVar(s, x) === 0;";
-    let (_, errors, _) = analyze(input, types, vars).await;
+    let input = "pub let f(s: Int, x: Int) -> Constraint = $MultiVar(s, x) === 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
 
     assert!(
         errors.is_empty(),

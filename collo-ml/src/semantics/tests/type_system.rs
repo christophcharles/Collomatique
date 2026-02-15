@@ -129,47 +129,38 @@ async fn list_type_mismatch_with_output() {
     );
 }
 
-// ========== Object Type Tests ==========
+// ========== Struct Type Tests ==========
 
 #[tokio::test]
-async fn object_type_with_no_fields() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> Student = s;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn struct_type_with_no_fields() {
+    let input = "pub let f(s: {}) -> {} = s;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object type should be valid: {:?}",
+        "Struct type should be valid: {:?}",
         errors
     );
 }
 
 #[tokio::test]
-async fn object_type_with_fields() {
-    let mut types = object_with_fields(
-        "Student",
-        vec![
-            ("age", SimpleType::Int),
-            ("name", SimpleType::Object("String".to_string())),
-        ],
-    );
-    types.insert("String".to_string(), HashMap::new());
-    let input = "pub let f(s: Student) -> Int = s.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn struct_type_with_fields() {
+    let input = "pub let f(s: {age: Int, name: String}) -> Int = s.age;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object field access should be valid: {:?}",
+        "Struct field access should be valid: {:?}",
         errors
     );
 }
 
 #[tokio::test]
-async fn unknown_object_type() {
+async fn unknown_custom_type() {
     let input = "pub let f(s: UnknownObject) -> Int = 5;";
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
-    assert!(!errors.is_empty(), "Unknown object type should error");
+    assert!(!errors.is_empty(), "Unknown custom type should error");
     assert!(
         errors
             .iter()
@@ -179,43 +170,31 @@ async fn unknown_object_type() {
 
 #[tokio::test]
 async fn unknown_field_access() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> Int = s.unknown_field;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = "pub let f(s: {name: String}) -> Int = s.unknown_field;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
-    assert!(!errors.is_empty(), "Unknown field should error");
+    assert!(
+        !errors.is_empty(),
+        "Unknown field should error: {:?}",
+        errors
+    );
     assert!(
         errors
             .iter()
-            .any(|e| matches!(e, SemError::UnknownField { .. }))
+            .any(|e| matches!(e, SemError::UnknownStructField { .. })),
+        "Should have UnknownStructField error: {:?}",
+        errors
     );
 }
 
 #[tokio::test]
 async fn nested_field_access() {
-    let mut types = HashMap::new();
-    types.insert("String2".to_string(), HashMap::new());
-
-    let mut address_fields = HashMap::new();
-    address_fields.insert(
-        "city".to_string(),
-        ExprType::simple(SimpleType::Object("String2".to_string()))
-            .try_into()
-            .unwrap(),
-    );
-    types.insert("Address".to_string(), address_fields);
-
-    let mut student_fields = HashMap::new();
-    student_fields.insert(
-        "address".to_string(),
-        ExprType::simple(SimpleType::Object("Address".to_string()))
-            .try_into()
-            .unwrap(),
-    );
-    types.insert("Student".to_string(), student_fields);
-
-    let input = "pub let f(s: Student) -> String2 = s.address.city;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+    let input = r#"
+        type Address = {city: String};
+        type Student = {address: Address};
+        pub let f(s: Student) -> String = s.address.city;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -375,14 +354,13 @@ async fn string_list_to_string_conversion() {
 }
 
 #[tokio::test]
-async fn object_to_string_conversion() {
-    let types = simple_object("Student");
-    let input = r#"pub let f(s: Student) -> String = String(s);"#;
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn struct_to_string_conversion_type_system() {
+    let input = r#"pub let f(s: {name: String}) -> String = String(s);"#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object to String conversion should be valid: {:?}",
+        "Struct to String conversion should be valid: {:?}",
         errors
     );
 }
@@ -411,74 +389,29 @@ async fn chained_conversion_to_string() {
     );
 }
 
-// ========== List of Object Types ==========
+// ========== List of Struct Types ==========
 
 #[tokio::test]
-async fn list_of_objects() {
-    let types = simple_object("Student");
-    let input = "pub let f(students: [Student]) -> [Student] = students;";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn list_of_structs() {
+    let input = "pub let f(students: [{age: Int}]) -> [{age: Int}] = students;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "List of objects should be valid: {:?}",
+        "List of structs should be valid: {:?}",
         errors
     );
 }
 
 #[tokio::test]
-async fn list_of_objects_with_field_access_in_comprehension() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
+async fn list_of_structs_with_field_access_in_comprehension() {
+    let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
         "Field access in list comprehension should be valid: {:?}",
         errors
-    );
-}
-
-// ========== Global Collections ==========
-
-#[tokio::test]
-async fn global_collection_primitive() {
-    let input = "pub let f() -> [Int] = @[Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of Int should not be valid: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_object() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [Student] = @[Student];";
-    let (_, errors, _) = analyze(input, types, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Global collection of objects should be valid: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn global_collection_unknown_type() {
-    let input = "pub let f() -> [UnknownType] = @[UnknownType];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of unknown type should error"
-    );
-    assert!(
-        errors
-            .iter()
-            .any(|e| matches!(e, SemError::UnknownType { .. }))
     );
 }
 
