@@ -421,9 +421,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// The trait uses an **associated type `Env`** to specify the environment. The `#[env(EnvType)]`
 /// attribute is required to set this associated type.
 ///
-/// If the enum contains fields that reference object ID types (from an `EvalObject` enum),
-/// use `#[object(ObjectIdType)]` to specify which `EvalObject` to use for enumeration.
-///
 /// # Required Attributes
 ///
 /// ## On the enum:
@@ -434,7 +431,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ## On the enum:
 ///
-/// - `#[object(ObjectIdType)]` - Specifies the `EvalObject` type (required if any field is an object ID)
 /// - `#[fix_with(value)]` - Sets the default fix value for out-of-range variables (default: 0.0)
 ///
 /// ## On variants:
@@ -452,26 +448,21 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// - `i32` - **Must** have `#[range(...)]` attribute
 /// - `bool` - Automatically enumerates `true` and `false`
-/// - Object ID types - Enumerated via `EvalObject::objects_with_typ()`
 ///
 /// # Requirements
 ///
 /// - Must be applied to an enum
 /// - All `i32` fields must have `#[range(...)]` attribute
-/// - For object types, `#[object(ObjectIdType)]` must be specified
 /// - The enum must implement standard derives: `Clone, PartialEq, Eq, PartialOrd, Ord`
 ///
 /// # Examples
 ///
-/// ## Basic usage with objects
+/// ## Basic usage
 ///
 /// ```ignore
 /// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]  // Required because StudentId/GroupId are object IDs
 /// enum Var {
-///     StudentInGroup(StudentId, GroupId),
-///
 ///     TimeSlot {
 ///         #[range(0..7)]
 ///         day: i32,
@@ -486,10 +477,14 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
-///     #[name("SiG")]  // Called "SiG" in DSL scripts
-///     StudentInGroup(StudentId, GroupId),
+///     #[name("TS")]  // Called "TS" in DSL scripts
+///     TimeSlot {
+///         #[range(0..7)]
+///         day: i32,
+///         #[range(8..18)]
+///         hour: i32,
+///     },
 /// }
 /// ```
 ///
@@ -498,11 +493,11 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
-/// #[object(ObjectId)]
 /// #[fix_with(0.0)]
 /// enum Var {
-///     StudentInWeek {
-///         student: StudentId,
+///     SlotInWeek {
+///         #[range(0..env.max_slots)]
+///         slot: i32,
 ///         #[range(0..env.max_week)]  // Range depends on environment!
 ///         week: i32,
 ///     },
@@ -514,7 +509,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
 ///     #[fix_with(if env.lunch_mandatory { 1.0 } else { 0.5 })]
 ///     TimeSlot {
@@ -562,11 +556,11 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
-///     #[defer_fix(Self::check_availability(env, student, week))]
-///     StudentAvailable {
-///         student: StudentId,
+///     #[defer_fix(Self::check_availability(env, day, week))]
+///     SlotAvailable {
+///         #[range(0..7)]
+///         day: i32,
 ///         #[range(0..env.max_week)]
 ///         week: i32,
 ///     },
@@ -575,11 +569,10 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// impl Var {
 ///     fn check_availability(
 ///         env: &DynamicEnv,
-///         student: &StudentId,
+///         day: &i32,
 ///         week: &i32,
 ///     ) -> Option<f64> {
-///         let env = env.as_ref();
-///         if env.is_student_absent(student, *week) {
+///         if env.is_day_off(*day, *week) {
 ///             Some(10.0)  // High penalty for unavailable slots
 ///         } else {
 ///             None
@@ -593,7 +586,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(DynamicEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
 ///     #[defer_fix({
 ///         if *week >= 3 {
@@ -602,8 +594,9 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///             None
 ///         }
 ///     })]
-///     LateWeekTask {
-///         task: TaskId,
+///     LateWeekSlot {
+///         #[range(0..env.max_slots)]
+///         slot: i32,
 ///         #[range(0..env.max_week)]
 ///         week: i32,
 ///     },
@@ -615,16 +608,15 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
 ///     #[var(Variable::binary())]
-///     IsSelected(TaskId),
+///     IsSelected(#[range(0..env.num_tasks)] i32),
 ///
 ///     #[var(Variable::integer())]
 ///     Count(#[range(0..100)] i32),
 ///
 ///     #[var(Variable::continuous().min(0.0).max(1.0))]
-///     Proportion(ProjectId),
+///     Proportion(#[range(0..env.num_items)] i32),
 /// }
 /// ```
 ///
@@ -633,10 +625,10 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
 ///     TaskEnabled {
-///         task: TaskId,
+///         #[range(0..env.num_tasks)]
+///         task: i32,
 ///         is_enabled: bool,  // No range needed - automatically [false, true]
 ///     },
 /// }
@@ -656,7 +648,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 ///     fn vars(env: &DynamicEnv) -> Result<BTreeMap<Self, Variable>, TypeId> {
 ///         // Generates cartesian product of all parameter combinations
-///         // Object types are enumerated via ObjectId::objects_with_typ()
 ///         // Variables with defer_fix returning Some are excluded
 ///     }
 ///
@@ -671,14 +662,10 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// // Also generates generic TryFrom for converting from DSL representation
-/// impl<__T: EvalObject> TryFrom<&ExternVar<__T>> for Var
-/// where
-///     StudentId: TryFrom<__T>,
-///     GroupId: TryFrom<__T>,
-/// {
+/// impl<__T: EvalObject, __D: DatabaseConnection> TryFrom<&ExternVar<__T, __D>> for Var {
 ///     type Error = VarConversionError;
-///     
-///     fn try_from(value: &ExternVar<__T>) -> Result<Self, Self::Error> {
+///
+///     fn try_from(value: &ExternVar<__T, __D>) -> Result<Self, Self::Error> {
 ///         // Matches DSL name and converts parameters
 ///     }
 /// }
@@ -699,7 +686,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 ///   - Ranges can be static: `#[range(0..10)]`
 ///   - Or dynamic from environment: `#[range(0..env.max_week)]`
 /// - **bool**: Iterates through `[false, true]`
-/// - **Objects**: Calls `ObjectId::objects_with_typ(env, type_name)` (from `#[object(ObjectId)]`) and converts to the ID type
 ///
 /// **Filtering with defer_fix**: Variables where `defer_fix` returns `Some(_)` are automatically
 /// excluded from `vars()`.
@@ -707,17 +693,12 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// For example:
 /// ```ignore
 /// // Static ranges
-/// StudentInGroup(StudentId, GroupId)
-/// // With 3 students and 5 groups → generates 15 variables
-///
 /// TimeSlot { day: i32, hour: i32 }  // #[range(0..7)] and #[range(8..18)]
 /// // 7 days × 10 hours → generates 70 variables
 ///
 /// // Dynamic ranges
-/// #[env(DynamicEnv)]
-/// StudentInWeek { student: StudentId, week: i32 }  // #[range(0..env.max_week)]
-/// // With 3 students and env.max_week = 4 → generates 12 variables
-/// // With env.max_week = 2 → generates 6 variables
+/// SlotInWeek { slot: i32, week: i32 }  // #[range(0..env.max_slots)] and #[range(0..env.max_week)]
+/// // With env.max_slots = 3 and env.max_week = 4 → generates 12 variables
 /// ```
 ///
 /// # Fix Values
@@ -757,17 +738,12 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// The macro panics at compile time if:
 /// - Applied to non-enum types
 /// - An `i32` field lacks `#[range(...)]` attribute
-/// - A `bool` or object field has `#[range(...)]` attribute
+/// - A `bool` field has `#[range(...)]` attribute
 /// - A `Vec` type is used (lists cannot be enumerated)
 /// - Both `#[fix_with(...)]` and `#[defer_fix(...)]` are present on the same variant
 /// - `#[env(...)]` is missing
-/// - Object-type fields exist but `#[object(...)]` is missing
 ///
 /// ## Runtime Errors
-///
-/// `vars()` returns `Err(type_id)` if an object type's name cannot be resolved via
-/// `ObjectId::type_id_to_name()`. This typically indicates a mismatch between your variable
-/// definition and your `EvalObject` implementation.
 ///
 /// `TryFrom` returns `VarConversionError` if:
 /// - The DSL variable name is unknown
@@ -789,16 +765,20 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// // Rust definition
 /// #[derive(EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
-///     #[name("SiG")]
-///     StudentInGroup(StudentId, GroupId),
+///     #[name("TS")]
+///     TimeSlot {
+///         #[range(0..7)]
+///         day: i32,
+///         #[range(8..18)]
+///         hour: i32,
+///     },
 /// }
 ///
 /// // ColloML script
 /// pub let constraints() -> [Constraint] = [
-///     sum g in @[Group] { $SiG(s, g) } === 1
-///     for s in @[Student]
+///     sum h in 8..18 { $TS(d, h) } <= 8
+///     for d in 0..7
 /// ];
 /// ```
 ///
@@ -817,25 +797,6 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// // Generated: impl EvalVar for DynamicVar { type Env = DynamicEnv; ... }
 /// ```
 ///
-/// # The #[object(...)] Attribute
-///
-/// The `#[object(ObjectIdType)]` attribute is required when the enum has fields that are
-/// object ID types (anything other than `i32`, `bool`, or `Option<...>` thereof).
-/// It specifies which `EvalObject` enum to use for enumerating objects.
-///
-/// ```ignore
-/// #[derive(EvalVar)]
-/// #[env(MyEnv)]
-/// #[object(ObjectId)]  // Required because StudentId is an object ID
-/// enum Var {
-///     StudentSlot {
-///         student: StudentId,
-///         #[range(0..10)]
-///         slot: i32,
-///     },
-/// }
-/// ```
-///
 /// # Variable Type Expressions
 ///
 /// The `#[var(...)]` attribute accepts any expression that evaluates to `Variable`:
@@ -846,10 +807,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// #[var(Variable::continuous())]                // Continuous variable
 /// #[var(Variable::integer().min(0).max(100))]   // With bounds
 /// ```
-#[proc_macro_derive(
-    EvalVar,
-    attributes(name, var, range, fix_with, defer_fix, env, object)
-)]
+#[proc_macro_derive(EvalVar, attributes(name, var, range, fix_with, defer_fix, env))]
 pub fn derive_eval_var(input: TokenStream) -> TokenStream {
     eval_var::derive(input)
 }

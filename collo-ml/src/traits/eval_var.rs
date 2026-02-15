@@ -30,8 +30,6 @@ use std::collections::HashMap;
 ///
 /// This trait is typically implemented via the `#[derive(EvalVar)]` macro on an enum.
 /// The `#[env(EnvType)]` attribute is required and sets the associated `Env` type.
-/// For enums with object-type fields, `#[object(ObjectType)]` specifies the `EvalObject`
-/// used for object enumeration.
 ///
 /// ## Variables without objects
 ///
@@ -59,49 +57,24 @@ use std::collections::HashMap;
 /// }
 /// ```
 ///
-/// ## Variables with object-type fields
-///
-/// ```ignore
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
-/// #[env(DynamicEnv)]
-/// #[object(ObjectId)]
-/// #[fix_with(0.0)]
-/// enum DynamicVar {
-///     StudentInWeek {
-///         student: StudentId,
-///         #[range(0..env.max_week)]
-///         week: i32,
-///     },
-/// }
-/// ```
-///
-/// The macro generates:
-///
-/// ```ignore
-/// impl EvalVar for DynamicVar {
-///     type Env = DynamicEnv;
-///     fn field_schema() -> HashMap<String, Vec<FieldType>> { /* ... */ }
-///     fn vars(env: &DynamicEnv) -> Result<BTreeMap<Self, Variable>, TypeId> {
-///         // Object enumeration uses ObjectId::objects_with_typ(env, ...)
-///     }
-///     fn fix(&self, env: &DynamicEnv) -> Option<f64> { /* ... */ }
-/// }
-/// ```
-///
 /// # Usage Example
 ///
 /// ```ignore
 /// #[derive(EvalVar)]
 /// #[env(MyEnv)]
-/// #[object(ObjectId)]
 /// enum Var {
-///     StudentInGroup(StudentId, GroupId),
+///     TimeSlot {
+///         #[range(0..7)]
+///         day: i32,
+///         #[range(8..18)]
+///         hour: i32,
+///     },
 /// }
 ///
 /// let env = MyEnv::new();
 /// let vars = Var::vars(&env)?;
 ///
-/// let var = Var::StudentInGroup(StudentId(0), GroupId(1));
+/// let var = Var::TimeSlot { day: 0, hour: 8 };
 /// if let Some(value) = var.fix(&env) {
 ///     // This variable should be fixed to `value`
 /// }

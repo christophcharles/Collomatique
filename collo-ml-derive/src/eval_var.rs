@@ -21,9 +21,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let env_type = extract_env_attribute(&input.attrs)
         .expect("EvalVar derive requires #[env(EnvType)] attribute");
 
-    // Extract optional object type from #[object(ObjectType)]
-    let object_type = extract_object_attribute(&input.attrs);
-
     // Extract value for fix_with if present
     let fix_with_expr = extract_fix_with_attribute(&input.attrs)
         .map(|expr| quote! { #expr })
@@ -37,8 +34,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 
     // Generate the implementations
-    let eval_var_impl =
-        generate_eval_var_impl(enum_name, &variant_info, &env_type, object_type.as_ref());
+    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info, &env_type);
     let try_from_impl = generate_try_from_impl(enum_name, &variant_info);
 
     // Combine everything
@@ -103,19 +99,6 @@ fn get_core_type(ty: &Type) -> &Type {
 fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
     for attr in attrs {
         if attr.path().is_ident("env")
-            && let Meta::List(meta_list) = &attr.meta
-            && let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone())
-        {
-            return Some(ty);
-        }
-    }
-    None
-}
-
-// Helper function to extract #[object(Type)]
-fn extract_object_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
-    for attr in attrs {
-        if attr.path().is_ident("object")
             && let Meta::List(meta_list) = &attr.meta
             && let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone())
         {
@@ -274,28 +257,7 @@ fn generate_eval_var_impl(
     enum_name: &syn::Ident,
     variants: &[VariantInfo],
     env_type: &syn::Type,
-    object_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
-    // Check if there are any object-type fields that need #[object(Type)]
-    let has_object_fields = variants.iter().any(|variant| {
-        variant.fields.iter().any(|field| {
-            let core_ty = get_core_type(&field.ty);
-            if let Type::Path(type_path) = core_ty {
-                let segment = type_path.path.segments.last().unwrap();
-                let type_name = segment.ident.to_string();
-                type_name != "i32" && type_name != "bool"
-            } else {
-                false
-            }
-        })
-    });
-
-    if has_object_fields && object_type.is_none() {
-        panic!(
-            "EvalVar derive requires #[object(ObjectType)] attribute when enum has object-type fields"
-        );
-    }
-
     // Generate field_schema implementation
     let field_schema_entries = variants.iter().map(|info| {
         let dsl_name = &info.dsl_name;
@@ -313,7 +275,7 @@ fn generate_eval_var_impl(
     });
 
     // Generate vars implementation
-    let vars_generation = generate_vars_impl(enum_name, variants, object_type);
+    let vars_generation = generate_vars_impl(enum_name, variants);
 
     // Generate fix implementation
     let fix_arms = variants.iter().map(|info| {
@@ -403,7 +365,6 @@ fn generate_field_type_expr_core(ty: &Type) -> proc_macro2::TokenStream {
 fn generate_vars_impl(
     enum_name: &syn::Ident,
     variants: &[VariantInfo],
-    object_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
     let variant_iterations = variants.iter().map(|info| {
         let variant_name = &info.variant_name;
@@ -422,7 +383,6 @@ fn generate_vars_impl(
             &info.fields,
             &var_type,
             matches!(info.fix, FixType::DeferFix(_)),
-            object_type,
         )
     });
 
@@ -440,7 +400,6 @@ fn generate_field_iterations(
     fields: &[FieldInfo],
     var_type: &proc_macro2::TokenStream,
     defered_fix: bool,
-    object_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         // Unit variant
@@ -465,7 +424,7 @@ fn generate_field_iterations(
             quote! {}
         };
 
-        let loop_code = generate_field_loop(&field.ty, &var_name, &field.range, object_type);
+        let loop_code = generate_field_loop(&field.ty, &var_name, &field.range);
         loops.push((loop_code, binding));
         var_names.push(var_name);
     }
@@ -521,9 +480,8 @@ fn generate_field_loop(
     ty: &Type,
     var_name: &syn::Ident,
     range: &Option<syn::Expr>,
-    object_type: Option<&syn::Type>,
 ) -> proc_macro2::TokenStream {
-    let iterator_expr = generate_field_iterator(ty, range, object_type);
+    let iterator_expr = generate_field_iterator(ty, range);
 
     // Check if it's Option<T>
     if let Some(_inner_ty) = unwrap_option_type(ty) {
@@ -541,11 +499,7 @@ fn generate_field_loop(
     }
 }
 
-fn generate_field_iterator(
-    ty: &Type,
-    range: &Option<syn::Expr>,
-    _object_type: Option<&syn::Type>,
-) -> proc_macro2::TokenStream {
+fn generate_field_iterator(ty: &Type, range: &Option<syn::Expr>) -> proc_macro2::TokenStream {
     // Get the core type (unwrap Option if present)
     let core_ty = get_core_type(ty);
 
@@ -709,41 +663,8 @@ fn generate_try_from_impl(
         }
     });
 
-    // Collect all unique object types used across all variants
-    let mut object_types = std::collections::HashSet::new();
-    for variant in variants {
-        for field in &variant.fields {
-            let core_ty = get_core_type(&field.ty); // Unwrap Option if present
-            if let Type::Path(type_path) = core_ty {
-                let segment = type_path.path.segments.last().unwrap();
-                let type_name = segment.ident.to_string();
-                if type_name != "i32" && type_name != "bool" {
-                    object_types.insert(core_ty.clone()); // Insert core type
-                }
-            }
-        }
-    }
-
-    // Generate where clause for all object types
-    let where_clauses = object_types.iter().map(|ty| {
-        quote! {
-            #ty: TryFrom<__T>
-        }
-    });
-
-    let where_text = if where_clauses.len() == 0 {
-        quote! {}
-    } else {
-        quote! {
-            where
-                #(#where_clauses),*
-        }
-    };
-
     quote! {
-        impl<__T: ::collo_ml::EvalObject, __D: ::collo_ml::DatabaseConnection> TryFrom<&::collo_ml::eval::ExternVar<__T, __D>> for #enum_name
-            #where_text
-        {
+        impl<__T: ::collo_ml::EvalObject, __D: ::collo_ml::DatabaseConnection> TryFrom<&::collo_ml::eval::ExternVar<__T, __D>> for #enum_name {
             type Error = ::collo_ml::traits::VarConversionError;
 
             fn try_from(value: &::collo_ml::eval::ExternVar<__T, __D>) -> Result<Self, Self::Error> {
