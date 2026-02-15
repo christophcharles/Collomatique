@@ -1590,25 +1590,50 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for Constraint<V> {
     }
 }
 
+impl<V: UsableData> std::ops::AddAssign<&LinExpr<V>> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: &LinExpr<V>) {
+        for (key, value) in rhs.coefs.iter() {
+            if let Some(coef) = self.coefs.get_mut(key) {
+                *coef += value;
+            } else {
+                self.coefs.insert(key.clone(), *value);
+            }
+        }
+        self.constant += rhs.constant;
+    }
+}
+
+impl<V: UsableData> std::ops::AddAssign<LinExpr<V>> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: LinExpr<V>) {
+        *self += &rhs;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<&LinExpr<V>> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: &LinExpr<V>) {
+        for (key, value) in rhs.coefs.iter() {
+            if let Some(coef) = self.coefs.get_mut(key) {
+                *coef -= value;
+            } else {
+                self.coefs.insert(key.clone(), -*value);
+            }
+        }
+        self.constant -= rhs.constant;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<LinExpr<V>> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: LinExpr<V>) {
+        *self -= &rhs;
+    }
+}
+
 impl<V: UsableData> std::ops::Add for &LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: &LinExpr<V>) -> Self::Output {
-        let mut output = LinExpr {
-            coefs: self.coefs.clone(),
-            constant: self.constant,
-        };
-
-        for (key, value) in rhs.coefs.iter() {
-            if let Some(coef) = output.coefs.get_mut(key) {
-                *coef += value;
-            } else {
-                output.coefs.insert(key.clone(), *value);
-            }
-        }
-
-        output.constant += rhs.constant;
-
+        let mut output = self.clone();
+        output += rhs;
         output
     }
 }

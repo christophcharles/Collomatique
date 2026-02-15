@@ -172,11 +172,11 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             }
         };
 
-        let params: Vec<ExprValue<D::Connection>> =
-            args[1..].iter().map(|a| (**a).clone()).collect();
         let global_env = &self.ast.global_env;
 
-        let result = db_handle.query(&sql, params, out_type, global_env).await;
+        let result = db_handle
+            .query(&sql, &args[1..], out_type, global_env)
+            .await;
 
         match result {
             Ok(value) => {

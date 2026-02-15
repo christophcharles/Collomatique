@@ -94,12 +94,12 @@ impl DbValue {
     /// the conversion recurses into the underlying type, wrapping the result
     /// in `ExprValue::Custom`.
     pub fn to_expr_value<D: DatabaseDriver>(
-        self,
+        &self,
         env: &GlobalEnv<D>,
         target: &ExprType,
     ) -> Result<ExprValue<D::Connection>, DbConversionError> {
         for variant in target.get_variants() {
-            if let Ok(v) = self.clone().try_convert_to(env, variant) {
+            if let Ok(v) = self.try_convert_to(env, variant) {
                 return Ok(v);
             }
         }
@@ -112,17 +112,17 @@ impl DbValue {
     /// the underlying type in `env` and recurses via `to_expr_value`,
     /// wrapping the result in [`ExprValue::Custom`].
     fn try_convert_to<D: DatabaseDriver>(
-        self,
+        &self,
         env: &GlobalEnv<D>,
         variant: &SimpleType,
     ) -> Result<ExprValue<D::Connection>, DbConversionError> {
         match (self, variant) {
             (DbValue::Null, SimpleType::None) => Ok(ExprValue::None),
-            (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(v)),
+            (DbValue::Int(v), SimpleType::Int) => Ok(ExprValue::Int(*v)),
             (DbValue::Int(0), SimpleType::Bool) => Ok(ExprValue::Bool(false)),
             (DbValue::Int(1), SimpleType::Bool) => Ok(ExprValue::Bool(true)),
-            (DbValue::Bool(v), SimpleType::Bool) => Ok(ExprValue::Bool(v)),
-            (DbValue::String(v), SimpleType::String) => Ok(ExprValue::String(v)),
+            (DbValue::Bool(v), SimpleType::Bool) => Ok(ExprValue::Bool(*v)),
+            (DbValue::String(v), SimpleType::String) => Ok(ExprValue::String(v.clone())),
             (db_val, SimpleType::Custom(module, root, variant_name)) => {
                 let qualified = match variant_name {
                     Some(v) => format!("{}::{}", root, v),
@@ -144,18 +144,25 @@ impl DbValue {
     }
 }
 
+/// Converts an `ExprValue` reference to `DbValue`, recursively unwrapping `Custom` wrappers.
+fn db_value_from_ref<D: DatabaseConnection>(
+    val: &ExprValue<D>,
+) -> Result<DbValue, DbConversionError> {
+    match val {
+        ExprValue::None => Ok(DbValue::Null),
+        ExprValue::Int(v) => Ok(DbValue::Int(*v)),
+        ExprValue::Bool(v) => Ok(DbValue::Bool(*v)),
+        ExprValue::String(v) => Ok(DbValue::String(v.clone())),
+        ExprValue::Custom(custom) => db_value_from_ref(&custom.content),
+        _ => Err(DbConversionError),
+    }
+}
+
 /// Recursively unwraps `ExprValue::Custom` wrappers, then converts the leaf value.
 impl<D: DatabaseConnection> TryFrom<ExprValue<D>> for DbValue {
     type Error = DbConversionError;
     fn try_from(value: ExprValue<D>) -> Result<Self, Self::Error> {
-        match value {
-            ExprValue::None => Ok(DbValue::Null),
-            ExprValue::Int(v) => Ok(DbValue::Int(v)),
-            ExprValue::Bool(v) => Ok(DbValue::Bool(v)),
-            ExprValue::String(v) => Ok(DbValue::String(v)),
-            ExprValue::Custom(custom) => DbValue::try_from((*custom.content).clone()),
-            _ => Err(DbConversionError),
-        }
+        db_value_from_ref(&value)
     }
 }
 
@@ -164,13 +171,13 @@ impl<D: DatabaseConnection> TryFrom<ExprValue<D>> for DbValue {
 // =============================================================================
 
 fn convert_params<D: DatabaseConnection>(
-    params: Vec<ExprValue<D>>,
+    params: &[Arc<ExprValue<D>>],
 ) -> Result<Vec<DbValue>, SqlQueryError> {
     params
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(index, p)| {
-            DbValue::try_from(p).map_err(|_| SqlQueryError::ParamConversionError { index })
+            db_value_from_ref(p).map_err(|_| SqlQueryError::ParamConversionError { index })
         })
         .collect()
 }
@@ -386,7 +393,7 @@ fn build_row_value<D: DatabaseDriver>(
                 let mut struct_fields = BTreeMap::new();
                 for (col_name, db_val) in row {
                     let field_type = &fields[col_name];
-                    let val = db_val.clone().to_expr_value(env, field_type).map_err(|_| {
+                    let val = db_val.to_expr_value(env, field_type).map_err(|_| {
                         SqlQueryError::ResultConversionError {
                             row: row_idx,
                             column: col_name.clone(),
@@ -408,7 +415,7 @@ fn build_row_value<D: DatabaseDriver>(
                 for (i, col_name) in columns.iter().enumerate() {
                     let db_val = &row[col_name];
                     let elem_type = &elements[i];
-                    let val = db_val.clone().to_expr_value(env, elem_type).map_err(|_| {
+                    let val = db_val.to_expr_value(env, elem_type).map_err(|_| {
                         SqlQueryError::ResultConversionError {
                             row: row_idx,
                             column: col_name.clone(),
@@ -428,7 +435,7 @@ fn build_row_value<D: DatabaseDriver>(
                 }
                 let col_name = &columns[0];
                 let db_val = &row[col_name];
-                db_val.clone().to_expr_value(env, row_type).map_err(|_| {
+                db_val.to_expr_value(env, row_type).map_err(|_| {
                     SqlQueryError::ResultConversionError {
                         row: row_idx,
                         column: col_name.clone(),
@@ -463,12 +470,12 @@ impl<C: DatabaseConnection> DatabaseHandle<C> {
     pub async fn query<D: DatabaseDriver<Connection = C>>(
         &self,
         sql: &str,
-        params: Vec<ExprValue<C>>,
+        params: &[Arc<ExprValue<C>>],
         out_type: ExprType,
         global_env: &GlobalEnv<D>,
     ) -> Result<ExprValue<C>, SqlQueryError> {
         // 1. Convert params
-        let db_params = convert_params(params)?;
+        let db_params = convert_params::<C>(params)?;
 
         // 2. Execute raw query
         let (rows, columns) = self.inner.query(sql, db_params).await?;

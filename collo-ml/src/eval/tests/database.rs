@@ -664,7 +664,7 @@ async fn typed_query_list_of_structs() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -721,7 +721,7 @@ async fn typed_query_optional_struct_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -765,7 +765,7 @@ async fn typed_query_optional_struct_not_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -792,7 +792,7 @@ async fn typed_query_empty_list() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -819,7 +819,7 @@ async fn typed_query_custom_wrapped_rows() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -890,7 +890,7 @@ async fn typed_query_custom_wrapped_fields() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -961,12 +961,7 @@ async fn typed_query_column_mismatch() {
     ))));
 
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
-        .query(
-            "SELECT id, name FROM users",
-            vec![],
-            out_type,
-            &ast.global_env,
-        )
+        .query("SELECT id, name FROM users", &[], out_type, &ast.global_env)
         .await;
 
     assert!(
@@ -991,12 +986,7 @@ async fn typed_query_column_count_mismatch() {
     ))));
 
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
-        .query(
-            "SELECT id, name FROM users",
-            vec![],
-            out_type,
-            &ast.global_env,
-        )
+        .query("SELECT id, name FROM users", &[], out_type, &ast.global_env)
         .await;
 
     assert!(
@@ -1026,7 +1016,7 @@ async fn typed_query_param_conversion() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = ?",
-            vec![ExprValue::Int(1)],
+            &[Arc::new(ExprValue::Int(1))],
             out_type,
             &ast.global_env,
         )
@@ -1063,7 +1053,7 @@ async fn typed_query_tuple_output() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1106,7 +1096,7 @@ async fn typed_query_optional_takes_first_row() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1139,7 +1129,7 @@ async fn typed_query_invalid_output_type() {
     let out_type = ExprType::simple(SimpleType::Int);
 
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
-        .query("SELECT id FROM users", vec![], out_type, &ast.global_env)
+        .query("SELECT id FROM users", &[], out_type, &ast.global_env)
         .await;
 
     assert!(
@@ -1166,7 +1156,7 @@ async fn typed_query_custom_list_type() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1222,7 +1212,7 @@ async fn typed_query_custom_optional_type() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1265,7 +1255,7 @@ async fn typed_query_custom_enum_type() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1468,7 +1458,7 @@ async fn typed_query_list_of_ints() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1495,7 +1485,7 @@ async fn typed_query_list_of_strings() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1522,7 +1512,7 @@ async fn typed_query_optional_int_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1545,7 +1535,7 @@ async fn typed_query_optional_int_not_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1568,7 +1558,7 @@ async fn typed_query_optional_string_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1589,12 +1579,7 @@ async fn typed_query_primitive_column_count_mismatch() {
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
 
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
-        .query(
-            "SELECT id, name FROM users",
-            vec![],
-            out_type,
-            &ast.global_env,
-        )
+        .query("SELECT id, name FROM users", &[], out_type, &ast.global_env)
         .await;
 
     assert!(
@@ -1617,7 +1602,7 @@ async fn typed_query_empty_primitive_list() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1734,7 +1719,7 @@ async fn typed_query_nullable_custom_nullable_string_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1767,7 +1752,7 @@ async fn typed_query_nullable_custom_nullable_string_not_found() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1799,7 +1784,7 @@ async fn typed_query_nullable_custom_nullable_string_null_value() {
     ]);
 
     let result: ExprValue<SqliteDatabaseConnection> = handle
-        .query("SELECT val FROM data", vec![], out_type, &ast.global_env)
+        .query("SELECT val FROM data", &[], out_type, &ast.global_env)
         .await
         .unwrap();
 
@@ -1840,7 +1825,7 @@ async fn typed_query_deeply_nested_enum_with_value() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 1",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1914,7 +1899,7 @@ async fn typed_query_deeply_nested_enum_empty() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )
@@ -1983,7 +1968,7 @@ async fn typed_query_list_with_nullable_custom_fields() {
     let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, val FROM data ORDER BY id",
-            vec![],
+            &[],
             out_type,
             &ast.global_env,
         )

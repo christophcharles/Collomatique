@@ -606,7 +606,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, collection)).await?;
         let list = match &*collection_value {
-            ExprValue::List(list) => list.clone(),
+            ExprValue::List(list) => list,
             other => panic!("Expected collection for sum. Got: {:?}", other),
         };
 
@@ -626,7 +626,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
 
         for elem in list {
             let mut builder = Self::start_subscope(Arc::clone(&self));
-            builder.register_identifier(&var.node, elem);
+            builder.register_identifier(&var.node, Arc::clone(elem));
             let subscope = builder.build_subscope();
 
             let cond = match filter {
@@ -646,23 +646,28 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 let new_value_arc =
                     Box::pin(Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(&body)))
                         .await?;
-                output = match (output, &*new_value_arc) {
+                let new_value = Arc::unwrap_or_clone(new_value_arc);
+                output = match (output, new_value) {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                     (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value)) => {
-                        let new_lin_expr = LinExpr::constant(int_value as f64);
-                        ExprValue::LinExpr(lin_expr_value.clone() + new_lin_expr)
+                        let mut result = lin_expr_value;
+                        result += LinExpr::constant(int_value as f64);
+                        ExprValue::LinExpr(result)
                     }
-                    (ExprValue::LinExpr(lin_expr_value), ExprValue::Int(int_value)) => {
-                        let new_lin_expr = LinExpr::constant(*int_value as f64);
-                        ExprValue::LinExpr(lin_expr_value + new_lin_expr)
+                    (ExprValue::LinExpr(mut lin_expr_value), ExprValue::Int(int_value)) => {
+                        lin_expr_value += LinExpr::constant(int_value as f64);
+                        ExprValue::LinExpr(lin_expr_value)
                     }
-                    (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => {
-                        ExprValue::LinExpr(v1 + v2.clone())
+                    (ExprValue::LinExpr(mut v1), ExprValue::LinExpr(ref v2)) => {
+                        v1 += v2;
+                        ExprValue::LinExpr(v1)
                     }
-                    (ExprValue::String(s1), ExprValue::String(s2)) => ExprValue::String(s1 + s2),
+                    (ExprValue::String(mut s1), ExprValue::String(ref s2)) => {
+                        s1.push_str(s2);
+                        ExprValue::String(s1)
+                    }
                     (ExprValue::List(mut list), ExprValue::List(new_list)) => {
-                        list.reserve(new_list.len());
-                        list.extend(new_list.iter().cloned());
+                        list.extend(new_list);
                         ExprValue::List(list)
                     }
                     (value1, value2) => panic!(
@@ -689,19 +694,18 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, collection)).await?;
-        let mut list = match &*collection_value {
-            ExprValue::List(list) => list.clone(),
+        let list = match &*collection_value {
+            ExprValue::List(list) => list,
             other => panic!("Expected collection for fold. Got: {:?}", other),
         };
-        if reversed {
-            list.reverse();
-        }
 
         let mut output = Box::pin(Arc::clone(&self).eval_expr(eval_history, init_value)).await?;
 
-        for elem in list {
+        let len = list.len();
+        for i in 0..len {
+            let elem = &list[if reversed { len - 1 - i } else { i }];
             let mut builder = Self::start_subscope(Arc::clone(&self));
-            builder.register_identifier(&var.node, elem);
+            builder.register_identifier(&var.node, Arc::clone(elem));
             builder.register_identifier(&accumulator.node, Arc::clone(&output));
             let subscope = builder.build_subscope();
 
@@ -739,7 +743,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, collection)).await?;
         let list = match &*collection_value {
-            ExprValue::List(list) => list.clone(),
+            ExprValue::List(list) => list,
             other => panic!("Expected collection for forall. Got: {:?}", other),
         };
 
@@ -757,7 +761,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
 
         for elem in list {
             let mut builder = Self::start_subscope(Arc::clone(&self));
-            builder.register_identifier(&var.node, elem);
+            builder.register_identifier(&var.node, Arc::clone(elem));
             let subscope = builder.build_subscope();
 
             let cond = match filter {
@@ -777,11 +781,11 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 let new_value_arc =
                     Box::pin(Arc::clone(&subscope).eval_expr(eval_history, Arc::clone(&body)))
                         .await?;
-                output = match (output, &*new_value_arc) {
-                    (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && *v2),
+                let new_value = Arc::unwrap_or_clone(new_value_arc);
+                output = match (output, new_value) {
+                    (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(v1 && v2),
                     (ExprValue::Constraint(mut c1), ExprValue::Constraint(c2)) => {
-                        c1.reserve(c2.len());
-                        c1.extend(c2.iter().cloned());
+                        c1.extend(c2);
                         ExprValue::Constraint(c1)
                     }
                     (value1, value2) => panic!(
@@ -1756,7 +1760,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(collection))).await?;
         let list = match &*collection_value {
-            ExprValue::List(list) => list.clone(),
+            ExprValue::List(list) => list,
             other => panic!("Expected list. Got: {:?}", other),
         };
 
@@ -1764,7 +1768,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
 
         for elem in list {
             let mut builder = Self::start_subscope(Arc::clone(&self));
-            builder.register_identifier(&var.node, elem);
+            builder.register_identifier(&var.node, Arc::clone(elem));
             let subscope = builder.build_subscope();
 
             let extension = Box::pin(subscope.build_naked_list_for_list_comprehension(
