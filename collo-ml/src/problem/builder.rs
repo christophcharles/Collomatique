@@ -27,8 +27,7 @@ use std::sync::Arc;
 pub struct ProblemBuilder<
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<Env = T::Env>
-        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     /// Compiled AST (all modules compiled together)
     pub(crate) ast: CheckedAST<T, D>,
@@ -60,13 +59,12 @@ pub(crate) struct EvalData<
     'a,
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<Env = T::Env>
-        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > {
     pub(crate) builder: ProblemBuilder<T, D, V>,
 
     /// Reference to the evaluation environment
-    pub(crate) env: &'a T::Env,
+    pub(crate) env: &'a V::Env,
 
     /// List of constraints incrementally built (populated during build())
     pub(crate) constraints: Vec<(
@@ -98,8 +96,7 @@ pub(crate) struct EvalData<
 impl<
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<Env = T::Env>
-        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > ProblemBuilder<T, D, V>
 {
     fn build_vars() -> HashMap<String, Vec<ExprType>> {
@@ -269,7 +266,7 @@ impl<
 
     pub async fn build(
         self,
-        env: &T::Env,
+        env: &V::Env,
         db_connection: Option<D::Connection>,
     ) -> Result<Problem<T, D::Connection, V>, ProblemError<T, D::Connection>> {
         // Evaluate all pending constraints and objectives
@@ -350,8 +347,7 @@ impl<
     'a,
     T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar<Env = T::Env>
-        + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > EvalData<'a, T, D, V>
 {
     fn generate_helper_var(&mut self) -> ProblemVar<T, D::Connection, V> {
@@ -703,7 +699,7 @@ impl<
 
     pub(crate) async fn new(
         builder: ProblemBuilder<T, D, V>,
-        env: &'a T::Env,
+        env: &'a V::Env,
         db_connection: Option<D::Connection>,
     ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D::Connection>> {
         // Phase 1: Evaluate all functions and collect results
