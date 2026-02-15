@@ -1,5 +1,4 @@
 use collo_ml::eval::Origin;
-use collomatique_binding_colloscopes::views::ObjectId;
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::FactorySender;
 use relm4::factory::FactoryVecDeque;
@@ -10,7 +9,7 @@ use relm4::{adw, gtk};
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
-    warnings: Option<Result<Vec<Origin<ObjectId, collo_ml::SqliteDatabaseConnection>>, String>>,
+    warnings: Option<Result<Vec<Origin<collo_ml::SqliteDatabaseConnection>>, String>>,
     messages: FactoryVecDeque<Entry>,
 }
 
@@ -18,7 +17,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show,
     Close,
-    Update(Option<Result<Vec<Origin<ObjectId, collo_ml::SqliteDatabaseConnection>>, String>>),
+    Update(Option<Result<Vec<Origin<collo_ml::SqliteDatabaseConnection>>, String>>),
 }
 
 #[relm4::component(pub)]

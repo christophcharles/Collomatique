@@ -15,7 +15,6 @@ use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,
 };
-use crate::traits::EvalObject;
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 
@@ -26,13 +25,12 @@ use thiserror::Error;
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
-pub struct CheckedAST<T: EvalObject, D: DatabaseDriver> {
+pub struct CheckedAST<D: DatabaseDriver> {
     pub(crate) global_env: GlobalEnv<D>,
     pub(crate) type_info: TypeInfo,
     pub(crate) expr_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) resolved_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) warnings: Vec<SemWarning>,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -51,15 +49,15 @@ pub enum CompileError {
 }
 
 #[derive(Derivative, Error)]
-#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
-pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub enum EvalError<D: DatabaseConnection> {
     #[error("Unknown function \"{0}\"")]
     UnknownFunction(String),
     #[error("Type mismatch for parameter {param}: expected {expected} but found {found:?}")]
     TypeMismatch {
         param: usize,
         expected: ExprType,
-        found: ExprValue<T, D>,
+        found: ExprValue<D>,
     },
     #[error(
         "Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}"
@@ -72,15 +70,15 @@ pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
     #[error("Param {param} is an inconsistent ExprValue")]
     InvalidExprValue { param: usize },
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T, D>>),
+    Panic(Box<ExprValue<D>>),
 }
 
-impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
+impl<D: DatabaseDriver> CheckedAST<D> {
     /// Create a CheckedAST from source modules
     pub async fn new(
         inputs: &BTreeMap<&str, &str>,
         vars: HashMap<String, ArgsType>,
-    ) -> Result<CheckedAST<T, D>, CompileError> {
+    ) -> Result<CheckedAST<D>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
@@ -109,7 +107,6 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
             expr_types,
             resolved_types,
             warnings,
-            _phantom: std::marker::PhantomData,
         })
     }
 
@@ -175,7 +172,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
             .collect()
     }
 
-    pub fn start_eval_history(&self) -> EvalHistory<'_, T, D> {
+    pub fn start_eval_history(&self) -> EvalHistory<'_, D> {
         EvalHistory {
             ast: self,
             funcs: BTreeMap::new(),
@@ -189,8 +186,8 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         &self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D::Connection>>,
-    ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
         let mut eval_history = self.start_eval_history();
         Ok(eval_history.eval_fn(module, fn_name, args).await?.0)
     }
@@ -199,13 +196,10 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         &self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D::Connection>>,
+        args: Vec<ExprValue<D::Connection>>,
     ) -> Result<
-        (
-            ExprValue<T, D::Connection>,
-            VariableDefinitions<T, D::Connection>,
-        ),
-        EvalError<T, D::Connection>,
+        (ExprValue<D::Connection>, VariableDefinitions<D::Connection>),
+        EvalError<D::Connection>,
     > {
         let mut eval_history = self.start_eval_history();
         let (r, _o) = eval_history.eval_fn(module, fn_name, args).await?;

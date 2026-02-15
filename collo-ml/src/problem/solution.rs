@@ -8,7 +8,6 @@
 use super::types::{ConstraintDesc, ExtraDesc, ProblemVar};
 use crate::EvalVar;
 use crate::database::DatabaseConnection;
-use crate::traits::EvalObject;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, DefaultRepr, LinExpr, Variable};
 use derivative::Derivative;
@@ -16,24 +15,24 @@ use std::collections::BTreeMap;
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
 )]
-pub struct Problem<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
-    problem: collomatique_ilp::Problem<ProblemVar<T, D, V>, ConstraintDesc<T, D>>,
+pub struct Problem<D: DatabaseConnection, V: EvalVar> {
+    problem: collomatique_ilp::Problem<ProblemVar<D, V>, ConstraintDesc<D>>,
     pub(crate) reification_problem_builder:
-        collomatique_ilp::ProblemBuilder<ProblemVar<T, D, V>, ExtraDesc<T, D, V>>,
+        collomatique_ilp::ProblemBuilder<ProblemVar<D, V>, ExtraDesc<D, V>>,
     pub(crate) original_var_list: BTreeMap<V, Variable>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
+impl<D: DatabaseConnection, V: EvalVar> Problem<D, V> {
     pub(crate) fn new(
-        problem: collomatique_ilp::Problem<ProblemVar<T, D, V>, ConstraintDesc<T, D>>,
+        problem: collomatique_ilp::Problem<ProblemVar<D, V>, ConstraintDesc<D>>,
         reification_problem_builder: collomatique_ilp::ProblemBuilder<
-            ProblemVar<T, D, V>,
-            ExtraDesc<T, D, V>,
+            ProblemVar<D, V>,
+            ExtraDesc<D, V>,
         >,
         original_var_list: BTreeMap<V, Variable>,
     ) -> Self {
@@ -46,17 +45,17 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
 
     pub fn get_inner_problem(
         &self,
-    ) -> &collomatique_ilp::Problem<ProblemVar<T, D, V>, ConstraintDesc<T, D>> {
+    ) -> &collomatique_ilp::Problem<ProblemVar<D, V>, ConstraintDesc<D>> {
         &self.problem
     }
 
     pub fn solve<
         'a,
-        S: Solver<ProblemVar<T, D, V>, ConstraintDesc<T, D>, DefaultRepr<ProblemVar<T, D, V>>>,
+        S: Solver<ProblemVar<D, V>, ConstraintDesc<D>, DefaultRepr<ProblemVar<D, V>>>,
     >(
         &'a self,
         solver: &S,
-    ) -> Option<FeasableSolution<'a, T, D, V>> {
+    ) -> Option<FeasableSolution<'a, D, V>> {
         solver
             .solve(&self.problem)
             .map(|x| FeasableSolution { feasable_config: x })
@@ -64,12 +63,12 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
 
     pub fn solution_from_data<
         'a,
-        S: Solver<ProblemVar<T, D, V>, ExtraDesc<T, D, V>, DefaultRepr<ProblemVar<T, D, V>>>,
+        S: Solver<ProblemVar<D, V>, ExtraDesc<D, V>, DefaultRepr<ProblemVar<D, V>>>,
     >(
         &'a self,
         config_data: &ConfigData<V>,
         solver: &S,
-    ) -> Option<Solution<'a, T, D, V>> {
+    ) -> Option<Solution<'a, D, V>> {
         if !self.check_no_missing_variables(config_data) {
             return None;
         }
@@ -96,8 +95,8 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
 
     pub fn solution_from_complete_data<'a>(
         &'a self,
-        config_data: ConfigData<ProblemVar<T, D, V>>,
-    ) -> Option<Solution<'a, T, D, V>> {
+        config_data: ConfigData<ProblemVar<D, V>>,
+    ) -> Option<Solution<'a, D, V>> {
         Some(Solution {
             config: self.problem.build_config(config_data).ok()?,
         })
@@ -105,7 +104,7 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
 
     fn build_equality_constraints_from_config_data(
         config_data: &ConfigData<V>,
-    ) -> impl Iterator<Item = (Constraint<ProblemVar<T, D, V>>, ExtraDesc<T, D, V>)> {
+    ) -> impl Iterator<Item = (Constraint<ProblemVar<D, V>>, ExtraDesc<D, V>)> {
         config_data.get_values().into_iter().map(|(var, value)| {
             let var_expr = LinExpr::var(ProblemVar::Base(var.clone()));
             let value_expr = LinExpr::constant(value);
@@ -137,17 +136,17 @@ impl<T: EvalObject, D: DatabaseConnection, V: EvalVar> Problem<T, D, V> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "T: EvalObject"), Clone(bound = "T: EvalObject"))]
-pub struct Solution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> {
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct Solution<'a, D: DatabaseConnection, V: EvalVar> {
     config: collomatique_ilp::Config<
         'a,
-        ProblemVar<T, D, V>,
-        ConstraintDesc<T, D>,
-        DefaultRepr<ProblemVar<T, D, V>>,
+        ProblemVar<D, V>,
+        ConstraintDesc<D>,
+        DefaultRepr<ProblemVar<D, V>>,
     >,
 }
 
-impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> Solution<'a, T, D, V> {
+impl<'a, D: DatabaseConnection, V: EvalVar> Solution<'a, D, V> {
     pub fn get_data(&self) -> ConfigData<V> {
         ConfigData::from(self.config.get_values().into_iter().filter_map(
             |(var, value)| match var {
@@ -157,7 +156,7 @@ impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> Solution<'a, T, D, V>
         ))
     }
 
-    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<T, D, V>> {
+    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<D, V>> {
         ConfigData::from(self.config.get_values())
     }
 
@@ -165,30 +164,30 @@ impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> Solution<'a, T, D, V>
         self.config.is_feasable()
     }
 
-    pub fn into_feasable(self) -> Option<FeasableSolution<'a, T, D, V>> {
+    pub fn into_feasable(self) -> Option<FeasableSolution<'a, D, V>> {
         Some(FeasableSolution {
             feasable_config: self.config.into_feasable()?,
         })
     }
 
-    pub fn blame(&self) -> Vec<(Constraint<ProblemVar<T, D, V>>, ConstraintDesc<T, D>)> {
+    pub fn blame(&self) -> Vec<(Constraint<ProblemVar<D, V>>, ConstraintDesc<D>)> {
         self.config.blame().cloned().collect()
     }
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "T: EvalObject"), Clone(bound = "T: EvalObject"))]
-pub struct FeasableSolution<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> {
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct FeasableSolution<'a, D: DatabaseConnection, V: EvalVar> {
     feasable_config: collomatique_ilp::FeasableConfig<
         'a,
-        ProblemVar<T, D, V>,
-        ConstraintDesc<T, D>,
-        DefaultRepr<ProblemVar<T, D, V>>,
+        ProblemVar<D, V>,
+        ConstraintDesc<D>,
+        DefaultRepr<ProblemVar<D, V>>,
     >,
 }
 
-impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> FeasableSolution<'a, T, D, V> {
-    pub fn into_solution(self) -> Solution<'a, T, D, V> {
+impl<'a, D: DatabaseConnection, V: EvalVar> FeasableSolution<'a, D, V> {
+    pub fn into_solution(self) -> Solution<'a, D, V> {
         Solution {
             config: self.feasable_config.into_inner(),
         }
@@ -203,7 +202,7 @@ impl<'a, T: EvalObject, D: DatabaseConnection, V: EvalVar> FeasableSolution<'a, 
         ))
     }
 
-    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<T, D, V>> {
+    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<D, V>> {
         ConfigData::from(self.feasable_config.get_values())
     }
 }

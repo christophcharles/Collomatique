@@ -11,7 +11,7 @@ async fn constraint_eq_two_ints() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -40,7 +40,7 @@ async fn constraint_eq_var_with_int() {
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -69,7 +69,7 @@ async fn constraint_eq_two_vars() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -98,7 +98,7 @@ async fn constraint_eq_with_arithmetic() {
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -128,7 +128,7 @@ async fn constraint_eq_with_params() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -162,7 +162,7 @@ async fn constraint_le_two_ints() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -190,7 +190,7 @@ async fn constraint_le_var_with_int() {
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -219,7 +219,7 @@ async fn constraint_le_with_arithmetic() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -249,7 +249,7 @@ async fn constraint_le_two_vars() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -281,7 +281,7 @@ async fn constraint_ge_two_ints() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -309,7 +309,7 @@ async fn constraint_ge_var_with_int() {
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -338,7 +338,7 @@ async fn constraint_ge_with_arithmetic() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -368,7 +368,7 @@ async fn constraint_ge_two_vars() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -400,7 +400,7 @@ async fn and_two_constraints() {
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -429,7 +429,7 @@ async fn and_constraint_chain() {
     ]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -457,7 +457,7 @@ async fn and_mixed_constraint_types() {
     ]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 

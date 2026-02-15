@@ -12,7 +12,7 @@ async fn eval_with_variables_simple_reified_var() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -20,7 +20,7 @@ async fn eval_with_variables_simple_reified_var() {
         .eval_fn_with_variables(
             "main",
             "f",
-            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+            vec![ExprValue::<SqliteDatabaseConnection>::Int(5)],
         )
         .await
         .expect("Should evaluate");
@@ -70,7 +70,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -141,7 +141,7 @@ async fn eval_with_variables_in_forall() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -149,7 +149,7 @@ async fn eval_with_variables_in_forall() {
         .eval_fn_with_variables(
             "main",
             "f",
-            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3)],
+            vec![ExprValue::<SqliteDatabaseConnection>::Int(3)],
         )
         .await
         .expect("Should evaluate");
@@ -214,7 +214,7 @@ async fn eval_with_variables_multiple_vars() {
     ]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -223,7 +223,7 @@ async fn eval_with_variables_multiple_vars() {
             "main",
             "f",
             vec![
-                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5),
+                ExprValue::<SqliteDatabaseConnection>::Int(5),
                 ExprValue::Int(10),
             ],
         )
@@ -294,7 +294,7 @@ async fn eval_with_variables_var_with_multiple_params() {
     )]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -303,7 +303,7 @@ async fn eval_with_variables_var_with_multiple_params() {
             "main",
             "f",
             vec![
-                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3),
+                ExprValue::<SqliteDatabaseConnection>::Int(3),
                 ExprValue::Int(7),
             ],
         )
@@ -354,7 +354,7 @@ async fn eval_with_variables_simple_var_list() {
     )]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -363,7 +363,7 @@ async fn eval_with_variables_simple_var_list() {
             "main",
             "f",
             vec![
-                ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3),
+                ExprValue::<SqliteDatabaseConnection>::Int(3),
                 ExprValue::Int(7),
             ],
         )
@@ -439,16 +439,16 @@ async fn eval_with_variables_var_list_in_nested_forall() {
     )]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
-        Arc::new(ExprValue::<NoObject, SqliteDatabaseConnection>::Int(1)),
+        Arc::new(ExprValue::<SqliteDatabaseConnection>::Int(1)),
         Arc::new(ExprValue::Int(2)),
     ]));
     let ys = ExprValue::List(Vec::from([
-        Arc::new(ExprValue::<NoObject, SqliteDatabaseConnection>::Int(10)),
+        Arc::new(ExprValue::<SqliteDatabaseConnection>::Int(10)),
         Arc::new(ExprValue::Int(20)),
     ]));
 
@@ -521,7 +521,7 @@ async fn eval_with_variables_with_let_expr() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -529,7 +529,7 @@ async fn eval_with_variables_with_let_expr() {
         .eval_fn_with_variables(
             "main",
             "f",
-            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+            vec![ExprValue::<SqliteDatabaseConnection>::Int(5)],
         )
         .await
         .expect("Should evaluate");
@@ -573,7 +573,7 @@ async fn eval_with_variables_no_reified_vars() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -581,7 +581,7 @@ async fn eval_with_variables_no_reified_vars() {
         .eval_fn_with_variables(
             "main",
             "f",
-            vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
+            vec![ExprValue::<SqliteDatabaseConnection>::Int(5)],
         )
         .await
         .expect("Should evaluate");

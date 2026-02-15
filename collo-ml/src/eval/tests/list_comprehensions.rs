@@ -11,7 +11,7 @@ async fn list_comp_simple_identity() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -36,7 +36,7 @@ async fn list_comp_with_arithmetic() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -61,7 +61,7 @@ async fn list_comp_with_addition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -86,7 +86,7 @@ async fn list_comp_with_range() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -113,7 +113,7 @@ async fn list_comp_with_param() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -142,7 +142,7 @@ async fn list_comp_boolean_expression() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -168,7 +168,7 @@ async fn list_comp_constant_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -196,7 +196,7 @@ async fn list_comp_with_simple_filter() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -220,7 +220,7 @@ async fn list_comp_filter_even_numbers() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -246,7 +246,7 @@ async fn list_comp_filter_with_transformation() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -274,7 +274,7 @@ async fn list_comp_filter_no_matches() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -292,7 +292,7 @@ async fn list_comp_filter_all_match() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -317,7 +317,7 @@ async fn list_comp_filter_complex_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -342,7 +342,7 @@ async fn list_comp_filter_with_param() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -370,7 +370,7 @@ async fn list_comp_two_vars_simple() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -397,7 +397,7 @@ async fn list_comp_two_vars_multiplication() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -424,7 +424,7 @@ async fn list_comp_two_vars_with_ranges() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -451,7 +451,7 @@ async fn list_comp_two_vars_with_filter() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -486,7 +486,7 @@ async fn list_comp_two_vars_filter_on_first() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -514,7 +514,7 @@ async fn list_comp_two_vars_filter_on_second() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -543,7 +543,7 @@ async fn list_comp_two_vars_filter_on_both() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -571,7 +571,7 @@ async fn list_comp_cartesian_product() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -599,7 +599,7 @@ async fn list_comp_with_dependent_limit() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -627,7 +627,7 @@ async fn list_comp_over_union() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -653,7 +653,7 @@ async fn list_comp_over_difference() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -680,7 +680,7 @@ async fn list_comp_linexpr_simple() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -705,7 +705,7 @@ async fn list_comp_linexpr_with_coefficient() {
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -731,7 +731,7 @@ async fn list_comp_linexpr_with_filter() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -759,7 +759,7 @@ async fn list_comp_nested_in_sum() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -778,7 +778,7 @@ async fn list_comp_in_if_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -802,7 +802,7 @@ async fn list_comp_with_if_expression_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -829,7 +829,7 @@ async fn list_comp_cardinality() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -848,7 +848,7 @@ async fn list_comp_two_vars_one_used() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 
@@ -878,7 +878,7 @@ async fn list_comp_with_multiple_operations() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
 

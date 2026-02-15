@@ -12,12 +12,10 @@ async fn function_forward_reference_simple() {
         let g() -> Int = 42;
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "f", vec![])
@@ -33,12 +31,10 @@ async fn function_forward_reference_with_params() {
         let g(a: Int, b: Int) -> Int = a + b;
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "f", vec![ExprValue::Int(5)])
@@ -56,12 +52,10 @@ async fn function_forward_reference_chain() {
         let c() -> Int = 42;
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "a", vec![])
@@ -86,12 +80,10 @@ async fn direct_recursion_factorial() {
             if n == 0 { 1 } else { n * factorial(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // factorial(0) = 1
     let result0 = checked_ast
@@ -134,12 +126,10 @@ async fn direct_recursion_countdown() {
             if n == 0 { 0 } else { countdown(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // Keep depth at 10 to work safely in both debug and release
     let result = checked_ast
@@ -157,12 +147,10 @@ async fn direct_recursion_sum_to_n() {
             if n == 0 { 0 } else { n + sum_to(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // sum_to(0) = 0
     let result0 = checked_ast
@@ -194,12 +182,10 @@ async fn direct_recursion_fibonacci() {
             if n <= 1 { n } else { fib(n - 1) + fib(n - 2) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // fib(0) = 0
     let result0 = checked_ast
@@ -231,12 +217,10 @@ async fn direct_recursion_constraint_function() {
             if n == 0 { 0 === 0 } else { n >== 0 and recursive_constraint(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // recursive_constraint(3) should produce constraints: 3 >= 0 and 2 >= 0 and 1 >= 0 and 0 == 0
     let result = checked_ast
@@ -265,12 +249,10 @@ async fn mutual_recursion_even_odd() {
         pub let is_odd(n: Int) -> Bool = if n == 0 { false } else { is_even(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // Test is_even
     let even0 = checked_ast
@@ -333,12 +315,10 @@ async fn mutual_recursion_three_functions() {
         pub let start(n: Int) -> Int = a(n);
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // start(0) = a(0) = 0
     let result0 = checked_ast
@@ -382,12 +362,10 @@ async fn type_forward_reference_simple() {
         pub let unwrap(a: A) -> [Int] = [Int(x) for x in [B](a)];
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "f", vec![])
@@ -411,12 +389,10 @@ async fn type_forward_reference_in_function() {
         pub let unwrap(b: B) -> Int = Int(b);
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let f_result = checked_ast
         .eval_fn("main", "f", vec![])
@@ -444,12 +420,10 @@ async fn guarded_recursion_tree_structure() {
         pub let leaf(v: Int) -> Tree = Tree(v, []);
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // Create a leaf node with value 42
     let leaf = checked_ast
@@ -485,12 +459,10 @@ async fn recursive_function_with_recursive_type() {
         pub let node(v: Int, children: [Tree]) -> Tree = Tree(v, children);
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // Create a leaf with value 5
     let leaf5 = checked_ast
@@ -550,12 +522,10 @@ async fn reify_forward_reference_list() {
         pub let use_vars(x: Int) -> LinExpr = sum v in $[Vars](x) { v };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "use_vars", vec![ExprValue::Int(5)])
@@ -583,12 +553,10 @@ async fn mixed_function_and_type_forward_refs() {
         pub let get_y(p: Point) -> Int = p.1;
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let point = checked_ast
         .eval_fn("main", "make_point", vec![])
@@ -617,12 +585,10 @@ async fn complex_forward_reference_scenario() {
         let helper(t: Tree) -> Int = t.0;
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let tree = checked_ast
         .eval_fn("main", "create_tree", vec![])
@@ -647,16 +613,14 @@ async fn recursion_with_list_processing() {
             if |xs| == 0 { 0 } else { 1 + list_length([x for x in xs where x != xs[0]!]) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // Note: This is a quirky way to compute length that removes first element each time
     // For unique lists it works correctly
-    let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
+    let empty: ExprValue<SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result0 = checked_ast
         .eval_fn("main", "list_length", vec![empty])
         .await
@@ -673,14 +637,12 @@ async fn recursion_with_accumulator_pattern() {
         pub let list_sum(xs: [Int]) -> Int = sum_helper(xs, 0);
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
-    let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
+    let empty: ExprValue<SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result_empty = checked_ast
         .eval_fn("main", "list_sum", vec![empty])
         .await
@@ -706,12 +668,10 @@ async fn recursion_gcd() {
             if b == 0 { a } else { gcd(b, a % b) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // gcd(48, 18) = 6
     let result1 = checked_ast
@@ -743,12 +703,10 @@ async fn recursion_power() {
             if exp == 0 { 1 } else { base * power(base, exp - 1) };
     "#;
 
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     // 2^0 = 1
     let result1 = checked_ast

@@ -3,8 +3,6 @@
 //! This module defines the runtime value types:
 //! - `ExprValue`: The main enum representing evaluated expressions
 //! - `CustomValue`: Data for custom type values
-//! - `NoObject`: A placeholder object type for tests without objects
-//! - `NoObjectEnv`: Environment for NoObject
 
 use derivative::Derivative;
 
@@ -12,35 +10,31 @@ use super::database::DatabaseHandle;
 use super::variables::{ConstraintWithOrigin, IlpVar, Origin};
 use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
-use crate::traits::EvalObject;
 use collomatique_ilp::{Constraint, LinExpr};
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
+    Ord(bound = "", feature_allow_slow_enum = "true")
 )]
-pub enum ExprValue<T: EvalObject, D: DatabaseConnection> {
+pub enum ExprValue<D: DatabaseConnection> {
     None,
     Int(i32),
     Bool(bool),
-    LinExpr(LinExpr<IlpVar<T, D>>),
-    Constraint(Vec<ConstraintWithOrigin<T, D>>),
+    LinExpr(LinExpr<IlpVar<D>>),
+    Constraint(Vec<ConstraintWithOrigin<D>>),
     String(String),
-    List(Vec<Arc<ExprValue<T, D>>>),
-    Tuple(Vec<Arc<ExprValue<T, D>>>),
-    Struct(BTreeMap<String, Arc<ExprValue<T, D>>>),
-    Custom(CustomValue<T, D>),
+    List(Vec<Arc<ExprValue<D>>>),
+    Tuple(Vec<Arc<ExprValue<D>>>),
+    Struct(BTreeMap<String, Arc<ExprValue<D>>>),
+    Custom(CustomValue<D>),
     Database(DatabaseHandle<D>),
-    #[doc(hidden)]
-    _Phantom(std::convert::Infallible, PhantomData<T>),
 }
 
 /// Data for custom type values.
@@ -49,24 +43,24 @@ pub enum ExprValue<T: EvalObject, D: DatabaseConnection> {
 /// indirection and cheap cloning.
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = "")
 )]
-pub struct CustomValue<T: EvalObject, D: DatabaseConnection> {
+pub struct CustomValue<D: DatabaseConnection> {
     /// The module where this type is defined
     pub module: String,
     /// The root type name (e.g., "Result" or "MyType")
     pub type_name: String,
     /// The variant name if this is an enum variant (e.g., Some("Ok") for Result::Ok)
     pub variant: Option<String>,
-    pub content: Arc<ExprValue<T, D>>,
+    pub content: Arc<ExprValue<D>>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExprValue<T, D> {
+impl<D: DatabaseConnection> std::fmt::Display for ExprValue<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprValue::None => write!(f, "none"),
@@ -118,31 +112,30 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExprValue<T, D>
                 ),
             },
             ExprValue::Database(db) => write!(f, "{}", db),
-            ExprValue::_Phantom(..) => unreachable!(),
         }
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<i32> for ExprValue<T, D> {
+impl<D: DatabaseConnection> From<i32> for ExprValue<D> {
     fn from(value: i32) -> Self {
         ExprValue::Int(value)
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<bool> for ExprValue<T, D> {
+impl<D: DatabaseConnection> From<bool> for ExprValue<D> {
     fn from(value: bool) -> Self {
         ExprValue::Bool(value)
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<LinExpr<IlpVar<T, D>>> for ExprValue<T, D> {
-    fn from(value: LinExpr<IlpVar<T, D>>) -> Self {
+impl<D: DatabaseConnection> From<LinExpr<IlpVar<D>>> for ExprValue<D> {
+    fn from(value: LinExpr<IlpVar<D>>) -> Self {
         ExprValue::LinExpr(value)
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<Constraint<IlpVar<T, D>>> for ExprValue<T, D> {
-    fn from(value: Constraint<IlpVar<T, D>>) -> Self {
+impl<D: DatabaseConnection> From<Constraint<IlpVar<D>>> for ExprValue<D> {
+    fn from(value: Constraint<IlpVar<D>>) -> Self {
         ExprValue::Constraint(Vec::from([ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -150,14 +143,14 @@ impl<T: EvalObject, D: DatabaseConnection> From<Constraint<IlpVar<T, D>>> for Ex
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<ConstraintWithOrigin<T, D>> for ExprValue<T, D> {
-    fn from(value: ConstraintWithOrigin<T, D>) -> Self {
+impl<D: DatabaseConnection> From<ConstraintWithOrigin<D>> for ExprValue<D> {
+    fn from(value: ConstraintWithOrigin<D>) -> Self {
         ExprValue::Constraint(Vec::from([value]))
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
-    pub fn with_origin(&self, origin: &Origin<T, D>) -> ExprValue<T, D> {
+impl<D: DatabaseConnection> ExprValue<D> {
+    pub fn with_origin(&self, origin: &Origin<D>) -> ExprValue<D> {
         match self {
             ExprValue::Constraint(constraints) => ExprValue::Constraint(
                 constraints
@@ -312,7 +305,6 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     false
                 }
             }
-            Self::_Phantom(..) => unreachable!(),
         }
     }
 
@@ -412,7 +404,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         }
     }
 
-    pub unsafe fn convert_to_unchecked(&self, target: &SimpleType) -> ExprValue<T, D> {
+    pub unsafe fn convert_to_unchecked(&self, target: &SimpleType) -> ExprValue<D> {
         match (self, target) {
             // This should also work for empty lists as the iterator will be empty
             (Self::List(list), SimpleType::List(inner_typ)) => {
@@ -473,7 +465,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         }
     }
 
-    pub fn convert_to(&self, target: &ConcreteType) -> Option<ExprValue<T, D>> {
+    pub fn convert_to(&self, target: &ConcreteType) -> Option<ExprValue<D>> {
         if !self.can_convert_to(target) {
             return None;
         }
@@ -514,14 +506,4 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             v => format!("{}", v),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NoObject {}
-
-#[derive(Debug, Clone)]
-pub struct NoObjectEnv {}
-
-impl EvalObject for NoObject {
-    type Env = NoObjectEnv;
 }

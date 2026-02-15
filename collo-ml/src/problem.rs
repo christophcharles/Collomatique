@@ -34,6 +34,6 @@ pub(crate) use crate::eval::SqliteDatabaseDriver;
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
-pub(crate) use crate::traits::{EvalObject, VarConversionError};
+pub(crate) use crate::traits::VarConversionError;
 #[cfg(test)]
 pub(crate) use std::collections::{BTreeMap, HashMap};

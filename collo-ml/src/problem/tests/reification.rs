@@ -1,4 +1,4 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 
 use super::*;
 
@@ -35,9 +35,9 @@ async fn internal_reification() {
         }
     }
 
-    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -88,9 +88,9 @@ async fn internal_reification() {
                 $R1() + $R2() + $R3() === 1 and $R2() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
         .await
-        .expect("NoObject and Var should be compatible");
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -165,9 +165,9 @@ async fn private_reification_does_not_leak() {
         }
     }
 
-    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -216,9 +216,9 @@ async fn private_reification_does_not_leak() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
         .await
-        .expect("NoObject and Var should be compatible");
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -294,9 +294,9 @@ async fn three_module_chain_define_reify_use() {
         }
     }
 
-    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -355,9 +355,9 @@ async fn three_module_chain_define_reify_use() {
         ),
     ]);
 
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
         .await
-        .expect("NoObject and Var should be compatible");
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),

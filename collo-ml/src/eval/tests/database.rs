@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::*;
 use crate::database::{DbValue, SqlQueryError, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use crate::eval::database::DatabaseHandle;
-use crate::eval::values::{CustomValue, NoObject};
+use crate::eval::values::CustomValue;
 use crate::semantics::database::DbConversionError;
 
 // =============================================================================
@@ -12,16 +12,13 @@ use crate::semantics::database::DbConversionError;
 // =============================================================================
 
 /// Build a CheckedAST (and therefore a GlobalEnv) from DSL source.
-async fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
-    CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile")
+async fn checked(input: &str) -> CheckedAST<SqliteDatabaseDriver> {
+    CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+        .await
+        .expect("Should compile")
 }
 
-async fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
+async fn empty_ast() -> CheckedAST<SqliteDatabaseDriver> {
     checked("").await
 }
 
@@ -33,7 +30,7 @@ async fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
 async fn to_expr_value_int() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Int(42)));
 }
@@ -42,7 +39,7 @@ async fn to_expr_value_int() {
 async fn to_expr_value_bool() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Bool(true).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(true)));
 }
@@ -51,7 +48,7 @@ async fn to_expr_value_bool() {
 async fn to_expr_value_string() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::String);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::String("hi".to_string()).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::String("hi".to_string())));
 }
@@ -60,7 +57,7 @@ async fn to_expr_value_string() {
 async fn to_expr_value_null_to_none() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::None);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::None));
 }
@@ -73,7 +70,7 @@ async fn to_expr_value_null_to_none() {
 async fn to_expr_value_null_into_nullable_int() {
     let ast = empty_ast().await;
     let target = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::None));
 }
@@ -82,7 +79,7 @@ async fn to_expr_value_null_into_nullable_int() {
 async fn to_expr_value_int_into_nullable_int() {
     let ast = empty_ast().await;
     let target = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Int(42)));
 }
@@ -95,7 +92,7 @@ async fn to_expr_value_int_into_nullable_int() {
 async fn to_expr_value_int_into_bool_rejected() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -104,7 +101,7 @@ async fn to_expr_value_int_into_bool_rejected() {
 async fn to_expr_value_int_zero_to_bool() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(0).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(false)));
 }
@@ -113,7 +110,7 @@ async fn to_expr_value_int_zero_to_bool() {
 async fn to_expr_value_int_one_to_bool() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(1).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Ok(ExprValue::Bool(true)));
 }
@@ -122,7 +119,7 @@ async fn to_expr_value_int_one_to_bool() {
 async fn to_expr_value_int_two_into_bool_rejected() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Bool);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(2).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -131,7 +128,7 @@ async fn to_expr_value_int_two_into_bool_rejected() {
 async fn to_expr_value_int_into_string_rejected() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::String);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -140,7 +137,7 @@ async fn to_expr_value_int_into_string_rejected() {
 async fn to_expr_value_null_into_int_rejected() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -149,7 +146,7 @@ async fn to_expr_value_null_into_int_rejected() {
 async fn to_expr_value_bool_into_int_rejected() {
     let ast = empty_ast().await;
     let target = ExprType::simple(SimpleType::Int);
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Bool(true).to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -166,7 +163,7 @@ async fn to_expr_value_custom_type_wraps_int() {
         "MyInt".to_string(),
         None,
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
@@ -187,7 +184,7 @@ async fn to_expr_value_custom_type_null_into_non_nullable_rejected() {
         "MyInt".to_string(),
         None,
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(result, Err(DbConversionError));
 }
@@ -200,7 +197,7 @@ async fn to_expr_value_custom_nullable_int() {
         "MaybeInt".to_string(),
         None,
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
@@ -221,7 +218,7 @@ async fn to_expr_value_custom_nullable_null() {
         "MaybeInt".to_string(),
         None,
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Null.to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
@@ -246,7 +243,7 @@ async fn to_expr_value_nested_custom_types() {
         "Deep".to_string(),
         None,
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
@@ -276,7 +273,7 @@ async fn to_expr_value_enum_variant() {
         "Wrapper".to_string(),
         Some("A".to_string()),
     ));
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> =
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(42).to_expr_value(&ast.global_env, &target);
     assert_eq!(
         result,
@@ -295,19 +292,19 @@ async fn to_expr_value_enum_variant() {
 
 #[tokio::test]
 async fn try_from_expr_value_int() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Int(42);
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::Int(42);
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Int(42)));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_bool() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Bool(true);
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::Bool(true);
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Bool(true)));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_string() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::String("hi".to_string());
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::String("hi".to_string());
     assert_eq!(
         DbValue::try_from(val),
         Ok(DbValue::String("hi".to_string()))
@@ -316,13 +313,13 @@ async fn try_from_expr_value_string() {
 
 #[tokio::test]
 async fn try_from_expr_value_none() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::None;
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::None;
     assert_eq!(DbValue::try_from(val), Ok(DbValue::Null));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_custom_unwraps() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "MyInt".to_string(),
         variant: None,
@@ -333,7 +330,7 @@ async fn try_from_expr_value_custom_unwraps() {
 
 #[tokio::test]
 async fn try_from_expr_value_nested_custom_unwraps() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
         type_name: "Deep".to_string(),
         variant: None,
@@ -353,21 +350,21 @@ async fn try_from_expr_value_nested_custom_unwraps() {
 
 #[tokio::test]
 async fn try_from_expr_value_list_rejected() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> =
+    let val: ExprValue<SqliteDatabaseConnection> =
         ExprValue::List(vec![Arc::new(ExprValue::Int(1))]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_tuple_rejected() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> =
+    let val: ExprValue<SqliteDatabaseConnection> =
         ExprValue::Tuple(vec![Arc::new(ExprValue::Int(1))]);
     assert_eq!(DbValue::try_from(val), Err(DbConversionError));
 }
 
 #[tokio::test]
 async fn try_from_expr_value_struct_rejected() {
-    let val: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Struct(
+    let val: ExprValue<SqliteDatabaseConnection> = ExprValue::Struct(
         [("x".to_string(), Arc::new(ExprValue::Int(1)))]
             .into_iter()
             .collect(),
@@ -382,10 +379,10 @@ async fn try_from_expr_value_struct_rejected() {
 #[tokio::test]
 async fn roundtrip_int() {
     let ast = empty_ast().await;
-    let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Int(7);
+    let original: ExprValue<SqliteDatabaseConnection> = ExprValue::Int(7);
     let target = ExprType::simple(SimpleType::Int);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
-    let recovered: ExprValue<NoObject, SqliteDatabaseConnection> = db
+    let recovered: ExprValue<SqliteDatabaseConnection> = db
         .to_expr_value(&ast.global_env, &target)
         .expect("Should convert back");
     assert_eq!(recovered, original);
@@ -394,10 +391,10 @@ async fn roundtrip_int() {
 #[tokio::test]
 async fn roundtrip_bool() {
     let ast = empty_ast().await;
-    let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::Bool(true);
+    let original: ExprValue<SqliteDatabaseConnection> = ExprValue::Bool(true);
     let target = ExprType::simple(SimpleType::Bool);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
-    let recovered: ExprValue<NoObject, SqliteDatabaseConnection> = db
+    let recovered: ExprValue<SqliteDatabaseConnection> = db
         .to_expr_value(&ast.global_env, &target)
         .expect("Should convert back");
     assert_eq!(recovered, original);
@@ -406,11 +403,10 @@ async fn roundtrip_bool() {
 #[tokio::test]
 async fn roundtrip_string() {
     let ast = empty_ast().await;
-    let original: ExprValue<NoObject, SqliteDatabaseConnection> =
-        ExprValue::String("hello".to_string());
+    let original: ExprValue<SqliteDatabaseConnection> = ExprValue::String("hello".to_string());
     let target = ExprType::simple(SimpleType::String);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
-    let recovered: ExprValue<NoObject, SqliteDatabaseConnection> = db
+    let recovered: ExprValue<SqliteDatabaseConnection> = db
         .to_expr_value(&ast.global_env, &target)
         .expect("Should convert back");
     assert_eq!(recovered, original);
@@ -419,10 +415,10 @@ async fn roundtrip_string() {
 #[tokio::test]
 async fn roundtrip_none() {
     let ast = empty_ast().await;
-    let original: ExprValue<NoObject, SqliteDatabaseConnection> = ExprValue::None;
+    let original: ExprValue<SqliteDatabaseConnection> = ExprValue::None;
     let target = ExprType::simple(SimpleType::None);
     let db = DbValue::try_from(original.clone()).expect("Should convert to DbValue");
-    let recovered: ExprValue<NoObject, SqliteDatabaseConnection> = db
+    let recovered: ExprValue<SqliteDatabaseConnection> = db
         .to_expr_value(&ast.global_env, &target)
         .expect("Should convert back");
     assert_eq!(recovered, original);
@@ -665,7 +661,7 @@ async fn typed_query_list_of_structs() {
         .collect(),
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -722,7 +718,7 @@ async fn typed_query_optional_struct_found() {
         SimpleType::None,
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
             vec![],
@@ -766,7 +762,7 @@ async fn typed_query_optional_struct_not_found() {
         SimpleType::None,
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 999",
             vec![],
@@ -793,7 +789,7 @@ async fn typed_query_empty_list() {
             .collect(),
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
             vec![],
@@ -820,7 +816,7 @@ async fn typed_query_custom_wrapped_rows() {
         None,
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -891,7 +887,7 @@ async fn typed_query_custom_wrapped_fields() {
         .collect(),
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -964,7 +960,7 @@ async fn typed_query_column_mismatch() {
         .collect(),
     ))));
 
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> = handle
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
         .query(
             "SELECT id, name FROM users",
             vec![],
@@ -994,7 +990,7 @@ async fn typed_query_column_count_mismatch() {
             .collect(),
     ))));
 
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> = handle
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
         .query(
             "SELECT id, name FROM users",
             vec![],
@@ -1027,7 +1023,7 @@ async fn typed_query_param_conversion() {
         .collect(),
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = ?",
             vec![ExprValue::Int(1)],
@@ -1064,7 +1060,7 @@ async fn typed_query_tuple_output() {
         ExprType::simple(SimpleType::String),
     ]))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -1107,7 +1103,7 @@ async fn typed_query_optional_takes_first_row() {
         SimpleType::None,
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -1142,7 +1138,7 @@ async fn typed_query_invalid_output_type() {
     // Int — not a list or optional
     let out_type = ExprType::simple(SimpleType::Int);
 
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> = handle
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
         .query("SELECT id FROM users", vec![], out_type, &ast.global_env)
         .await;
 
@@ -1167,7 +1163,7 @@ async fn typed_query_custom_list_type() {
         None,
     ));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users ORDER BY id",
             vec![],
@@ -1223,7 +1219,7 @@ async fn typed_query_custom_optional_type() {
         None,
     ));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
             vec![],
@@ -1266,7 +1262,7 @@ async fn typed_query_custom_enum_type() {
         None,
     ));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, name FROM users WHERE id = 1",
             vec![],
@@ -1434,11 +1430,9 @@ async fn eval_query_call_query_failed() {
     pub let run(db: Db) -> [{id: Int}] = bad_query(db);
     "#;
 
-    let result = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await;
+    let result =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await;
 
     match result {
         Err(CompileError::SemanticsError { errors, .. }) => {
@@ -1471,7 +1465,7 @@ async fn typed_query_list_of_ints() {
     // [Int]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users ORDER BY id",
             vec![],
@@ -1498,7 +1492,7 @@ async fn typed_query_list_of_strings() {
     // [String]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::String)));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users ORDER BY id",
             vec![],
@@ -1525,7 +1519,7 @@ async fn typed_query_optional_int_found() {
     // Int | None
     let out_type = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 1",
             vec![],
@@ -1548,7 +1542,7 @@ async fn typed_query_optional_int_not_found() {
     // Int | None
     let out_type = ExprType::from_variants([SimpleType::Int, SimpleType::None]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
             vec![],
@@ -1571,7 +1565,7 @@ async fn typed_query_optional_string_found() {
     // String | None
     let out_type = ExprType::from_variants([SimpleType::String, SimpleType::None]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 1",
             vec![],
@@ -1594,7 +1588,7 @@ async fn typed_query_primitive_column_count_mismatch() {
     // [Int] but SELECT returns 2 columns
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
 
-    let result: Result<ExprValue<NoObject, SqliteDatabaseConnection>, _> = handle
+    let result: Result<ExprValue<SqliteDatabaseConnection>, _> = handle
         .query(
             "SELECT id, name FROM users",
             vec![],
@@ -1620,7 +1614,7 @@ async fn typed_query_empty_primitive_list() {
     // [Int]
     let out_type = ExprType::simple(SimpleType::List(ExprType::simple(SimpleType::Int)));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
             vec![],
@@ -1737,7 +1731,7 @@ async fn typed_query_nullable_custom_nullable_string_found() {
         SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 1",
             vec![],
@@ -1770,7 +1764,7 @@ async fn typed_query_nullable_custom_nullable_string_not_found() {
         SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT name FROM users WHERE id = 999",
             vec![],
@@ -1804,7 +1798,7 @@ async fn typed_query_nullable_custom_nullable_string_null_value() {
         SimpleType::Custom("main".to_string(), "NullableString".to_string(), None),
     ]);
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query("SELECT val FROM data", vec![], out_type, &ast.global_env)
         .await
         .unwrap();
@@ -1843,7 +1837,7 @@ async fn typed_query_deeply_nested_enum_with_value() {
         None,
     ));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 1",
             vec![],
@@ -1917,7 +1911,7 @@ async fn typed_query_deeply_nested_enum_empty() {
         None,
     ));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id FROM users WHERE id = 999",
             vec![],
@@ -1986,7 +1980,7 @@ async fn typed_query_list_with_nullable_custom_fields() {
         .collect(),
     ))));
 
-    let result: ExprValue<NoObject, SqliteDatabaseConnection> = handle
+    let result: ExprValue<SqliteDatabaseConnection> = handle
         .query(
             "SELECT id, val FROM data ORDER BY id",
             vec![],

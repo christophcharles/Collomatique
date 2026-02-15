@@ -11,35 +11,34 @@ use super::variables::{IlpVar, Origin};
 use crate::ast::Spanned;
 use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
-use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
-    pub(crate) ast: &'a CheckedAST<T, D>,
+pub struct EvalHistory<'a, D: DatabaseDriver> {
+    pub(crate) ast: &'a CheckedAST<D>,
     pub(crate) funcs: BTreeMap<
-        (String, String, Vec<Arc<ExprValue<T, D::Connection>>>),
-        (Arc<ExprValue<T, D::Connection>>, Origin<T, D::Connection>),
+        (String, String, Vec<Arc<ExprValue<D::Connection>>>),
+        (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
     >,
     pub(crate) vars:
-        BTreeMap<(String, String, Vec<Arc<ExprValue<T, D::Connection>>>), (String, String)>,
+        BTreeMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
     pub(crate) var_lists:
-        BTreeMap<(String, String, Vec<Arc<ExprValue<T, D::Connection>>>), (String, String)>,
+        BTreeMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
     pub(crate) queries: BTreeMap<
-        (String, String, Vec<Arc<ExprValue<T, D::Connection>>>),
-        Arc<ExprValue<T, D::Connection>>,
+        (String, String, Vec<Arc<ExprValue<D::Connection>>>),
+        Arc<ExprValue<D::Connection>>,
     >,
 }
 
-impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
+impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
     async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        local_env: &Arc<LocalEvalEnv<T, D>>,
-    ) -> Result<Vec<String>, EvalError<T, D::Connection>> {
+        local_env: &Arc<LocalEvalEnv<D>>,
+    ) -> Result<Vec<String>, EvalError<D::Connection>> {
         let mut lines = Vec::new();
         for line in &fn_desc.docstring {
             let mut result = String::new();
@@ -68,12 +67,10 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<Arc<ExprValue<T, D::Connection>>>,
+        args: Vec<Arc<ExprValue<D::Connection>>>,
         allow_private: bool,
-    ) -> Result<
-        (Arc<ExprValue<T, D::Connection>>, Origin<T, D::Connection>),
-        EvalError<T, D::Connection>,
-    > {
+    ) -> Result<(Arc<ExprValue<D::Connection>>, Origin<D::Connection>), EvalError<D::Connection>>
+    {
         let fn_desc = self
             .ast
             .global_env
@@ -144,8 +141,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         &mut self,
         module: &str,
         name: &str,
-        args: Vec<Arc<ExprValue<T, D::Connection>>>,
-    ) -> Result<Arc<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
+        args: Vec<Arc<ExprValue<D::Connection>>>,
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         if let Some(cached) =
             self.queries
                 .get(&(module.to_string(), name.to_string(), args.clone()))
@@ -163,7 +160,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         let out_type = query_desc.typ.output.clone();
 
         let db_handle = {
-            let mut val: &ExprValue<T, D::Connection> = &args[0];
+            let mut val: &ExprValue<D::Connection> = &args[0];
             loop {
                 match val {
                     ExprValue::Database(h) => break h.clone(),
@@ -175,7 +172,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             }
         };
 
-        let params: Vec<ExprValue<T, D::Connection>> =
+        let params: Vec<ExprValue<D::Connection>> =
             args[1..].iter().map(|a| (**a).clone()).collect();
         let global_env = &self.ast.global_env;
 
@@ -200,8 +197,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
     }
 }
 
-impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
-    pub fn validate_value(&self, val: &ExprValue<T, D::Connection>) -> bool {
+impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
+    pub fn validate_value(&self, val: &ExprValue<D::Connection>) -> bool {
         match val {
             ExprValue::None => true,
             ExprValue::Int(_) => true,
@@ -232,7 +229,6 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
                     && self.validate_value(&custom.content)
             }
             ExprValue::Database(_) => true,
-            ExprValue::_Phantom(..) => unreachable!(),
         }
     }
 
@@ -240,9 +236,8 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D::Connection>>,
-    ) -> Result<(ExprValue<T, D::Connection>, Origin<T, D::Connection>), EvalError<T, D::Connection>>
-    {
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<(ExprValue<D::Connection>, Origin<D::Connection>), EvalError<D::Connection>> {
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -256,7 +251,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         Ok((Arc::unwrap_or_clone(result), origin))
     }
 
-    pub fn into_var_def(self) -> VariableDefinitions<T, D::Connection> {
+    pub fn into_var_def(self) -> VariableDefinitions<D::Connection> {
         let mut var_def = VariableDefinitions {
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
@@ -320,14 +315,12 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
 }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
-pub struct VariableDefinitions<T: EvalObject, D: DatabaseConnection> {
-    pub vars: BTreeMap<
-        (String, String, Vec<Arc<ExprValue<T, D>>>),
-        (Vec<Constraint<IlpVar<T, D>>>, Origin<T, D>),
-    >,
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub struct VariableDefinitions<D: DatabaseConnection> {
+    pub vars:
+        BTreeMap<(String, String, Vec<Arc<ExprValue<D>>>), (Vec<Constraint<IlpVar<D>>>, Origin<D>)>,
     pub var_lists: BTreeMap<
-        (String, String, Vec<Arc<ExprValue<T, D>>>),
-        (Vec<Vec<Constraint<IlpVar<T, D>>>>, Origin<T, D>),
+        (String, String, Vec<Arc<ExprValue<D>>>),
+        (Vec<Vec<Constraint<IlpVar<D>>>>, Origin<D>),
     >,
 }

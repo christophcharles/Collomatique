@@ -12,12 +12,10 @@ async fn enum_basic_construction() {
         pub let make_ok(x: Int) -> Result = Result::Ok(x);
         pub let make_error(msg: String) -> Result = Result::Error(msg);
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let ok_result = checked_ast
         .eval_fn("main", "make_ok", vec![ExprValue::Int(42)])
@@ -61,12 +59,10 @@ async fn enum_unit_variant() {
         pub let make_some(x: Int) -> Option = Option::Some(x);
         pub let make_none() -> Option = Option::None;
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let some_result = checked_ast
         .eval_fn("main", "make_some", vec![ExprValue::Int(42)])
@@ -105,12 +101,10 @@ async fn enum_unit_variant_with_empty_parens() {
         enum Option = Some(Int) | None;
         pub let make_none() -> Option = Option::None();
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let none_result = checked_ast
         .eval_fn("main", "make_none", vec![])
@@ -134,12 +128,10 @@ async fn enum_unit_variant_with_explicit_none() {
         enum Option = Some(Int) | None;
         pub let make_none() -> Option = Option::None(none);
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let none_result = checked_ast
         .eval_fn("main", "make_none", vec![])
@@ -168,12 +160,10 @@ async fn enum_variant_as_return_type() {
         enum Result = Ok(Int) | Error(String);
         pub let make_ok(x: Int) -> Result::Ok = Result::Ok(x);
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "make_ok", vec![ExprValue::Int(42)])
@@ -199,12 +189,10 @@ async fn enum_variant_subtype_of_root() {
         pub let identity(x: Result) -> Result = x;
         pub let make_and_pass() -> Result = identity(Result::Ok(42));
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "make_and_pass", vec![])
@@ -232,12 +220,10 @@ async fn enum_tuple_variant() {
         enum MyEnum = TupleCase(Int, Bool);
         pub let make(x: Int, b: Bool) -> MyEnum = MyEnum::TupleCase(x, b);
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn(
@@ -272,12 +258,10 @@ async fn enum_struct_variant() {
         enum MyEnum = StructCase { x: Int, y: Bool };
         pub let make(x: Int, b: Bool) -> MyEnum = MyEnum::StructCase { x: x, y: b };
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn(
@@ -319,12 +303,10 @@ async fn enum_match_expression() {
             _ as Result::Error { 0 }
         };
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let ok_value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
@@ -361,12 +343,10 @@ async fn enum_in_if_expression() {
         enum Result = Ok(Int) | Error(String);
         pub let f(b: Bool) -> Result = if b { Result::Ok(1) } else { Result::Error("no") };
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
         .eval_fn("main", "f", vec![ExprValue::Bool(true)])
@@ -407,12 +387,10 @@ async fn qualified_type_in_function_param() {
         enum Result = Ok(Int) | Error(String);
         pub let extract_ok(x: Result::Ok) -> Int = Int(x);
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let value = ExprValue::Custom(CustomValue {
         module: "main".to_string(),
@@ -435,12 +413,10 @@ async fn qualified_type_in_list() {
         enum Result = Ok(Int) | Error(String);
         pub let make_list() -> [Result::Ok] = [Result::Ok(1), Result::Ok(2)];
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
         .eval_fn("main", "make_list", vec![])
@@ -472,12 +448,10 @@ async fn qualified_type_maybe() {
         enum Result = Ok(Int) | Error(String);
         pub let maybe_ok(b: Bool) -> ?Result::Ok = if b { Result::Ok(42) } else { none };
     "#;
-    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
-        &BTreeMap::from([("main", input)]),
-        HashMap::new(),
-    )
-    .await
-    .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
+            .await
+            .expect("Should compile");
 
     let result_some = checked_ast
         .eval_fn("main", "maybe_ok", vec![ExprValue::Bool(true)])

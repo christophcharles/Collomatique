@@ -2,9 +2,9 @@ use super::*;
 use std::sync::Arc;
 
 /// Helper to compile multiple modules
-async fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
+async fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<SqliteDatabaseDriver> {
     let inputs: BTreeMap<&str, &str> = modules.iter().copied().collect();
-    CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&inputs, HashMap::new())
+    CheckedAST::<SqliteDatabaseDriver>::new(&inputs, HashMap::new())
         .await
         .expect("Should compile")
 }

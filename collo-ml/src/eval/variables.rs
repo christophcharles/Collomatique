@@ -10,33 +10,32 @@
 use super::values::ExprValue;
 use crate::ast::Spanned;
 use crate::database::DatabaseConnection;
-use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
 use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
 )]
-pub struct ScriptVar<T: EvalObject, D: DatabaseConnection> {
+pub struct ScriptVar<D: DatabaseConnection> {
     pub module: String,
     pub name: String,
     pub from_list: Option<usize>,
-    pub params: Vec<Arc<ExprValue<T, D>>>,
+    pub params: Vec<Arc<ExprValue<D>>>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
+impl<D: DatabaseConnection> ScriptVar<D> {
     pub fn new(
         module: String,
         name: String,
         from_list: Option<usize>,
-        params: Vec<Arc<ExprValue<T, D>>>,
+        params: Vec<Arc<ExprValue<D>>>,
     ) -> Self {
         ScriptVar {
             module,
@@ -47,7 +46,7 @@ impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D> {
+impl<D: DatabaseConnection> std::fmt::Display for ScriptVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
         let params_str = params_str.join(", ");
@@ -64,25 +63,25 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D>
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
 )]
-pub struct ExternVar<T: EvalObject, D: DatabaseConnection> {
+pub struct ExternVar<D: DatabaseConnection> {
     pub name: String,
-    pub params: Vec<Arc<ExprValue<T, D>>>,
+    pub params: Vec<Arc<ExprValue<D>>>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
-    pub fn new(name: String, params: Vec<Arc<ExprValue<T, D>>>) -> Self {
+impl<D: DatabaseConnection> ExternVar<D> {
+    pub fn new(name: String, params: Vec<Arc<ExprValue<D>>>) -> Self {
         ExternVar { name, params }
     }
 }
 
-impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExternVar<T, D> {
+impl<D: DatabaseConnection> std::fmt::Display for ExternVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
         write!(f, "${}({})", self.name, params_str.join(", "))
@@ -91,19 +90,19 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExternVar<T, D>
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
+    Ord(bound = "", feature_allow_slow_enum = "true")
 )]
-pub enum IlpVar<T: EvalObject, D: DatabaseConnection> {
-    Base(ExternVar<T, D>),
-    Script(ScriptVar<T, D>),
+pub enum IlpVar<D: DatabaseConnection> {
+    Base(ExternVar<D>),
+    Script(ScriptVar<D>),
 }
 
-impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for IlpVar<T, D> {
+impl<D: DatabaseConnection> std::fmt::Display for IlpVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IlpVar::Base(b) => write!(f, "{}", b),
@@ -114,21 +113,21 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for IlpVar<T, D> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = "")
 )]
-pub struct Origin<T: EvalObject, D: DatabaseConnection> {
+pub struct Origin<D: DatabaseConnection> {
     pub module: String,
     pub fn_name: Spanned<String>,
-    pub args: Vec<Arc<ExprValue<T, D>>>,
+    pub args: Vec<Arc<ExprValue<D>>>,
     pub pretty_docstring: Vec<String>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for Origin<T, D> {
+impl<D: DatabaseConnection> std::fmt::Display for Origin<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.pretty_docstring.is_empty() {
             let args_str: Vec<_> = self.args.iter().map(|x| x.to_string()).collect();
@@ -148,22 +147,20 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for Origin<T, D> {
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = "")
 )]
-pub struct ConstraintWithOrigin<T: EvalObject, D: DatabaseConnection> {
-    pub constraint: Constraint<IlpVar<T, D>>,
-    pub origin: Option<Origin<T, D>>,
+pub struct ConstraintWithOrigin<D: DatabaseConnection> {
+    pub constraint: Constraint<IlpVar<D>>,
+    pub origin: Option<Origin<D>>,
 }
 
-impl<T: EvalObject, D: DatabaseConnection> From<Constraint<IlpVar<T, D>>>
-    for ConstraintWithOrigin<T, D>
-{
-    fn from(value: Constraint<IlpVar<T, D>>) -> Self {
+impl<D: DatabaseConnection> From<Constraint<IlpVar<D>>> for ConstraintWithOrigin<D> {
+    fn from(value: Constraint<IlpVar<D>>) -> Self {
         ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -171,8 +168,8 @@ impl<T: EvalObject, D: DatabaseConnection> From<Constraint<IlpVar<T, D>>>
     }
 }
 
-pub fn strip_origins<T: EvalObject, D: DatabaseConnection>(
-    set: &Vec<ConstraintWithOrigin<T, D>>,
-) -> Vec<Constraint<IlpVar<T, D>>> {
+pub fn strip_origins<D: DatabaseConnection>(
+    set: &Vec<ConstraintWithOrigin<D>>,
+) -> Vec<Constraint<IlpVar<D>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }

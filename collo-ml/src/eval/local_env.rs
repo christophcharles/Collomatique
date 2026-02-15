@@ -10,34 +10,33 @@ use super::variables::{ExternVar, IlpVar, ScriptVar};
 use crate::ast::{Span, Spanned};
 use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::semantics::{LocalEnvCheck, ResolvedPathKind, SimpleType, resolve_path};
-use crate::traits::EvalObject;
 use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub(crate) struct LocalEvalEnv<T: EvalObject, D: DatabaseDriver> {
-    scope: HashMap<String, Arc<ExprValue<T, D::Connection>>>,
-    parent: Option<Arc<LocalEvalEnv<T, D>>>,
+pub(crate) struct LocalEvalEnv<D: DatabaseDriver> {
+    scope: HashMap<String, Arc<ExprValue<D::Connection>>>,
+    parent: Option<Arc<LocalEvalEnv<D>>>,
     current_module: Arc<str>,
 }
 
-pub(crate) struct SubscopeBuilder<T: EvalObject, D: DatabaseDriver> {
-    identifiers: HashMap<String, Arc<ExprValue<T, D::Connection>>>,
-    parent: Arc<LocalEvalEnv<T, D>>,
+pub(crate) struct SubscopeBuilder<D: DatabaseDriver> {
+    identifiers: HashMap<String, Arc<ExprValue<D::Connection>>>,
+    parent: Arc<LocalEvalEnv<D>>,
 }
 
-impl<T: EvalObject, D: DatabaseDriver> SubscopeBuilder<T, D> {
+impl<D: DatabaseDriver> SubscopeBuilder<D> {
     pub(crate) fn register_identifier(
         &mut self,
         ident: &str,
-        value: Arc<ExprValue<T, D::Connection>>,
+        value: Arc<ExprValue<D::Connection>>,
     ) {
         assert!(!self.identifiers.contains_key(ident));
         self.identifiers.insert(ident.to_string(), value);
     }
 
-    pub(crate) fn build_subscope(self) -> Arc<LocalEvalEnv<T, D>> {
+    pub(crate) fn build_subscope(self) -> Arc<LocalEvalEnv<D>> {
         let current_module = Arc::clone(&self.parent.current_module);
         Arc::new(LocalEvalEnv {
             scope: self.identifiers,
@@ -47,13 +46,13 @@ impl<T: EvalObject, D: DatabaseDriver> SubscopeBuilder<T, D> {
     }
 }
 
-impl<T: EvalObject, D: DatabaseDriver> LocalEnvCheck for LocalEvalEnv<T, D> {
+impl<D: DatabaseDriver> LocalEnvCheck for LocalEvalEnv<D> {
     fn has_ident(&self, ident: &str) -> bool {
         self.lookup_ident(ident).is_some()
     }
 }
 
-impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
+impl<D: DatabaseDriver> LocalEvalEnv<D> {
     pub(crate) fn new(current_module: &str) -> Arc<Self> {
         Arc::new(LocalEvalEnv {
             scope: HashMap::new(),
@@ -66,14 +65,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
         &self.current_module
     }
 
-    fn lookup_ident(&self, ident: &str) -> Option<Arc<ExprValue<T, D::Connection>>> {
+    fn lookup_ident(&self, ident: &str) -> Option<Arc<ExprValue<D::Connection>>> {
         if let Some(value) = self.scope.get(ident) {
             return Some(Arc::clone(value));
         }
         self.parent.as_ref().and_then(|p| p.lookup_ident(ident))
     }
 
-    pub(crate) fn start_subscope(parent: Arc<Self>) -> SubscopeBuilder<T, D> {
+    pub(crate) fn start_subscope(parent: Arc<Self>) -> SubscopeBuilder<D> {
         SubscopeBuilder {
             identifiers: HashMap::new(),
             parent,
@@ -82,9 +81,9 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
     pub(crate) async fn eval_expr(
         self: Arc<Self>,
-        eval_history: &mut EvalHistory<'_, T, D>,
+        eval_history: &mut EvalHistory<'_, D>,
         expr: Arc<Spanned<crate::ast::Expr>>,
-    ) -> Result<Arc<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         use crate::ast::Expr;
         Ok(match &expr.node {
             Expr::None => Arc::new(ExprValue::None),
@@ -141,13 +140,13 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 use crate::ast::PathSegment;
                 assert!(!segments.is_empty());
 
-                let mut current_value: Arc<ExprValue<T, D::Connection>> =
+                let mut current_value: Arc<ExprValue<D::Connection>> =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(object))).await?;
 
                 // Helper to unwrap Custom values for field/index access
-                fn unwrap_custom<T: EvalObject, D: DatabaseConnection>(
-                    value: Arc<ExprValue<T, D>>,
-                ) -> Arc<ExprValue<T, D>> {
+                fn unwrap_custom<D: DatabaseConnection>(
+                    value: Arc<ExprValue<D>>,
+                ) -> Arc<ExprValue<D>> {
                     match &*value {
                         ExprValue::Custom(custom) => unwrap_custom(Arc::clone(&custom.content)),
                         _ => value,
@@ -441,7 +440,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let mut eval_args: Vec<Arc<ExprValue<T, D::Connection>>> =
+                let mut eval_args: Vec<Arc<ExprValue<D::Connection>>> =
                     Vec::with_capacity(args.len());
                 for x in args {
                     eval_args.push(
@@ -1118,7 +1117,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
                 let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
 
-                let mut evaluated_args: Vec<Arc<ExprValue<T, D::Connection>>> =
+                let mut evaluated_args: Vec<Arc<ExprValue<D::Connection>>> =
                     Vec::with_capacity(args.len());
                 for x in args {
                     evaluated_args.push(
@@ -1235,10 +1234,10 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
     /// Helper for evaluating type casts in GenericCall expressions
     async fn eval_generic_call_type_cast(
         self: Arc<Self>,
-        eval_history: &mut EvalHistory<'_, T, D>,
+        eval_history: &mut EvalHistory<'_, D>,
         simple_type: &SimpleType,
         args: &Vec<Arc<Spanned<crate::ast::Expr>>>,
-    ) -> Result<Arc<ExprValue<T, D::Connection>>, EvalError<T, D::Connection>> {
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         match simple_type {
             // Built-in type casts: Int(x), Bool(x), String(x), etc.
             SimpleType::Int
@@ -1280,7 +1279,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 // Check if it's a tuple type
                 let is_tuple = matches!(underlying_type.to_simple(), Some(SimpleType::Tuple(_)));
 
-                let content: Arc<ExprValue<T, D::Connection>> = if is_unit {
+                let content: Arc<ExprValue<D::Connection>> = if is_unit {
                     // Unit variant - args should be empty or just `none`
                     if args.is_empty() {
                         Arc::new(ExprValue::None)
@@ -1319,11 +1318,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
 
     async fn build_naked_list_for_list_comprehension(
         self: Arc<Self>,
-        eval_history: &mut EvalHistory<'_, T, D>,
+        eval_history: &mut EvalHistory<'_, D>,
         body: &Arc<Spanned<crate::ast::Expr>>,
         vars_and_collections: &[(Spanned<String>, Arc<Spanned<crate::ast::Expr>>)],
         filter: Option<&Arc<Spanned<crate::ast::Expr>>>,
-    ) -> Result<Vec<Arc<ExprValue<T, D::Connection>>>, EvalError<T, D::Connection>> {
+    ) -> Result<Vec<Arc<ExprValue<D::Connection>>>, EvalError<D::Connection>> {
         if vars_and_collections.is_empty() {
             let cond = match filter {
                 None => true,

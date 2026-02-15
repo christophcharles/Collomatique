@@ -9,7 +9,7 @@ use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedV
 use crate::database::DatabaseDriver;
 use crate::eval::{CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
 use crate::semantics::ArgsType;
-use crate::traits::{EvalObject, VarConversionError};
+use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
@@ -19,18 +19,17 @@ use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(
-    Clone(bound = "T: EvalObject"),
-    Debug(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
 )]
 pub struct ProblemBuilder<
-    T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
 > {
     /// Compiled AST (all modules compiled together)
-    pub(crate) ast: CheckedAST<T, D>,
+    pub(crate) ast: CheckedAST<D>,
 
     /// Variables that define the problem
     /// The set of possible values of these variables is one-to-one with
@@ -39,14 +38,14 @@ pub struct ProblemBuilder<
 
     /// Pending constraint function calls (validated but not yet evaluated)
     /// Format: (module, fn_name, args, needs_db)
-    pending_constraints: Vec<(String, String, Vec<ExprValue<T, D::Connection>>, bool)>,
+    pending_constraints: Vec<(String, String, Vec<ExprValue<D::Connection>>, bool)>,
 
     /// Pending objective function calls (validated but not yet evaluated)
     /// Format: (module, fn_name, args, needs_db, coefficient, sense)
     pending_objectives: Vec<(
         String,
         String,
-        Vec<ExprValue<T, D::Connection>>,
+        Vec<ExprValue<D::Connection>>,
         bool,
         ordered_float::OrderedFloat<f64>,
         ObjectiveSense,
@@ -57,23 +56,22 @@ pub struct ProblemBuilder<
 
 pub(crate) struct EvalData<
     'a,
-    T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
 > {
-    pub(crate) builder: ProblemBuilder<T, D, V>,
+    pub(crate) builder: ProblemBuilder<D, V>,
 
     /// Reference to the evaluation environment
     pub(crate) env: &'a V::Env,
 
     /// List of constraints incrementally built (populated during build())
     pub(crate) constraints: Vec<(
-        Constraint<ProblemVar<T, D::Connection, V>>,
-        ConstraintDesc<T, D::Connection>,
+        Constraint<ProblemVar<D::Connection, V>>,
+        ConstraintDesc<D::Connection>,
     )>,
 
     /// Objective function (populated during build())
-    pub(crate) objective: Objective<ProblemVar<T, D::Connection, V>>,
+    pub(crate) objective: Objective<ProblemVar<D::Connection, V>>,
 
     /// Internal ID.
     ///
@@ -87,17 +85,16 @@ pub(crate) struct EvalData<
     /// This starts with the variables from V.
     /// Then reified variables as well as
     /// helpers variables are added as needed.
-    pub(crate) vars_desc: BTreeMap<ProblemVar<T, D::Connection, V>, Variable>,
+    pub(crate) vars_desc: BTreeMap<ProblemVar<D::Connection, V>, Variable>,
 
     /// base variables list
     pub(crate) original_var_list: BTreeMap<V, Variable>,
 }
 
 impl<
-    T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
-> ProblemBuilder<T, D, V>
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
+> ProblemBuilder<D, V>
 {
     /// Validate that a function exists with the correct signature.
     /// Returns `Ok(true)` if the first argument is a database schema (needs_db),
@@ -106,9 +103,9 @@ impl<
         &self,
         module: &str,
         fn_name: &str,
-        args: &[ExprValue<T, D::Connection>],
+        args: &[ExprValue<D::Connection>],
         expected_return: &ExprType,
-    ) -> Result<bool, ProblemError<T, D::Connection>> {
+    ) -> Result<bool, ProblemError<D::Connection>> {
         let functions = self.ast.get_functions();
         let key = (module.to_string(), fn_name.to_string());
 
@@ -147,9 +144,7 @@ impl<
         Ok(needs_db)
     }
 
-    pub async fn new(
-        modules: &BTreeMap<&str, &str>,
-    ) -> Result<Self, ProblemError<T, D::Connection>> {
+    pub async fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<D::Connection>> {
         let base_vars = V::field_schema();
 
         // Compile all modules upfront
@@ -198,8 +193,8 @@ impl<
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D::Connection>>,
-    ) -> Result<(), ProblemError<T, D::Connection>> {
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<(), ProblemError<D::Connection>> {
         // Validate function exists and has correct signature
         // Constraints can return Constraint or [Constraint]
         let constraint_type = ExprType::from_variants([
@@ -223,10 +218,10 @@ impl<
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T, D::Connection>>,
+        args: Vec<ExprValue<D::Connection>>,
         coefficient: f64,
         sense: ObjectiveSense,
-    ) -> Result<(), ProblemError<T, D::Connection>> {
+    ) -> Result<(), ProblemError<D::Connection>> {
         // Validate function exists and has correct signature
         // Objectives can return LinExpr or Constraint or a list of those
         let obj_types = ExprType::from_variants([
@@ -256,7 +251,7 @@ impl<
         self,
         env: &V::Env,
         db_connection: Option<D::Connection>,
-    ) -> Result<Problem<T, D::Connection, V>, ProblemError<T, D::Connection>> {
+    ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>> {
         // Evaluate all pending constraints and objectives
         let mut eval_data = EvalData::new(self, env, db_connection).await?;
 
@@ -333,12 +328,11 @@ impl<
 
 impl<
     'a,
-    T: EvalObject,
     D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
-> EvalData<'a, T, D, V>
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
+> EvalData<'a, D, V>
 {
-    fn generate_helper_var(&mut self) -> ProblemVar<T, D::Connection, V> {
+    fn generate_helper_var(&mut self) -> ProblemVar<D::Connection, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::binary());
@@ -346,7 +340,7 @@ impl<
         new_var
     }
 
-    fn generate_helper_continuous_var(&mut self) -> ProblemVar<T, D::Connection, V> {
+    fn generate_helper_continuous_var(&mut self) -> ProblemVar<D::Connection, V> {
         let new_var = ProblemVar::Helper(self.current_helper_id);
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::continuous());
@@ -354,7 +348,7 @@ impl<
         new_var
     }
 
-    fn get_variable_type(&self, v: &ProblemVar<T, D::Connection, V>) -> Variable {
+    fn get_variable_type(&self, v: &ProblemVar<D::Connection, V>) -> Variable {
         match v {
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
@@ -374,14 +368,14 @@ impl<
     }
 
     fn objectify_single_constraint(
-        constraint: &Constraint<ProblemVar<T, D::Connection, V>>,
-        origin: ConstraintDesc<T, D::Connection>,
-        var: ProblemVar<T, D::Connection, V>,
+        constraint: &Constraint<ProblemVar<D::Connection, V>>,
+        origin: ConstraintDesc<D::Connection>,
+        var: ProblemVar<D::Connection, V>,
     ) -> (
-        Objective<ProblemVar<T, D::Connection, V>>,
+        Objective<ProblemVar<D::Connection, V>>,
         Vec<(
-            Constraint<ProblemVar<T, D::Connection, V>>,
-            ConstraintDesc<T, D::Connection>,
+            Constraint<ProblemVar<D::Connection, V>>,
+            ConstraintDesc<D::Connection>,
         )>,
     ) {
         match constraint.get_symbol() {
@@ -411,17 +405,16 @@ impl<
     /// necessary constraints to enforce define the helper variables.
     fn objectify_constraints<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D::Connection, V>>>,
-        origin: ConstraintDesc<T, D::Connection>,
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<D::Connection, V>>>,
+        origin: ConstraintDesc<D::Connection>,
     ) -> (
-        Objective<ProblemVar<T, D::Connection, V>>,
+        Objective<ProblemVar<D::Connection, V>>,
         Vec<(
-            Constraint<ProblemVar<T, D::Connection, V>>,
-            ConstraintDesc<T, D::Connection>,
+            Constraint<ProblemVar<D::Connection, V>>,
+            ConstraintDesc<D::Connection>,
         )>,
     )
     where
-        T: 'b,
         D::Connection: 'b,
         V: 'b,
     {
@@ -457,12 +450,12 @@ impl<
 
     fn reify_single_constraint(
         &mut self,
-        constraint: &Constraint<ProblemVar<T, D::Connection, V>>,
-        origin: ConstraintDesc<T, D::Connection>,
-        var: ProblemVar<T, D::Connection, V>,
+        constraint: &Constraint<ProblemVar<D::Connection, V>>,
+        origin: ConstraintDesc<D::Connection>,
+        var: ProblemVar<D::Connection, V>,
     ) -> Vec<(
-        Constraint<ProblemVar<T, D::Connection, V>>,
-        ConstraintDesc<T, D::Connection>,
+        Constraint<ProblemVar<D::Connection, V>>,
+        ConstraintDesc<D::Connection>,
     )> {
         let vars = constraint.get_lhs().variables();
         // Handle special cases with 0 or 1 variable in the lin_expr.
@@ -567,15 +560,14 @@ impl<
     /// to enforce this.
     fn reify_constraint<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<T, D::Connection, V>>>,
-        origin: ConstraintDesc<T, D::Connection>,
-        var: ProblemVar<T, D::Connection, V>,
+        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<D::Connection, V>>>,
+        origin: ConstraintDesc<D::Connection>,
+        var: ProblemVar<D::Connection, V>,
     ) -> Vec<(
-        Constraint<ProblemVar<T, D::Connection, V>>,
-        ConstraintDesc<T, D::Connection>,
+        Constraint<ProblemVar<D::Connection, V>>,
+        ConstraintDesc<D::Connection>,
     )>
     where
-        T: 'b,
         D::Connection: 'b,
         V: 'b,
     {
@@ -616,7 +608,7 @@ impl<
         output
     }
 
-    fn clean_var(&self, var: &IlpVar<T, D::Connection>) -> ProblemVar<T, D::Connection, V> {
+    fn clean_var(&self, var: &IlpVar<D::Connection>) -> ProblemVar<D::Connection, V> {
         match var {
             IlpVar::Base(extern_var) => {
                 if self.builder.base_vars.contains_key(&extern_var.name) {
@@ -666,30 +658,30 @@ impl<
 
     fn clean_constraint(
         &self,
-        constraint: &Constraint<IlpVar<T, D::Connection>>,
-    ) -> Constraint<ProblemVar<T, D::Connection, V>> {
+        constraint: &Constraint<IlpVar<D::Connection>>,
+    ) -> Constraint<ProblemVar<D::Connection, V>> {
         constraint.transmute(|v| self.clean_var(v))
     }
 
     fn clean_lin_expr(
         &self,
-        lin_expr: &LinExpr<IlpVar<T, D::Connection>>,
-    ) -> LinExpr<ProblemVar<T, D::Connection, V>> {
+        lin_expr: &LinExpr<IlpVar<D::Connection>>,
+    ) -> LinExpr<ProblemVar<D::Connection, V>> {
         lin_expr.transmute(|v| self.clean_var(v))
     }
 
     fn update_origin(
-        origin: Option<crate::eval::Origin<T, D::Connection>>,
-    ) -> ConstraintDesc<T, D::Connection> {
+        origin: Option<crate::eval::Origin<D::Connection>>,
+    ) -> ConstraintDesc<D::Connection> {
         let origin = origin.expect("All constraints should have an origin");
         ConstraintDesc::InScript { origin }
     }
 
     pub(crate) async fn new(
-        builder: ProblemBuilder<T, D, V>,
+        builder: ProblemBuilder<D, V>,
         env: &'a V::Env,
         db_connection: Option<D::Connection>,
-    ) -> Result<EvalData<'a, T, D, V>, ProblemError<T, D::Connection>> {
+    ) -> Result<EvalData<'a, D, V>, ProblemError<D::Connection>> {
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
         let (constraint_results, objective_results, var_def) = {
@@ -707,7 +699,7 @@ impl<
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
                     let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
-                    let wrapped = wrap_db_in_custom_layers::<T, D>(
+                    let wrapped = wrap_db_in_custom_layers::<D>(
                         db_val.clone(),
                         &fn_desc.typ.args[0],
                         &builder.ast.global_env,
@@ -743,7 +735,7 @@ impl<
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
                     let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
-                    let wrapped = wrap_db_in_custom_layers::<T, D>(
+                    let wrapped = wrap_db_in_custom_layers::<D>(
                         db_val.clone(),
                         &fn_desc.typ.args[0],
                         &builder.ast.global_env,
@@ -834,7 +826,7 @@ impl<
 
         // Phase 3: Process objective results
         for (module, fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
-            let mut values_list: Vec<ExprValue<T, D::Connection>> = vec![];
+            let mut values_list: Vec<ExprValue<D::Connection>> = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
                 ExprValue::Constraint(constraint) => {
@@ -880,17 +872,17 @@ impl<
 
         // Phase 4: Process reified variables
         let mut constraints_to_reify = BTreeMap::<
-            ProblemVar<T, D::Connection, V>,
+            ProblemVar<D::Connection, V>,
             (
-                Vec<Constraint<ProblemVar<T, D::Connection, V>>>,
-                crate::eval::Origin<T, D::Connection>,
+                Vec<Constraint<ProblemVar<D::Connection, V>>>,
+                crate::eval::Origin<D::Connection>,
             ),
         >::new();
 
         for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c: Constraint<IlpVar<T, D::Connection>>| eval_data.clean_constraint(&c))
+                .map(|c: Constraint<IlpVar<D::Connection>>| eval_data.clean_constraint(&c))
                 .collect();
 
             let reified_var = ReifiedVar {
@@ -956,11 +948,11 @@ impl<
 
 /// Wrap a database ExprValue in Custom type layers to match a declared parameter type.
 /// Recursively resolves Custom types until reaching DatabaseSchema, then wraps on the way back up.
-fn wrap_db_in_custom_layers<T: EvalObject, D: DatabaseDriver>(
-    db_value: ExprValue<T, D::Connection>,
+fn wrap_db_in_custom_layers<D: DatabaseDriver>(
+    db_value: ExprValue<D::Connection>,
     declared_type: &ExprType,
     global_env: &crate::semantics::GlobalEnv<D>,
-) -> Option<ExprValue<T, D::Connection>> {
+) -> Option<ExprValue<D::Connection>> {
     let variants: Vec<_> = declared_type.get_variants().iter().cloned().collect();
     if variants.len() != 1 {
         return None;
@@ -973,7 +965,7 @@ fn wrap_db_in_custom_layers<T: EvalObject, D: DatabaseDriver>(
                 None => root.clone(),
             };
             let underlying = global_env.get_custom_type_underlying(module, &qualified)?;
-            let inner = wrap_db_in_custom_layers::<T, D>(db_value, underlying, global_env)?;
+            let inner = wrap_db_in_custom_layers::<D>(db_value, underlying, global_env)?;
             Some(ExprValue::Custom(CustomValue {
                 module: module.clone(),
                 type_name: root.clone(),

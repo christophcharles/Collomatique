@@ -4,7 +4,7 @@
 //! It is organized into the following submodules:
 //!
 //! - `variables`: Variable types (ScriptVar, ExternVar, IlpVar, Origin)
-//! - `values`: Expression values (ExprValue, CustomValue, NoObject)
+//! - `values`: Expression values (ExprValue, CustomValue)
 //! - `checked_ast`: Type-checked AST and error types
 //! - `local_env`: Local environment for expression evaluation
 //! - `history`: Evaluation history tracking
@@ -26,11 +26,8 @@ pub use database::{
     SqliteDatabaseConnection, SqliteDatabaseDriver,
 };
 pub use history::{EvalHistory, VariableDefinitions};
-pub use values::{CustomValue, ExprValue, NoObject, NoObjectEnv}; // NoObjectEnv kept for external users
+pub use values::{CustomValue, ExprValue};
 pub use variables::{ConstraintWithOrigin, ExternVar, IlpVar, Origin, ScriptVar, strip_origins};
-
-// Re-export traits and types used by eval (for backwards compatibility)
-pub use crate::traits::EvalObject;
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]
@@ -38,4 +35,4 @@ pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
 pub(crate) use collomatique_ilp::LinExpr;
 #[cfg(test)]
-pub(crate) use std::collections::{BTreeMap, HashMap};
+pub(crate) use std::collections::HashMap;

@@ -9,7 +9,6 @@
 
 use crate::database::DatabaseConnection;
 use crate::eval::{ExprValue, Origin};
-use crate::traits::EvalObject;
 use crate::{EvalVar, ExprType};
 use derivative::Derivative;
 use std::sync::Arc;
@@ -19,74 +18,67 @@ use super::CompileError;
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject"),
-    Ord(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject")
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = ""),
+    Ord(bound = ""),
+    Clone(bound = "")
 )]
-pub struct ReifiedVar<T: EvalObject, D: DatabaseConnection> {
+pub struct ReifiedVar<D: DatabaseConnection> {
     pub(crate) module: String,
     pub(crate) name: String,
     pub(crate) from_list: Option<usize>,
-    pub(crate) params: Vec<Arc<ExprValue<T, D>>>,
+    pub(crate) params: Vec<Arc<ExprValue<D>>>,
 }
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Clone(bound = "T: EvalObject")
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
+    Ord(bound = "", feature_allow_slow_enum = "true"),
+    Clone(bound = "")
 )]
-pub enum ProblemVar<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
+pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
     Base(V),
-    Reified(ReifiedVar<T, D>),
+    Reified(ReifiedVar<D>),
     Helper(u64),
 }
 
 #[derive(Derivative)]
 #[derivative(
-    Clone(bound = "T: EvalObject"),
-    Debug(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+    Clone(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
+    Ord(bound = "", feature_allow_slow_enum = "true")
 )]
-pub enum ConstraintDesc<T: EvalObject, D: DatabaseConnection> {
-    Reified {
-        var_name: String,
-        origin: Origin<T, D>,
-    },
-    InScript {
-        origin: Origin<T, D>,
-    },
-    Objectify {
-        origin: Origin<T, D>,
-    },
+pub enum ConstraintDesc<D: DatabaseConnection> {
+    Reified { var_name: String, origin: Origin<D> },
+    InScript { origin: Origin<D> },
+    Objectify { origin: Origin<D> },
 }
 
 #[derive(Derivative)]
 #[derivative(
-    Debug(bound = "T: EvalObject"),
-    Clone(bound = "T: EvalObject"),
-    PartialEq(bound = "T: EvalObject"),
-    Eq(bound = "T: EvalObject"),
-    PartialOrd(bound = "T: EvalObject", feature_allow_slow_enum = "true"),
-    Ord(bound = "T: EvalObject", feature_allow_slow_enum = "true")
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
+    Ord(bound = "", feature_allow_slow_enum = "true")
 )]
-pub enum ExtraDesc<T: EvalObject, D: DatabaseConnection, V: EvalVar> {
-    Orig(ConstraintDesc<T, D>),
+pub enum ExtraDesc<D: DatabaseConnection, V: EvalVar> {
+    Orig(ConstraintDesc<D>),
     InitCond(V),
 }
 
 #[derive(Derivative, Error)]
-#[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
-pub enum ProblemError<T: EvalObject, D: DatabaseConnection> {
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub enum ProblemError<D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
     #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
@@ -110,5 +102,5 @@ pub enum ProblemError<T: EvalObject, D: DatabaseConnection> {
     #[error("Function \"{0}\" expects a database connection but none was provided")]
     MissingDatabaseConnection(String),
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T, D>>),
+    Panic(Box<ExprValue<D>>),
 }

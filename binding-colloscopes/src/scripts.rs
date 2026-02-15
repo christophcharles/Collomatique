@@ -1,4 +1,4 @@
-use super::{vars::Var, views::ObjectId};
+use super::vars::Var;
 pub use collo_ml::SqliteDatabaseDriver;
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
@@ -109,27 +109,25 @@ mod tests;
 
 pub async fn default_problem_builder<T: DatabaseDriver>(
     main_module: &str,
-) -> Result<ProblemBuilder<ObjectId, T, Var>, SimpleProblemError> {
+) -> Result<ProblemBuilder<T, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::<ObjectId, T, Var>::new(&modules)
-        .await
-        .map_err(|e| {
-            // Filter ProblemError into SimpleProblemError
-            match e {
-                ProblemError::CompileError(compile_error) => match compile_error {
-                    CompileError::ParsingError(parse_err) => {
-                        SimpleProblemError::ParsingError(parse_err)
-                    }
-                    CompileError::SemanticsError { errors, warnings } => {
-                        SimpleProblemError::SemanticErrors { errors, warnings }
-                    }
-                    other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-                },
+    let mut builder = ProblemBuilder::<T, Var>::new(&modules).await.map_err(|e| {
+        // Filter ProblemError into SimpleProblemError
+        match e {
+            ProblemError::CompileError(compile_error) => match compile_error {
+                CompileError::ParsingError(parse_err) => {
+                    SimpleProblemError::ParsingError(parse_err)
+                }
+                CompileError::SemanticsError { errors, warnings } => {
+                    SimpleProblemError::SemanticErrors { errors, warnings }
+                }
                 other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-            }
-        })?;
+            },
+            other => SimpleProblemError::UnexpectedError(format!("{}", other)),
+        }
+    })?;
 
     let functions = builder.get_fn_from_module("main");
 

@@ -1,4 +1,4 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 
 use super::*;
 
@@ -35,9 +35,9 @@ async fn list_constraint_reification() {
         }
     }
 
-    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -84,9 +84,9 @@ async fn list_constraint_reification() {
             pub let exactly_one() -> Constraint = sum r in $[R]() { r } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
         .await
-        .expect("NoObject and Var should be compatible");
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -160,9 +160,9 @@ async fn list_constraint_reification_exact_count_with_param() {
         }
     }
 
-    impl<T: EvalObject, D: DatabaseConnection> TryFrom<&ExternVar<T, D>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T, D>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "X" => {
                     if value.params.len() != 1 {
@@ -199,9 +199,9 @@ async fn list_constraint_reification_exact_count_with_param() {
             pub let exactly_five() -> Constraint = sum r in $[R]() { r } === 5;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, SqliteDatabaseDriver, Var>::new(&modules)
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
         .await
-        .expect("NoObject and Var should be compatible");
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
