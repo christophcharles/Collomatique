@@ -52,7 +52,7 @@ use std::collections::HashMap;
 /// impl EvalVar for Var {
 ///     type Env = MyEnv;
 ///     fn field_schema() -> HashMap<String, Vec<ExprType>> { /* ... */ }
-///     fn vars(env: &MyEnv) -> Result<BTreeMap<Self, Variable>, TypeId> { /* ... */ }
+///     fn vars(env: &MyEnv) -> BTreeMap<Self, Variable> { /* ... */ }
 ///     fn fix(&self, env: &MyEnv) -> Option<f64> { /* ... */ }
 /// }
 /// ```
@@ -72,7 +72,7 @@ use std::collections::HashMap;
 /// }
 ///
 /// let env = MyEnv::new();
-/// let vars = Var::vars(&env)?;
+/// let vars = Var::vars(&env);
 ///
 /// let var = Var::TimeSlot { day: 0, hour: 8 };
 /// if let Some(value) = var.fix(&env) {
@@ -99,11 +99,8 @@ pub trait EvalVar: UsableData {
     ///
     /// # Returns
     ///
-    /// * `Ok(BTreeMap<Self, Variable>)` - Map of all variable instances to their variable types
-    /// * `Err(TypeId)` - If an object type cannot be resolved
-    fn vars(
-        env: &Self::Env,
-    ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>;
+    /// A map of all variable instances to their variable types.
+    fn vars(env: &Self::Env) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable>;
 
     /// Returns a fixed value for this variable instance, if it should be fixed.
     ///

@@ -25,13 +25,12 @@ async fn internal_reification() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -156,12 +155,11 @@ async fn private_reification_does_not_leak() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -285,12 +283,11 @@ async fn three_module_chain_define_reify_use() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 

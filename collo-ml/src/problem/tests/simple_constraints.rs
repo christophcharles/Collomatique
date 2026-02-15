@@ -19,12 +19,8 @@ async fn single_constraint_problem() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([(
-                Var::V,
-                collomatique_ilp::Variable::binary(),
-            )]))
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
@@ -104,13 +100,12 @@ async fn multiple_constraints_in_script() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -221,12 +216,11 @@ async fn multiple_function_calls() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -326,12 +320,11 @@ async fn constraints_from_different_modules() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 

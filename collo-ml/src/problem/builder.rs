@@ -767,8 +767,7 @@ impl<
             (constraint_results, objective_results, var_def)
         };
 
-        let original_var_list =
-            V::vars(env).map_err(|id| ProblemError::EvalVarIncompatibleWithEvalObject(id))?;
+        let original_var_list = V::vars(env);
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
                 return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));

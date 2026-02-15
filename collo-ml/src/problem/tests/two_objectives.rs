@@ -28,14 +28,13 @@ async fn two_objectives_same_script() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -189,14 +188,13 @@ async fn two_objectives_different_scripts() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
@@ -363,14 +361,13 @@ async fn objectives_with_different_senses() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 

@@ -19,12 +19,8 @@ async fn error_unknown_function() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([(
-                Var::V,
-                collomatique_ilp::Variable::binary(),
-            )]))
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
@@ -87,12 +83,8 @@ async fn error_wrong_return_type_for_constraint() {
         }
         fn vars(
             _env: &NoObjectEnv,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([(
-                Var::V,
-                collomatique_ilp::Variable::binary(),
-            )]))
+        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
+            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 

@@ -91,7 +91,7 @@ enum NegativeRangeVar {
 fn test_negative_range() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <NegativeRangeVar as EvalVar>::vars(&env).expect("Should generate vars");
+    let vars = <NegativeRangeVar as EvalVar>::vars(&env);
 
     // Range -10..10 = 20 values
     assert_eq!(vars.len(), 20, "Negative range should work correctly");
@@ -216,7 +216,7 @@ enum AlwaysValidVar {
 fn test_defer_fix_always_none() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <AlwaysValidVar as EvalVar>::vars(&env).expect("Should generate vars");
+    let vars = <AlwaysValidVar as EvalVar>::vars(&env);
 
     // Should generate all combinations since defer_fix always returns None
     // 10 slots = 10 variables
@@ -254,7 +254,7 @@ enum AlwaysInvalidVar {
 fn test_defer_fix_always_some() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <AlwaysInvalidVar as EvalVar>::vars(&env).expect("Should generate vars");
+    let vars = <AlwaysInvalidVar as EvalVar>::vars(&env);
 
     // Should generate NO variables since defer_fix always returns Some
     assert_eq!(
@@ -343,7 +343,7 @@ enum UnitVariantVar {
 fn test_unit_variant() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <UnitVariantVar as EvalVar>::vars(&env).expect("Should generate vars");
+    let vars = <UnitVariantVar as EvalVar>::vars(&env);
 
     // NoFields: should generate 1 var (no defer_fix or defer_fix returns None)
     // NoFieldsDefer: should NOT generate (defer_fix returns Some)
@@ -392,7 +392,7 @@ enum BoolVar {
 fn test_boolean_field_enumeration() {
     let env = EdgeCaseEnv::empty_env();
 
-    let vars = <BoolVar as EvalVar>::vars(&env).expect("Should generate vars");
+    let vars = <BoolVar as EvalVar>::vars(&env);
 
     // 2 values for x (0..2) × 2 values for bool = 4 variables
     assert_eq!(vars.len(), 4, "Should enumerate both true and false");

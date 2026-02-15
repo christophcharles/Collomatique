@@ -81,8 +81,6 @@ pub enum ExtraDesc<D: DatabaseConnection, V: EvalVar> {
 pub enum ProblemError<D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
-    #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
-    EvalVarIncompatibleWithEvalObject(std::any::TypeId),
     #[error("Function \"{0}\" was not found in script (maybe it is not public?)")]
     UnknownFunction(String),
     #[error("Function \"{func}\" expects {expected} arguments but got {found}")]

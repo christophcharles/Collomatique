@@ -305,10 +305,7 @@ fn generate_eval_var_impl(
 
             fn vars(
                 env: &#env_ty
-            ) -> ::std::result::Result<
-                ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
-                ::std::any::TypeId
-            > {
+            ) -> ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable> {
                 #vars_generation
             }
 
@@ -390,7 +387,7 @@ fn generate_vars_impl(
         use ::collomatique_ilp::Variable;
         let mut vars = ::std::collections::BTreeMap::new();
         #(#variant_iterations)*
-        Ok(vars)
+        vars
     }
 }
 

@@ -246,7 +246,7 @@ mod eval_var;
 ///         // Maps DSL names to parameter types
 ///     }
 ///
-///     fn vars(env: &DynamicEnv) -> Result<BTreeMap<Self, Variable>, TypeId> {
+///     fn vars(env: &DynamicEnv) -> BTreeMap<Self, Variable> {
 ///         // Generates cartesian product of all parameter combinations
 ///         // Variables with defer_fix returning Some are excluded
 ///     }
@@ -274,7 +274,7 @@ mod eval_var;
 /// # Usage
 ///
 /// ```ignore
-/// let vars = <Var as EvalVar>::vars(&env)?;
+/// let vars = <Var as EvalVar>::vars(&env);
 /// let fix = <Var as EvalVar>::fix(&var, &env);
 /// ```
 ///
