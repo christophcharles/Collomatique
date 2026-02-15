@@ -271,7 +271,10 @@ CREATE TABLE settings_global (
     interrogations_per_week_max_value INTEGER,
     interrogations_per_week_max_soft INTEGER CHECK (interrogations_per_week_max_soft IN (0, 1)),
     max_interrogations_per_day_value INTEGER CHECK (max_interrogations_per_day_value > 0),
-    max_interrogations_per_day_soft INTEGER CHECK (max_interrogations_per_day_soft IN (0, 1))
+    max_interrogations_per_day_soft INTEGER CHECK (max_interrogations_per_day_soft IN (0, 1)),
+    CHECK ((interrogations_per_week_min_value IS NULL) = (interrogations_per_week_min_soft IS NULL)),
+    CHECK ((interrogations_per_week_max_value IS NULL) = (interrogations_per_week_max_soft IS NULL)),
+    CHECK ((max_interrogations_per_day_value IS NULL) = (max_interrogations_per_day_soft IS NULL))
 );
 
 CREATE TABLE settings_students (
@@ -281,7 +284,10 @@ CREATE TABLE settings_students (
     interrogations_per_week_max_value INTEGER,
     interrogations_per_week_max_soft INTEGER CHECK (interrogations_per_week_max_soft IN (0, 1)),
     max_interrogations_per_day_value INTEGER CHECK (max_interrogations_per_day_value > 0),
-    max_interrogations_per_day_soft INTEGER CHECK (max_interrogations_per_day_soft IN (0, 1))
+    max_interrogations_per_day_soft INTEGER CHECK (max_interrogations_per_day_soft IN (0, 1)),
+    CHECK ((interrogations_per_week_min_value IS NULL) = (interrogations_per_week_min_soft IS NULL)),
+    CHECK ((interrogations_per_week_max_value IS NULL) = (interrogations_per_week_max_soft IS NULL)),
+    CHECK ((max_interrogations_per_day_value IS NULL) = (max_interrogations_per_day_soft IS NULL))
 );
 
 -- View for effective settings with automatic fallback to global defaults
