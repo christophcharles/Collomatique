@@ -68,12 +68,8 @@ async fn function_forward_reference_chain() {
 // =============================================================================
 // DIRECT RECURSION
 // =============================================================================
-// Note: many tests in this section are #[ignore]d because the async eval_expr
-// state machine is very large, causing stack overflows with the default 8 MB
-// thread stack in debug builds. Run with RUST_MIN_STACK=16777216 to execute them.
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn direct_recursion_factorial() {
     let input = r#"
         pub let factorial(n: Int) -> Int =
@@ -115,7 +111,6 @@ async fn direct_recursion_factorial() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn direct_recursion_countdown() {
     // Note: Recursion depth limits due to stack size:
     // - Debug mode: ~19
@@ -140,7 +135,6 @@ async fn direct_recursion_countdown() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn direct_recursion_sum_to_n() {
     let input = r#"
         pub let sum_to(n: Int) -> Int =
@@ -175,7 +169,6 @@ async fn direct_recursion_sum_to_n() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn direct_recursion_fibonacci() {
     let input = r#"
         pub let fib(n: Int) -> Int =
@@ -210,7 +203,6 @@ async fn direct_recursion_fibonacci() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn direct_recursion_constraint_function() {
     let input = r#"
         pub let recursive_constraint(n: Int) -> Constraint =
@@ -242,7 +234,6 @@ async fn direct_recursion_constraint_function() {
 // =============================================================================
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn mutual_recursion_even_odd() {
     let input = r#"
         pub let is_even(n: Int) -> Bool = if n == 0 { true } else { is_odd(n - 1) };
@@ -306,7 +297,6 @@ async fn mutual_recursion_even_odd() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn mutual_recursion_three_functions() {
     let input = r#"
         let a(n: Int) -> Int = if n == 0 { 0 } else { b(n - 1) };
@@ -629,7 +619,6 @@ async fn recursion_with_list_processing() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn recursion_with_accumulator_pattern() {
     let input = r#"
         let sum_helper(xs: [Int], acc: Int) -> Int =
@@ -696,7 +685,6 @@ async fn recursion_gcd() {
 }
 
 #[tokio::test]
-#[ignore = "stack overflow: async eval_expr future is too large (use RUST_MIN_STACK=16777216)"]
 async fn recursion_power() {
     let input = r#"
         pub let power(base: Int, exp: Int) -> Int =
