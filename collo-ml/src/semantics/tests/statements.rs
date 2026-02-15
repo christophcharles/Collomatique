@@ -8,7 +8,7 @@ async fn reify_constraint_function() {
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -23,7 +23,7 @@ async fn reify_constraint_list() {
         pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
         reify my_constraints as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -38,7 +38,7 @@ async fn reify_function_with_parameters() {
         pub let constraint(s: Int) -> Constraint = 0 === 1;
         reify constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -53,7 +53,7 @@ async fn reify_function_with_parameters_into_var_list() {
         pub let constraints(s: Int) -> [Constraint] = [0 === 1, 0 <== s];
         reify constraints as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -68,7 +68,7 @@ async fn disallow_reify_constraint_list_into_simple_var() {
         pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
         reify my_constraints as $MyVars;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -83,7 +83,7 @@ async fn disallow_reify_constraint_into_var_list() {
         pub let my_constraint() -> Constraint = 0 === 1;
         reify my_constraint as $[MyVars];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -95,7 +95,7 @@ async fn disallow_reify_constraint_into_var_list() {
 #[tokio::test]
 async fn reify_undefined_function() {
     let input = "reify undefined_func as $MyVar;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -114,7 +114,7 @@ async fn reify_non_constraint_function() {
         pub let not_constraint() -> Int = 42;
         reify not_constraint as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -133,7 +133,7 @@ async fn reify_linexpr_coerces_to_constraint() {
         pub let linexpr_func() -> LinExpr = 5;
         reify linexpr_func as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     // LinExpr should not coerce to Constraint in reify
     assert!(!errors.is_empty(), "LinExpr should not be reifiable");
@@ -147,7 +147,7 @@ async fn duplicate_variable_name() {
         reify c1 as $MyVar;
         reify c2 as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -168,7 +168,7 @@ async fn multiple_valid_reify_statements() {
         reify c1 as $Var1;
         reify c2 as $Var2;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -186,7 +186,7 @@ async fn using_reified_variable_in_constraint() {
         reify base as $BaseVar;
         pub let use_var(x: Int) -> Constraint = $BaseVar(x) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -198,7 +198,7 @@ async fn using_reified_variable_in_constraint() {
 #[tokio::test]
 async fn using_undefined_variable() {
     let input = "pub let f(x: Int) -> Constraint = $UndefinedVar(x) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on undefined variable");
     assert!(
@@ -215,7 +215,7 @@ async fn variable_call_with_wrong_arguments() {
         reify base as $BaseVar;
         pub let use_var(x: Int) -> Constraint = $BaseVar(x) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
     assert!(
@@ -232,7 +232,7 @@ async fn variable_call_with_wrong_types() {
         reify base as $BaseVar;
         pub let use_var() -> Constraint = $BaseVar(true) === 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
     assert!(
@@ -248,7 +248,7 @@ async fn variable_call_with_wrong_types() {
 async fn using_predefined_variable() {
     let vars = var_with_args("PredefinedVar", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $PredefinedVar(x) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -262,7 +262,7 @@ async fn predefined_variable_with_struct_type() {
     let vars = var_with_args("StudentVar", vec![SimpleType::Int]);
 
     let input = "pub let f(s: Int) -> Constraint = $StudentVar(s) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -276,7 +276,7 @@ async fn predefined_variable_with_multiple_args() {
     let vars = var_with_args("MultiVar", vec![SimpleType::Int, SimpleType::Int]);
 
     let input = "pub let f(s: Int, x: Int) -> Constraint = $MultiVar(s, x) === 0;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -291,7 +291,7 @@ async fn predefined_variable_with_multiple_args() {
 async fn variable_call_returns_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x);";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -304,7 +304,7 @@ async fn variable_call_returns_linexpr() {
 async fn variable_call_in_arithmetic() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> LinExpr = $V(x) + 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -317,7 +317,7 @@ async fn variable_call_in_arithmetic() {
 async fn variable_call_in_constraint() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> Constraint = $V(x) === 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -334,7 +334,7 @@ async fn let_with_docstring() {
         /// This is a docstring
         pub let f() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -351,7 +351,7 @@ async fn let_with_multiple_docstrings() {
         /// Third line
         pub let f() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -367,7 +367,7 @@ async fn reify_with_docstring() {
         /// Docstring for reify
         reify c as $MyVar;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -388,7 +388,7 @@ async fn multiple_lets_and_reifies() {
         reify c2 as $Var2;
         pub let combined(x: Int) -> Constraint = $Var1(x) <== 1 and $Var2(x) >== 0;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -404,7 +404,7 @@ async fn forward_declaration_now_allowed() {
         pub let use_func() -> Int = helper(5);
         pub let helper(x: Int) -> Int = x;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -420,7 +420,7 @@ async fn query_with_db_param_and_option_struct_return() {
     let input = r#"
         pub query get_student(db: #{"CREATE TABLE students(id INTEGER NOT NULL, name TEXT NOT NULL)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -434,7 +434,7 @@ async fn query_with_db_param_and_list_struct_return() {
     let input = r#"
         pub query all_students(db: #{"CREATE TABLE students(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -450,7 +450,7 @@ async fn query_callable_from_function() {
         pub query get_student(db: MyDb, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";
         pub let wrapper(db: MyDb, id: Int) -> ?{name: String} = get_student(db, id);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -466,7 +466,7 @@ async fn query_wrong_argument_count() {
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
     assert!(
@@ -483,7 +483,7 @@ async fn query_wrong_argument_type() {
         query get_row(db: MyDb, id: Int) -> ?{id: Int} = "SELECT id FROM t WHERE id = ?";
         pub let wrapper(db: MyDb) -> ?{id: Int} = get_row(db, "not an int");
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
     assert!(
@@ -500,7 +500,7 @@ async fn query_duplicate_name_with_query() {
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         query my_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -519,7 +519,7 @@ async fn unused_private_query_warning() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query unused_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
     assert!(
@@ -539,7 +539,7 @@ async fn public_query_not_warned_as_unused() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query public_query(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should not have errors: {:?}", errors);
     assert!(
@@ -557,7 +557,7 @@ async fn function_conflicts_with_type() {
         type my_name = Int;
         pub let my_name() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with type");
     assert!(
@@ -574,7 +574,7 @@ async fn query_conflicts_with_type() {
         type my_name = Int;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with type");
     assert!(
@@ -591,7 +591,7 @@ async fn query_conflicts_with_function() {
         pub let my_name() -> Int = 42;
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Query should conflict with function");
     assert!(
@@ -608,7 +608,7 @@ async fn function_conflicts_with_query() {
         pub query my_name(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
         pub let my_name() -> Int = 42;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Function should conflict with query");
     assert!(
@@ -627,7 +627,7 @@ async fn query_output_list_struct_direct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: String}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct list of struct should be valid: {:?}",
@@ -640,7 +640,7 @@ async fn query_output_optional_struct_direct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?{name: String} = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct optional struct should be valid: {:?}",
@@ -654,7 +654,7 @@ async fn query_output_custom_alias_in_list() {
         type T = {name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [T] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Custom alias inside list should be valid: {:?}",
@@ -668,7 +668,7 @@ async fn query_output_custom_alias_optional() {
         type T = {name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?T = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Custom alias in optional should be valid: {:?}",
@@ -682,7 +682,7 @@ async fn query_output_alias_wrapping_optional() {
         type T = ?{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> T = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias wrapping optional struct should be valid: {:?}",
@@ -696,7 +696,7 @@ async fn query_output_alias_wrapping_list() {
         type T = [{name: String}];
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> T = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias wrapping list of struct should be valid: {:?}",
@@ -711,7 +711,7 @@ async fn query_output_none_union_alias() {
         type U = None | T;
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Union through alias (None | Struct) should be valid: {:?}",
@@ -726,7 +726,7 @@ async fn query_output_nested_alias() {
         type U = ?T;
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Chained alias (?T where T is struct) should be valid: {:?}",
@@ -740,7 +740,7 @@ async fn query_output_enum_none_struct_variant() {
         enum E = None | V{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> E = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum with None + struct variant should be valid: {:?}",
@@ -756,7 +756,7 @@ async fn query_output_alias_chain_none() {
         type U = MyNone | T;
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> U = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to None in union should be valid: {:?}",
@@ -771,7 +771,7 @@ async fn query_output_int_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> Int = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Int output type should be rejected");
     assert!(
         errors
@@ -785,7 +785,7 @@ async fn query_output_list_int_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [Int] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of Int output type should be valid: {:?}",
@@ -798,7 +798,7 @@ async fn query_output_optional_int_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> ?Int = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional Int output type should be valid: {:?}",
@@ -811,7 +811,7 @@ async fn query_output_bare_struct_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> {name: String} = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Bare struct output type should be rejected"
@@ -829,7 +829,7 @@ async fn query_output_enum_multi_unit_rejected() {
         enum E = A | B | S{name: String};
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> E = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Enum with 2 unit + 1 struct variant should be rejected (3 resolved variants)"
@@ -850,7 +850,7 @@ async fn query_first_param_direct_schema() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Direct database schema param should be valid: {:?}",
@@ -864,7 +864,7 @@ async fn query_first_param_alias() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to database schema param should be valid: {:?}",
@@ -879,7 +879,7 @@ async fn query_first_param_nested_alias() {
         type B = A;
         pub query q(db: B) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Nested alias to database schema param should be valid: {:?}",
@@ -894,7 +894,7 @@ async fn query_first_param_int_rejected() {
     let input = r#"
         pub query q(db: Int) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Int as first param should be rejected");
     assert!(
         errors
@@ -908,7 +908,7 @@ async fn query_first_param_struct_rejected() {
     let input = r#"
         pub query q(db: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Struct as first param should be rejected"
@@ -925,7 +925,7 @@ async fn query_no_params_rejected() {
     let input = r#"
         pub query q() -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Query with no params should be rejected"
@@ -947,7 +947,7 @@ async fn query_param_int() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, id: Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Int param should be valid: {:?}", errors);
 }
 
@@ -957,7 +957,7 @@ async fn query_param_bool() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL, active BOOLEAN NOT NULL)"};
         pub query q(db: MyDb, flag: Bool) -> [{id: Int}] = "SELECT id FROM t WHERE active = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Bool param should be valid: {:?}",
@@ -971,7 +971,7 @@ async fn query_param_string() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"};
         pub query q(db: MyDb, name: String) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "String param should be valid: {:?}",
@@ -985,7 +985,7 @@ async fn query_param_optional_int() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, id: ?Int) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional Int param should be valid: {:?}",
@@ -1000,7 +1000,7 @@ async fn query_param_alias_to_int() {
         type MyId = Int;
         pub query q(db: MyDb, id: MyId) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to Int param should be valid: {:?}",
@@ -1015,7 +1015,7 @@ async fn query_param_enum_none_string() {
         enum MaybeName = None | Name(String);
         pub query q(db: MyDb, n: MaybeName) -> [{id: Int}] = "SELECT id FROM t WHERE name = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum resolving to ?String param should be valid: {:?}",
@@ -1031,7 +1031,7 @@ async fn query_param_struct_rejected() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, s: {name: String}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct param should be rejected");
     assert!(
         errors
@@ -1046,7 +1046,7 @@ async fn query_param_list_rejected() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, ids: [Int]) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "List param should be rejected");
     assert!(
         errors
@@ -1061,7 +1061,7 @@ async fn query_param_linexpr_rejected() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, x: LinExpr) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr param should be rejected");
     assert!(
         errors
@@ -1076,7 +1076,7 @@ async fn query_param_constraint_rejected() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         pub query q(db: MyDb, c: Constraint) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Constraint param should be rejected");
     assert!(
         errors
@@ -1094,7 +1094,7 @@ async fn query_output_field_int() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Int field should be valid: {:?}", errors);
 }
 
@@ -1103,7 +1103,7 @@ async fn query_output_field_optional_string() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: ?String}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional String field should be valid: {:?}",
@@ -1117,7 +1117,7 @@ async fn query_output_field_alias_to_int() {
         type MyId = Int;
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: MyId}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Alias to Int field should be valid: {:?}",
@@ -1131,7 +1131,7 @@ async fn query_output_field_enum_nullable() {
         enum MaybeName = None | Name(String);
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: MaybeName}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum resolving to ?String field should be valid: {:?}",
@@ -1145,7 +1145,7 @@ async fn query_output_field_enum_variant() {
         enum MaybeName = None | Name(String);
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: MaybeName::Name}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Enum variant resolving to String field should be valid: {:?}",
@@ -1158,7 +1158,7 @@ async fn query_output_field_optional_struct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> ?{id: Int, name: String} = "SELECT id, name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Fields in optional struct should be valid: {:?}",
@@ -1173,7 +1173,7 @@ async fn query_output_field_struct_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{nested: {a: Int}}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Struct field should be rejected");
     assert!(
         errors
@@ -1187,7 +1187,7 @@ async fn query_output_field_list_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{ids: [Int]}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "List field should be rejected");
     assert!(
         errors
@@ -1201,7 +1201,7 @@ async fn query_output_field_linexpr_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{x: LinExpr}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "LinExpr field should be rejected");
     assert!(
         errors
@@ -1217,7 +1217,7 @@ async fn query_output_list_bool_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(active BOOLEAN NOT NULL)"}) -> [Bool] = "SELECT active FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of Bool output type should be valid: {:?}",
@@ -1230,7 +1230,7 @@ async fn query_output_list_string_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [String] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of String output type should be valid: {:?}",
@@ -1243,7 +1243,7 @@ async fn query_output_optional_bool_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(active BOOLEAN NOT NULL)"}) -> ?Bool = "SELECT active FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional Bool output type should be valid: {:?}",
@@ -1256,7 +1256,7 @@ async fn query_output_optional_string_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> ?String = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional String output type should be valid: {:?}",
@@ -1269,7 +1269,7 @@ async fn query_output_list_tuple_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of tuple output type should be valid: {:?}",
@@ -1282,7 +1282,7 @@ async fn query_output_optional_tuple_valid() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> ?(Int, String) = "SELECT id, name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional tuple output type should be valid: {:?}",
@@ -1295,7 +1295,7 @@ async fn query_output_list_linexpr_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [LinExpr] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "List of LinExpr output type should be rejected"
@@ -1312,7 +1312,7 @@ async fn query_output_optional_linexpr_rejected() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> ?LinExpr = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Optional LinExpr output type should be rejected"
@@ -1332,7 +1332,7 @@ async fn query_output_nested_nullable_valid() {
         type NullableString = ?String;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> ?NullableString = "SELECT name FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Nested nullable output (?NullableString where NullableString = ?String) should be valid: {:?}",
@@ -1346,7 +1346,7 @@ async fn query_output_list_nullable_inner_valid() {
         type NullableString = ?String;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [NullableString] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of nullable custom type ([NullableString]) should be valid: {:?}",
@@ -1360,7 +1360,7 @@ async fn query_param_nested_nullable_valid() {
         type NullableString = ?String;
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}, n: NullableString) -> [{name: String}] = "SELECT name FROM t WHERE name = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Nested nullable param (NullableString = ?String) should be valid: {:?}",
@@ -1376,7 +1376,7 @@ async fn query_param_deep_nested_nullable() {
         type MyType4 = MyType3;
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}, id: MyType4) -> [{id: Int}] = "SELECT id FROM t WHERE id = ?";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Deep nested nullable param (MyType4 = MyType3 = ?MyType1 = ?Int) should be valid: {:?}",
@@ -1390,7 +1390,7 @@ async fn query_output_struct_nullable_custom_field() {
         type NullableString = ?String;
         pub query q(db: #{"CREATE TABLE t(name TEXT)"}) -> [{name: NullableString}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Struct with nullable custom type field should be valid: {:?}",
@@ -1403,7 +1403,7 @@ async fn query_output_list_optional_int() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [?Int] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "List of ?Int should be valid: {:?}",
@@ -1420,7 +1420,7 @@ async fn query_column_count_mismatch_struct_too_few_sql_columns() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1433,7 +1433,7 @@ async fn query_column_count_mismatch_struct_too_many_sql_columns() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int}] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1446,7 +1446,7 @@ async fn query_column_count_mismatch_tuple() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL, flag BOOLEAN NOT NULL)"}) -> [(Int, String)] = "SELECT id, name, flag FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1459,7 +1459,7 @@ async fn query_column_count_mismatch_primitive_multiple_columns() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [Int] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1476,7 +1476,7 @@ async fn query_column_name_mismatch_struct() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, label TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, label FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1489,7 +1489,7 @@ async fn query_column_name_mismatch_struct_all_wrong() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(a INTEGER NOT NULL, b TEXT NOT NULL)"}) -> [{x: Int, y: String}] = "SELECT a, b FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1506,7 +1506,7 @@ async fn query_column_type_mismatch_int_vs_string() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [{name: Int}] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1519,7 +1519,7 @@ async fn query_column_type_mismatch_nullable_column_nonnullable_declared() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER)"}) -> [{id: Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1532,7 +1532,7 @@ async fn query_column_type_mismatch_tuple_type() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id TEXT NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1545,7 +1545,7 @@ async fn query_column_type_mismatch_primitive() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(name TEXT NOT NULL)"}) -> [Int] = "SELECT name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1558,7 +1558,7 @@ async fn query_column_type_mismatch_optional_output_nullable_column_wrong_base()
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id TEXT)"}) -> ?Int = "SELECT id FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors
             .iter()
@@ -1575,7 +1575,7 @@ async fn query_column_valid_struct_match() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Struct with matching columns should be valid: {:?}",
@@ -1588,7 +1588,7 @@ async fn query_column_valid_struct_nullable_field() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT)"}) -> [{id: Int, name: ?String}] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Struct with nullable field matching nullable column should be valid: {:?}",
@@ -1601,7 +1601,7 @@ async fn query_column_valid_tuple_match() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL, name TEXT NOT NULL)"}) -> [(Int, String)] = "SELECT id, name FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Tuple with matching columns should be valid: {:?}",
@@ -1614,7 +1614,7 @@ async fn query_column_valid_primitive_match() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [Int] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Primitive with matching single column should be valid: {:?}",
@@ -1627,7 +1627,7 @@ async fn query_column_valid_nonnullable_column_to_nullable_declared() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> [{id: ?Int}] = "SELECT id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Non-nullable SQL column assigned to nullable declared type should be valid: {:?}",
@@ -1640,7 +1640,7 @@ async fn query_column_valid_optional_output_with_matching_type() {
     let input = r#"
         pub query q(db: #{"CREATE TABLE t(id INTEGER NOT NULL)"}) -> ?Int = "SELECT id FROM t LIMIT 1";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Optional output with matching primitive type should be valid: {:?}",
@@ -1654,7 +1654,7 @@ async fn query_duplicate_column_in_sql_result() {
         type MyDb = #{"CREATE TABLE t(id INTEGER NOT NULL)"};
         query my_query(db: MyDb) -> [(Int, Int)] = "SELECT id, id FROM t";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors

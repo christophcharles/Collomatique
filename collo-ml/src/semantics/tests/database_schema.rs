@@ -16,7 +16,7 @@ async fn database_schema_type_declaration() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -26,7 +26,7 @@ async fn database_schema_public_type_declaration() {
         pub type MyDB = #{ "CREATE TABLE test (id INTEGER PRIMARY KEY)" };
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -36,7 +36,7 @@ async fn database_schema_multiple_tables() {
         type MultiTableDB = #{ "CREATE TABLE t1 (id INTEGER); CREATE TABLE t2 (id INTEGER)" };
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -49,7 +49,7 @@ async fn database_schema_multiple_string_literals() {
         };
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -65,7 +65,7 @@ async fn database_schema_identical_are_equal() {
         type DB1 = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: DB1) -> DB1 = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Same type alias should be assignable: {:?}",
@@ -78,7 +78,7 @@ async fn database_schema_identical_inline() {
     let input = r#"
         pub let f(x: #{ "CREATE TABLE t (id INTEGER)" }) -> #{ "CREATE TABLE t (id INTEGER)" } = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Identical inline schemas should be equal: {:?}",
@@ -97,7 +97,7 @@ async fn database_schema_different_not_equal() {
         type DB2 = #{ "CREATE TABLE other (id INTEGER)" };
         pub let f(x: DB1) -> DB2 = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Different schemas should not be equal");
 }
 
@@ -109,7 +109,7 @@ async fn database_schema_whitespace_matters() {
         type DB2 = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: DB1) -> DB2 = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Whitespace differences should make schemas different"
@@ -127,7 +127,7 @@ async fn database_schema_in_sum_type() {
         type MaybeDB = MyDB | None;
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Sum type should work: {:?}", errors);
 }
 
@@ -137,7 +137,7 @@ async fn database_schema_inline_in_sum_type() {
         type MaybeDB = #{ "CREATE TABLE test (id INTEGER)" } | None;
         pub let f() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Inline sum type should work: {:?}",
@@ -155,7 +155,7 @@ async fn database_schema_as_parameter() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let use_db(db: MyDB) -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Schema as parameter should work: {:?}",
@@ -168,7 +168,7 @@ async fn database_schema_inline_as_parameter() {
     let input = r#"
         pub let use_db(db: #{ "CREATE TABLE test (id INTEGER)" }) -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Inline schema as parameter should work: {:?}",
@@ -186,7 +186,7 @@ async fn database_schema_not_subtype_of_int() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: MyDB) -> Int = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Database schema should not be subtype of Int"
@@ -199,7 +199,7 @@ async fn database_schema_not_subtype_of_string() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: MyDB) -> String = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     // Database schema types are type-level constructs, not runtime values,
     // so they don't convert to String like other types
     assert!(
@@ -214,7 +214,7 @@ async fn database_schema_not_subtype_of_bool() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: MyDB) -> Bool = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Database schema should not be subtype of Bool"
@@ -227,7 +227,7 @@ async fn int_not_subtype_of_database_schema() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: Int) -> MyDB = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Int should not be subtype of database schema"
@@ -240,7 +240,7 @@ async fn string_not_subtype_of_database_schema() {
         type MyDB = #{ "CREATE TABLE test (id INTEGER)" };
         pub let f(x: String) -> MyDB = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "String should not be subtype of database schema"
@@ -258,7 +258,7 @@ async fn multiple_database_schema_types() {
         type OrdersDB = #{ "CREATE TABLE orders (id INTEGER, user_id INTEGER)" };
         pub let f(u: UsersDB, o: OrdersDB) -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Multiple schema types should work: {:?}",
@@ -273,7 +273,7 @@ async fn cannot_mix_different_schemas() {
         type OrdersDB = #{ "CREATE TABLE orders (id INTEGER)" };
         pub let f(u: UsersDB) -> OrdersDB = u;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Different schemas should not be assignable"

@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use collo_ml::traits::SimpleFieldType;
-use collo_ml::{EvalObject, ExprType, ExprValue, SqliteDatabaseConnection, ViewObject};
-use std::collections::HashMap;
+use collo_ml::{EvalObject, ExprValue, SqliteDatabaseConnection, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -10,10 +9,6 @@ struct TestObjectId;
 // Dummy implementation for testing
 impl EvalObject for TestObjectId {
     type Env = ();
-
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-        HashMap::new()
-    }
 }
 
 // Test 1: Basic fields (Int, Bool)

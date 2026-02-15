@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn simple_function_with_arithmetic() {
     let input = "pub let add(x: Int, y: Int) -> Int = x + y;";
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert_eq!(errors.len(), 0, "Should have no errors: {:?}", errors);
     assert_eq!(warnings.len(), 0, "Should have no warnings: {:?}", warnings);
@@ -14,7 +14,7 @@ async fn simple_function_with_arithmetic() {
 #[tokio::test]
 async fn function_with_no_parameters() {
     let input = "pub let constant() -> Int = 42;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -26,7 +26,7 @@ async fn function_with_no_parameters() {
 #[tokio::test]
 async fn function_with_string_return_type() {
     let input = r#"pub let constant() -> String = "Hello world!";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -38,7 +38,7 @@ async fn function_with_string_return_type() {
 #[tokio::test]
 async fn function_passing_string() {
     let input = "pub let pass(str: String) -> String = str;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -52,7 +52,7 @@ async fn function_passing_string() {
 #[tokio::test]
 async fn string_concatenation_with_plus() {
     let input = r#"pub let concat() -> String = "hello" + "world";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -64,7 +64,7 @@ async fn string_concatenation_with_plus() {
 #[tokio::test]
 async fn string_concatenation_multiple() {
     let input = r#"pub let concat() -> String = "a" + "b" + "c";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -76,7 +76,7 @@ async fn string_concatenation_multiple() {
 #[tokio::test]
 async fn string_concatenation_with_variables() {
     let input = r#"pub let concat(a: String, b: String) -> String = a + b;"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -88,7 +88,7 @@ async fn string_concatenation_with_variables() {
 #[tokio::test]
 async fn string_concatenation_with_parentheses() {
     let input = r#"pub let concat() -> String = ("hello" + " ") + "world";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -100,7 +100,7 @@ async fn string_concatenation_with_parentheses() {
 #[tokio::test]
 async fn string_concatenation_mixed_with_int_should_fail() {
     let input = r#"pub let concat() -> String = "hello" + 42;"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -116,7 +116,7 @@ async fn string_concatenation_mixed_with_int_should_fail() {
 #[tokio::test]
 async fn string_concatenation_mixed_with_bool_should_fail() {
     let input = r#"pub let concat() -> String = "value: " + true;"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -132,7 +132,7 @@ async fn string_concatenation_mixed_with_bool_should_fail() {
 #[tokio::test]
 async fn int_plus_string_should_fail() {
     let input = r#"pub let concat() -> String = 42 + "hello";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error when adding int to string");
 }
@@ -143,7 +143,7 @@ async fn string_concatenation_in_expression() {
         pub let greet(name: String) -> String = 
             "Hello, " + name + "!";
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -155,7 +155,7 @@ async fn string_concatenation_in_expression() {
 #[tokio::test]
 async fn string_concatenation_with_empty_string() {
     let input = r#"pub let concat() -> String = "" + "hello" + "";"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -170,7 +170,7 @@ async fn sum_strings_in_list() {
         pub let concat_list() -> String = 
             sum s in ["a", "b", "c"] { s };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -185,7 +185,7 @@ async fn sum_strings_with_expression() {
         pub let build_string() -> String = 
             sum s in ["hello", "world"] { s + " " };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -197,7 +197,7 @@ async fn sum_strings_with_expression() {
 #[tokio::test]
 async fn function_with_constraint_return_type() {
     let input = "pub let constraint() -> Constraint = 5 <== 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -209,7 +209,7 @@ async fn function_with_constraint_return_type() {
 #[tokio::test]
 async fn private_function_definition() {
     let input = "let private_fn(x: Int) -> Int = x;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -221,7 +221,7 @@ async fn private_function_definition() {
 #[tokio::test]
 async fn function_with_multiple_parameters() {
     let input = "pub let complex(a: Int, b: Int, c: Int, d: Int) -> Int = a + b + c + d;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -238,7 +238,7 @@ async fn calling_defined_function() {
         pub let helper(x: Int) -> Int = x;
         pub let main() -> Int = helper(5);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -250,7 +250,7 @@ async fn calling_defined_function() {
 #[tokio::test]
 async fn calling_undefined_function() {
     let input = "pub let main() -> Int = undefined_func(5);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on undefined function");
     assert!(
@@ -266,7 +266,7 @@ async fn function_call_with_wrong_argument_count() {
         pub let helper(x: Int) -> Int = x;
         pub let main() -> Int = helper(5, 10);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument count");
     assert!(
@@ -282,7 +282,7 @@ async fn function_call_with_wrong_argument_types() {
         pub let helper(x: Int) -> Int = x;
         pub let main() -> Int = helper(true);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on wrong argument type");
     assert!(
@@ -300,7 +300,7 @@ async fn duplicate_function_definition() {
         pub let foo() -> Int = 1;
         pub let foo() -> Int = 2;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on duplicate function");
     assert!(
@@ -313,7 +313,7 @@ async fn duplicate_function_definition() {
 #[tokio::test]
 async fn duplicate_parameter_names() {
     let input = "pub let f(x: Int, x: Int) -> Int = x;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert_eq!(errors.len(), 1, "Should have exactly one error");
     assert!(matches!(
@@ -325,7 +325,7 @@ async fn duplicate_parameter_names() {
 #[tokio::test]
 async fn unknown_type_in_parameter() {
     let input = "pub let f(x: UnknownType) -> LinExpr = LinExpr(5);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert_eq!(errors.len(), 1);
     assert!(matches!(errors[0], SemError::UnknownType { .. }));
@@ -334,7 +334,7 @@ async fn unknown_type_in_parameter() {
 #[tokio::test]
 async fn unknown_type_in_return_type() {
     let input = "pub let f() -> UnknownType = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Should error on unknown return type");
     assert!(
@@ -347,7 +347,7 @@ async fn unknown_type_in_return_type() {
 #[tokio::test]
 async fn body_type_mismatch() {
     let input = "pub let f() -> LinExpr = 5 <== 10;"; // Constraint body, LinExpr expected
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert_eq!(errors.len(), 1);
     assert!(matches!(errors[0], SemError::BodyTypeMismatch { .. }));
@@ -356,7 +356,7 @@ async fn body_type_mismatch() {
 #[tokio::test]
 async fn body_type_mismatch_bool_to_int() {
     let input = "pub let f() -> Int = true;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Bool should not match Int return type");
     assert!(
@@ -374,7 +374,7 @@ async fn recursive_function_call_should_fail() {
         pub let factorial(n: Int) -> Int = 
             if n <== 1 { 1 } else { n * factorial(n - 1) };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     // Note: This will fail type checking because of Int vs Bool in if condition
     // But it tests that recursive calls are recognized
@@ -393,7 +393,7 @@ async fn mutually_recursive_functions_now_allowed() {
         pub let is_even(n: Int) -> Bool = if n == 0 { true } else { is_odd(n - 1) };
         pub let is_odd(n: Int) -> Bool = if n == 0 { false } else { is_even(n - 1) };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

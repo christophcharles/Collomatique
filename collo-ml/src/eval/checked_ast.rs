@@ -97,7 +97,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         }
 
         let (global_env, type_info, expr_types, resolved_types, errors, warnings) =
-            GlobalEnv::new(T::type_schemas(), vars, &modules).await?;
+            GlobalEnv::new(vars, &modules).await?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });

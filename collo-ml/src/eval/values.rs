@@ -14,7 +14,7 @@ use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use crate::traits::EvalObject;
 use collomatique_ilp::{Constraint, LinExpr};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -524,8 +524,4 @@ pub struct NoObjectEnv {}
 
 impl EvalObject for NoObject {
     type Env = NoObjectEnv;
-
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-        HashMap::new()
-    }
 }

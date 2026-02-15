@@ -5,7 +5,7 @@
 //! reify statements, and function body validation.
 
 use super::errors::{ArgsType, FunctionType, GlobalEnvError, SemError, SemWarning};
-use super::global_env::{GlobalEnv, ObjectFields, Symbol, SymbolPath, TypeDesc, TypeInfo};
+use super::global_env::{GlobalEnv, Symbol, SymbolPath, TypeDesc, TypeInfo};
 use super::local_env::LocalCheckEnv;
 use super::path_resolution::{ResolvedPathKind, resolve_path};
 use super::string_case;
@@ -35,7 +35,6 @@ async fn get_or_create_model<'a, D: DatabaseDriver>(
 impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
     pub async fn new(
-        object_types: HashMap<String, ObjectFields>,
         variables: HashMap<String, ArgsType>,
         modules: &BTreeMap<&str, crate::ast::File>,
     ) -> Result<
@@ -51,7 +50,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
     > {
         let mut temp_env = GlobalEnv {
             module_names: modules.keys().map(|name| name.to_string()).collect(),
-            object_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
             queries: HashMap::new(),
@@ -61,18 +59,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             symbols: HashMap::new(),
             _phantom: std::marker::PhantomData,
         };
-
-        for (object_type, field_desc) in &temp_env.object_types {
-            for (field, typ) in field_desc {
-                if !temp_env.validate_type(typ) {
-                    return Err(GlobalEnvError::UnknownTypeInField {
-                        object_type: object_type.clone(),
-                        field: field.clone(),
-                        unknown_type: typ.to_string(),
-                    });
-                }
-            }
-        }
 
         for (var, args) in &temp_env.external_variables {
             for (param, typ) in args.iter().enumerate() {
@@ -1569,16 +1555,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             return;
         }
 
-        // Check if type name shadows an object type
-        if self.object_types.contains_key(&name.node) {
-            errors.push(SemError::TypeShadowsObject {
-                module: current_module.to_string(),
-                type_name: name.node.clone(),
-                span: name.span.clone(),
-            });
-            return;
-        }
-
         // Check if type name shadows a previous custom type (duplicate in same file)
         let type_key = (current_module.to_string(), name.node.clone());
         if self.custom_types.contains_key(&type_key) {
@@ -1672,16 +1648,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         // Check if enum name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
-                module: current_module.to_string(),
-                type_name: name.node.clone(),
-                span: name.span.clone(),
-            });
-            return;
-        }
-
-        // Check for shadowing existing object or custom types
-        if self.object_types.contains_key(&name.node) {
-            errors.push(SemError::TypeShadowsObject {
                 module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),

@@ -7,8 +7,6 @@ use crate::database::DatabaseDriver;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-pub type ObjectFields = HashMap<String, ExprType>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDesc {
     pub name_span: Span,
@@ -87,14 +85,13 @@ impl Symbol {
 )]
 pub struct GlobalEnv<D: DatabaseDriver> {
     pub module_names: Vec<String>,
-    pub(crate) object_types: HashMap<String, ObjectFields>, // external, no module
     pub(crate) custom_types: HashMap<(String, String), TypeDesc>, // (module, name) → desc
     pub(crate) functions: HashMap<(String, String), FunctionDesc>, // (module, name) → desc
-    pub(crate) queries: HashMap<(String, String), QueryDesc>, // (module, name) → desc
-    pub(crate) external_variables: HashMap<String, ArgsType>, // external, no module
+    pub(crate) queries: HashMap<(String, String), QueryDesc>,     // (module, name) → desc
+    pub(crate) external_variables: HashMap<String, ArgsType>,     // external, no module
     pub(crate) internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     pub(crate) variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
-    pub(crate) symbols: HashMap<String, SymbolMap>,         // module → symbol table
+    pub(crate) symbols: HashMap<String, SymbolMap>,               // module → symbol table
     pub(crate) _phantom: std::marker::PhantomData<D>,
 }
 

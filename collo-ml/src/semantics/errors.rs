@@ -20,12 +20,6 @@ pub type ArgsType = Vec<ExprType>;
 
 #[derive(Debug, Error, Clone)]
 pub enum GlobalEnvError {
-    #[error("Field {field} of object type {object_type} has unknown type {unknown_type}")]
-    UnknownTypeInField {
-        object_type: String,
-        field: String,
-        unknown_type: String,
-    },
     #[error("Parameter number {param} for ILP variable {var} has unknown type {unknown_type}")]
     UnknownTypeForVariableArg {
         var: String,
@@ -241,12 +235,6 @@ pub enum SemError {
     IndexOnNonList { typ: ExprType, span: Span },
     #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows a primitive type")]
     TypeShadowsPrimitive {
-        module: String,
-        type_name: String,
-        span: Span,
-    },
-    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows an object type")]
-    TypeShadowsObject {
         module: String,
         type_name: String,
         span: Span,

@@ -10,7 +10,7 @@ async fn custom_type_declaration_basic() {
         type MyInt = Int;
         let f() -> MyInt = MyInt(5);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -20,7 +20,7 @@ async fn custom_type_declaration_with_tuple() {
         type Point = (Int, Int);
         let origin() -> Point = Point(0, 0);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -30,7 +30,7 @@ async fn custom_type_declaration_with_list() {
         type IntList = [Int];
         let empty() -> IntList = IntList([]);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -43,7 +43,7 @@ async fn custom_type_declaration_with_sum_type() {
         type MaybeInt = Int | None;
         let get_type() -> Bool = true;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -54,7 +54,7 @@ async fn custom_type_referencing_previous_custom_type() {
         type MyIntList = [MyInt];
         let make_list() -> MyIntList = MyIntList([MyInt(5)]);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -68,7 +68,7 @@ async fn into_custom_type_basic() {
         type MyInt = Int;
         let wrap(x: Int) -> MyInt = MyInt(x);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -78,7 +78,7 @@ async fn into_underlying_type() {
         type MyInt = Int;
         let unwrap(x: MyInt) -> Int = Int(x);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -88,7 +88,7 @@ async fn into_roundtrip() {
         type MyInt = Int;
         let roundtrip(x: Int) -> Int = Int(MyInt(x));
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -102,7 +102,7 @@ async fn custom_type_as_parameter() {
         type MyInt = Int;
         let process(x: MyInt) -> Int = Int(x);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -112,7 +112,7 @@ async fn custom_type_as_return_type() {
         type MyInt = Int;
         let create() -> MyInt = MyInt(42);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -123,7 +123,7 @@ async fn multiple_custom_types_in_function() {
         type TypeB = Bool;
         let combine(a: TypeA, b: TypeB) -> Int = if Bool(b) { Int(a) } else { 0 };
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -137,7 +137,7 @@ async fn field_access_through_custom_type_with_tuple() {
         type Point = (Int, Int);
         let get_x(p: Point) -> Int = p.0;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -148,7 +148,7 @@ async fn field_access_through_custom_type_with_struct() {
         type MyStudent = Student;
         let get_age(s: MyStudent) -> Int = s.age;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -159,7 +159,7 @@ async fn nested_custom_type_field_access() {
         type NamedPoint = (String, Point);
         let get_x(np: NamedPoint) -> Int = np.1.0;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -179,7 +179,7 @@ async fn error_shadowing_previous_custom_type_simple() {
         type Student = {age: Int};
         type Student = Int;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error when shadowing custom type"
@@ -197,7 +197,7 @@ async fn error_shadowing_previous_custom_type() {
         type MyType = Int;
         type MyType = Bool;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error when shadowing custom type"
@@ -224,7 +224,7 @@ async fn recursive_type_in_list() {
     let input = r#"
         type A = [A];
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Guarded recursion in list should be allowed: {:?}",
@@ -238,7 +238,7 @@ async fn recursive_type_in_tuple() {
     let input = r#"
         type A = (Int, A);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Guarded recursion in tuple should be allowed: {:?}",
@@ -254,7 +254,7 @@ async fn recursive_type_indirect_guarded() {
         type B = [A];
         type C = (B, C);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Guarded indirect recursion should be allowed: {:?}",
@@ -272,7 +272,7 @@ async fn error_wrong_type_return() {
         type MyInt = Int;
         let f(x: Int) -> MyInt = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error: Int doesn't match MyInt without into"
@@ -285,7 +285,7 @@ async fn error_wrong_type_parameter() {
         type MyInt = Int;
         let f(x: MyInt) -> Int = x;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error: MyInt doesn't convert to Int without into"
@@ -299,7 +299,7 @@ async fn error_incompatible_custom_types() {
         type TypeB = Int;
         let f(x: TypeA) -> TypeB = TypeB(x);
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     // TypeA cannot be converted to TypeB directly, even though both are Int underneath
     // The user must first convert to Int, then to TypeB
     assert!(
@@ -318,7 +318,7 @@ async fn custom_type_in_list() {
         type MyInt = Int;
         let make_list() -> [MyInt] = [MyInt(1), MyInt(2)];
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -328,7 +328,7 @@ async fn sum_with_custom_type() {
         type MyInt = Int;
         let total(xs: [MyInt]) -> Int = sum x in xs { Int(x) };
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -342,7 +342,7 @@ async fn forall_with_custom_type() {
         type MyInt = Int;
         let check(xs: [MyInt]) -> Bool = forall x in xs { (Int(x)) > 0 };
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -355,7 +355,7 @@ async fn error_unknown_custom_type() {
     let input = r#"
         let f(x: UnknownType) -> Int = 5;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Should error on unknown type");
     assert!(
         errors
@@ -371,7 +371,7 @@ async fn forward_reference_to_custom_type_now_allowed() {
         let f() -> B = B(5);
         type B = Int;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Forward reference to custom type should now be allowed: {:?}",
@@ -390,7 +390,7 @@ async fn custom_type_wrapping_union_tuple_index_same_type() {
         type MyType = (Int, Bool) | (String, Bool);
         let f(x: MyType) -> Bool = x.1;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -401,7 +401,7 @@ async fn custom_type_wrapping_union_tuple_index_different_types() {
         type MyType = (Int, Bool) | (String, Bool);
         let f(x: MyType) -> Int | String = x.0;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -413,7 +413,7 @@ async fn custom_type_wrapping_nested_custom_type_union() {
         type B = A | (String, Int);
         let f(x: B) -> Int = x.1;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -424,7 +424,7 @@ async fn custom_type_wrapping_union_with_triple_tuple() {
         type MyType = (Int, Bool) | (String, Bool, Int);
         let f(x: MyType) -> Bool = x.1;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }
 
@@ -435,7 +435,7 @@ async fn error_custom_type_wrapping_union_invalid_index() {
         type MyType = (Int, Bool) | String;
         let f(x: MyType) -> Bool = x.1;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error: String has no tuple index"
@@ -449,7 +449,7 @@ async fn error_custom_type_wrapping_union_index_out_of_bounds() {
         type MyType = (Int, Bool, String) | (Int, Bool);
         let f(x: MyType) -> String = x.2;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should error: second variant has no index 2"
@@ -464,6 +464,6 @@ async fn custom_type_wrapping_custom_type_tuple_index() {
         type MyType = UnionType;
         let f(x: MyType) -> Int = x.0;
     "#;
-    let (_, errors, _warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _warnings) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Errors: {:?}", errors);
 }

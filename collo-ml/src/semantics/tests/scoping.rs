@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn parameter_accessible_in_body() {
     let input = "pub let f(x: Int) -> Int = x;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -17,7 +17,7 @@ async fn parameter_accessible_in_body() {
 #[tokio::test]
 async fn multiple_parameters_accessible() {
     let input = "pub let f(x: Int, y: Int, z: Int) -> Int = x + y + z;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -32,7 +32,7 @@ async fn parameter_not_accessible_in_other_function() {
         pub let f(x: Int) -> Int = x;
         pub let g() -> Int = x;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -52,7 +52,7 @@ async fn forall_variable_accessible_in_body() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
 
     let input = "pub let f(students: [Int]) -> Constraint = forall s in students { $V(s) >== 0 };";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -66,7 +66,7 @@ async fn forall_variable_not_accessible_outside() {
     let input = r#"
         pub let f(students: [Int]) -> Int = forall s in students { 0 <== 1 } and s;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -89,7 +89,7 @@ async fn nested_forall_with_different_variables() {
                 }
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested forall should work: {:?}", errors);
 }
@@ -100,7 +100,7 @@ async fn forall_variable_shadows_parameter() {
         pub let f(s: Int, students: [Int]) -> Constraint =
             forall s in students { 0 <== 1 };
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     // Should have a shadowing warning
     assert!(
@@ -125,7 +125,7 @@ async fn forall_where_clause_can_access_variable() {
         pub let f(students: [{age: Int}]) -> Constraint =
             forall s in students where s.age > 18 { 0 <== 1 };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -141,7 +141,7 @@ async fn sum_variable_accessible_in_body() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
 
     let input = "pub let f(students: [Int]) -> LinExpr = sum s in students { $V(s) };";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -155,7 +155,7 @@ async fn sum_variable_not_accessible_outside() {
     let input = r#"
         pub let f(students: [Int]) -> LinExpr = (sum s in students { 5 }) + s;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Sum variable should not leak outside");
     assert!(
@@ -171,7 +171,7 @@ async fn sum_where_clause_can_access_variable() {
         pub let f(students: [{age: Int}]) -> LinExpr =
             sum s in students where s.age > 18 { LinExpr(1) };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -188,7 +188,7 @@ async fn nested_sum() {
                 sum s2 in students { 1 }
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested sum should work: {:?}", errors);
 }
@@ -198,7 +198,7 @@ async fn nested_sum() {
 #[tokio::test]
 async fn list_comprehension_variable_accessible_in_body() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -212,7 +212,7 @@ async fn list_comprehension_variable_not_accessible_outside() {
     let input = r#"
         pub let f() -> Int = [x * 2 for x in [1, 2, 3]] and x;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -223,7 +223,7 @@ async fn list_comprehension_variable_not_accessible_outside() {
 #[tokio::test]
 async fn list_comprehension_where_clause() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3, 4, 5] where x > 2];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -235,7 +235,7 @@ async fn list_comprehension_where_clause() {
 #[tokio::test]
 async fn list_comprehension_with_struct_field_access() {
     let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -252,7 +252,7 @@ async fn sum_shadows_parameter() {
         pub let f(x: Int) -> Int = 
             sum x in [1, 2, 3] { x };
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(
         warnings
@@ -273,7 +273,7 @@ async fn list_comprehension_shadows_parameter() {
         pub let f(x: Int) -> [Int] = 
             [x for x in [1, 2, 3]];
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(
         warnings
@@ -298,7 +298,7 @@ async fn nested_forall_shadows_outer_variable() {
                 }
             };
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(
         warnings
@@ -322,7 +322,7 @@ async fn multiple_scopes_with_same_name_in_sequence() {
             (sum x in [1, 2, 3] { x }) + 
             (sum x in [4, 5, 6] { x });
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -337,7 +337,7 @@ async fn nested_different_construct_scopes() {
         pub let f(students: [{age: Int}]) -> Int =
             sum s in students where (forall t in students { t.age > 0 }) { s.age };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -352,7 +352,7 @@ async fn if_expression_maintains_outer_scope() {
         pub let f(x: Int, flag: Bool) -> Int =
             if flag { x + 1 } else { x - 1 };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -369,7 +369,7 @@ async fn local_variable_cannot_shadow_function() {
         let f() -> Int = 42;
         let g() -> Int = let f = 43 { f };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors
@@ -385,7 +385,7 @@ async fn local_variable_shadowing_local_is_warning() {
     let input = r#"
         let f(x: Int) -> Int = let x = 43 { x };
     "#;
-    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(
         warnings
@@ -409,7 +409,7 @@ async fn function_shadowing_causes_usage_error() {
             f + f
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     // Should have the shadowing error
     assert!(

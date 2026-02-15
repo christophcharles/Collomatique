@@ -345,10 +345,6 @@ pub fn derive_view_object(input: TokenStream) -> TokenStream {
 ///         // Build view object and access field
 ///     }
 ///     
-///     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-///         // Generate schema for all types
-///     }
-///     
 ///     fn pretty_print(&self, env: &Self::Env, cache: &mut Self::Cache) -> Option<String> {
 ///         // Build view object and call its pretty_print
 ///     }

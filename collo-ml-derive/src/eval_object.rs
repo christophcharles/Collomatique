@@ -44,7 +44,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 struct VariantInfo {
     variant_name: syn::Ident, // e.g., "Student"
     id_type: syn::Type,       // e.g., StudentId
-    dsl_type_name: String,    // e.g., "Student" or custom from #[name("...")]
+    _dsl_type_name: String,   // e.g., "Student" or custom from #[name("...")]
 }
 
 fn extract_env_type(attrs: &[Attribute]) -> Option<syn::Type> {
@@ -93,7 +93,7 @@ fn process_variant(variant: &Variant) -> VariantInfo {
     VariantInfo {
         variant_name,
         id_type,
-        dsl_type_name,
+        _dsl_type_name: dsl_type_name,
     }
 }
 
@@ -134,37 +134,11 @@ fn generate_from_impls(
 fn generate_eval_object_impl(
     enum_name: &syn::Ident,
     env_type: &syn::Type,
-    variants: &[VariantInfo],
+    _variants: &[VariantInfo],
 ) -> proc_macro2::TokenStream {
-    // Generate type_schemas implementation
-    let type_schemas_entries = variants.iter().map(|info| {
-        let dsl_name = &info.dsl_type_name;
-        let id_type = &info.id_type;
-
-        quote! {
-            {
-                let field_schema = <<#enum_name as ::collo_ml::ViewBuilder<#env_type, #id_type>>::Object as ::collo_ml::ViewObject>::field_schema();
-                let expr_schema = field_schema.into_iter()
-                    .map(|(k, v)| (
-                        k,
-                        v.convert_to_expr_type::<#enum_name>()
-                            .expect("Object type should be known")
-                    ))
-                    .collect();
-                map.insert(#dsl_name.to_string(), expr_schema);
-            }
-        }
-    });
-
     quote! {
         impl ::collo_ml::EvalObject for #enum_name {
             type Env = #env_type;
-
-            fn type_schemas() -> ::std::collections::HashMap<String, ::std::collections::HashMap<String, ::collo_ml::ExprType>> {
-                let mut map = ::std::collections::HashMap::new();
-                #(#type_schemas_entries)*
-                map
-            }
         }
     }
 }

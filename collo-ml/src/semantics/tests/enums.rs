@@ -16,7 +16,7 @@ async fn enum_decl_creates_types() {
         enum Result = Ok(Int) | Error(String);
         pub let f() -> Result = Result::Ok(42);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
 }
 
@@ -27,7 +27,7 @@ async fn enum_variant_is_subtype_of_root() {
         pub let identity(x: Result) -> Result = x;
         pub let test() -> Result = identity(Result::Ok(42));
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Variant should be accepted where root type expected: {:?}",
@@ -41,7 +41,7 @@ async fn enum_variant_return_type() {
         enum Result = Ok(Int) | Error(String);
         pub let make_ok(x: Int) -> Result::Ok = Result::Ok(x);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow variant return type: {:?}",
@@ -55,7 +55,7 @@ async fn enum_unit_variant() {
         enum Option = Some(Int) | None;
         pub let make_none() -> Option = Option::None;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(errors.is_empty(), "Should allow unit variant: {:?}", errors);
 }
 
@@ -65,7 +65,7 @@ async fn enum_tuple_variant() {
         enum Pair = P(Int, Bool);
         pub let make_pair() -> Pair = Pair::P(42, true);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow tuple variant: {:?}",
@@ -79,7 +79,7 @@ async fn enum_struct_variant() {
         enum Point = P { x: Int, y: Int };
         pub let make_point() -> Point = Point::P { x: 1, y: 2 };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow struct variant: {:?}",
@@ -95,7 +95,7 @@ async fn enum_primitive_variant_names() {
         pub let test_bool() -> MyType = MyType::Bool(true);
         pub let test_none() -> MyType = MyType::None;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow primitive names as variants: {:?}",
@@ -113,7 +113,7 @@ async fn enum_wrong_argument_type() {
         enum Result = Ok(Int) | Error(String);
         pub let bad() -> Result = Result::Ok("not an int");
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Should reject wrong argument type");
 }
 
@@ -123,7 +123,7 @@ async fn enum_wrong_argument_count() {
         enum Result = Ok(Int) | Error(String);
         pub let bad() -> Result = Result::Ok(1, 2);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Should reject wrong argument count");
 }
 
@@ -133,7 +133,7 @@ async fn enum_unknown_variant() {
         enum Result = Ok(Int) | Error(String);
         pub let bad() -> Result = Result::Unknown(42);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(!errors.is_empty(), "Should reject unknown variant");
 }
 
@@ -166,7 +166,7 @@ async fn enum_match_exhaustive() {
             _ as Result::Error { 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should accept exhaustive match on enum: {:?}",
@@ -182,7 +182,7 @@ async fn enum_match_non_exhaustive() {
             x as Result::Ok { Int(x) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         !errors.is_empty(),
         "Should reject non-exhaustive match on enum"
@@ -199,7 +199,7 @@ async fn enum_match_three_variants() {
             _ as Color::Blue { "blue" }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should accept exhaustive match on three variants: {:?}",
@@ -217,7 +217,7 @@ async fn qualified_type_in_list() {
         enum Result = Ok(Int) | Error(String);
         pub let oks() -> [Result::Ok] = [Result::Ok(1), Result::Ok(2)];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow qualified type in list: {:?}",
@@ -231,7 +231,7 @@ async fn qualified_type_in_maybe() {
         enum Result = Ok(Int) | Error(String);
         pub let maybe_ok(b: Bool) -> ?Result::Ok = if b { Result::Ok(42) } else { none };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow qualified type in maybe: {:?}",
@@ -245,7 +245,7 @@ async fn qualified_type_in_param() {
         enum Result = Ok(Int) | Error(String);
         pub let extract_ok(x: Result::Ok) -> Int = Int(x);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "Should allow qualified type in param: {:?}",
@@ -263,7 +263,7 @@ async fn enum_if_expression_unifies_to_root() {
         enum Result = Ok(Int) | Error(String);
         pub let decide(b: Bool) -> Result = if b { Result::Ok(1) } else { Result::Error("no") };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(
         errors.is_empty(),
         "If branches with different variants should unify to root: {:?}",

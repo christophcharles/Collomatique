@@ -1,6 +1,5 @@
-use collo_ml::{EvalObject, ExprType};
+use collo_ml::EvalObject;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Env {
@@ -24,8 +23,4 @@ pub enum ObjectId {}
 
 impl EvalObject for ObjectId {
     type Env = Env;
-
-    fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-        HashMap::new()
-    }
 }

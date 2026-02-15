@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn empty_list() {
     let input = "pub let f() -> [Int] = [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Empty list should work: {:?}", errors);
 }
@@ -13,7 +13,7 @@ async fn empty_list() {
 #[tokio::test]
 async fn simple_list() {
     let input = "pub let f() -> [Int] = [1, 2, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Simple list should work: {:?}", errors);
 }
@@ -21,7 +21,7 @@ async fn simple_list() {
 #[tokio::test]
 async fn list_with_expressions() {
     let input = "pub let f(x: Int) -> [Int] = [x, x + 1, x * 2];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -33,7 +33,7 @@ async fn list_with_expressions() {
 #[tokio::test]
 async fn list_type_mismatch() {
     let input = "pub let f() -> [Int] = [1, true, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "List with mixed types should fail");
 }
@@ -41,7 +41,7 @@ async fn list_type_mismatch() {
 #[tokio::test]
 async fn list_of_bool() {
     let input = "pub let f() -> [Bool] = [true, false, true];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "List of Bool should work: {:?}", errors);
 }
@@ -50,7 +50,7 @@ async fn list_of_bool() {
 async fn list_of_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [LinExpr] = [$V(x), $V(x + 1)];";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -62,7 +62,7 @@ async fn list_of_linexpr() {
 #[tokio::test]
 async fn nested_lists() {
     let input = "pub let f() -> [[Int]] = [[1, 2], [3, 4], [5, 6]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested lists should work: {:?}", errors);
 }
@@ -70,7 +70,7 @@ async fn nested_lists() {
 #[tokio::test]
 async fn nested_lists_with_empty() {
     let input = "pub let f() -> [[Int]] = [[], [1, 2], []];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -83,7 +83,7 @@ async fn nested_lists_with_empty() {
 async fn list_with_coercion() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f(x: Int) -> [Int | LinExpr] = [5, $V(x), 10];";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -97,7 +97,7 @@ async fn list_with_coercion() {
 #[tokio::test]
 async fn collection_accepts_lists_range_with_numbers() {
     let input = "pub let f() -> [Int] = [0..42];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -112,7 +112,7 @@ async fn collection_accepts_lists_range_with_expr() {
     let count() -> Int = 32;
     pub let f(students: [Int]) -> [Int] = [count()..|students|];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -124,7 +124,7 @@ async fn collection_accepts_lists_range_with_expr() {
 #[tokio::test]
 async fn collection_rejects_lists_range_with_wrong_type() {
     let input = "pub let f() -> [Int] = [0..true];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -139,7 +139,7 @@ async fn collection_rejects_lists_range_with_wrong_type() {
 #[tokio::test]
 async fn simple_list_comprehension() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -151,7 +151,7 @@ async fn simple_list_comprehension() {
 #[tokio::test]
 async fn list_comprehension_with_transformation() {
     let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -163,7 +163,7 @@ async fn list_comprehension_with_transformation() {
 #[tokio::test]
 async fn list_comprehension_with_where() {
     let input = "pub let f() -> [Int] = [x for x in [1, 2, 3, 4, 5] where x > 2];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -176,7 +176,7 @@ async fn list_comprehension_with_where() {
 async fn list_comprehension_type_transformation() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = "pub let f() -> [LinExpr] = [$V(x) for x in [1, 2, 3]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -188,7 +188,7 @@ async fn list_comprehension_type_transformation() {
 #[tokio::test]
 async fn list_comprehension_with_struct_fields() {
     let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -200,7 +200,7 @@ async fn list_comprehension_with_struct_fields() {
 #[tokio::test]
 async fn list_comprehension_where_uses_field() {
     let input = "pub let f(students: [{age: Int}]) -> [{age: Int}] = [s for s in students where s.age > 18];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -215,7 +215,7 @@ async fn nested_list_comprehension() {
         pub let f() -> [[Int]] = 
             [[x * y for x in [1, 2, 3]] for y in [1, 2, 3]];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -236,7 +236,7 @@ async fn list_comprehension_multiple_for_typechecks_correctly() {
              where x in y.students];
     "#;
 
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -258,7 +258,7 @@ async fn list_comprehension_where_can_reference_all_for_variables() {
              where p1.id < p2.id and g.min_age > 18];
     "#;
 
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -273,7 +273,7 @@ async fn list_comprehension_rejects_non_iterable_in_second_for() {
         let f(s: {age: Int}, students: [Int]) -> [Int] = [x for y in s.age for x in students];
     ";
 
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -286,7 +286,7 @@ async fn list_comprehension_rejects_non_iterable_in_second_for() {
 #[tokio::test]
 async fn union_of_lists() {
     let input = "pub let f() -> [Int] = [1, 2] + [3, 4];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Union should work: {:?}", errors);
 }
@@ -294,7 +294,7 @@ async fn union_of_lists() {
 #[tokio::test]
 async fn difference_of_lists() {
     let input = "pub let f() -> [Int] = [1, 2, 3] - [2];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Difference should work: {:?}", errors);
 }
@@ -302,7 +302,7 @@ async fn difference_of_lists() {
 #[tokio::test]
 async fn union_with_coercion() {
     let input = "pub let f(xs: [Int], ys: [LinExpr]) -> [Int | LinExpr] = xs + ys;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -314,7 +314,7 @@ async fn union_with_coercion() {
 #[tokio::test]
 async fn chained_collection_operations() {
     let input = "pub let f(a: [Int], b: [Int], c: [Int]) -> [Int] = a + b - c;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -326,7 +326,7 @@ async fn chained_collection_operations() {
 #[tokio::test]
 async fn collection_operation_with_structs() {
     let input = "pub let f(a: [{x: Int}], b: [{x: Int}]) -> [{x: Int}] = a + b;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -340,7 +340,7 @@ async fn collection_operation_with_structs() {
 #[tokio::test]
 async fn cardinality_of_list_literal() {
     let input = "pub let f() -> Int = |[1, 2, 3, 4, 5]|;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -352,7 +352,7 @@ async fn cardinality_of_list_literal() {
 #[tokio::test]
 async fn cardinality_of_parameter() {
     let input = "pub let f(xs: [Int]) -> Int = |xs|;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -364,7 +364,7 @@ async fn cardinality_of_parameter() {
 #[tokio::test]
 async fn cardinality_of_comprehension() {
     let input = "pub let f() -> Int = |[x for x in [1, 2, 3]]|;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -376,7 +376,7 @@ async fn cardinality_of_comprehension() {
 #[tokio::test]
 async fn cardinality_in_comparison() {
     let input = "pub let f(xs: [Int]) -> Bool = |xs| > 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -388,7 +388,7 @@ async fn cardinality_in_comparison() {
 #[tokio::test]
 async fn cardinality_in_constraint() {
     let input = "pub let f(xs: [Int]) -> Constraint = |xs| === 10;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -402,7 +402,7 @@ async fn cardinality_in_constraint() {
 #[tokio::test]
 async fn element_in_list() {
     let input = "pub let f(x: Int, xs: [Int]) -> Bool = x in xs;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -414,7 +414,7 @@ async fn element_in_list() {
 #[tokio::test]
 async fn membership_with_conversion() {
     let input = "pub let f(x: Int, xs: [LinExpr]) -> Bool = LinExpr(x) in xs;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -426,7 +426,7 @@ async fn membership_with_conversion() {
 #[tokio::test]
 async fn membership_type_mismatch() {
     let input = "pub let f(x: Bool, xs: [Int]) -> Bool = x in xs;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Membership with wrong type should fail");
 }
@@ -437,7 +437,7 @@ async fn membership_type_mismatch() {
 async fn list_of_list_comprehensions() {
     let input =
         "pub let f() -> [[Int]] = [[x * 2 for x in [1, 2, 3]], [y + 1 for y in [4, 5, 6]]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -449,7 +449,7 @@ async fn list_of_list_comprehensions() {
 #[tokio::test]
 async fn comprehension_over_union() {
     let input = "pub let f(a: [Int], b: [Int]) -> [Int] = [x * 2 for x in a + b];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -464,7 +464,7 @@ async fn filtering_with_cardinality() {
         pub let f(lists: [[Int]]) -> [[Int]] = 
             [xs for xs in lists where |xs| > 3];
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -482,7 +482,7 @@ async fn var_list_can_be_used_as_source_collection() {
     reify constraints as $[MyConstraints];
     pub let f() -> LinExpr = sum x in $[MyConstraints]([0..42]) { x };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

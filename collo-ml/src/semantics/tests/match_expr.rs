@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn simple_match_with_one_branch() {
     let input = "pub let f(x: Int) -> Int = match x { y as Int { 10 } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -22,7 +22,7 @@ async fn match_with_multiple_branches() {
             b as Bool { 2 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -39,7 +39,7 @@ async fn match_with_catchall_branch() {
             other { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -51,7 +51,7 @@ async fn match_with_catchall_branch() {
 #[tokio::test]
 async fn match_only_catchall() {
     let input = "pub let f(x: Int) -> Int = match x { y { 42 } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -70,7 +70,7 @@ async fn match_refines_union_type() {
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -87,7 +87,7 @@ async fn match_binding_has_refined_type() {
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -104,7 +104,7 @@ async fn match_catchall_has_remaining_type() {
             other { other == none } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -123,7 +123,7 @@ async fn match_converts_int_to_linexpr() {
             i as Int { $V(LinExpr(i)) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -140,7 +140,7 @@ async fn match_converts_emptylist_to_list() {
             lst as [] { [Int]([1, 2, 3]) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -153,7 +153,7 @@ async fn match_converts_emptylist_to_list() {
 async fn match_non_exhaustive_with_only_where() {
     // Match with only a filtered branch is not exhaustive
     let input = "pub let f(x: Int) -> Int = match x { i as Int where i > 0 { i } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -171,7 +171,7 @@ async fn match_with_where_filter() {
             j as Int { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -187,7 +187,7 @@ async fn match_where_must_be_bool() {
             i as Int where i { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Match where clause must be Bool");
 }
@@ -199,7 +199,7 @@ async fn match_where_does_not_refine_type() {
             i as Int where i > 0 { i }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -216,7 +216,7 @@ async fn match_where_with_conversion_in_body() {
             j as Int { j }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -234,7 +234,7 @@ async fn match_non_exhaustive_simple() {
             i as Int { 1 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -250,7 +250,7 @@ async fn match_exhaustive_with_catchall() {
             other { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -268,7 +268,7 @@ async fn match_exhaustive_all_branches() {
             n as None { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -284,7 +284,7 @@ async fn match_non_exhaustive_partial_union() {
             i as Int | Bool { 1 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -303,7 +303,7 @@ async fn match_detects_unreachable_after_exhaustive() {
             other { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -319,7 +319,7 @@ async fn match_detects_overlapping_branches() {
             j as Int { 2 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -336,7 +336,7 @@ async fn match_detects_duplicate_type() {
             b as Bool { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -354,7 +354,7 @@ async fn match_unifies_branch_outputs() {
             b as Bool { true } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -372,7 +372,7 @@ async fn match_unifies_int_and_linexpr() {
             b as Bool { $V(0) } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -389,7 +389,7 @@ async fn match_unifies_emptylist_and_list() {
             b as Bool { [] } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -408,7 +408,7 @@ async fn match_handles_emptylist() {
             lst as [Int] { |lst| }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -424,7 +424,7 @@ async fn match_emptylist_exhausts_list() {
             lst as [Int] { |lst| } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -440,7 +440,7 @@ async fn match_list_conversion() {
             lst as [Int] { [LinExpr](lst) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -461,7 +461,7 @@ async fn match_with_custom_types() {
             t as Teacher { 2 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -479,7 +479,7 @@ async fn match_with_field_access_in_branch() {
             i as Int { i }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -496,7 +496,7 @@ async fn match_unknown_type_in_pattern() {
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -519,7 +519,7 @@ async fn nested_match_expressions() {
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested match should work: {:?}", errors);
 }
@@ -532,7 +532,7 @@ async fn match_in_branch_body() {
             b as Bool { match 5 { y as Int { y } } } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -551,7 +551,7 @@ async fn match_with_if_in_branch() {
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -568,7 +568,7 @@ async fn match_with_quantifier_in_branch() {
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -585,7 +585,7 @@ async fn match_with_list_comprehension_in_branch() {
             i as Int { [i] } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -607,7 +607,7 @@ async fn if_with_match_in_branches() {
                 5 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "If with match should work: {:?}", errors);
 }
@@ -623,7 +623,7 @@ async fn forall_with_match_in_body() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -644,7 +644,7 @@ async fn match_complex_type_dispatch() {
             lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -662,7 +662,7 @@ async fn match_with_filtered_branches() {
             k as Int { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -680,7 +680,7 @@ async fn match_optional_handling() {
             n as None { 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -700,7 +700,7 @@ async fn match_list_processing_with_conversion() {
             i as Int { $V(LinExpr(i)) === 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -715,7 +715,7 @@ async fn match_in_arithmetic_expression() {
         pub let f(x: Int | Bool) -> Int = 
             (match x { i as Int { i } b as Bool { 0 } }) + 5;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -733,7 +733,7 @@ async fn match_with_cardinality_in_filter() {
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

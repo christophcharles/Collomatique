@@ -60,7 +60,7 @@ impl PathResolutionError {
 /// This is the single source of truth for what a path refers to.
 /// Resolution priority:
 /// 1. Built-in types: Int, Bool, String, LinExpr, Constraint, None, Never
-/// 2. External entities: object_types, external_variables (treated like primitives)
+/// 2. External entities: external_variables (treated like primitives)
 /// 3. Symbol table: custom types, functions, internal variables, variable lists
 /// 4. Local variables (from LocalEnv) - checked last for defensive programming
 ///

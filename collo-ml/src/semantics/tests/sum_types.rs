@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn option_int_type_valid() {
     let input = "pub let f() -> ?Int = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -19,7 +19,7 @@ async fn option_int_type_valid() {
 #[tokio::test]
 async fn option_bool_type_valid() {
     let input = "pub let f() -> ?Bool = true;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -34,7 +34,7 @@ async fn option_custom_type_valid() {
         type Student = {age: Int};
         pub let f(s: ?Student) -> ?Student = s;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -46,7 +46,7 @@ async fn option_custom_type_valid() {
 #[tokio::test]
 async fn option_list_type_valid() {
     let input = "pub let f() -> ?[Int] = [1, 2, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -58,7 +58,7 @@ async fn option_list_type_valid() {
 #[tokio::test]
 async fn list_of_option_type_valid() {
     let input = "pub let f() -> [?Int] = [1, none];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -70,7 +70,7 @@ async fn list_of_option_type_valid() {
 #[tokio::test]
 async fn none_literal_valid() {
     let input = "pub let f() -> ?Int = none;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -82,7 +82,7 @@ async fn none_literal_valid() {
 #[tokio::test]
 async fn option_type_annotation_valid() {
     let input = "pub let f() -> ?Int = 5 as ?Int;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Option type annotation should be valid",);
 }
@@ -91,7 +91,7 @@ async fn option_type_annotation_valid() {
 async fn option_type_can_hold_value() {
     // Option types are valid as return types and can hold concrete values
     let input = "pub let f() -> ?Int = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -107,7 +107,7 @@ async fn option_type_can_hold_value() {
 #[tokio::test]
 async fn double_question_mark_error() {
     let input = "pub let f() -> ??Int = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Double question mark should error");
     assert!(
@@ -122,7 +122,7 @@ async fn double_question_mark_error() {
 #[tokio::test]
 async fn triple_question_mark_error() {
     let input = "pub let f() -> ???Bool = true;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Triple question mark should error");
     assert!(
@@ -137,7 +137,7 @@ async fn triple_question_mark_error() {
 #[tokio::test]
 async fn option_marker_on_none_error() {
     let input = "pub let f() -> ?None = none;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Option marker on None should error");
     assert!(
@@ -156,7 +156,7 @@ async fn option_marker_on_none_error() {
 #[tokio::test]
 async fn sum_type_int_bool_valid() {
     let input = "pub let f() -> Int | Bool = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -168,7 +168,7 @@ async fn sum_type_int_bool_valid() {
 #[tokio::test]
 async fn sum_type_three_variants_valid() {
     let input = "pub let f() -> Int | Bool | LinExpr = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -180,7 +180,7 @@ async fn sum_type_three_variants_valid() {
 #[tokio::test]
 async fn sum_type_with_none_valid() {
     let input = "pub let f() -> None | Int | Bool = none;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -196,7 +196,7 @@ async fn sum_type_custom_types_valid() {
         type Teacher = {subject: String};
         pub let f(p: Student | Teacher) -> Student | Teacher = p;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -208,7 +208,7 @@ async fn sum_type_custom_types_valid() {
 #[tokio::test]
 async fn list_of_sum_type_valid() {
     let input = "pub let f() -> [Int | Bool] = [1, true];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -220,7 +220,7 @@ async fn list_of_sum_type_valid() {
 #[tokio::test]
 async fn sum_of_list_types_valid() {
     let input = "pub let f() -> [Int] | [Bool] = [1, 2];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -236,7 +236,7 @@ async fn sum_of_list_types_valid() {
 #[tokio::test]
 async fn duplicate_types_in_sum_error() {
     let input = "pub let f() -> Int | Int = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Duplicate types in sum should error");
     assert!(
@@ -254,7 +254,7 @@ async fn triplicate_types_in_sum_error() {
         type Student = {age: Int};
         pub let f(x: Student) -> Student | Student | Student = x;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Triplicate types in sum should error");
     assert!(
@@ -272,7 +272,7 @@ async fn triplicate_types_in_sum_error_with_extra_error() {
         type Student = {age: Int};
         pub let f() -> Student | Student | Student = get();
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Triplicate types in sum should error");
     assert!(
@@ -288,7 +288,7 @@ async fn triplicate_types_in_sum_error_with_extra_error() {
 async fn duplicate_after_flattening_error() {
     // None | Int | None should error after flattening
     let input = "pub let f() -> None | Int | None = none;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -310,7 +310,7 @@ async fn duplicate_after_flattening_error() {
 #[tokio::test]
 async fn multiple_options_in_sum_type_error() {
     let input = "pub let f() -> ?Int | ?Bool = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -329,7 +329,7 @@ async fn multiple_options_in_sum_type_error() {
 async fn option_with_none_in_sum_error() {
     // ?Int | None should error - redundant
     let input = "pub let f() -> ?Int | None = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Option with None in sum should error");
     assert!(
@@ -348,7 +348,7 @@ async fn option_with_none_in_sum_error() {
 #[tokio::test]
 async fn coercion_to_sum_type_valid() {
     let input = "pub let f() -> Int | Bool = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -361,7 +361,7 @@ async fn coercion_to_sum_type_valid() {
 async fn conversion_within_sum_type_explicit() {
     // LinExpr(5) should work when target is LinExpr | Bool
     let input = "pub let f() -> LinExpr | Bool = LinExpr(5);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -374,7 +374,7 @@ async fn conversion_within_sum_type_explicit() {
 async fn implicit_conversion_not_allowed() {
     // 5 should NOT implicitly convert to LinExpr | Bool (Int not in sum)
     let input = "pub let f() -> LinExpr | Bool = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -386,7 +386,7 @@ async fn implicit_conversion_not_allowed() {
 async fn empty_list_coercion_to_sum_with_one_list() {
     // [] should coerce to [Int] | Bool (only one list type)
     let input = "pub let f() -> [Int] | Bool = [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -398,7 +398,7 @@ async fn empty_list_coercion_to_sum_with_one_list() {
 #[tokio::test]
 async fn empty_list_ambiguous_with_multiple_lists() {
     let input = "pub let f() -> [Int] | [Bool] = [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -409,7 +409,7 @@ async fn empty_list_ambiguous_with_multiple_lists() {
 #[tokio::test]
 async fn explicit_empty_list_cast_valid() {
     let input = "pub let f() -> [Int] | [Bool] = [] as [Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -426,7 +426,7 @@ async fn explicit_empty_list_cast_valid() {
 async fn option_of_list_of_sum_valid() {
     // Elements in [Int | Bool] need explicit casts
     let input = "pub let f() -> ?[Int | Bool] = [1, true];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -439,7 +439,7 @@ async fn option_of_list_of_sum_valid() {
 async fn list_of_option_valid() {
     // [?Int] where elements are explicitly cast
     let input = "pub let f() -> [?Int] = [1, none];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -451,7 +451,7 @@ async fn list_of_option_valid() {
 #[tokio::test]
 async fn deeply_nested_types_valid() {
     let input = "pub let f() -> ?[[Int | Bool] | [LinExpr]] = [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -470,7 +470,7 @@ async fn field_access_on_sum_type_error() {
         type Student = {age: Int};
         pub let f(p: Student | Int) -> Int = p.age;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -484,7 +484,7 @@ async fn field_access_on_option_type_error() {
         type Student = {age: Int};
         pub let f(s: ?Student) -> Int = s.age;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -502,7 +502,7 @@ async fn function_with_sum_type_parameter_valid() {
         pub let process(x: Int | Bool) -> Int = 0;
         pub let use_process() -> Int = process(5);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -517,7 +517,7 @@ async fn function_with_option_parameter_valid() {
         pub let maybe_process(x: ?Int) -> Int = 0;
         pub let use_maybe() -> Int = maybe_process(5);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -533,7 +533,7 @@ async fn function_call_with_wrong_type_for_sum() {
         pub let use_process() -> Int = process($V());
     "#;
     let vars = var_with_args("V", vec![]);
-    let (_, errors, _) = analyze(input, HashMap::new(), vars).await;
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         !errors.is_empty(),
@@ -548,7 +548,7 @@ async fn function_call_with_wrong_type_for_sum() {
 #[tokio::test]
 async fn unknown_type_in_sum_error() {
     let input = "pub let f() -> Int | UnknownType = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Unknown type in sum should error");
     assert!(
@@ -563,7 +563,7 @@ async fn unknown_type_in_sum_error() {
 #[tokio::test]
 async fn unknown_type_in_option_error() {
     let input = "pub let f() -> ?UnknownType = none;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Unknown type in option should error");
     assert!(
@@ -586,7 +586,7 @@ async fn realistic_option_return_type() {
         pub let find_student(id: Int) -> ?Student = none;
         pub let process() -> ?Student = find_student(5);
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -602,7 +602,7 @@ async fn realistic_sum_type_for_mixed_entities() {
         type Teacher = {subject: String};
         pub let count_all(entities: [Student | Teacher]) -> Int = |entities|;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new()).await;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
