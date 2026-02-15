@@ -13,7 +13,6 @@ use crate::database::DatabaseConnection;
 use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Derivative)]
@@ -30,44 +29,34 @@ pub struct ScriptVar<T: EvalObject, D: DatabaseConnection> {
     pub name: String,
     pub from_list: Option<usize>,
     pub params: Vec<Arc<ExprValue<T, D>>>,
-    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: Arc<str>,
 }
 
 impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
     pub fn new(
-        var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
         module: String,
         name: String,
         from_list: Option<usize>,
         params: Vec<Arc<ExprValue<T, D>>>,
     ) -> Self {
-        let params_str = if let Some(cached) = var_str_cache.get(&params) {
-            cached.clone()
-        } else {
-            let args: Vec<_> = params.iter().map(|x| x.convert_to_string()).collect();
-            let s: Arc<str> = args.join(", ").into();
-            var_str_cache.insert(params.clone(), s.clone());
-            s
-        };
         ScriptVar {
             module,
             name,
             from_list,
             params,
-            params_str,
         }
     }
 }
 
 impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
+        let params_str = params_str.join(", ");
         match self.from_list {
             Some(i) => {
-                write!(f, "${}({})[{}]", self.name, self.params_str, i)
+                write!(f, "${}({})[{}]", self.name, params_str, i)
             }
             None => {
-                write!(f, "${}({})", self.name, self.params_str)
+                write!(f, "${}({})", self.name, params_str)
             }
         }
     }
@@ -85,35 +74,18 @@ impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ScriptVar<T, D>
 pub struct ExternVar<T: EvalObject, D: DatabaseConnection> {
     pub name: String,
     pub params: Vec<Arc<ExprValue<T, D>>>,
-    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: Arc<str>,
 }
 
 impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
-    pub fn new(
-        var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
-        name: String,
-        params: Vec<Arc<ExprValue<T, D>>>,
-    ) -> Self {
-        let params_str = if let Some(cached) = var_str_cache.get(&params) {
-            cached.clone()
-        } else {
-            let args: Vec<_> = params.iter().map(|x| x.convert_to_string()).collect();
-            let s: Arc<str> = args.join(", ").into();
-            var_str_cache.insert(params.clone(), s.clone());
-            s
-        };
-        ExternVar {
-            name,
-            params,
-            params_str,
-        }
+    pub fn new(name: String, params: Vec<Arc<ExprValue<T, D>>>) -> Self {
+        ExternVar { name, params }
     }
 }
 
 impl<T: EvalObject, D: DatabaseConnection> std::fmt::Display for ExternVar<T, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "${}({})", self.name, self.params_str)
+        let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
+        write!(f, "${}({})", self.name, params_str.join(", "))
     }
 }
 

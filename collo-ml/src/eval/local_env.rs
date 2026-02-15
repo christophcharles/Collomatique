@@ -458,7 +458,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 ) {
                     Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
                         Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Base(
-                            ExternVar::new(&mut eval_history.var_str_cache, ext_var_name, args),
+                            ExternVar::new(ext_var_name, args),
                         ))))
                     }
                     Ok(ResolvedPathKind::InternalVariable {
@@ -484,13 +484,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         ))
                         .await?;
                         Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                            ScriptVar::new(
-                                &mut eval_history.var_str_cache,
-                                var_module,
-                                var_name,
-                                None,
-                                args,
-                            ),
+                            ScriptVar::new(var_module, var_name, None, args),
                         ))))
                     }
                     _ => panic!("Valid var expected (should have been caught by type checker)"),
@@ -1169,7 +1163,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 .map(|i| {
                                     Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                                         ScriptVar::new(
-                                            &mut eval_history.var_str_cache,
                                             var_module.clone(),
                                             var_name.clone(),
                                             Some(i),

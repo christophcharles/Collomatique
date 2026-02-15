@@ -279,7 +279,6 @@ async fn let_expr_with_constraint_value() {
             let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(5))],
             )))
@@ -313,7 +312,6 @@ async fn let_expr_with_linexpr_arithmetic() {
             let constraints = strip_origins(&constraints);
 
             let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::constant(5.))
@@ -348,7 +346,6 @@ async fn let_expr_with_constraint_combination() {
             let constraints = strip_origins(&constraints);
 
             let var = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(7))],
             )));

@@ -258,11 +258,9 @@ async fn sum_linexpr_simple() {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(1) + $V(2)
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -316,11 +314,7 @@ async fn sum_linexpr_with_coefficient() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 1*$V() + 2*$V() = 3*$V()
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
-                "V".into(),
-                vec![],
-            )));
+            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -347,15 +341,12 @@ async fn sum_linexpr_with_constant() {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: ($V(1)+10) + ($V(2)+10) + ($V(3)+10) = $V(1) + $V(2) + $V(3) + 30
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::constant(30.);
@@ -385,11 +376,9 @@ async fn sum_linexpr_with_filter() {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(1) + $V(3) (odd numbers only)
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             )));
@@ -421,19 +410,15 @@ async fn sum_linexpr_multiple_vars() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -463,11 +448,9 @@ async fn sum_linexpr_with_param() {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 5*$V(1) + 5*$V(2)
             let expected = 5 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + 5 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -714,7 +697,6 @@ async fn forall_constraint_simple() {
 
             // Check first constraint: $V(1) === 1
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
@@ -723,7 +705,6 @@ async fn forall_constraint_simple() {
 
             // Check second constraint: $V(2) === 1
             let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
@@ -782,7 +763,6 @@ async fn forall_constraint_with_inequality() {
 
             // Check constraints are <= constraints
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
@@ -790,7 +770,6 @@ async fn forall_constraint_with_inequality() {
             assert!(constraints.contains(&constraint1));
 
             let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
@@ -824,7 +803,6 @@ async fn forall_constraint_with_filter() {
             let constraints = strip_origins(&constraints);
 
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
@@ -832,7 +810,6 @@ async fn forall_constraint_with_filter() {
             assert!(constraints.contains(&constraint1));
 
             let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(4))],
             )))
@@ -891,7 +868,6 @@ async fn forall_constraint_with_arithmetic() {
 
             // Check first constraint: 2*$V(1) + 5 === 15
             let constraint1 = (2 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::constant(5.))
@@ -899,7 +875,6 @@ async fn forall_constraint_with_arithmetic() {
             assert!(constraints.contains(&constraint1));
 
             let constraint2 = (2 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::constant(5.))
@@ -935,11 +910,9 @@ async fn forall_constraint_multiple_vars() {
             let constraints = strip_origins(&constraints);
 
             let constraint1 = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))))
@@ -947,11 +920,9 @@ async fn forall_constraint_multiple_vars() {
             assert!(constraints.contains(&constraint1));
 
             let constraint2 = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))))
@@ -985,7 +956,6 @@ async fn forall_constraint_with_param() {
 
             // All constraints should be === 42
             let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
@@ -993,7 +963,6 @@ async fn forall_constraint_with_param() {
             assert!(constraints.contains(&constraint1));
 
             let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))

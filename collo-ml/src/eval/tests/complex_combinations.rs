@@ -37,7 +37,6 @@ async fn forall_with_reified_var_and_filter() {
 
             // Expected: $MyVar(1) === 1 and $MyVar(2) === 1
             let expected1 = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -46,7 +45,6 @@ async fn forall_with_reified_var_and_filter() {
             .eq(&LinExpr::constant(1.));
 
             let expected2 = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -94,7 +92,6 @@ async fn sum_with_var_list_and_comprehension() {
         ExprValue::LinExpr(lin_expr) => {
             // Concat gives [1, 2, 2, 3], so 4 variables summed
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(0),
@@ -105,7 +102,6 @@ async fn sum_with_var_list_and_comprehension() {
                     Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(1),
@@ -116,7 +112,6 @@ async fn sum_with_var_list_and_comprehension() {
                     Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(2),
@@ -127,7 +122,6 @@ async fn sum_with_var_list_and_comprehension() {
                     Arc::new(ExprValue::Int(3)),
                 ])))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(3),
@@ -266,7 +260,6 @@ async fn nested_list_comp_with_reified_vars() {
             let expected_vars = Vec::from([
                 Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                     ScriptVar::new(
-                        &mut BTreeMap::new(),
                         "main".to_string(),
                         "MyVar".into(),
                         None,
@@ -275,7 +268,6 @@ async fn nested_list_comp_with_reified_vars() {
                 )))),
                 Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                     ScriptVar::new(
-                        &mut BTreeMap::new(),
                         "main".to_string(),
                         "MyVar".into(),
                         None,
@@ -284,7 +276,6 @@ async fn nested_list_comp_with_reified_vars() {
                 )))),
                 Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                     ScriptVar::new(
-                        &mut BTreeMap::new(),
                         "main".to_string(),
                         "MyVar".into(),
                         None,
@@ -458,7 +449,6 @@ async fn nested_if_with_variables() {
     match result_scaled {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -509,15 +499,12 @@ async fn function_returning_constraint_system() {
 
             // Check sum constraint: V(1) + V(2) + V(3) === 2
             let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             ))))
@@ -527,14 +514,12 @@ async fn function_returning_constraint_system() {
             // Check bound constraints for each variable
             for x in [1, 2, 3] {
                 let ge_constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
                     "V".into(),
                     vec![Arc::new(ExprValue::Int(x))],
                 )))
                 .geq(&LinExpr::constant(0.));
 
                 let le_constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
                     "V".into(),
                     vec![Arc::new(ExprValue::Int(x))],
                 )))
@@ -588,13 +573,11 @@ async fn function_composition_with_reified_vars() {
 
             // Expected: MyVar(1,5) + MyVar(2,5) <= 10
             let expected = (LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(5))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -661,11 +644,9 @@ async fn assignment_constraint_pattern() {
 
             // Student 1 exactly one: Assigned(1,1) + Assigned(1,2) === 1
             let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
             ))))
@@ -674,11 +655,9 @@ async fn assignment_constraint_pattern() {
 
             // Student 2 exactly one: Assigned(2,1) + Assigned(2,2) === 1
             let student2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(2))],
             ))))
@@ -687,11 +666,9 @@ async fn assignment_constraint_pattern() {
 
             // Slot 1 capacity: Assigned(1,1) + Assigned(2,1) <= 1
             let slot1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(1))],
             ))))
@@ -700,11 +677,9 @@ async fn assignment_constraint_pattern() {
 
             // Slot 2 capacity: Assigned(1,2) + Assigned(2,2) <= 1
             let slot2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(2))],
             ))))
@@ -762,12 +737,10 @@ async fn conditional_constraint_with_reification() {
 
             // Expected: Assigned(1,5) <= IsAvailable(1,5)
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "Assigned".into(),
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(5))],
             )))
             .leq(&LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "IsAvailable".into(),
                 None,
@@ -1005,11 +978,9 @@ async fn mixed_coercion_in_complex_expression() {
         ExprValue::LinExpr(lin_expr) => {
             // 2*$V(1) + 4*$V(2)
             let expected = 2 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + 4 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -1123,7 +1094,6 @@ async fn all_features_combined() {
 
             // Verify some constraints exist
             let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -1134,25 +1104,21 @@ async fn all_features_combined() {
 
             // Verify sum constraint exists
             let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(4))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -1255,7 +1221,6 @@ async fn all_features_combined_with_let() {
 
             // Verify some constraints exist
             let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -1265,7 +1230,6 @@ async fn all_features_combined_with_let() {
             assert!(constraints.contains(&constraint_1_3));
 
             let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -1276,25 +1240,21 @@ async fn all_features_combined_with_let() {
 
             // Verify sum constraint exists
             let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(4))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,

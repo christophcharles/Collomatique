@@ -22,7 +22,6 @@ async fn base_var_simple() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![]
         ))))
@@ -48,7 +47,6 @@ async fn base_var_with_int_param() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(42))]
         ))))
@@ -74,7 +72,6 @@ async fn base_var_with_bool_param() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Bool(true))]
         ))))
@@ -107,7 +104,6 @@ async fn base_var_with_multiple_params() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![
                 Arc::new(ExprValue::Int(1)),
@@ -137,7 +133,6 @@ async fn base_var_with_function_param() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(42))]
         ))))
@@ -163,7 +158,6 @@ async fn base_var_with_expression_param() {
     assert_eq!(
         result,
         ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(15))]
         ))))
@@ -191,12 +185,8 @@ async fn base_var_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                )))
-                .eq(&LinExpr::constant(1.))
+                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                    .eq(&LinExpr::constant(1.))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -221,11 +211,8 @@ async fn base_var_in_arithmetic() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
-                "V".into(),
-                vec![],
-            ))) + LinExpr::constant(5.);
+            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -250,15 +237,8 @@ async fn multiple_base_vars() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
-                "V1".into(),
-                vec![],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
-                "V2".into(),
-                vec![],
-            )));
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
+                + LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -292,7 +272,6 @@ async fn script_var_simple_reify() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -330,7 +309,6 @@ async fn script_var_in_constraint() {
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -372,19 +350,16 @@ async fn script_var_with_sum() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(2))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -457,7 +432,6 @@ async fn script_var_multiple_params() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -494,7 +468,6 @@ async fn script_var_no_params() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -529,7 +502,6 @@ async fn script_var_with_arithmetic() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -569,13 +541,11 @@ async fn multiple_script_vars() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar1".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(5))],
             ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar2".into(),
                 None,
@@ -610,13 +580,11 @@ async fn script_var_and_base_var_mixed() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(10))],
             ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "BaseV".into(),
                 vec![Arc::new(ExprValue::Int(10))],
             )));
@@ -665,7 +633,6 @@ async fn var_list_simple_reify() {
                         assert_eq!(
                             le,
                             &LinExpr::var(IlpVar::Script(ScriptVar::new(
-                                &mut BTreeMap::new(),
                                 "main".to_string(),
                                 "MyVars".into(),
                                 Some(idx),
@@ -711,13 +678,11 @@ async fn var_list_in_sum() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
@@ -762,19 +727,16 @@ async fn var_list_in_constraint() {
             assert_eq!(
                 constraint,
                 (LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![Arc::new(list.clone())]
                 ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(2),
@@ -818,7 +780,6 @@ async fn var_list_with_forall() {
             let constraints = strip_origins(&constraints);
 
             let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(0),
@@ -828,7 +789,6 @@ async fn var_list_with_forall() {
             assert!(constraints.contains(&constraint));
 
             let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(1),
@@ -902,7 +862,6 @@ async fn var_list_with_multiple_params() {
             assert_eq!(linexprs.len(), 2);
             let lin_expr1 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                 ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
@@ -912,7 +871,6 @@ async fn var_list_with_multiple_params() {
             assert!(linexprs.contains(&lin_expr1));
             let lin_expr2 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                 ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
@@ -1087,7 +1045,6 @@ async fn var_in_if_expression() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Script(ScriptVar::new(
-                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,

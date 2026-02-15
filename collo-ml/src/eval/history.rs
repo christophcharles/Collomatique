@@ -28,7 +28,6 @@ pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
         BTreeMap<(String, String, Vec<Arc<ExprValue<T, D::Connection>>>), (String, String)>,
     pub(crate) var_lists:
         BTreeMap<(String, String, Vec<Arc<ExprValue<T, D::Connection>>>), (String, String)>,
-    pub(crate) var_str_cache: BTreeMap<Vec<Arc<ExprValue<T, D::Connection>>>, Arc<str>>,
     pub(crate) queries: BTreeMap<
         (String, String, Vec<Arc<ExprValue<T, D::Connection>>>),
         Arc<ExprValue<T, D::Connection>>,
@@ -42,7 +41,6 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             funcs: BTreeMap::new(),
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
-            var_str_cache: BTreeMap::new(),
             queries: BTreeMap::new(),
         }
     }

@@ -51,7 +51,6 @@ async fn eval_with_variables_simple_reified_var() {
     assert_eq!(my_var_constraints.len(), 1);
 
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(5))],
     )))
@@ -109,7 +108,6 @@ async fn eval_with_variables_multiple_calls_same_var() {
         .0;
     assert_eq!(my_var_3_constraints.len(), 1);
     let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(3))],
     )))
@@ -125,7 +123,6 @@ async fn eval_with_variables_multiple_calls_same_var() {
         .0;
     assert_eq!(my_var_7_constraints.len(), 1);
     let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(7))],
     )))
@@ -193,7 +190,6 @@ async fn eval_with_variables_in_forall() {
             .0;
         assert_eq!(my_var_constraints.len(), 1);
         let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(i))],
         )))
@@ -263,7 +259,6 @@ async fn eval_with_variables_multiple_vars() {
     )]
         .0;
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V1".into(),
         vec![Arc::new(ExprValue::Int(5))],
     )))
@@ -278,7 +273,6 @@ async fn eval_with_variables_multiple_vars() {
     )]
         .0;
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V2".into(),
         vec![Arc::new(ExprValue::Int(10))],
     )))
@@ -339,7 +333,6 @@ async fn eval_with_variables_var_with_multiple_params() {
         .0;
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
     )))
@@ -410,14 +403,12 @@ async fn eval_with_variables_simple_var_list() {
 
         // Should be either $V(3, 7) === 1 or $V(3, 7) <== 10
         let c1 = LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
         .eq(&LinExpr::constant(1.));
 
         let c2 = LinExpr::var(IlpVar::Base(ExternVar::new(
-            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
@@ -566,7 +557,6 @@ async fn eval_with_variables_with_let_expr() {
         .0;
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(10))],
     )))

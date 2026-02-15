@@ -95,11 +95,7 @@ async fn add_linexpr_with_int_coercion() {
             // Should be: 1 * $V() + 5
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                ))) + 5.
+                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![]))) + 5.
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -127,11 +123,7 @@ async fn add_int_to_linexpr_coercion() {
             // Should be: 1 * $V() + 10
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                ))) + 10.
+                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![]))) + 10.
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -159,15 +151,8 @@ async fn add_two_linexprs() {
             // Should be: $V1() + $V2()
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V1".into(),
-                    vec![]
-                ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V2".into(),
-                    vec![]
-                )))
+                LinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
+                    + LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -286,11 +271,7 @@ async fn sub_linexpr_with_int() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                ))) - 3
+                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![]))) - 3
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -317,15 +298,8 @@ async fn sub_two_linexprs() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V1".into(),
-                    vec![]
-                ))) - LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V2".into(),
-                    vec![]
-                )))
+                LinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
+                    - LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -408,11 +382,7 @@ async fn mul_int_with_linexpr() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                5 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                )))
+                5 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -439,11 +409,7 @@ async fn mul_linexpr_with_int() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                3 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                )))
+                3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -470,11 +436,7 @@ async fn mul_with_param() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                10 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![]
-                )))
+                10 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),

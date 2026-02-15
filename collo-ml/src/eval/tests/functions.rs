@@ -223,11 +223,7 @@ async fn fn_call_with_linexpr_param() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 5 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
-                "V".into(),
-                vec![],
-            )));
+            let expected = 5 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -310,7 +306,6 @@ async fn fn_returning_linexpr() {
             assert_eq!(
                 lin_expr,
                 LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
                     "V".into(),
                     vec![Arc::new(ExprValue::Int(10))]
                 )))
@@ -426,11 +421,7 @@ async fn fn_call_int_coerced_in_addition() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::constant(10.)
-                + LinExpr::var(IlpVar::Base(ExternVar::new(
-                    &mut BTreeMap::new(),
-                    "V".into(),
-                    vec![],
-                )));
+                + LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -709,7 +700,6 @@ async fn fn_using_base_var() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
-                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(10))],
             ))) + LinExpr::constant(5.);
@@ -743,7 +733,6 @@ async fn fn_using_reified_var() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -780,7 +769,6 @@ async fn fn_calling_fn_with_reified_var() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
-                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
