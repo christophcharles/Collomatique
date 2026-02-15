@@ -101,14 +101,6 @@ impl<
 {
     fn build_vars() -> HashMap<String, Vec<ExprType>> {
         V::field_schema()
-            .into_iter()
-            .map(|(name, typ)| {
-                (
-                    name,
-                    typ.into_iter().map(|x| x.convert_to_expr_type()).collect(),
-                )
-            })
-            .collect()
     }
 
     /// Validate that a function exists with the correct signature.

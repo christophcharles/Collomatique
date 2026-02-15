@@ -11,11 +11,8 @@ async fn test_fix_forces_variable_values() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([(
-                "V".to_string(),
-                vec![crate::traits::SimpleFieldType::Int.into()],
-            )])
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
         }
 
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -57,7 +54,7 @@ async fn test_fix_forces_variable_values() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "V".into(),
                                 param: 0,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
+                                expected: SimpleType::Int.into(),
                             });
                         }
                     };

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use collo_ml::traits::SimpleFieldType;
+use collo_ml::SimpleType;
 use collo_ml::{EvalObject, ExprValue, SqliteDatabaseConnection, ViewObject};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -23,8 +23,8 @@ struct TestStudent {
 fn test_field_schema_generation() {
     let schema = TestStudent::field_schema();
     assert_eq!(schema.len(), 2);
-    assert_eq!(schema.get("age"), Some(&SimpleFieldType::Int.into()));
-    assert_eq!(schema.get("enrolled"), Some(&SimpleFieldType::Bool.into()));
+    assert_eq!(schema.get("age"), Some(&SimpleType::Int.into()));
+    assert_eq!(schema.get("enrolled"), Some(&SimpleType::Bool.into()));
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn test_collections_of_ints() {
     assert_eq!(schema.len(), 2);
     assert_eq!(
         schema.get("grades"),
-        Some(&SimpleFieldType::List(SimpleFieldType::Int.into()).into())
+        Some(&SimpleType::List(SimpleType::Int.into()).into())
     );
 
     let mut grades = Vec::new();
@@ -131,7 +131,7 @@ fn test_collections_of_bools() {
     let schema = StudentWithFlags::field_schema();
     assert_eq!(
         schema.get("flags"),
-        Some(&SimpleFieldType::List(SimpleFieldType::Bool.into()).into())
+        Some(&SimpleType::List(SimpleType::Bool.into()).into())
     );
 
     let mut flags = Vec::new();
@@ -299,10 +299,7 @@ fn test_schemas_for_recursive_vecs() {
     assert_eq!(schema.len(), 1);
     assert_eq!(
         schema.get("ages"),
-        Some(
-            &SimpleFieldType::List(SimpleFieldType::List(SimpleFieldType::Int.into()).into())
-                .into()
-        )
+        Some(&SimpleType::List(SimpleType::List(SimpleType::Int.into()).into()).into())
     );
 }
 

@@ -297,7 +297,7 @@ fn generate_eval_var_impl(
         impl ::collo_ml::EvalVar for #enum_name {
             type Env = #env_ty;
 
-            fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
+            fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::ExprType>> {
                 let mut schema = ::std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
@@ -324,12 +324,12 @@ fn generate_eval_var_impl(
 fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
     // Check if it's Option<T>
     if let Some(inner_ty) = unwrap_option_type(ty) {
-        // For Option<T>, we need to generate: FieldType::sum(vec![SimpleFieldType::None, <inner type>])
+        // For Option<T>, we need to generate: ExprType::sum(vec![SimpleType::None, <inner type>])
         let inner_type_expr = generate_field_type_expr_core(inner_ty);
 
         return quote! {
-            ::collo_ml::traits::FieldType::sum(vec![
-                ::collo_ml::traits::SimpleFieldType::None,
+            ::collo_ml::ExprType::sum(vec![
+                ::collo_ml::SimpleType::None,
                 #inner_type_expr
             ]).expect("Should have at least one variant")
         };
@@ -346,8 +346,8 @@ fn generate_field_type_expr_core(ty: &Type) -> proc_macro2::TokenStream {
             let type_name = segment.ident.to_string();
 
             match type_name.as_str() {
-                "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
-                "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
+                "i32" => quote! { ::collo_ml::SimpleType::Int.into() },
+                "bool" => quote! { ::collo_ml::SimpleType::Bool.into() },
                 "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
                 "Option" => panic!("Should not reach here - Option should be handled by caller"),
                 _ => {
@@ -745,7 +745,7 @@ fn generate_param_extraction(
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Int.into(),
+                                    expected: ::collo_ml::SimpleType::Int.into(),
                                 })
                             }
                         };
@@ -765,7 +765,7 @@ fn generate_param_extraction(
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Bool.into(),
+                                    expected: ::collo_ml::SimpleType::Bool.into(),
                                 })
                             }
                         };

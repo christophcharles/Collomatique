@@ -1,4 +1,5 @@
-use super::{EvalObject, FieldType};
+use super::EvalObject;
+use crate::ExprType;
 use crate::database::DatabaseConnection;
 use crate::eval::ExprValue;
 use std::collections::{BTreeSet, HashMap};
@@ -61,7 +62,7 @@ pub trait ViewObject {
     /// # Returns
     ///
     /// A map from field names to their types.
-    fn field_schema() -> HashMap<String, FieldType>;
+    fn field_schema() -> HashMap<String, ExprType>;
 
     /// Accesses a field by name and returns its value.
     ///

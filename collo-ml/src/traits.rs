@@ -124,15 +124,6 @@
 //! }
 //! ```
 //!
-//! # Type Information Flow
-//!
-//! The module uses intermediate types to handle type information across boundaries:
-//!
-//! - [`SimpleFieldType`]: Building blocks for field types (Int, Bool, Object, List)
-//! - [`FieldType`]: May represent simple types or sum types (unions), using `TypeId` for
-//!   object references
-//! - These are converted to [`SimpleType`]/[`ExprType`] by `EvalObject`
-//!
 //! # Caching
 //!
 //! View objects can be expensive to construct, especially if they involve database queries
@@ -203,11 +194,9 @@
 mod errors;
 mod eval_object;
 mod eval_var;
-mod field_types;
 mod view;
 
 pub use errors::{TypeConversionError, VarConversionError};
 pub use eval_object::EvalObject;
 pub use eval_var::EvalVar;
-pub use field_types::{FieldType, SimpleFieldType};
 pub use view::{ViewBuilder, ViewObject};

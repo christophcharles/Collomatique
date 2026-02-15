@@ -15,7 +15,7 @@ async fn two_objectives_same_script() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -176,7 +176,7 @@ async fn two_objectives_different_scripts() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -350,7 +350,7 @@ async fn objectives_with_different_senses() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),

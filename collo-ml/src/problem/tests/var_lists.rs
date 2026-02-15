@@ -13,7 +13,7 @@ async fn list_constraint_reification() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -134,11 +134,8 @@ async fn list_constraint_reification_exact_count_with_param() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([(
-                "X".to_string(),
-                vec![crate::traits::SimpleFieldType::Int.into()],
-            )])
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("X".to_string(), vec![SimpleType::Int.into()])])
         }
 
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -181,7 +178,7 @@ async fn list_constraint_reification_exact_count_with_param() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "X".into(),
                                 param: 0,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
+                                expected: SimpleType::Int.into(),
                             });
                         }
                     };

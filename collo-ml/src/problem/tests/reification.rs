@@ -13,7 +13,7 @@ async fn internal_reification() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -148,7 +148,7 @@ async fn private_reification_does_not_leak() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -277,7 +277,7 @@ async fn three_module_chain_define_reify_use() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {

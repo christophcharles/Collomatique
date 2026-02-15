@@ -11,7 +11,7 @@ async fn single_constraint_problem() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -92,7 +92,7 @@ async fn multiple_constraints_in_script() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -213,7 +213,7 @@ async fn multiple_function_calls() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -318,7 +318,7 @@ async fn constraints_from_different_modules() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {

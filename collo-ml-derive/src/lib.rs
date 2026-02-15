@@ -207,7 +207,7 @@ mod view_object;
 /// impl ::collo_ml::ViewObject for Student {
 ///     type EvalObject = ObjectId;
 ///     
-///     fn field_schema() -> HashMap<String, FieldType> {
+///     fn field_schema() -> HashMap<String, ExprType> {
 ///         // Maps field names to their types
 ///     }
 ///     
@@ -638,7 +638,7 @@ pub fn derive_eval_object(input: TokenStream) -> TokenStream {
 /// impl EvalVar for Var {
 ///     type Env = DynamicEnv;
 ///
-///     fn field_schema() -> HashMap<String, Vec<FieldType>> {
+///     fn field_schema() -> HashMap<String, Vec<ExprType>> {
 ///         // Maps DSL names to parameter types
 ///     }
 ///

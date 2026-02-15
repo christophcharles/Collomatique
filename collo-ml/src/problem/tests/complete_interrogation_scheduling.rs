@@ -24,13 +24,13 @@ async fn complete_interrogations_scheduling() {
 
     impl EvalVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([(
                 "StudentWithTeacher".to_string(),
                 vec![
-                    crate::traits::SimpleFieldType::Int.into(),
-                    crate::traits::SimpleFieldType::Int.into(),
-                    crate::traits::SimpleFieldType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
                 ],
             )])
         }
@@ -99,7 +99,7 @@ async fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 0,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
+                                expected: SimpleType::Int.into(),
                             });
                         }
                     };
@@ -109,7 +109,7 @@ async fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 1,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
+                                expected: SimpleType::Int.into(),
                             });
                         }
                     };
@@ -119,7 +119,7 @@ async fn complete_interrogations_scheduling() {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 2,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
+                                expected: SimpleType::Int.into(),
                             });
                         }
                     };

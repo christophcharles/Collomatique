@@ -1,4 +1,4 @@
-use super::FieldType;
+use crate::ExprType;
 use thiserror::Error;
 
 /// Error used in TryFrom auto-impl for converting between types
@@ -26,6 +26,6 @@ pub enum VarConversionError {
     WrongParameterType {
         name: String,
         param: usize,
-        expected: FieldType,
+        expected: ExprType,
     },
 }

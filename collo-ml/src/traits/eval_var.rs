@@ -1,4 +1,4 @@
-use super::FieldType;
+use crate::ExprType;
 use collomatique_ilp::UsableData;
 use std::collections::HashMap;
 
@@ -51,7 +51,7 @@ use std::collections::HashMap;
 /// ```ignore
 /// impl EvalVar for Var {
 ///     type Env = MyEnv;
-///     fn field_schema() -> HashMap<String, Vec<FieldType>> { /* ... */ }
+///     fn field_schema() -> HashMap<String, Vec<ExprType>> { /* ... */ }
 ///     fn vars(env: &MyEnv) -> Result<BTreeMap<Self, Variable>, TypeId> { /* ... */ }
 ///     fn fix(&self, env: &MyEnv) -> Option<f64> { /* ... */ }
 /// }
@@ -90,7 +90,7 @@ pub trait EvalVar: UsableData {
     type Env;
 
     /// Returns the schema describing all variable types and their parameters.
-    fn field_schema() -> HashMap<String, Vec<FieldType>>;
+    fn field_schema() -> HashMap<String, Vec<ExprType>>;
 
     /// Generates all valid variable instances by enumerating parameter combinations.
     ///

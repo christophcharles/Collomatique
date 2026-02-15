@@ -64,7 +64,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl ::collo_ml::ViewObject for #name {
             type EvalObject = #eval_object_type;
 
-            fn field_schema() -> ::std::collections::HashMap<String, ::collo_ml::traits::FieldType> {
+            fn field_schema() -> ::std::collections::HashMap<String, ::collo_ml::ExprType> {
                 let mut schema = ::std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
@@ -141,8 +141,8 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
             let type_name_str = type_name.to_string();
 
             match type_name_str.as_str() {
-                "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
-                "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
+                "i32" => quote! { ::collo_ml::SimpleType::Int.into() },
+                "bool" => quote! { ::collo_ml::SimpleType::Bool.into() },
                 "Vec" => {
                     // Extract the inner type from Vec<T>
                     if let PathArguments::AngleBracketed(args) = &segment.arguments
@@ -150,7 +150,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                     {
                         let inner_expr_type = type_to_field_type(inner_ty);
                         return quote! {
-                            ::collo_ml::traits::SimpleFieldType::List(#inner_expr_type).into()
+                            ::collo_ml::SimpleType::List(#inner_expr_type).into()
                         };
                     }
                     panic!("Vec must have a type parameter");
@@ -175,9 +175,9 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                         }
                         let inner_expr_type = type_to_field_type(inner_ty);
                         return quote! {
-                            ::collo_ml::traits::FieldType::sum(
+                            ::collo_ml::ExprType::sum(
                                 [
-                                    ::collo_ml::traits::SimpleFieldType::None,
+                                    ::collo_ml::SimpleType::None,
                                     #inner_expr_type
                                 ]
                             ).expect("Sum type should be valid")
@@ -185,7 +185,7 @@ fn type_to_field_type(ty: &Type) -> proc_macro2::TokenStream {
                     }
                     panic!("Vec must have a type parameter");
                 }
-                "String" => quote! { ::collo_ml::traits::SimpleFieldType::String.into() },
+                "String" => quote! { ::collo_ml::SimpleType::String.into() },
                 _ => {
                     panic!(
                         "Unsupported field type '{}' in ViewObject derive. Supported types: i32, bool, String, Vec<T>, Option<T>",
