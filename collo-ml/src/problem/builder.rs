@@ -9,7 +9,7 @@ use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedV
 use crate::database::DatabaseDriver;
 use crate::eval::{CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
 use crate::semantics::ArgsType;
-use crate::traits::{EvalObject, FieldConversionError, VarConversionError};
+use crate::traits::{EvalObject, VarConversionError};
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
@@ -102,23 +102,16 @@ impl<
         + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > ProblemBuilder<T, D, V>
 {
-    fn build_vars() -> Result<HashMap<String, Vec<ExprType>>, ProblemError<T, D::Connection>> {
+    fn build_vars() -> HashMap<String, Vec<ExprType>> {
         V::field_schema()
             .into_iter()
             .map(|(name, typ)| {
-                Ok((
+                (
                     name,
-                    typ.into_iter()
-                        .map(|x| x.convert_to_expr_type::<T>())
-                        .collect::<Result<_, _>>()
-                        .map_err(|e| match e {
-                            FieldConversionError::UnknownTypeId(type_id) => {
-                                ProblemError::EvalVarIncompatibleWithEvalObject(type_id)
-                            }
-                        })?,
-                ))
+                    typ.into_iter().map(|x| x.convert_to_expr_type()).collect(),
+                )
             })
-            .collect::<Result<_, _>>()
+            .collect()
     }
 
     /// Validate that a function exists with the correct signature.
@@ -172,7 +165,7 @@ impl<
     pub async fn new(
         modules: &BTreeMap<&str, &str>,
     ) -> Result<Self, ProblemError<T, D::Connection>> {
-        let base_vars = Self::build_vars()?;
+        let base_vars = Self::build_vars();
 
         // Compile all modules upfront
         let ast = CheckedAST::new(modules, base_vars.clone()).await?;

@@ -1,4 +1,3 @@
-use super::{EvalObject, FieldConversionError};
 use crate::semantics::{ExprType, SimpleType};
 use std::collections::BTreeSet;
 
@@ -37,12 +36,12 @@ pub enum SimpleFieldType {
 }
 
 impl SimpleFieldType {
-    pub fn convert_to_simple_type<T: EvalObject>(self) -> Result<SimpleType, FieldConversionError> {
+    pub fn convert_to_simple_type(self) -> SimpleType {
         match self {
-            SimpleFieldType::None => Ok(SimpleType::None),
-            SimpleFieldType::Bool => Ok(SimpleType::Bool),
-            SimpleFieldType::Int => Ok(SimpleType::Int),
-            SimpleFieldType::List(typ) => Ok(SimpleType::List(typ.convert_to_expr_type::<T>()?)),
+            SimpleFieldType::None => SimpleType::None,
+            SimpleFieldType::Bool => SimpleType::Bool,
+            SimpleFieldType::Int => SimpleType::Int,
+            SimpleFieldType::List(typ) => SimpleType::List(typ.convert_to_expr_type()),
         }
     }
 }
@@ -165,14 +164,14 @@ impl FieldType {
         &self.variants
     }
 
-    pub fn convert_to_expr_type<T: EvalObject>(self) -> Result<ExprType, FieldConversionError> {
-        Ok(ExprType::sum(
+    pub fn convert_to_expr_type(self) -> ExprType {
+        ExprType::sum(
             self.variants
                 .into_iter()
-                .map(|x| x.convert_to_simple_type::<T>())
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|x| x.convert_to_simple_type())
+                .collect::<Vec<_>>(),
         )
-        .expect("There should always be at least one variant"))
+        .expect("There should always be at least one variant")
     }
 }
 

@@ -1,12 +1,6 @@
 use super::FieldType;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
-pub enum FieldConversionError {
-    #[error("Cannot convert value: unknown TypeId")]
-    UnknownTypeId(std::any::TypeId),
-}
-
 /// Error used in TryFrom auto-impl for converting between types
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum TypeConversionError {

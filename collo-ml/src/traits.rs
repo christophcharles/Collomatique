@@ -206,7 +206,7 @@ mod eval_var;
 mod field_types;
 mod view;
 
-pub use errors::{FieldConversionError, TypeConversionError, VarConversionError};
+pub use errors::{TypeConversionError, VarConversionError};
 pub use eval_object::EvalObject;
 pub use eval_var::EvalVar;
 pub use field_types::{FieldType, SimpleFieldType};
