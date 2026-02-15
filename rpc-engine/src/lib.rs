@@ -42,9 +42,8 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         .map_err(|e| anyhow!("Error creating DB connection: {}", e))?;
 
     let colloscope = inner_data.colloscope;
-    let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
+    let env = inner_data.params;
     let main_script = env
-        .get_params()
         .main_script
         .as_deref()
         .unwrap_or(get_default_main_module());

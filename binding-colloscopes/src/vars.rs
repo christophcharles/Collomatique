@@ -1,9 +1,9 @@
 use super::tools::*;
-use super::views::Env;
 use collo_ml::EvalVar;
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
-#[env(Env)]
+#[env(Parameters)]
 pub enum Var {
     #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]
     GroupInInterrogationInternal {
@@ -25,21 +25,20 @@ pub enum Var {
 }
 
 impl Var {
-    fn compute_max_group_num(env: &Env, group_list: &i32) -> f64 {
+    fn compute_max_group_num(env: &Parameters, group_list: &i32) -> f64 {
         use collomatique_state_colloscopes::ids::Id;
         let group_list_id =
             unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list_data = match env.params.group_lists.group_list_map.get(&group_list_id) {
+        let group_list_data = match env.group_lists.group_list_map.get(&group_list_id) {
             Some(data) => data,
             None => return 0.,
         };
         (group_list_data.params.group_names.len() as i32 - 1) as f64
     }
 
-    fn compute_slot_range(env: &Env) -> std::ops::Range<i32> {
+    fn compute_slot_range(env: &Parameters) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let ids = env
-            .params
             .slots
             .subject_map
             .iter()
@@ -52,27 +51,25 @@ impl Var {
         Self::compute_range_from_iter(ids)
     }
 
-    fn enumerate_weeks_for_slot(env: &Env, slot: &i32) -> Vec<i32> {
+    fn enumerate_weeks_for_slot(env: &Parameters, slot: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        let Some((subject_id, pos)) = env.params.slots.find_slot_subject_and_position(slot_id)
-        else {
+        let Some((subject_id, pos)) = env.slots.find_slot_subject_and_position(slot_id) else {
             return vec![];
         };
-        let slot_desc = &env.params.slots.subject_map[&subject_id].ordered_slots[pos].1;
+        let slot_desc = &env.slots.subject_map[&subject_id].ordered_slots[pos].1;
         let subject_desc = env
-            .params
             .subjects
             .find_subject(subject_id)
             .expect("Subject ID should be valid");
 
-        let week_pattern = crate::tools::extract_week_pattern(&env.params, slot_desc.week_pattern);
+        let week_pattern = crate::tools::extract_week_pattern(env, slot_desc.week_pattern);
         let mut output = vec![];
         for (week, status) in week_pattern.into_iter().enumerate() {
             if !status {
                 continue;
             }
-            let (period, _) = crate::tools::week_to_period_id(&env.params, week)
+            let (period, _) = crate::tools::week_to_period_id(env, week)
                 .expect("Week should correspond to some period");
             if subject_desc.excluded_periods.contains(&period) {
                 continue;
@@ -83,26 +80,25 @@ impl Var {
         output
     }
 
-    fn compute_week_range(env: &Env, slot: &i32) -> std::ops::Range<i32> {
+    fn compute_week_range(env: &Parameters, slot: &i32) -> std::ops::Range<i32> {
         let weeks = Self::enumerate_weeks_for_slot(env, slot);
         Self::compute_range_from_iter(weeks.into_iter())
     }
 
-    fn compute_group_range(env: &Env, slot: &i32, week: &i32) -> std::ops::Range<i32> {
+    fn compute_group_range(env: &Parameters, slot: &i32, week: &i32) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
         let week_num = *week as usize;
         let default_range = 0..0;
-        let subject_id = match env.params.slots.find_slot_subject_and_position(slot_id) {
+        let subject_id = match env.slots.find_slot_subject_and_position(slot_id) {
             Some((subject_id, _pos)) => subject_id,
             None => return default_range,
         };
-        let period_id = match week_to_period_id(&env.params, week_num) {
+        let period_id = match week_to_period_id(env, week_num) {
             Some((id, _)) => id,
             None => return default_range,
         };
-        let period_associations = match env.params.group_lists.subjects_associations.get(&period_id)
-        {
+        let period_associations = match env.group_lists.subjects_associations.get(&period_id) {
             Some(period_associations) => period_associations,
             None => return default_range,
         };
@@ -110,7 +106,7 @@ impl Var {
             Some(id) => id,
             None => return default_range,
         };
-        let group_list = match env.params.group_lists.group_list_map.get(group_list_id) {
+        let group_list = match env.group_lists.group_list_map.get(group_list_id) {
             Some(group_list) => group_list,
             None => return default_range,
         };
@@ -134,10 +130,9 @@ impl Var {
         group_list_min..group_list_max + 1
     }
 
-    fn compute_group_list_range(env: &Env) -> std::ops::Range<i32> {
+    fn compute_group_list_range(env: &Parameters) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let ids = env
-            .params
             .group_lists
             .group_list_map
             .keys()
@@ -145,11 +140,11 @@ impl Var {
         Self::compute_range_from_iter(ids)
     }
 
-    fn compute_student_ids(env: &Env, group_list: &i32) -> Vec<i32> {
+    fn compute_student_ids(env: &Parameters, group_list: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let group_list_id =
             unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list = match env.params.group_lists.group_list_map.get(&group_list_id) {
+        let group_list = match env.group_lists.group_list_map.get(&group_list_id) {
             Some(group_list) => group_list,
             None => return Vec::new(),
         };
@@ -157,7 +152,6 @@ impl Var {
             collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                 excluded_students,
             } => env
-                .params
                 .students
                 .student_map
                 .keys()
@@ -177,16 +171,16 @@ impl Var {
         }
     }
 
-    fn compute_student_range(env: &Env, group_list: &i32) -> std::ops::Range<i32> {
+    fn compute_student_range(env: &Parameters, group_list: &i32) -> std::ops::Range<i32> {
         let ids = Self::compute_student_ids(env, group_list);
         Self::compute_range_from_iter(ids.into_iter())
     }
 
-    fn fix_student_group(env: &Env, student: &i32, group_list: &i32) -> Option<f64> {
+    fn fix_student_group(env: &Parameters, student: &i32, group_list: &i32) -> Option<f64> {
         use collomatique_state_colloscopes::ids::Id;
         let group_list_id =
             unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list_data = match env.params.group_lists.group_list_map.get(&group_list_id) {
+        let group_list_data = match env.group_lists.group_list_map.get(&group_list_id) {
             Some(data) => data,
             None => return Some(-1.),
         };
@@ -214,10 +208,15 @@ impl Var {
         Some(num as f64)
     }
 
-    fn fix_group_in_interrogation(env: &Env, slot: &i32, week: &i32, group: &i32) -> Option<f64> {
+    fn fix_group_in_interrogation(
+        env: &Parameters,
+        slot: &i32,
+        week: &i32,
+        group: &i32,
+    ) -> Option<f64> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        if env.params.slots.find_slot(slot_id).is_none() {
+        if env.slots.find_slot(slot_id).is_none() {
             return Some(0.0); // Non existent slot, so obviously not in it
         };
 

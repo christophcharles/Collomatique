@@ -1,17 +1,17 @@
-use crate::{tools, views::Env};
+use crate::tools;
 use collomatique_ilp::ConfigData;
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 
 use collomatique_state_colloscopes::ids::Id;
 
 use super::vars::Var;
 
-pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
+pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
 
     for (group_list_id, group_list) in &colloscope.group_lists {
         let data_group_list = env
-            .params
             .group_lists
             .group_list_map
             .get(group_list_id)
@@ -31,7 +31,7 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.params.periods.ordered_period_list {
+    for (period_id, period_desc) in &env.periods.ordered_period_list {
         let period = colloscope
             .period_map
             .get(period_id)
@@ -65,12 +65,11 @@ pub fn build_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
     config_data
 }
 
-pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<Var> {
+pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = build_config(env, colloscope);
 
-    for (group_list_id, group_list) in &env.params.group_lists.group_list_map {
+    for (group_list_id, group_list) in &env.group_lists.group_list_map {
         let data_group_list = env
-            .params
             .group_lists
             .group_list_map
             .get(group_list_id)
@@ -78,7 +77,7 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
         if data_group_list.is_prefilled() {
             continue;
         }
-        for student_id in env.params.students.student_map.keys() {
+        for student_id in env.students.student_map.keys() {
             if group_list.filling.excluded_students().contains(student_id) {
                 continue;
             }
@@ -94,21 +93,19 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.params.periods.ordered_period_list {
+    for (period_id, period_desc) in &env.periods.ordered_period_list {
         let period = colloscope
             .period_map
             .get(period_id)
             .expect("Period ID should be valid");
 
         let subject_associations = env
-            .params
             .group_lists
             .subjects_associations
             .get(period_id)
             .expect("Period Id should be valid");
         for (slot_id, slot) in &period.slot_map {
             let (subject_id, _pos) = env
-                .params
                 .slots
                 .find_slot_subject_and_position(*slot_id)
                 .expect("Slot ID should be valid");
@@ -117,7 +114,6 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
                 continue;
             };
             let group_list = env
-                .params
                 .group_lists
                 .group_list_map
                 .get(group_list_id)
@@ -153,8 +149,8 @@ pub fn build_complete_config(env: &Env, colloscope: &Colloscope) -> ConfigData<V
     config_data
 }
 
-pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Colloscope> {
-    let mut colloscope = Colloscope::new_empty_from_params(&env.params);
+pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Option<Colloscope> {
+    let mut colloscope = Colloscope::new_empty_from_params(env);
 
     for (var, value) in config_data.get_values() {
         match var {
@@ -181,8 +177,7 @@ pub fn build_colloscope(env: &Env, config_data: &ConfigData<Var>) -> Option<Coll
                 }
                 let slot_id =
                     unsafe { collomatique_state_colloscopes::ids::SlotId::new(slot as u64) };
-                let (period_id, num_in_period) =
-                    tools::week_to_period_id(&env.params, week as usize)?;
+                let (period_id, num_in_period) = tools::week_to_period_id(env, week as usize)?;
                 let collo_period = colloscope.period_map.get_mut(&period_id)?;
                 let collo_slot = collo_period.slot_map.get_mut(&slot_id)?;
                 let collo_interrogation_opt = collo_slot.interrogations.get_mut(num_in_period)?;

@@ -59,7 +59,7 @@ pub enum ColloscopeOutput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
-    env: collomatique_binding_colloscopes::views::Env,
+    env: collomatique_state_colloscopes::colloscope_params::Parameters,
     problem: collo_ml::problem::Problem<
         collo_ml::SqliteDatabaseConnection,
         collomatique_binding_colloscopes::vars::Var,
@@ -417,7 +417,7 @@ impl Component for Colloscope {
                                     self.compute_ilp_repr(sender.clone());
                                 }
                                 Some(Ok(ilp_repr)) => {
-                                    if *ilp_repr.ilp_problem.env.get_params() != self.params {
+                                    if ilp_repr.ilp_problem.env != self.params {
                                         self.compute_ilp_repr(sender.clone());
                                     } else if ilp_repr.colloscope != self.colloscope {
                                         let ilp_problem = ilp_repr.ilp_problem.clone();
@@ -557,7 +557,7 @@ impl Component for Colloscope {
             ColloscopeCommandOutput::IlpProblemComputed(result) => {
                 match result {
                     Ok(ilp_problem) => {
-                        if *ilp_problem.env.get_params() != self.params {
+                        if ilp_problem.env != self.params {
                             return; // Ignore old computation that are no longer relevant
                         }
                         self.recompute_warnings(sender, ilp_problem);
@@ -568,7 +568,7 @@ impl Component for Colloscope {
                 }
             }
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
-                if *ilp_repr.ilp_problem.env.get_params() != self.params {
+                if ilp_repr.ilp_problem.env != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
                 self.update_ilp_repr(Some(Ok(ilp_repr)));
@@ -631,8 +631,7 @@ impl Colloscope {
         sender.oneshot_command(async move {
             let result: Result<IlpProblem, String> = async {
                 let inner_data = collomatique_state_colloscopes::InnerData { params, colloscope };
-                let env =
-                    collomatique_binding_colloscopes::views::Env::from(inner_data.params.clone());
+                let env = inner_data.params.clone();
 
                 let pool = sqlx::SqlitePool::connect(":memory:")
                     .await
