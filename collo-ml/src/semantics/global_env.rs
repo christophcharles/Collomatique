@@ -247,10 +247,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         &self.functions
     }
 
-    pub fn get_predefined_vars(&self) -> &HashMap<String, ArgsType> {
-        &self.external_variables
-    }
-
     pub fn get_vars(&self) -> &HashMap<(String, String), VariableDesc> {
         &self.internal_variables
     }

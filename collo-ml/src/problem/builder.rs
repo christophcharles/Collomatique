@@ -99,10 +99,6 @@ impl<
     V: EvalVar + for<'b> TryFrom<&'b ExternVar<T, D::Connection>, Error = VarConversionError>,
 > ProblemBuilder<T, D, V>
 {
-    fn build_vars() -> HashMap<String, Vec<ExprType>> {
-        V::field_schema()
-    }
-
     /// Validate that a function exists with the correct signature.
     /// Returns `Ok(true)` if the first argument is a database schema (needs_db),
     /// `Ok(false)` otherwise.
@@ -154,7 +150,7 @@ impl<
     pub async fn new(
         modules: &BTreeMap<&str, &str>,
     ) -> Result<Self, ProblemError<T, D::Connection>> {
-        let base_vars = Self::build_vars();
+        let base_vars = V::field_schema();
 
         // Compile all modules upfront
         let ast = CheckedAST::new(modules, base_vars.clone()).await?;

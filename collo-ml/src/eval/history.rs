@@ -35,16 +35,6 @@ pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
 }
 
 impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
-    pub(crate) fn new(ast: &'a CheckedAST<T, D>) -> Self {
-        EvalHistory {
-            ast,
-            funcs: BTreeMap::new(),
-            vars: BTreeMap::new(),
-            var_lists: BTreeMap::new(),
-            queries: BTreeMap::new(),
-        }
-    }
-
     async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,

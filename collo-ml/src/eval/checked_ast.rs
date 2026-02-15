@@ -113,10 +113,6 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         })
     }
 
-    pub fn get_type_info(&self) -> &TypeInfo {
-        &self.type_info
-    }
-
     pub fn get_warnings(&self) -> &Vec<SemWarning> {
         &self.warnings
     }
@@ -180,7 +176,13 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
     }
 
     pub fn start_eval_history(&self) -> EvalHistory<'_, T, D> {
-        EvalHistory::new(self)
+        EvalHistory {
+            ast: self,
+            funcs: BTreeMap::new(),
+            vars: BTreeMap::new(),
+            var_lists: BTreeMap::new(),
+            queries: BTreeMap::new(),
+        }
     }
 
     pub async fn eval_fn(

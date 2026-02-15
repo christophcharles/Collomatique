@@ -193,19 +193,6 @@ impl SimpleType {
         matches!(self, SimpleType::Struct(_))
     }
 
-    /// Check if this type is valid as the inner type of a query return value.
-    /// Valid types are: Struct, Tuple, Int, Bool, String
-    pub fn is_sql_compatible_inner(&self) -> bool {
-        matches!(
-            self,
-            SimpleType::Struct(_)
-                | SimpleType::Tuple(_)
-                | SimpleType::Int
-                | SimpleType::Bool
-                | SimpleType::String
-        )
-    }
-
     pub fn get_struct_fields(&self) -> Option<&BTreeMap<String, ExprType>> {
         match self {
             SimpleType::Struct(fields) => Some(fields),
