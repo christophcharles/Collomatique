@@ -9,12 +9,15 @@ use std::sync::Arc;
 #[tokio::test]
 async fn struct_construction_basic() {
     let input = "pub let f() -> {x: Int, y: Bool} = {x: 42, y: true};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -27,12 +30,15 @@ async fn struct_construction_basic() {
 #[tokio::test]
 async fn struct_construction_single_field() {
     let input = "pub let f() -> {value: Int} = {value: 100};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -44,12 +50,15 @@ async fn struct_construction_single_field() {
 #[tokio::test]
 async fn struct_construction_three_fields() {
     let input = "pub let f() -> {a: Int, b: Bool, c: String} = {a: 1, b: false, c: \"hello\"};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -66,12 +75,15 @@ async fn struct_construction_three_fields() {
 #[tokio::test]
 async fn struct_construction_with_params() {
     let input = "pub let f(x: Int, y: Bool) -> {x: Int, y: Bool} = {x: x, y: y};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10), ExprValue::Bool(true)])
         .await
         .expect("Should evaluate");
 
@@ -84,12 +96,15 @@ async fn struct_construction_with_params() {
 #[tokio::test]
 async fn struct_construction_with_expressions() {
     let input = "pub let f(x: Int) -> {total: Int, doubled: Int} = {total: x + 1, doubled: x * 2};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -102,12 +117,15 @@ async fn struct_construction_with_expressions() {
 #[tokio::test]
 async fn struct_empty() {
     let input = "pub let f() -> {} = {};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -122,12 +140,15 @@ async fn struct_empty() {
 async fn struct_field_order_in_literal() {
     // Fields written in different order than type declaration
     let input = "pub let f() -> {x: Int, y: Bool} = {y: true, x: 42};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -144,16 +165,19 @@ async fn struct_field_order_in_literal() {
 #[tokio::test]
 async fn struct_access_first_field() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> Int = s.x;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -163,16 +187,19 @@ async fn struct_access_first_field() {
 #[tokio::test]
 async fn struct_access_second_field() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> Bool = s.y;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -182,12 +209,15 @@ async fn struct_access_second_field() {
 #[tokio::test]
 async fn struct_access_on_literal() {
     let input = "pub let f() -> Int = {x: 10, y: 20}.x;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -197,12 +227,15 @@ async fn struct_access_on_literal() {
 #[tokio::test]
 async fn struct_access_second_on_literal() {
     let input = "pub let f() -> Int = {x: 10, y: 20}.y;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -216,12 +249,15 @@ async fn struct_access_second_on_literal() {
 #[tokio::test]
 async fn nested_struct_construction() {
     let input = "pub let f() -> {inner: {x: Int}} = {inner: {x: 42}};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -235,9 +271,12 @@ async fn nested_struct_construction() {
 #[tokio::test]
 async fn nested_struct_access() {
     let input = "pub let f(s: {inner: {x: Int}}) -> Int = s.inner.x;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut inner = BTreeMap::new();
     inner.insert("x".to_string(), Arc::new(ExprValue::Int(99)));
@@ -245,7 +284,7 @@ async fn nested_struct_access() {
     outer.insert("inner".to_string(), Arc::new(ExprValue::Struct(inner)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(outer)])
         .await
         .expect("Should evaluate");
 
@@ -255,12 +294,15 @@ async fn nested_struct_access() {
 #[tokio::test]
 async fn deeply_nested_struct_access() {
     let input = "pub let f() -> Int = {a: {b: {c: 123}}}.a.b.c;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -274,16 +316,19 @@ async fn deeply_nested_struct_access() {
 #[tokio::test]
 async fn struct_fields_in_arithmetic() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Int = s.x + s.y;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(10)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(32)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -293,16 +338,19 @@ async fn struct_fields_in_arithmetic() {
 #[tokio::test]
 async fn struct_fields_in_multiplication() {
     let input = "pub let f(s: {a: Int, b: Int}) -> Int = s.a * s.b;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("a".to_string(), Arc::new(ExprValue::Int(6)));
     struct_val.insert("b".to_string(), Arc::new(ExprValue::Int(7)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -316,16 +364,19 @@ async fn struct_fields_in_multiplication() {
 #[tokio::test]
 async fn struct_fields_in_comparison() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Bool = s.x < s.y;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(10)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -335,16 +386,19 @@ async fn struct_fields_in_comparison() {
 #[tokio::test]
 async fn struct_fields_equality() {
     let input = "pub let f(s: {x: Int, y: Int}) -> Bool = s.x == s.y;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(5)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Int(5)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -358,12 +412,15 @@ async fn struct_fields_equality() {
 #[tokio::test]
 async fn struct_containing_list() {
     let input = "pub let f() -> {items: [Int]} = {items: [1, 2, 3]};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -382,12 +439,15 @@ async fn struct_containing_list() {
 #[tokio::test]
 async fn list_of_structs() {
     let input = "pub let f() -> [{x: Int}] = [{x: 1}, {x: 2}];";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -408,9 +468,12 @@ async fn list_of_structs() {
 #[tokio::test]
 async fn struct_field_access_in_list_comprehension() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> [Int] = [p.x + p.y for p in points];";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
@@ -420,7 +483,7 @@ async fn struct_field_access_in_list_comprehension() {
     p2.insert("y".to_string(), Arc::new(ExprValue::Int(4)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -443,12 +506,15 @@ async fn struct_field_access_in_list_comprehension() {
 #[tokio::test]
 async fn struct_creation_in_list_comprehension() {
     let input = "pub let f(xs: [Int]) -> [{val: Int}] = [{val: x} for x in xs];";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -484,12 +550,15 @@ async fn struct_creation_in_list_comprehension() {
 #[tokio::test]
 async fn struct_in_if_expression() {
     let input = "pub let f(b: Bool) -> {x: Int} = if b { {x: 1} } else { {x: 2} };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .await
         .expect("Should evaluate");
 
@@ -501,12 +570,15 @@ async fn struct_in_if_expression() {
 #[tokio::test]
 async fn struct_in_if_expression_else() {
     let input = "pub let f(b: Bool) -> {x: Int} = if b { {x: 1} } else { {x: 2} };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .await
         .expect("Should evaluate");
 
@@ -518,12 +590,15 @@ async fn struct_in_if_expression_else() {
 #[tokio::test]
 async fn struct_in_let_expression() {
     let input = "pub let f() -> Int = let s = {x: 3, y: 7} { s.x + s.y };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -537,9 +612,12 @@ async fn struct_in_let_expression() {
 #[tokio::test]
 async fn struct_access_in_sum() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Int = sum p in points { p.x };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
@@ -552,7 +630,7 @@ async fn struct_access_in_sum() {
     p3.insert("y".to_string(), Arc::new(ExprValue::Int(30)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -571,9 +649,12 @@ async fn struct_access_in_sum() {
 async fn struct_access_in_forall() {
     let input =
         "pub let f(points: [{x: Int, y: Int}]) -> Bool = forall p in points { p.x <= p.y };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
@@ -583,7 +664,7 @@ async fn struct_access_in_forall() {
     p2.insert("y".to_string(), Arc::new(ExprValue::Int(5)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -600,9 +681,12 @@ async fn struct_access_in_forall() {
 #[tokio::test]
 async fn struct_access_in_forall_false() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Bool = forall p in points { p.x < p.y };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
@@ -612,7 +696,7 @@ async fn struct_access_in_forall_false() {
     p2.insert("y".to_string(), Arc::new(ExprValue::Int(5))); // Not strictly less
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -633,16 +717,19 @@ async fn struct_access_in_forall_false() {
 #[tokio::test]
 async fn struct_to_string() {
     let input = "pub let f(s: {x: Int, y: Bool}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
     struct_val.insert("y".to_string(), Arc::new(ExprValue::Bool(true)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -653,9 +740,12 @@ async fn struct_to_string() {
 #[tokio::test]
 async fn struct_to_string_three_fields() {
     let input = "pub let f(s: {a: Int, b: Bool, c: String}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("a".to_string(), Arc::new(ExprValue::Int(1)));
@@ -666,7 +756,7 @@ async fn struct_to_string_three_fields() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -680,9 +770,12 @@ async fn struct_to_string_three_fields() {
 #[tokio::test]
 async fn nested_struct_to_string() {
     let input = "pub let f(s: {inner: {x: Int}}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut inner = BTreeMap::new();
     inner.insert("x".to_string(), Arc::new(ExprValue::Int(42)));
@@ -690,7 +783,7 @@ async fn nested_struct_to_string() {
     outer.insert("inner".to_string(), Arc::new(ExprValue::Struct(inner)));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(outer)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(outer)])
         .await
         .expect("Should evaluate");
 
@@ -700,12 +793,15 @@ async fn nested_struct_to_string() {
 #[tokio::test]
 async fn empty_struct_to_string() {
     let input = "pub let f(s: {}) -> String = String(s);";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(BTreeMap::new())])
+        .eval_fn("main", "f", vec![ExprValue::Struct(BTreeMap::new())])
         .await
         .expect("Should evaluate");
 
@@ -719,9 +815,12 @@ async fn empty_struct_to_string() {
 #[tokio::test]
 async fn struct_in_fold() {
     let input = "pub let f(points: [{x: Int, y: Int}]) -> Int = fold p in points with acc = 0 { acc + p.x + p.y };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut p1 = BTreeMap::new();
     p1.insert("x".to_string(), Arc::new(ExprValue::Int(1)));
@@ -731,7 +830,7 @@ async fn struct_in_fold() {
     p2.insert("y".to_string(), Arc::new(ExprValue::Int(4)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -748,12 +847,15 @@ async fn struct_in_fold() {
 #[tokio::test]
 async fn struct_as_fold_accumulator() {
     let input = "pub let f(xs: [Int]) -> {total: Int, prod: Int} = fold x in xs with acc = {total: 0, prod: 1} { {total: acc.total + x, prod: acc.prod * x} };";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::List(vec![
@@ -778,12 +880,15 @@ async fn struct_as_fold_accumulator() {
 #[tokio::test]
 async fn struct_containing_tuple() {
     let input = "pub let f() -> {point: (Int, Int)} = {point: (1, 2)};";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -801,12 +906,15 @@ async fn struct_containing_tuple() {
 #[tokio::test]
 async fn tuple_containing_struct() {
     let input = "pub let f() -> ({x: Int}, Bool) = ({x: 42}, true);";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -824,9 +932,12 @@ async fn tuple_containing_struct() {
 #[tokio::test]
 async fn struct_field_then_tuple_access() {
     let input = "pub let f(s: {point: (Int, Int)}) -> Int = s.point.0;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert(
@@ -838,7 +949,7 @@ async fn struct_field_then_tuple_access() {
     );
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
+        .eval_fn("main", "f", vec![ExprValue::Struct(struct_val)])
         .await
         .expect("Should evaluate");
 
@@ -848,15 +959,18 @@ async fn struct_field_then_tuple_access() {
 #[tokio::test]
 async fn tuple_then_struct_field_access() {
     let input = "pub let f(t: ({x: Int}, Bool)) -> Int = t.0.x;";
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut struct_val = BTreeMap::new();
     struct_val.insert("x".to_string(), Arc::new(ExprValue::Int(99)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::Tuple(vec![
@@ -884,16 +998,19 @@ async fn named_struct_field_access() {
         type Point = {x: Int, y: Int};
         pub let f(p: Point) -> Int = p.x + p.y;
     "#;
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let mut point = BTreeMap::new();
     point.insert("x".to_string(), Arc::new(ExprValue::Int(3)));
     point.insert("y".to_string(), Arc::new(ExprValue::Int(7)));
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![ExprValue::Custom(CustomValue {

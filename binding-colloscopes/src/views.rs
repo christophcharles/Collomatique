@@ -1,7 +1,6 @@
-use collo_ml::traits::FieldConversionError;
-use collo_ml::{DatabaseConnection, EvalObject, ExprType, ExprValue};
+use collo_ml::{EvalObject, ExprType};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Env {
@@ -25,28 +24,6 @@ pub enum ObjectId {}
 
 impl EvalObject for ObjectId {
     type Env = Env;
-    type Cache = ();
-
-    fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
-        BTreeSet::new()
-    }
-
-    fn typ_name(&self) -> String {
-        match *self {}
-    }
-
-    fn type_id_to_name(type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
-        Err(FieldConversionError::UnknownTypeId(type_id))
-    }
-
-    fn field_access<D: DatabaseConnection>(
-        &self,
-        _env: &Self::Env,
-        _cache: &mut Self::Cache,
-        _field: &str,
-    ) -> Option<ExprValue<Self, D>> {
-        match *self {}
-    }
 
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()

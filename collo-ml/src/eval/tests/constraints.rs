@@ -10,12 +10,13 @@ async fn constraint_eq_two_ints() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -38,12 +39,13 @@ async fn constraint_eq_var_with_int() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -52,8 +54,12 @@ async fn constraint_eq_var_with_int() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                .eq(&LinExpr::constant(42.));
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V".into(),
+                vec![],
+            )))
+            .eq(&LinExpr::constant(42.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -66,12 +72,13 @@ async fn constraint_eq_two_vars() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -79,10 +86,16 @@ async fn constraint_eq_two_vars() {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
-            let constraint =
-                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![]))).eq(
-                    &LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![]))),
-                );
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            )))
+            .eq(&LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V2".into(),
+                vec![],
+            ))));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -95,12 +108,13 @@ async fn constraint_eq_with_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -109,10 +123,12 @@ async fn constraint_eq_with_arithmetic() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint =
-                (2 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                    + LinExpr::constant(3.))
-                .eq(&LinExpr::constant(10.));
+            let constraint = (2 * LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V".into(),
+                vec![],
+            ))) + LinExpr::constant(3.))
+            .eq(&LinExpr::constant(10.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -125,12 +141,13 @@ async fn constraint_eq_with_params() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -139,7 +156,8 @@ async fn constraint_eq_with_params() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(5))],
             )))
@@ -158,12 +176,13 @@ async fn constraint_le_two_ints() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -185,12 +204,13 @@ async fn constraint_le_var_with_int() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -199,8 +219,12 @@ async fn constraint_le_var_with_int() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                .leq(&LinExpr::constant(100.));
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V".into(),
+                vec![],
+            )))
+            .leq(&LinExpr::constant(100.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -213,12 +237,13 @@ async fn constraint_le_with_arithmetic() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -227,10 +252,17 @@ async fn constraint_le_with_arithmetic() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint =
-                (3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
-                    + 2. * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![]))))
-                .leq(&LinExpr::constant(50.));
+            let constraint = (3 * LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            ))) + 2.
+                * LinExpr::var(IlpVar::Base(ExternVar::new(
+                    &mut BTreeMap::new(),
+                    "V2".into(),
+                    vec![],
+                ))))
+            .leq(&LinExpr::constant(50.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -243,12 +275,13 @@ async fn constraint_le_two_vars() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -257,10 +290,16 @@ async fn constraint_le_two_vars() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint =
-                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![]))).leq(
-                    &LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![]))),
-                );
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            )))
+            .leq(&LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V2".into(),
+                vec![],
+            ))));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -275,12 +314,13 @@ async fn constraint_ge_two_ints() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -302,12 +342,13 @@ async fn constraint_ge_var_with_int() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -316,8 +357,12 @@ async fn constraint_ge_var_with_int() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                .geq(&LinExpr::constant(0.));
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V".into(),
+                vec![],
+            )))
+            .geq(&LinExpr::constant(0.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -330,12 +375,13 @@ async fn constraint_ge_with_arithmetic() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -344,10 +390,16 @@ async fn constraint_ge_with_arithmetic() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint =
-                (LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
-                    + LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![]))))
-                .geq(&LinExpr::constant(10.));
+            let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V2".into(),
+                vec![],
+            ))))
+            .geq(&LinExpr::constant(10.));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -360,12 +412,13 @@ async fn constraint_ge_two_vars() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -374,10 +427,16 @@ async fn constraint_ge_two_vars() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint =
-                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![]))).geq(
-                    &LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![]))),
-                );
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            )))
+            .geq(&LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V2".into(),
+                vec![],
+            ))));
             assert!(constraints.contains(&constraint));
         }
         _ => panic!("Expected Constraint"),
@@ -392,12 +451,13 @@ async fn and_two_constraints() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -420,12 +480,13 @@ async fn and_constraint_chain() {
         ("V3".to_string(), vec![]),
     ]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -447,12 +508,13 @@ async fn and_mixed_constraint_types() {
         ("V3".to_string(), vec![]),
     ]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 

@@ -8,12 +8,13 @@ async fn let_expr_simple_binding() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .eval_fn("main", "f", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
 
@@ -26,12 +27,13 @@ async fn let_expr_arithmetic_value() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
@@ -44,12 +46,13 @@ async fn let_expr_nested_bindings() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(4)])
+        .eval_fn("main", "f", vec![ExprValue::Int(4)])
         .await
         .expect("Should evaluate");
 
@@ -63,18 +66,19 @@ async fn let_expr_with_boolean_value() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .eval_fn("main", "f", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
@@ -86,12 +90,13 @@ async fn let_expr_with_list_value() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -111,12 +116,13 @@ async fn let_expr_with_list_range() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -138,9 +144,10 @@ async fn let_expr_with_membership_test() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -149,13 +156,13 @@ async fn let_expr_with_membership_test() {
     ]));
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(2), list.clone()])
+        .eval_fn("main", "f", vec![ExprValue::Int(2), list.clone()])
         .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Bool(true));
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), list])
+        .eval_fn("main", "f", vec![ExprValue::Int(5), list])
         .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Bool(false));
@@ -167,18 +174,19 @@ async fn let_expr_with_if_body() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(15)])
+        .eval_fn("main", "f", vec![ExprValue::Int(15)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(1));
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
@@ -190,12 +198,13 @@ async fn let_expr_with_sum_body() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -209,12 +218,13 @@ async fn let_expr_with_forall_generating_constraints() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .eval_fn("main", "f", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
 
@@ -233,12 +243,13 @@ async fn let_expr_using_bound_var_multiple_times() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -252,12 +263,13 @@ async fn let_expr_with_constraint_value() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -266,7 +278,8 @@ async fn let_expr_with_constraint_value() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(5))],
             )))
@@ -284,12 +297,13 @@ async fn let_expr_with_linexpr_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .eval_fn("main", "f", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
 
@@ -298,7 +312,8 @@ async fn let_expr_with_linexpr_arithmetic() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             ))) + LinExpr::constant(5.))
@@ -316,12 +331,13 @@ async fn let_expr_with_constraint_combination() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(7)])
+        .eval_fn("main", "f", vec![ExprValue::Int(7)])
         .await
         .expect("Should evaluate");
 
@@ -331,7 +347,8 @@ async fn let_expr_with_constraint_combination() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let var = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let var = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(7))],
             )));
@@ -352,12 +369,13 @@ async fn let_expr_with_list_comprehension() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(4)])
+        .eval_fn("main", "f", vec![ExprValue::Int(4)])
         .await
         .expect("Should evaluate");
 
@@ -378,9 +396,10 @@ async fn let_expr_with_cardinality() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -389,7 +408,7 @@ async fn let_expr_with_cardinality() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
         .await
         .expect("Should evaluate");
 
@@ -402,9 +421,10 @@ async fn let_expr_with_collection_union() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list_a = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -416,7 +436,7 @@ async fn let_expr_with_collection_union() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list_a, list_b])
+        .eval_fn("main", "f", vec![list_a, list_b])
         .await
         .expect("Should evaluate");
 
@@ -437,12 +457,13 @@ async fn let_expr_shadowing_parameter() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(999)])
+        .eval_fn("main", "f", vec![ExprValue::Int(999)])
         .await
         .expect("Should evaluate");
 
@@ -456,12 +477,13 @@ async fn let_expr_shadowing_outer_let() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -488,20 +510,21 @@ async fn let_expr_complex_nested_computation() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     // x=10 -> a=20 -> b=25 -> c=75 -> c <= 100 so return c
     let result1 = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(75));
 
     // x=20 -> a=40 -> b=45 -> c=135 -> c > 100 so return a+b=85
     let result2 = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(20)])
+        .eval_fn("main", "f", vec![ExprValue::Int(20)])
         .await
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(85));
@@ -516,12 +539,13 @@ async fn let_expr_with_function_call() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(4)])
+        .eval_fn("main", "f", vec![ExprValue::Int(4)])
         .await
         .expect("Should evaluate");
 
@@ -535,12 +559,13 @@ async fn let_expr_returning_list_from_if() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(
@@ -553,7 +578,7 @@ async fn let_expr_returning_list_from_if() {
     );
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3)])
+        .eval_fn("main", "f", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
     assert_eq!(

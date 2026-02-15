@@ -15,11 +15,9 @@ async fn eval_with_variables_simple_reified_var() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
@@ -52,7 +50,8 @@ async fn eval_with_variables_simple_reified_var() {
     // MyVar(5) should have the constraint from base(5): $V(5) === 1
     assert_eq!(my_var_constraints.len(), 1);
 
-    let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(5))],
     )))
@@ -75,10 +74,9 @@ async fn eval_with_variables_multiple_calls_same_var() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![])
+        .eval_fn_with_variables("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -110,7 +108,8 @@ async fn eval_with_variables_multiple_calls_same_var() {
     )]
         .0;
     assert_eq!(my_var_3_constraints.len(), 1);
-    let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(3))],
     )))
@@ -125,7 +124,8 @@ async fn eval_with_variables_multiple_calls_same_var() {
     )]
         .0;
     assert_eq!(my_var_7_constraints.len(), 1);
-    let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(7))],
     )))
@@ -147,11 +147,9 @@ async fn eval_with_variables_in_forall() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(3)],
@@ -194,7 +192,8 @@ async fn eval_with_variables_in_forall() {
         )]
             .0;
         assert_eq!(my_var_constraints.len(), 1);
-        let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(i))],
         )))
@@ -222,11 +221,9 @@ async fn eval_with_variables_multiple_vars() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![
@@ -265,7 +262,8 @@ async fn eval_with_variables_multiple_vars() {
         vec![Arc::new(ExprValue::Int(5))],
     )]
         .0;
-    let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V1".into(),
         vec![Arc::new(ExprValue::Int(5))],
     )))
@@ -279,7 +277,8 @@ async fn eval_with_variables_multiple_vars() {
         vec![Arc::new(ExprValue::Int(10))],
     )]
         .0;
-    let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V2".into(),
         vec![Arc::new(ExprValue::Int(10))],
     )))
@@ -304,11 +303,9 @@ async fn eval_with_variables_var_with_multiple_params() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![
@@ -341,7 +338,8 @@ async fn eval_with_variables_var_with_multiple_params() {
     )]
         .0;
     assert_eq!(my_var_constraints.len(), 1);
-    let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
     )))
@@ -366,11 +364,9 @@ async fn eval_with_variables_simple_var_list() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![
@@ -413,13 +409,15 @@ async fn eval_with_variables_simple_var_list() {
         let constraint = constraints.iter().next().unwrap();
 
         // Should be either $V(3, 7) === 1 or $V(3, 7) <== 10
-        let c1 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        let c1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
         .eq(&LinExpr::constant(1.));
 
-        let c2 = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        let c2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
         )))
@@ -453,7 +451,6 @@ async fn eval_with_variables_var_list_in_nested_forall() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let xs = ExprValue::List(Vec::from([
         Arc::new(ExprValue::<NoObject, SqliteDatabaseConnection>::Int(1)),
@@ -465,7 +462,7 @@ async fn eval_with_variables_var_list_in_nested_forall() {
     ]));
 
     let (result, var_defs) = checked_ast
-        .eval_fn_with_variables(&env, "main", "f", vec![xs, ys])
+        .eval_fn_with_variables("main", "f", vec![xs, ys])
         .await
         .expect("Should evaluate");
 
@@ -536,11 +533,9 @@ async fn eval_with_variables_with_let_expr() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],
@@ -570,7 +565,8 @@ async fn eval_with_variables_with_let_expr() {
     )]
         .0;
     assert_eq!(my_var_constraints.len(), 1);
-    let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+    let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+        &mut BTreeMap::new(),
         "V".into(),
         vec![Arc::new(ExprValue::Int(10))],
     )))
@@ -590,11 +586,9 @@ async fn eval_with_variables_no_reified_vars() {
         CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
             .await
             .expect("Should compile");
-    let env = NoObjectEnv {};
 
     let (result, var_defs) = checked_ast
         .eval_fn_with_variables(
-            &env,
             "main",
             "f",
             vec![ExprValue::<NoObject, SqliteDatabaseConnection>::Int(5)],

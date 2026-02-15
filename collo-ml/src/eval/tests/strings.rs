@@ -8,12 +8,13 @@ async fn concat_two_strings() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("helloworld".to_string()));
@@ -25,12 +26,13 @@ async fn concat_with_space() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello world".to_string()));
@@ -42,12 +44,13 @@ async fn concat_with_empty_string_left() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello".to_string()));
@@ -59,12 +62,13 @@ async fn concat_with_empty_string_right() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello".to_string()));
@@ -76,12 +80,13 @@ async fn concat_two_empty_strings() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("".to_string()));
@@ -93,15 +98,16 @@ async fn concat_with_params() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let str1 = ExprValue::String("Hello, ".to_string());
     let str2 = ExprValue::String("World!".to_string());
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![str1, str2])
+        .eval_fn("main", "f", vec![str1, str2])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
@@ -113,12 +119,13 @@ async fn concat_chain() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
@@ -130,12 +137,13 @@ async fn concat_longer_chain() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, how are you?".to_string()));
@@ -147,12 +155,13 @@ async fn concat_with_unicode() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello 世界".to_string()));
@@ -164,12 +173,13 @@ async fn concat_with_newlines() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("line1\nline2".to_string()));
@@ -181,12 +191,13 @@ async fn concat_with_special_characters() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("tab:\tquote:\"".to_string()));
@@ -198,12 +209,13 @@ async fn concat_with_parentheses() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abcd".to_string()));
@@ -217,12 +229,13 @@ async fn sum_strings_in_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
@@ -234,12 +247,13 @@ async fn sum_strings_with_separator() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("hello world test ".to_string()));
@@ -251,12 +265,13 @@ async fn sum_empty_string_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("".to_string()));
@@ -268,12 +283,13 @@ async fn sum_strings_with_filter() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("abc".to_string()));
@@ -285,12 +301,13 @@ async fn sum_strings_with_transformation() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("aabbcc".to_string()));
@@ -304,18 +321,19 @@ async fn concat_in_if_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(true)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::String("yes!".to_string()));
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(false)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::String("no.".to_string()));
@@ -331,12 +349,13 @@ async fn concat_with_function_calls() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "greeting", vec![])
+        .eval_fn("main", "greeting", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
@@ -353,12 +372,13 @@ async fn concat_in_let_expression() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::String("Hello, World!".to_string()));
@@ -370,12 +390,13 @@ async fn concat_strings_with_tildes() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(

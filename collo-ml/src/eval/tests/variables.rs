@@ -9,18 +9,20 @@ async fn base_var_simple() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![]
         ))))
@@ -33,18 +35,20 @@ async fn base_var_with_int_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(42))]
         ))))
@@ -57,18 +61,20 @@ async fn base_var_with_bool_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Bool)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Bool(true))]
         ))))
@@ -88,18 +94,20 @@ async fn base_var_with_multiple_params() {
         ],
     )]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![
                 Arc::new(ExprValue::Int(1)),
@@ -116,18 +124,20 @@ async fn base_var_with_function_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(42)])
+        .eval_fn("main", "f", vec![ExprValue::Int(42)])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(42))]
         ))))
@@ -140,18 +150,20 @@ async fn base_var_with_expression_param() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
     assert_eq!(
         result,
-        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
+            &mut BTreeMap::new(),
             "V".into(),
             vec![Arc::new(ExprValue::Int(15))]
         ))))
@@ -164,12 +176,13 @@ async fn base_var_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -178,8 +191,12 @@ async fn base_var_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                    .eq(&LinExpr::constant(1.))
+                LinExpr::var(IlpVar::Base(ExternVar::new(
+                    &mut BTreeMap::new(),
+                    "V".into(),
+                    vec![]
+                )))
+                .eq(&LinExpr::constant(1.))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -192,20 +209,23 @@ async fn base_var_in_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected =
-                3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])))
-                    + LinExpr::constant(5.);
+            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V".into(),
+                vec![],
+            ))) + LinExpr::constant(5.);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -218,19 +238,27 @@ async fn multiple_base_vars() {
 
     let vars = HashMap::from([("V1".to_string(), vec![]), ("V2".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V1".into(), vec![])))
-                + LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V2".into(), vec![])));
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V1".into(),
+                vec![],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
+                "V2".into(),
+                vec![],
+            )));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -249,12 +277,13 @@ async fn script_var_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
+        .eval_fn("main", "g", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -262,7 +291,8 @@ async fn script_var_simple_reify() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -284,12 +314,13 @@ async fn script_var_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .eval_fn("main", "g", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
@@ -298,7 +329,8 @@ async fn script_var_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -321,9 +353,10 @@ async fn script_var_with_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -332,23 +365,26 @@ async fn script_var_with_sum() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![list])
+        .eval_fn("main", "g", vec![list])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(2))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -370,9 +406,10 @@ async fn script_var_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -380,7 +417,7 @@ async fn script_var_with_forall() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![list])
+        .eval_fn("main", "g", vec![list])
         .await
         .expect("Should evaluate");
 
@@ -405,12 +442,13 @@ async fn script_var_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(3), ExprValue::Int(7)])
+        .eval_fn("main", "g", vec![ExprValue::Int(3), ExprValue::Int(7)])
         .await
         .expect("Should evaluate");
 
@@ -418,7 +456,8 @@ async fn script_var_multiple_params() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -440,12 +479,13 @@ async fn script_var_no_params() {
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![])
+        .eval_fn("main", "g", vec![])
         .await
         .expect("Should evaluate");
 
@@ -453,7 +493,8 @@ async fn script_var_no_params() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -475,18 +516,20 @@ async fn script_var_with_arithmetic() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .eval_fn("main", "g", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
@@ -513,23 +556,26 @@ async fn multiple_script_vars() {
         ("V2".to_string(), vec![ExprType::simple(SimpleType::Int)]),
     ]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(5)])
+        .eval_fn("main", "g", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar1".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(5))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar2".into(),
                 None,
@@ -551,23 +597,26 @@ async fn script_var_and_base_var_mixed() {
 
     let vars = HashMap::from([("BaseV".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(10)])
+        .eval_fn("main", "g", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVar".into(),
                 None,
                 vec![Arc::new(ExprValue::Int(10))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+                &mut BTreeMap::new(),
                 "BaseV".into(),
                 vec![Arc::new(ExprValue::Int(10))],
             )));
@@ -589,9 +638,10 @@ async fn var_list_simple_reify() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -600,7 +650,7 @@ async fn var_list_simple_reify() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list.clone()])
+        .eval_fn("main", "i", vec![list.clone()])
         .await
         .expect("Should evaluate");
 
@@ -614,7 +664,8 @@ async fn var_list_simple_reify() {
                     ExprValue::LinExpr(le) => {
                         assert_eq!(
                             le,
-                            &LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                            &LinExpr::var(IlpVar::Script(ScriptVar::new(
+                                &mut BTreeMap::new(),
                                 "main".to_string(),
                                 "MyVars".into(),
                                 Some(idx),
@@ -640,9 +691,10 @@ async fn var_list_in_sum() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -650,7 +702,7 @@ async fn var_list_in_sum() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![list.clone()])
+        .eval_fn("main", "g", vec![list.clone()])
         .await
         .expect("Should evaluate");
 
@@ -658,12 +710,14 @@ async fn var_list_in_sum() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![Arc::new(list.clone())]
-                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
@@ -685,9 +739,10 @@ async fn var_list_in_constraint() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -696,7 +751,7 @@ async fn var_list_in_constraint() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "g", vec![list.clone()])
+        .eval_fn("main", "g", vec![list.clone()])
         .await
         .expect("Should evaluate");
 
@@ -706,17 +761,20 @@ async fn var_list_in_constraint() {
             let constraint = constraints.iter().next().unwrap().constraint.clone();
             assert_eq!(
                 constraint,
-                (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                (LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
                     vec![Arc::new(list.clone())]
-                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
                     vec![Arc::new(list.clone())]
-                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(2),
@@ -739,9 +797,10 @@ async fn var_list_with_forall() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -749,7 +808,7 @@ async fn var_list_with_forall() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list.clone()])
+        .eval_fn("main", "i", vec![list.clone()])
         .await
         .expect("Should evaluate");
 
@@ -758,7 +817,8 @@ async fn var_list_with_forall() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(0),
@@ -767,7 +827,8 @@ async fn var_list_with_forall() {
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint));
 
-            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let constraint = LinExpr::var(IlpVar::Script(ScriptVar::new(
+                &mut BTreeMap::new(),
                 "main".to_string(),
                 "MyVars".into(),
                 Some(1),
@@ -790,9 +851,10 @@ async fn var_list_cardinality() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -801,7 +863,7 @@ async fn var_list_cardinality() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list])
+        .eval_fn("main", "i", vec![list])
         .await
         .expect("Should evaluate");
 
@@ -820,9 +882,10 @@ async fn var_list_with_multiple_params() {
         vec![SimpleType::Int.into(), SimpleType::Int.into()],
     )]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -830,7 +893,7 @@ async fn var_list_with_multiple_params() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list.clone(), ExprValue::Int(10)])
+        .eval_fn("main", "i", vec![list.clone(), ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
 
@@ -838,7 +901,8 @@ async fn var_list_with_multiple_params() {
         ExprValue::List(linexprs) => {
             assert_eq!(linexprs.len(), 2);
             let lin_expr1 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                ScriptVar::new_no_env(
+                ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(0),
@@ -847,7 +911,8 @@ async fn var_list_with_multiple_params() {
             ))));
             assert!(linexprs.contains(&lin_expr1));
             let lin_expr2 = Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                ScriptVar::new_no_env(
+                ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVars".into(),
                     Some(1),
@@ -870,14 +935,15 @@ async fn var_list_empty_input() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let empty_list = ExprValue::List(Vec::new());
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![empty_list])
+        .eval_fn("main", "i", vec![empty_list])
         .await
         .expect("Should evaluate");
 
@@ -899,9 +965,10 @@ async fn var_list_in_list_comprehension() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
         Arc::new(ExprValue::Int(1)),
@@ -909,7 +976,7 @@ async fn var_list_in_list_comprehension() {
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list])
+        .eval_fn("main", "i", vec![list])
         .await
         .expect("Should evaluate");
 
@@ -936,15 +1003,16 @@ async fn var_list_with_collection_ops() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(1))]));
     let list2 = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(2))]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "i", vec![list1, list2])
+        .eval_fn("main", "i", vec![list1, list2])
         .await
         .expect("Should evaluate");
 
@@ -976,14 +1044,15 @@ async fn nested_reification_usage() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([Arc::new(ExprValue::Int(1))]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "final", vec![list])
+        .eval_fn("main", "final", vec![list])
         .await
         .expect("Should evaluate");
 
@@ -1003,12 +1072,13 @@ async fn var_in_if_expression() {
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(true)])
+        .eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(true)])
         .await
         .expect("Should evaluate");
 
@@ -1016,7 +1086,8 @@ async fn var_in_if_expression() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                LinExpr::var(IlpVar::Script(ScriptVar::new(
+                    &mut BTreeMap::new(),
                     "main".to_string(),
                     "MyVar".into(),
                     None,
@@ -1028,7 +1099,7 @@ async fn var_in_if_expression() {
     }
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(false)])
+        .eval_fn("main", "g", vec![ExprValue::Int(5), ExprValue::Bool(false)])
         .await
         .expect("Should evaluate");
 

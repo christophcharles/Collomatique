@@ -36,8 +36,6 @@ pub struct ScriptVar<T: EvalObject, D: DatabaseConnection> {
 
 impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
     pub fn new(
-        env: &T::Env,
-        cache: &mut T::Cache,
         var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
         module: String,
         name: String,
@@ -47,10 +45,7 @@ impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
         } else {
-            let args: Vec<_> = params
-                .iter()
-                .map(|x| x.convert_to_string(env, cache))
-                .collect();
+            let args: Vec<_> = params.iter().map(|x| x.convert_to_string()).collect();
             let s: Arc<str> = args.join(", ").into();
             var_str_cache.insert(params.clone(), s.clone());
             s
@@ -61,22 +56,6 @@ impl<T: EvalObject, D: DatabaseConnection> ScriptVar<T, D> {
             from_list,
             params,
             params_str,
-        }
-    }
-
-    pub fn new_no_env(
-        module: String,
-        name: String,
-        from_list: Option<usize>,
-        params: Vec<Arc<ExprValue<T, D>>>,
-    ) -> Self {
-        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
-        ScriptVar {
-            module,
-            name,
-            from_list,
-            params,
-            params_str: args.join(", ").into(),
         }
     }
 }
@@ -112,8 +91,6 @@ pub struct ExternVar<T: EvalObject, D: DatabaseConnection> {
 
 impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
     pub fn new(
-        env: &T::Env,
-        cache: &mut T::Cache,
         var_str_cache: &mut BTreeMap<Vec<Arc<ExprValue<T, D>>>, Arc<str>>,
         name: String,
         params: Vec<Arc<ExprValue<T, D>>>,
@@ -121,10 +98,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
         let params_str = if let Some(cached) = var_str_cache.get(&params) {
             cached.clone()
         } else {
-            let args: Vec<_> = params
-                .iter()
-                .map(|x| x.convert_to_string(env, cache))
-                .collect();
+            let args: Vec<_> = params.iter().map(|x| x.convert_to_string()).collect();
             let s: Arc<str> = args.join(", ").into();
             var_str_cache.insert(params.clone(), s.clone());
             s
@@ -133,15 +107,6 @@ impl<T: EvalObject, D: DatabaseConnection> ExternVar<T, D> {
             name,
             params,
             params_str,
-        }
-    }
-
-    pub fn new_no_env(name: String, params: Vec<Arc<ExprValue<T, D>>>) -> Self {
-        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
-        ExternVar {
-            name,
-            params,
-            params_str: args.join(", ").into(),
         }
     }
 }

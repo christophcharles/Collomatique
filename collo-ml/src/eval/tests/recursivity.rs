@@ -12,12 +12,15 @@ async fn function_forward_reference_simple() {
         let g() -> Int = 42;
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
@@ -30,12 +33,15 @@ async fn function_forward_reference_with_params() {
         let g(a: Int, b: Int) -> Int = a + b;
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
     // g(5, 10) = 5 + 10 = 15
@@ -50,12 +56,15 @@ async fn function_forward_reference_chain() {
         let c() -> Int = 42;
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "a", vec![])
+        .eval_fn("main", "a", vec![])
         .await
         .expect("Should evaluate");
     // a() -> b() -> c() -> 42
@@ -77,34 +86,37 @@ async fn direct_recursion_factorial() {
             if n == 0 { 1 } else { n * factorial(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // factorial(0) = 1
     let result0 = checked_ast
-        .quick_eval_fn("main", "factorial", vec![ExprValue::Int(0)])
+        .eval_fn("main", "factorial", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(result0, ExprValue::Int(1));
 
     // factorial(1) = 1
     let result1 = checked_ast
-        .quick_eval_fn("main", "factorial", vec![ExprValue::Int(1)])
+        .eval_fn("main", "factorial", vec![ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(1));
 
     // factorial(5) = 120
     let result5 = checked_ast
-        .quick_eval_fn("main", "factorial", vec![ExprValue::Int(5)])
+        .eval_fn("main", "factorial", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
     assert_eq!(result5, ExprValue::Int(120));
 
     // factorial(10) = 3628800
     let result10 = checked_ast
-        .quick_eval_fn("main", "factorial", vec![ExprValue::Int(10)])
+        .eval_fn("main", "factorial", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result10, ExprValue::Int(3628800));
@@ -122,13 +134,16 @@ async fn direct_recursion_countdown() {
             if n == 0 { 0 } else { countdown(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // Keep depth at 10 to work safely in both debug and release
     let result = checked_ast
-        .quick_eval_fn("main", "countdown", vec![ExprValue::Int(10)])
+        .eval_fn("main", "countdown", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(0));
@@ -142,27 +157,30 @@ async fn direct_recursion_sum_to_n() {
             if n == 0 { 0 } else { n + sum_to(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // sum_to(0) = 0
     let result0 = checked_ast
-        .quick_eval_fn("main", "sum_to", vec![ExprValue::Int(0)])
+        .eval_fn("main", "sum_to", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(result0, ExprValue::Int(0));
 
     // sum_to(5) = 5 + 4 + 3 + 2 + 1 = 15
     let result5 = checked_ast
-        .quick_eval_fn("main", "sum_to", vec![ExprValue::Int(5)])
+        .eval_fn("main", "sum_to", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
     assert_eq!(result5, ExprValue::Int(15));
 
     // sum_to(10) = 55
     let result10 = checked_ast
-        .quick_eval_fn("main", "sum_to", vec![ExprValue::Int(10)])
+        .eval_fn("main", "sum_to", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result10, ExprValue::Int(55));
@@ -176,27 +194,30 @@ async fn direct_recursion_fibonacci() {
             if n <= 1 { n } else { fib(n - 1) + fib(n - 2) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // fib(0) = 0
     let result0 = checked_ast
-        .quick_eval_fn("main", "fib", vec![ExprValue::Int(0)])
+        .eval_fn("main", "fib", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(result0, ExprValue::Int(0));
 
     // fib(1) = 1
     let result1 = checked_ast
-        .quick_eval_fn("main", "fib", vec![ExprValue::Int(1)])
+        .eval_fn("main", "fib", vec![ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(1));
 
     // fib(10) = 55
     let result10 = checked_ast
-        .quick_eval_fn("main", "fib", vec![ExprValue::Int(10)])
+        .eval_fn("main", "fib", vec![ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result10, ExprValue::Int(55));
@@ -210,13 +231,16 @@ async fn direct_recursion_constraint_function() {
             if n == 0 { 0 === 0 } else { n >== 0 and recursive_constraint(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // recursive_constraint(3) should produce constraints: 3 >= 0 and 2 >= 0 and 1 >= 0 and 0 == 0
     let result = checked_ast
-        .quick_eval_fn("main", "recursive_constraint", vec![ExprValue::Int(3)])
+        .eval_fn("main", "recursive_constraint", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
 
@@ -241,56 +265,59 @@ async fn mutual_recursion_even_odd() {
         pub let is_odd(n: Int) -> Bool = if n == 0 { false } else { is_even(n - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // Test is_even
     let even0 = checked_ast
-        .quick_eval_fn("main", "is_even", vec![ExprValue::Int(0)])
+        .eval_fn("main", "is_even", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(even0, ExprValue::Bool(true));
 
     let even1 = checked_ast
-        .quick_eval_fn("main", "is_even", vec![ExprValue::Int(1)])
+        .eval_fn("main", "is_even", vec![ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
     assert_eq!(even1, ExprValue::Bool(false));
 
     let even4 = checked_ast
-        .quick_eval_fn("main", "is_even", vec![ExprValue::Int(4)])
+        .eval_fn("main", "is_even", vec![ExprValue::Int(4)])
         .await
         .expect("Should evaluate");
     assert_eq!(even4, ExprValue::Bool(true));
 
     let even7 = checked_ast
-        .quick_eval_fn("main", "is_even", vec![ExprValue::Int(7)])
+        .eval_fn("main", "is_even", vec![ExprValue::Int(7)])
         .await
         .expect("Should evaluate");
     assert_eq!(even7, ExprValue::Bool(false));
 
     // Test is_odd
     let odd0 = checked_ast
-        .quick_eval_fn("main", "is_odd", vec![ExprValue::Int(0)])
+        .eval_fn("main", "is_odd", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(odd0, ExprValue::Bool(false));
 
     let odd1 = checked_ast
-        .quick_eval_fn("main", "is_odd", vec![ExprValue::Int(1)])
+        .eval_fn("main", "is_odd", vec![ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
     assert_eq!(odd1, ExprValue::Bool(true));
 
     let odd5 = checked_ast
-        .quick_eval_fn("main", "is_odd", vec![ExprValue::Int(5)])
+        .eval_fn("main", "is_odd", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
     assert_eq!(odd5, ExprValue::Bool(true));
 
     let odd6 = checked_ast
-        .quick_eval_fn("main", "is_odd", vec![ExprValue::Int(6)])
+        .eval_fn("main", "is_odd", vec![ExprValue::Int(6)])
         .await
         .expect("Should evaluate");
     assert_eq!(odd6, ExprValue::Bool(false));
@@ -306,34 +333,37 @@ async fn mutual_recursion_three_functions() {
         pub let start(n: Int) -> Int = a(n);
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // start(0) = a(0) = 0
     let result0 = checked_ast
-        .quick_eval_fn("main", "start", vec![ExprValue::Int(0)])
+        .eval_fn("main", "start", vec![ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(result0, ExprValue::Int(0));
 
     // start(1) = a(1) = b(0) = 1
     let result1 = checked_ast
-        .quick_eval_fn("main", "start", vec![ExprValue::Int(1)])
+        .eval_fn("main", "start", vec![ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(1));
 
     // start(2) = a(2) = b(1) = c(0) = 2
     let result2 = checked_ast
-        .quick_eval_fn("main", "start", vec![ExprValue::Int(2)])
+        .eval_fn("main", "start", vec![ExprValue::Int(2)])
         .await
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(2));
 
     // start(3) = a(3) = b(2) = c(1) = a(0) = 0
     let result3 = checked_ast
-        .quick_eval_fn("main", "start", vec![ExprValue::Int(3)])
+        .eval_fn("main", "start", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
     assert_eq!(result3, ExprValue::Int(0));
@@ -352,12 +382,15 @@ async fn type_forward_reference_simple() {
         pub let unwrap(a: A) -> [Int] = [Int(x) for x in [B](a)];
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
@@ -378,18 +411,21 @@ async fn type_forward_reference_in_function() {
         pub let unwrap(b: B) -> Int = Int(b);
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let f_result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
         .await
         .expect("Should evaluate");
 
     // Unwrap to verify the value
     let unwrap_result = checked_ast
-        .quick_eval_fn("main", "unwrap", vec![f_result])
+        .eval_fn("main", "unwrap", vec![f_result])
         .await
         .expect("Should evaluate");
     assert_eq!(unwrap_result, ExprValue::Int(5));
@@ -408,26 +444,29 @@ async fn guarded_recursion_tree_structure() {
         pub let leaf(v: Int) -> Tree = Tree(v, []);
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // Create a leaf node with value 42
     let leaf = checked_ast
-        .quick_eval_fn("main", "leaf", vec![ExprValue::Int(42)])
+        .eval_fn("main", "leaf", vec![ExprValue::Int(42)])
         .await
         .expect("Should evaluate");
 
     // Get value from leaf
     let value = checked_ast
-        .quick_eval_fn("main", "value", vec![leaf.clone()])
+        .eval_fn("main", "value", vec![leaf.clone()])
         .await
         .expect("Should evaluate");
     assert_eq!(value, ExprValue::Int(42));
 
     // Get children from leaf (should be empty)
     let children = checked_ast
-        .quick_eval_fn("main", "children", vec![leaf])
+        .eval_fn("main", "children", vec![leaf])
         .await
         .expect("Should evaluate");
     match children {
@@ -446,39 +485,42 @@ async fn recursive_function_with_recursive_type() {
         pub let node(v: Int, children: [Tree]) -> Tree = Tree(v, children);
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // Create a leaf with value 5
     let leaf5 = checked_ast
-        .quick_eval_fn("main", "leaf", vec![ExprValue::Int(5)])
+        .eval_fn("main", "leaf", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
     // sum_tree of a leaf should be just its value
     let sum_leaf = checked_ast
-        .quick_eval_fn("main", "sum_tree", vec![leaf5.clone()])
+        .eval_fn("main", "sum_tree", vec![leaf5.clone()])
         .await
         .expect("Should evaluate");
     assert_eq!(sum_leaf, ExprValue::Int(5));
 
     // Create another leaf
     let leaf3 = checked_ast
-        .quick_eval_fn("main", "leaf", vec![ExprValue::Int(3)])
+        .eval_fn("main", "leaf", vec![ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
 
     // Create a parent node with value 10 and two children
     let children = ExprValue::List(vec![Arc::new(leaf5), Arc::new(leaf3)]);
     let parent = checked_ast
-        .quick_eval_fn("main", "node", vec![ExprValue::Int(10), children])
+        .eval_fn("main", "node", vec![ExprValue::Int(10), children])
         .await
         .expect("Should evaluate");
 
     // sum_tree of parent should be 10 + 5 + 3 = 18
     let sum_parent = checked_ast
-        .quick_eval_fn("main", "sum_tree", vec![parent])
+        .eval_fn("main", "sum_tree", vec![parent])
         .await
         .expect("Should evaluate");
     assert_eq!(sum_parent, ExprValue::Int(18));
@@ -508,12 +550,15 @@ async fn reify_forward_reference_list() {
         pub let use_vars(x: Int) -> LinExpr = sum v in $[Vars](x) { v };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "use_vars", vec![ExprValue::Int(5)])
+        .eval_fn("main", "use_vars", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -538,23 +583,26 @@ async fn mixed_function_and_type_forward_refs() {
         pub let get_y(p: Point) -> Int = p.1;
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let point = checked_ast
-        .quick_eval_fn("main", "make_point", vec![])
+        .eval_fn("main", "make_point", vec![])
         .await
         .expect("Should evaluate");
 
     let x = checked_ast
-        .quick_eval_fn("main", "get_x", vec![point.clone()])
+        .eval_fn("main", "get_x", vec![point.clone()])
         .await
         .expect("Should evaluate");
     assert_eq!(x, ExprValue::Int(0));
 
     let y = checked_ast
-        .quick_eval_fn("main", "get_y", vec![point])
+        .eval_fn("main", "get_y", vec![point])
         .await
         .expect("Should evaluate");
     assert_eq!(y, ExprValue::Int(0));
@@ -569,17 +617,20 @@ async fn complex_forward_reference_scenario() {
         let helper(t: Tree) -> Int = t.0;
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let tree = checked_ast
-        .quick_eval_fn("main", "create_tree", vec![])
+        .eval_fn("main", "create_tree", vec![])
         .await
         .expect("Should evaluate");
 
     let value = checked_ast
-        .quick_eval_fn("main", "tree_value", vec![tree])
+        .eval_fn("main", "tree_value", vec![tree])
         .await
         .expect("Should evaluate");
     assert_eq!(value, ExprValue::Int(0));
@@ -596,15 +647,18 @@ async fn recursion_with_list_processing() {
             if |xs| == 0 { 0 } else { 1 + list_length([x for x in xs where x != xs[0]!]) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // Note: This is a quirky way to compute length that removes first element each time
     // For unique lists it works correctly
     let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result0 = checked_ast
-        .quick_eval_fn("main", "list_length", vec![empty])
+        .eval_fn("main", "list_length", vec![empty])
         .await
         .expect("Should evaluate");
     assert_eq!(result0, ExprValue::Int(0));
@@ -619,13 +673,16 @@ async fn recursion_with_accumulator_pattern() {
         pub let list_sum(xs: [Int]) -> Int = sum_helper(xs, 0);
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     let empty: ExprValue<_, SqliteDatabaseConnection> = ExprValue::List(vec![]);
     let result_empty = checked_ast
-        .quick_eval_fn("main", "list_sum", vec![empty])
+        .eval_fn("main", "list_sum", vec![empty])
         .await
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
@@ -636,7 +693,7 @@ async fn recursion_with_accumulator_pattern() {
         Arc::new(ExprValue::Int(3)),
     ]);
     let result123 = checked_ast
-        .quick_eval_fn("main", "list_sum", vec![list123])
+        .eval_fn("main", "list_sum", vec![list123])
         .await
         .expect("Should evaluate");
     assert_eq!(result123, ExprValue::Int(6));
@@ -649,27 +706,30 @@ async fn recursion_gcd() {
             if b == 0 { a } else { gcd(b, a % b) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // gcd(48, 18) = 6
     let result1 = checked_ast
-        .quick_eval_fn("main", "gcd", vec![ExprValue::Int(48), ExprValue::Int(18)])
+        .eval_fn("main", "gcd", vec![ExprValue::Int(48), ExprValue::Int(18)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(6));
 
     // gcd(100, 25) = 25
     let result2 = checked_ast
-        .quick_eval_fn("main", "gcd", vec![ExprValue::Int(100), ExprValue::Int(25)])
+        .eval_fn("main", "gcd", vec![ExprValue::Int(100), ExprValue::Int(25)])
         .await
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(25));
 
     // gcd(17, 13) = 1 (coprime)
     let result3 = checked_ast
-        .quick_eval_fn("main", "gcd", vec![ExprValue::Int(17), ExprValue::Int(13)])
+        .eval_fn("main", "gcd", vec![ExprValue::Int(17), ExprValue::Int(13)])
         .await
         .expect("Should evaluate");
     assert_eq!(result3, ExprValue::Int(1));
@@ -683,27 +743,30 @@ async fn recursion_power() {
             if exp == 0 { 1 } else { base * power(base, exp - 1) };
     "#;
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile");
+    let checked_ast = CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile");
 
     // 2^0 = 1
     let result1 = checked_ast
-        .quick_eval_fn("main", "power", vec![ExprValue::Int(2), ExprValue::Int(0)])
+        .eval_fn("main", "power", vec![ExprValue::Int(2), ExprValue::Int(0)])
         .await
         .expect("Should evaluate");
     assert_eq!(result1, ExprValue::Int(1));
 
     // 2^10 = 1024
     let result2 = checked_ast
-        .quick_eval_fn("main", "power", vec![ExprValue::Int(2), ExprValue::Int(10)])
+        .eval_fn("main", "power", vec![ExprValue::Int(2), ExprValue::Int(10)])
         .await
         .expect("Should evaluate");
     assert_eq!(result2, ExprValue::Int(1024));
 
     // 3^4 = 81
     let result3 = checked_ast
-        .quick_eval_fn("main", "power", vec![ExprValue::Int(3), ExprValue::Int(4)])
+        .eval_fn("main", "power", vec![ExprValue::Int(3), ExprValue::Int(4)])
         .await
         .expect("Should evaluate");
     assert_eq!(result3, ExprValue::Int(81));

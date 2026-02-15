@@ -4,7 +4,7 @@ use std::sync::Arc;
 /// Helper to compile multiple modules
 async fn compile_multi(modules: &[(&str, &str)]) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
     let inputs: BTreeMap<&str, &str> = modules.iter().copied().collect();
-    CheckedAST::new(&inputs, HashMap::new())
+    CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&inputs, HashMap::new())
         .await
         .expect("Should compile")
 }
@@ -17,13 +17,13 @@ async fn eval_functions_in_separate_modules() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result_a = checked_ast
-        .quick_eval_fn("mod_a", "add", vec![ExprValue::Int(2), ExprValue::Int(3)])
+        .eval_fn("mod_a", "add", vec![ExprValue::Int(2), ExprValue::Int(3)])
         .await
         .expect("Should evaluate");
     assert_eq!(result_a, ExprValue::Int(5));
 
     let result_b = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "mod_b",
             "multiply",
             vec![ExprValue::Int(2), ExprValue::Int(3)],
@@ -44,7 +44,7 @@ async fn eval_cross_module_function_call() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "mod_b",
             "add_three",
             vec![ExprValue::Int(1), ExprValue::Int(2), ExprValue::Int(3)],
@@ -65,7 +65,7 @@ async fn eval_cross_module_struct_creation() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
-        .quick_eval_fn("mod_b", "origin", vec![])
+        .eval_fn("mod_b", "origin", vec![])
         .await
         .expect("Should evaluate");
 
@@ -96,7 +96,7 @@ async fn eval_cross_module_enum_variant() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
-        .quick_eval_fn("mod_b", "make_some", vec![ExprValue::Int(42)])
+        .eval_fn("mod_b", "make_some", vec![ExprValue::Int(42)])
         .await
         .expect("Should evaluate");
 
@@ -129,7 +129,7 @@ async fn eval_cross_module_reified_variable() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
-        .quick_eval_fn("mod_b", "use_check", vec![ExprValue::Int(5)])
+        .eval_fn("mod_b", "use_check", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 
@@ -153,7 +153,7 @@ async fn eval_cross_module_reified_variable_list() {
     let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
 
     let result = checked_ast
-        .quick_eval_fn("mod_b", "use_check_list", vec![ExprValue::Int(5)])
+        .eval_fn("mod_b", "use_check_list", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate");
 

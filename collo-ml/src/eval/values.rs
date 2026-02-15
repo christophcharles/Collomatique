@@ -12,9 +12,9 @@ use super::database::DatabaseHandle;
 use super::variables::{ConstraintWithOrigin, IlpVar, Origin};
 use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
-use crate::traits::{EvalObject, FieldConversionError};
+use crate::traits::EvalObject;
 use collomatique_ilp::{Constraint, LinExpr};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -412,12 +412,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
         }
     }
 
-    pub unsafe fn convert_to_unchecked(
-        &self,
-        env: &T::Env,
-        cache: &mut T::Cache,
-        target: &SimpleType,
-    ) -> ExprValue<T, D> {
+    pub unsafe fn convert_to_unchecked(&self, target: &SimpleType) -> ExprValue<T, D> {
         match (self, target) {
             // This should also work for empty lists as the iterator will be empty
             (Self::List(list), SimpleType::List(inner_typ)) => {
@@ -426,16 +421,14 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     .expect("Inner list target type should have already been checked");
                 Self::List(
                     list.iter()
-                        .map(|x| {
-                            Arc::new(unsafe { x.convert_to_unchecked(env, cache, inner_target) })
-                        })
+                        .map(|x| Arc::new(unsafe { x.convert_to_unchecked(inner_target) }))
                         .collect(),
                 )
             }
             (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(*val as f64)),
             // Conversion to string
             (Self::String(v), SimpleType::String) => Self::String(v.clone()),
-            (v, SimpleType::String) => Self::String(v.convert_to_string(env, cache)),
+            (v, SimpleType::String) => Self::String(v.convert_to_string()),
             // Tuple conversion: element-wise
             (Self::Tuple(elements), SimpleType::Tuple(target_elems)) => {
                 let converted = elements
@@ -443,7 +436,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                     .zip(target_elems.iter())
                     .map(|(e, t)| {
                         let target_type = t.as_simple().expect("Type should be concrete");
-                        Arc::new(unsafe { e.convert_to_unchecked(env, cache, target_type) })
+                        Arc::new(unsafe { e.convert_to_unchecked(target_type) })
                     })
                     .collect();
                 Self::Tuple(converted)
@@ -456,8 +449,7 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                         let target_type = target_fields.get(k).expect("Field should exist");
                         let inner_target =
                             target_type.as_simple().expect("Type should be concrete");
-                        let converted_v =
-                            Arc::new(unsafe { v.convert_to_unchecked(env, cache, inner_target) });
+                        let converted_v = Arc::new(unsafe { v.convert_to_unchecked(inner_target) });
                         (k.clone(), converted_v)
                     })
                     .collect();
@@ -474,46 +466,35 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
             // Converting FROM a Custom type: unwrap and convert the content
             (Self::Custom(custom), target_typ) => {
                 // Recursively convert the inner content to the target type
-                unsafe { custom.content.convert_to_unchecked(env, cache, target_typ) }
+                unsafe { custom.content.convert_to_unchecked(target_typ) }
             }
             // Assume can_convert_to is correct so we just have the default behavior: return the current value
             (_, _) => self.clone(),
         }
     }
 
-    pub fn convert_to(
-        &self,
-        env: &T::Env,
-        cache: &mut T::Cache,
-        target: &ConcreteType,
-    ) -> Option<ExprValue<T, D>> {
+    pub fn convert_to(&self, target: &ConcreteType) -> Option<ExprValue<T, D>> {
         if !self.can_convert_to(target) {
             return None;
         }
 
-        Some(unsafe { self.convert_to_unchecked(env, cache, target.inner()) })
+        Some(unsafe { self.convert_to_unchecked(target.inner()) })
     }
 
-    pub(crate) fn convert_to_string(&self, env: &T::Env, cache: &mut T::Cache) -> String {
+    pub(crate) fn convert_to_string(&self) -> String {
         match self {
             Self::List(list) => {
-                let inners: Vec<_> = list
-                    .iter()
-                    .map(|x| x.convert_to_string(env, cache))
-                    .collect();
+                let inners: Vec<_> = list.iter().map(|x| x.convert_to_string()).collect();
                 format!("[{}]", inners.join(", "))
             }
             Self::Tuple(elements) => {
-                let inners: Vec<_> = elements
-                    .iter()
-                    .map(|x| x.convert_to_string(env, cache))
-                    .collect();
+                let inners: Vec<_> = elements.iter().map(|x| x.convert_to_string()).collect();
                 format!("({})", inners.join(", "))
             }
             Self::Struct(fields) => {
                 let inners: Vec<_> = fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.convert_to_string(env, cache)))
+                    .map(|(k, v)| format!("{}: {}", k, v.convert_to_string()))
                     .collect();
                 format!("{{{}}}", inners.join(", "))
             }
@@ -521,13 +502,13 @@ impl<T: EvalObject, D: DatabaseConnection> ExprValue<T, D> {
                 None => format!(
                     "{}({})",
                     custom.type_name,
-                    custom.content.convert_to_string(env, cache)
+                    custom.content.convert_to_string()
                 ),
                 Some(v) => format!(
                     "{}::{}({})",
                     custom.type_name,
                     v,
-                    custom.content.convert_to_string(env, cache)
+                    custom.content.convert_to_string()
                 ),
             },
             v => format!("{}", v),
@@ -543,28 +524,6 @@ pub struct NoObjectEnv {}
 
 impl EvalObject for NoObject {
     type Env = NoObjectEnv;
-    type Cache = ();
-
-    fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
-        BTreeSet::new()
-    }
-
-    fn typ_name(&self) -> String {
-        panic!("No object is defined for NoObject")
-    }
-
-    fn type_id_to_name(type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
-        Err(FieldConversionError::UnknownTypeId(type_id))
-    }
-
-    fn field_access<D: DatabaseConnection>(
-        &self,
-        _env: &Self::Env,
-        _cache: &mut Self::Cache,
-        _field: &str,
-    ) -> Option<ExprValue<Self, D>> {
-        None
-    }
 
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()

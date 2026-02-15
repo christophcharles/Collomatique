@@ -266,13 +266,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     .as_simple()
                     .expect("ComplexTypeCast should have a simple type as target");
 
-                Arc::new(unsafe {
-                    value.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        target_type,
-                    )
-                })
+                Arc::new(unsafe { value.convert_to_unchecked(target_type) })
             }
             Expr::StructCall { path, fields } => {
                 // Use resolve_path to determine what this path refers to
@@ -462,15 +456,11 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                     &eval_history.ast.global_env,
                     Some(&*self),
                 ) {
-                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => Arc::new(
-                        ExprValue::LinExpr(LinExpr::var(IlpVar::Base(ExternVar::new(
-                            eval_history.env,
-                            &mut eval_history.cache,
-                            &mut eval_history.var_str_cache,
-                            ext_var_name,
-                            args,
-                        )))),
-                    ),
+                    Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
+                        Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Base(
+                            ExternVar::new(&mut eval_history.var_str_cache, ext_var_name, args),
+                        ))))
+                    }
                     Ok(ResolvedPathKind::InternalVariable {
                         module: var_module,
                         name: var_name,
@@ -495,8 +485,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                         .await?;
                         Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                             ScriptVar::new(
-                                eval_history.env,
-                                &mut eval_history.cache,
                                 &mut eval_history.var_str_cache,
                                 var_module,
                                 var_name,
@@ -585,22 +573,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                let ExprValue::LinExpr(lin_expr1) = (unsafe {
-                    value1.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr1) =
+                    (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = (unsafe {
-                    value2.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr2) =
+                    (unsafe { value2.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -614,22 +594,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                let ExprValue::LinExpr(lin_expr1) = (unsafe {
-                    value1.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr1) =
+                    (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = (unsafe {
-                    value2.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr2) =
+                    (unsafe { value2.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -643,22 +615,14 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value2 =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(expr2))).await?;
 
-                let ExprValue::LinExpr(lin_expr1) = (unsafe {
-                    value1.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr1) =
+                    (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
-                let ExprValue::LinExpr(lin_expr2) = (unsafe {
-                    value2.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        &SimpleType::LinExpr,
-                    )
-                }) else {
+                let ExprValue::LinExpr(lin_expr2) =
+                    (unsafe { value2.convert_to_unchecked(&SimpleType::LinExpr) })
+                else {
                     panic!("Should be a LinExpr result")
                 };
 
@@ -1205,8 +1169,6 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                                 .map(|i| {
                                     Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                                         ScriptVar::new(
-                                            eval_history.env,
-                                            &mut eval_history.cache,
                                             &mut eval_history.var_str_cache,
                                             var_module.clone(),
                                             var_name.clone(),
@@ -1300,13 +1262,7 @@ impl<T: EvalObject, D: DatabaseDriver> LocalEvalEnv<T, D> {
                 let value =
                     Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(&args[0])))
                         .await?;
-                Ok(Arc::new(unsafe {
-                    value.convert_to_unchecked(
-                        eval_history.env,
-                        &mut eval_history.cache,
-                        simple_type,
-                    )
-                }))
+                Ok(Arc::new(unsafe { value.convert_to_unchecked(simple_type) }))
             }
 
             // Custom type casts: CustomType(x), Enum::Variant(x)

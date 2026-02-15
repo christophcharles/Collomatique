@@ -9,10 +9,8 @@
 use derivative::Derivative;
 
 use super::history::{EvalHistory, VariableDefinitions};
-use super::values::{ExprValue, NoObject, NoObjectEnv};
-use crate::database::{
-    DatabaseConnection, DatabaseDriver, SqliteDatabaseConnection, SqliteDatabaseDriver,
-};
+use super::values::ExprValue;
+use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,
@@ -52,23 +50,9 @@ pub enum CompileError {
     },
 }
 
-#[derive(Clone, Debug, Error)]
-pub enum EnvError<T: EvalObject> {
-    #[error("Typename {typ_name} used for object {obj:?} has bad format")]
-    BadTypeName { typ_name: String, obj: T },
-}
-
 #[derive(Derivative, Error)]
 #[derivative(Clone(bound = "T: EvalObject"), Debug(bound = "T: EvalObject"))]
 pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
-    #[error("Object of type {0} returns its type as being {1}")]
-    ObjectWithBadTypeName(String, String),
-    #[error("Object {object} of type {typ} does not have field {field}")]
-    MissingObjectField {
-        object: String,
-        typ: String,
-        field: String,
-    },
     #[error("Unknown function \"{0}\"")]
     UnknownFunction(String),
     #[error("Type mismatch for parameter {param}: expected {expected} but found {found:?}")]
@@ -89,21 +73,6 @@ pub enum EvalError<T: EvalObject, D: DatabaseConnection> {
     InvalidExprValue { param: usize },
     #[error("Panic: {0}")]
     Panic(Box<ExprValue<T, D>>),
-}
-
-impl CheckedAST<NoObject, SqliteDatabaseDriver> {
-    pub async fn quick_eval_fn(
-        &self,
-        module: &str,
-        fn_name: &str,
-        args: Vec<ExprValue<NoObject, SqliteDatabaseConnection>>,
-    ) -> Result<
-        ExprValue<NoObject, SqliteDatabaseConnection>,
-        EvalError<NoObject, SqliteDatabaseConnection>,
-    > {
-        let env = NoObjectEnv {};
-        self.eval_fn(&env, module, fn_name, args).await
-    }
 }
 
 impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
@@ -142,10 +111,6 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
             warnings,
             _phantom: std::marker::PhantomData,
         })
-    }
-
-    pub(crate) fn check_env(&self, _env: &T::Env) -> Result<(), EvalError<T, D::Connection>> {
-        Ok(())
     }
 
     pub fn get_type_info(&self) -> &TypeInfo {
@@ -214,36 +179,22 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
             .collect()
     }
 
-    pub fn start_eval_history<'a>(
-        &'a self,
-        env: &'a T::Env,
-    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D::Connection>> {
-        let cache = T::Cache::default();
-        EvalHistory::new(self, env, cache)
-    }
-
-    pub fn start_eval_history_with_cache<'a>(
-        &'a self,
-        env: &'a T::Env,
-        cache: T::Cache,
-    ) -> Result<EvalHistory<'a, T, D>, EvalError<T, D::Connection>> {
-        EvalHistory::new(self, env, cache)
+    pub fn start_eval_history(&self) -> EvalHistory<'_, T, D> {
+        EvalHistory::new(self)
     }
 
     pub async fn eval_fn(
         &self,
-        env: &T::Env,
         module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T, D::Connection>>,
     ) -> Result<ExprValue<T, D::Connection>, EvalError<T, D::Connection>> {
-        let mut eval_history = self.start_eval_history(env)?;
+        let mut eval_history = self.start_eval_history();
         Ok(eval_history.eval_fn(module, fn_name, args).await?.0)
     }
 
     pub async fn eval_fn_with_variables(
         &self,
-        env: &T::Env,
         module: &str,
         fn_name: &str,
         args: Vec<ExprValue<T, D::Connection>>,
@@ -254,7 +205,7 @@ impl<T: EvalObject, D: DatabaseDriver> CheckedAST<T, D> {
         ),
         EvalError<T, D::Connection>,
     > {
-        let mut eval_history = self.start_eval_history(env)?;
+        let mut eval_history = self.start_eval_history();
         let (r, _o) = eval_history.eval_fn(module, fn_name, args).await?;
         Ok((r, eval_history.into_var_def()))
     }

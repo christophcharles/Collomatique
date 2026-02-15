@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use collo_ml::traits::{FieldConversionError, SimpleFieldType};
-use collo_ml::{
-    DatabaseConnection, EvalObject, ExprType, ExprValue, SqliteDatabaseConnection, ViewObject,
-};
-use std::collections::{BTreeSet, HashMap};
+use collo_ml::traits::SimpleFieldType;
+use collo_ml::{EvalObject, ExprType, ExprValue, SqliteDatabaseConnection, ViewObject};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 struct TestObjectId;
@@ -12,25 +10,7 @@ struct TestObjectId;
 // Dummy implementation for testing
 impl EvalObject for TestObjectId {
     type Env = ();
-    type Cache = ();
 
-    fn field_access<D: DatabaseConnection>(
-        &self,
-        _env: &Self::Env,
-        _cache: &mut Self::Cache,
-        _field: &str,
-    ) -> Option<ExprValue<Self, D>> {
-        None
-    }
-    fn type_id_to_name(_field_typ: std::any::TypeId) -> Result<String, FieldConversionError> {
-        panic!("Not implemented for test")
-    }
-    fn objects_with_typ(_env: &Self::Env, _name: &str) -> BTreeSet<Self> {
-        BTreeSet::new()
-    }
-    fn typ_name(&self) -> String {
-        String::new()
-    }
     fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
         HashMap::new()
     }

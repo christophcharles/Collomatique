@@ -20,13 +20,13 @@ mod variables;
 mod tests;
 
 // Re-export public types
-pub use checked_ast::{CheckedAST, CompileError, EnvError, EvalError};
+pub use checked_ast::{CheckedAST, CompileError, EvalError};
 pub use database::{
     DatabaseConnection, DatabaseDriver, DatabaseHandle, DbValue, SqlQueryError,
     SqliteDatabaseConnection, SqliteDatabaseDriver,
 };
 pub use history::{EvalHistory, VariableDefinitions};
-pub use values::{CustomValue, ExprValue, NoObject, NoObjectEnv};
+pub use values::{CustomValue, ExprValue, NoObject, NoObjectEnv}; // NoObjectEnv kept for external users
 pub use variables::{ConstraintWithOrigin, ExternVar, IlpVar, Origin, ScriptVar, strip_origins};
 
 // Re-export traits and types used by eval (for backwards compatibility)
@@ -38,4 +38,4 @@ pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
 pub(crate) use collomatique_ilp::LinExpr;
 #[cfg(test)]
-pub(crate) use std::collections::HashMap;
+pub(crate) use std::collections::{BTreeMap, HashMap};

@@ -20,8 +20,6 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
     pub(crate) ast: &'a CheckedAST<T, D>,
-    pub(crate) env: &'a T::Env,
-    pub(crate) cache: T::Cache,
     pub(crate) funcs: BTreeMap<
         (String, String, Vec<Arc<ExprValue<T, D::Connection>>>),
         (Arc<ExprValue<T, D::Connection>>, Origin<T, D::Connection>),
@@ -38,23 +36,15 @@ pub struct EvalHistory<'a, T: EvalObject, D: DatabaseDriver> {
 }
 
 impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
-    pub(crate) fn new(
-        ast: &'a CheckedAST<T, D>,
-        env: &'a T::Env,
-        cache: T::Cache,
-    ) -> Result<Self, EvalError<T, D::Connection>> {
-        ast.check_env(env)?;
-
-        Ok(EvalHistory {
+    pub(crate) fn new(ast: &'a CheckedAST<T, D>) -> Self {
+        EvalHistory {
             ast,
-            env,
-            cache,
             funcs: BTreeMap::new(),
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
             var_str_cache: BTreeMap::new(),
             queries: BTreeMap::new(),
-        })
+        }
     }
 
     async fn prettify_docstring(
@@ -278,7 +268,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
         Ok((Arc::unwrap_or_clone(result), origin))
     }
 
-    pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T, D::Connection>, T::Cache) {
+    pub fn into_var_def(self) -> VariableDefinitions<T, D::Connection> {
         let mut var_def = VariableDefinitions {
             vars: BTreeMap::new(),
             var_lists: BTreeMap::new(),
@@ -337,11 +327,7 @@ impl<'a, T: EvalObject, D: DatabaseDriver> EvalHistory<'a, T, D> {
             );
         }
 
-        (var_def, self.cache)
-    }
-
-    pub fn into_var_def(self) -> VariableDefinitions<T, D::Connection> {
-        self.into_var_def_and_cache().0
+        var_def
     }
 }
 

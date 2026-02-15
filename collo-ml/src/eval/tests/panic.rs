@@ -9,11 +9,12 @@ async fn panic_returns_error_with_int() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("main", "f", vec![]).await;
+    let result = checked_ast.eval_fn("main", "f", vec![]).await;
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -30,11 +31,12 @@ async fn panic_returns_error_with_string() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("main", "f", vec![]).await;
+    let result = checked_ast.eval_fn("main", "f", vec![]).await;
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -51,11 +53,12 @@ async fn panic_returns_error_with_bool() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("main", "f", vec![]).await;
+    let result = checked_ast.eval_fn("main", "f", vec![]).await;
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -72,11 +75,12 @@ async fn panic_evaluates_expression_first() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("main", "f", vec![]).await;
+    let result = checked_ast.eval_fn("main", "f", vec![]).await;
 
     match result {
         Err(EvalError::Panic(value)) => {
@@ -93,12 +97,13 @@ async fn panic_with_param() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(99)])
+        .eval_fn("main", "f", vec![ExprValue::Int(99)])
         .await;
 
     match result {
@@ -116,13 +121,14 @@ async fn panic_in_else_branch_triggers() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     // x = -1, so else branch is taken
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(-1)])
+        .eval_fn("main", "f", vec![ExprValue::Int(-1)])
         .await;
 
     match result {
@@ -140,13 +146,14 @@ async fn panic_in_else_branch_not_triggered() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     // x = 5, so then branch is taken (panic not triggered)
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
         .await
         .expect("Should evaluate without panic");
 
@@ -159,11 +166,12 @@ async fn panic_with_list() {
 
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(&BTreeMap::from([("main", input)]), vars)
-        .await
-        .expect("Should compile");
+    let checked_ast =
+        CheckedAST::<NoObject, SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let result = checked_ast.quick_eval_fn("main", "f", vec![]).await;
+    let result = checked_ast.eval_fn("main", "f", vec![]).await;
 
     match result {
         Err(EvalError::Panic(value)) => {

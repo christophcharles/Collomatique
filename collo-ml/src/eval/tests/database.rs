@@ -13,9 +13,12 @@ use crate::semantics::database::DbConversionError;
 
 /// Build a CheckedAST (and therefore a GlobalEnv) from DSL source.
 async fn checked(input: &str) -> CheckedAST<NoObject, SqliteDatabaseDriver> {
-    CheckedAST::new(&BTreeMap::from([("main", input)]), HashMap::new())
-        .await
-        .expect("Should compile")
+    CheckedAST::<NoObject, SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", input)]),
+        HashMap::new(),
+    )
+    .await
+    .expect("Should compile")
 }
 
 async fn empty_ast() -> CheckedAST<NoObject, SqliteDatabaseDriver> {
@@ -1323,7 +1326,7 @@ async fn eval_query_call_list() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg])
+        .eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
@@ -1375,7 +1378,7 @@ async fn eval_query_call_optional_found() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
+        .eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
 
@@ -1414,7 +1417,7 @@ async fn eval_query_call_optional_not_found() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
+        .eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
         .await
         .expect("Should evaluate");
 
@@ -1650,7 +1653,7 @@ async fn eval_query_call_primitive_list() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg])
+        .eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
@@ -1681,7 +1684,7 @@ async fn eval_query_call_optional_primitive_found() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
+        .eval_fn("main", "run", vec![db_arg, ExprValue::Int(1)])
         .await
         .expect("Should evaluate");
 
@@ -1708,7 +1711,7 @@ async fn eval_query_call_optional_primitive_not_found() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
+        .eval_fn("main", "run", vec![db_arg, ExprValue::Int(999)])
         .await
         .expect("Should evaluate");
 
@@ -2059,7 +2062,7 @@ async fn eval_query_nullable_custom_type() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg])
+        .eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
@@ -2097,7 +2100,7 @@ async fn eval_query_nullable_custom_type_not_found() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg])
+        .eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 
@@ -2138,7 +2141,7 @@ async fn eval_query_deeply_nested_enum() {
         content: Arc::new(ExprValue::Database(handle)),
     });
     let result = ast
-        .quick_eval_fn("main", "run", vec![db_arg])
+        .eval_fn("main", "run", vec![db_arg])
         .await
         .expect("Should evaluate");
 

@@ -716,10 +716,7 @@ impl<
         // Phase 1: Evaluate all functions and collect results
         // We need to do this first because eval_history borrows self.ast
         let (constraint_results, objective_results, var_def) = {
-            let mut eval_history = builder
-                .ast
-                .start_eval_history_with_cache(env, T::Cache::default())
-                .expect("Environment should be compatible with AST");
+            let mut eval_history = builder.ast.start_eval_history();
 
             let db_value = db_connection
                 .map(|conn| ExprValue::Database(crate::eval::database::DatabaseHandle::new(conn)));
