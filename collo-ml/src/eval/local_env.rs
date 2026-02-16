@@ -7,10 +7,11 @@ use super::checked_ast::EvalError;
 use super::history::EvalHistory;
 use super::values::{CustomValue, ExprValue};
 use super::variables::{ExternVar, IlpVar, ScriptVar};
+use crate::Hashed;
 use crate::ast::{Span, Spanned};
 use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::semantics::{LocalEnvCheck, ResolvedPathKind, SimpleType, resolve_path};
-use collomatique_ilp::{Hashed, LinExpr};
+use collomatique_ilp::LinExpr;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 

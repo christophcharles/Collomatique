@@ -8,6 +8,7 @@ use super::solution::Problem;
 use super::types::{
     ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemError, ProblemVar, ReifiedVar,
 };
+use crate::Hashed;
 use crate::database::DatabaseDriver;
 use crate::eval::{
     CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, ScriptVar,
@@ -16,7 +17,7 @@ use crate::semantics::ArgsType;
 use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
-use collomatique_ilp::{Constraint, Hashed, LinExpr, Objective, ObjectiveSense, Variable};
+use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
 use derivative::Derivative;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;

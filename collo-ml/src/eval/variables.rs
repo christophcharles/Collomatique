@@ -8,9 +8,10 @@
 //! - `ConstraintWithOrigin`: A constraint paired with its origin
 
 use super::values::ExprValue;
+use crate::Hashed;
 use crate::ast::Spanned;
 use crate::database::DatabaseConnection;
-use collomatique_ilp::{Constraint, Hashed};
+use collomatique_ilp::Constraint;
 use derivative::Derivative;
 use std::sync::Arc;
 

@@ -7,9 +7,10 @@
 
 use super::types::{ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemVar};
 use crate::EvalVar;
+use crate::Hashed;
 use crate::database::DatabaseConnection;
 use collomatique_ilp::solvers::Solver;
-use collomatique_ilp::{ConfigData, Constraint, DefaultRepr, Hashed, LinExpr, Variable};
+use collomatique_ilp::{ConfigData, Constraint, DefaultRepr, LinExpr, Variable};
 use derivative::Derivative;
 use std::collections::HashMap;
 

@@ -1,5 +1,7 @@
 mod ast;
 pub mod database;
+mod hashed;
+pub(crate) use hashed::Hashed;
 pub mod eval;
 pub mod parser;
 pub mod problem;
