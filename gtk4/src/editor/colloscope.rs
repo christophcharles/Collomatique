@@ -1,4 +1,3 @@
-use collo_ml::eval::Origin;
 use collo_ml::problem::ConstraintDesc;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
@@ -70,7 +69,7 @@ pub struct IlpProblem {
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<Origin<collo_ml::SqliteDatabaseConnection>>,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -593,23 +592,23 @@ impl Colloscope {
                 .problem
                 .solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
-            let to_blame_list = sol.blame();
+            let warnings = sol
+                .blame()
+                .map(|(_constraint, desc)| {
+                    let ConstraintDesc::InScript { origin } = desc else {
+                        panic!(
+                            "Reification constraints should all be satisfied! {:?}",
+                            desc
+                        )
+                    };
+
+                    origin.to_string()
+                })
+                .collect();
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
                 ilp_problem,
                 colloscope,
-                warnings: to_blame_list
-                    .into_iter()
-                    .map(|(_constraint, desc)| {
-                        let ConstraintDesc::InScript { origin } = desc else {
-                            panic!(
-                                "Reification constraints should all be satisfied! {:?}",
-                                desc
-                            )
-                        };
-
-                        origin
-                    })
-                    .collect(),
+                warnings,
             })
         });
     }

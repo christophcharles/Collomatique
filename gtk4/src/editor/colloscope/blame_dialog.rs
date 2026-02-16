@@ -1,4 +1,3 @@
-use collo_ml::eval::Origin;
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::FactorySender;
 use relm4::factory::FactoryVecDeque;
@@ -9,7 +8,7 @@ use relm4::{adw, gtk};
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
-    warnings: Option<Result<Vec<Origin<collo_ml::SqliteDatabaseConnection>>, String>>,
+    warnings: Option<Result<Vec<String>, String>>,
     messages: FactoryVecDeque<Entry>,
 }
 
@@ -17,7 +16,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show,
     Close,
-    Update(Option<Result<Vec<Origin<collo_ml::SqliteDatabaseConnection>>, String>>),
+    Update(Option<Result<Vec<String>, String>>),
 }
 
 #[relm4::component(pub)]
@@ -190,7 +189,7 @@ impl Dialog {
     fn update_messages(&mut self) {
         let mut messages = vec![];
         if let Some(Ok(warnings)) = &self.warnings {
-            messages.extend(warnings.iter().map(|x| EntryData::Warning(x.to_string())));
+            messages.extend(warnings.iter().map(|x| EntryData::Warning(x.clone())));
         }
         // On Err, messages stays empty (error shown via label)
         super::super::tools::factories::update_vec_deque(

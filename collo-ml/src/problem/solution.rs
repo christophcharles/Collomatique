@@ -170,8 +170,11 @@ impl<'a, D: DatabaseConnection, V: EvalVar> Solution<'a, D, V> {
         })
     }
 
-    pub fn blame(&self) -> Vec<(Constraint<ProblemVar<D, V>>, ConstraintDesc<D>)> {
-        self.config.blame().cloned().collect()
+    pub fn blame<'b>(
+        &'b self,
+    ) -> impl ExactSizeIterator<Item = &'b (Constraint<ProblemVar<D, V>>, ConstraintDesc<D>)>
+    + use<'a, 'b, D, V> {
+        self.config.blame()
     }
 }
 
