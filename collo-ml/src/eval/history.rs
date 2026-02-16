@@ -256,10 +256,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
     ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
         let mut computed: HashMap<
             Hashed<VarKey<D::Connection>>,
-            (
-                Vec<Constraint<HashedIlpVar<D::Connection>>>,
-                Origin<D::Connection>,
-            ),
+            (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
         > = HashMap::new();
 
         let mut pending = std::mem::take(&mut self.vars);
@@ -285,17 +282,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                 ))
                 .await?;
 
-                let constraint = match &*fn_call_result {
-                    ExprValue::Constraint(c) => c
-                        .iter()
-                        .map(|c_with_o| c_with_o.constraint.clone())
-                        .collect::<Vec<_>>(),
-                    _ => panic!(
-                        "Fn call should have returned a constraint: {:?}",
-                        fn_call_result
-                    ),
-                };
-                computed.insert(hashed_key, (constraint, new_origin));
+                computed.insert(hashed_key, (fn_call_result, new_origin));
             }
             if self.vars.is_empty() {
                 break;
@@ -303,21 +290,29 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             pending = std::mem::take(&mut self.vars);
         }
 
-        let mut var_def = VariableDefinitions {
-            vars: HashMap::new(),
-        };
-        for (hashed_key, value) in computed {
-            var_def.vars.insert(hashed_key.into_inner(), value);
-        }
-        Ok(var_def)
+        // Drop the func cache so each Arc's refcount decreases,
+        // enabling try_unwrap to take ownership without cloning.
+        self.funcs.clear();
+
+        let vars = computed
+            .into_iter()
+            .map(|(hashed_key, (arc_result, origin))| {
+                let constraints = match Arc::unwrap_or_clone(arc_result) {
+                    ExprValue::Constraint(c) => {
+                        c.into_iter().map(|c_with_o| c_with_o.constraint).collect()
+                    }
+                    other => panic!("Fn call should have returned a constraint: {:?}", other),
+                };
+                (hashed_key, (constraints, origin))
+            })
+            .collect();
+
+        Ok(VariableDefinitions { vars })
     }
 }
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
-    pub vars: HashMap<
-        (String, String, Vec<Arc<ExprValue<D>>>),
-        (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>),
-    >,
+    pub vars: HashMap<Hashed<VarKey<D>>, (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>)>,
 }

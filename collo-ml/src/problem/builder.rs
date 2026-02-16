@@ -893,7 +893,8 @@ impl<
             ),
         >::new();
 
-        for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
+        for (hashed_key, (constraints, new_origin)) in var_def.vars {
+            let (var_module, var_name, var_args) = hashed_key.into_inner();
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
                 .map(|c: Constraint<HashedIlpVar<D::Connection>>| eval_data.clean_constraint(&c))

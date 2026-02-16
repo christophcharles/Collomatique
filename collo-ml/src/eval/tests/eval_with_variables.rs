@@ -1,4 +1,5 @@
 use super::*;
+use crate::Hashed;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -34,17 +35,17 @@ async fn eval_with_variables_simple_reified_var() {
     }
 
     // Check that MyVar with args [5] was defined
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(5))]
-    )));
+    ))));
 
-    let my_var_constraints = &var_defs.vars[&(
+    let my_var_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(5))],
-    )]
+    ))]
         .0;
 
     // MyVar(5) should have the constraint from base(5): $V(5) === 1
@@ -88,23 +89,23 @@ async fn eval_with_variables_multiple_calls_same_var() {
     }
 
     // Check that MyVar was called with both [3] and [7]
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3))]
-    )));
-    assert!(var_defs.vars.contains_key(&(
+    ))));
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(7))]
-    )));
+    ))));
 
     // Verify constraints for MyVar(3)
-    let my_var_3_constraints = &var_defs.vars[&(
+    let my_var_3_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3))],
-    )]
+    ))]
         .0;
     assert_eq!(my_var_3_constraints.len(), 1);
     let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new(
@@ -115,11 +116,11 @@ async fn eval_with_variables_multiple_calls_same_var() {
     assert!(my_var_3_constraints.contains(&expected_3));
 
     // Verify constraints for MyVar(7)
-    let my_var_7_constraints = &var_defs.vars[&(
+    let my_var_7_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(7))],
-    )]
+    ))]
         .0;
     assert_eq!(my_var_7_constraints.len(), 1);
     let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new(
@@ -164,29 +165,29 @@ async fn eval_with_variables_in_forall() {
 
     // Check that MyVar was called for i=0,1,2
     assert_eq!(var_defs.vars.len(), 3);
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(0))]
-    )));
-    assert!(var_defs.vars.contains_key(&(
+    ))));
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(1))]
-    )));
-    assert!(var_defs.vars.contains_key(&(
+    ))));
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(2))]
-    )));
+    ))));
 
     // Verify each has the correct constraint
     for i in 0..3 {
-        let my_var_constraints = &var_defs.vars[&(
+        let my_var_constraints = &var_defs.vars[&Hashed::new((
             "main".to_string(),
             "MyVar".to_string(),
             vec![Arc::new(ExprValue::Int(i))],
-        )]
+        ))]
             .0;
         assert_eq!(my_var_constraints.len(), 1);
         let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
@@ -240,23 +241,23 @@ async fn eval_with_variables_multiple_vars() {
 
     // Check both variables were defined
     assert_eq!(var_defs.vars.len(), 2);
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "Var1".to_string(),
         vec![Arc::new(ExprValue::Int(5))]
-    )));
-    assert!(var_defs.vars.contains_key(&(
+    ))));
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "Var2".to_string(),
         vec![Arc::new(ExprValue::Int(10))]
-    )));
+    ))));
 
     // Verify Var1 constraint
-    let var1_constraints = &var_defs.vars[&(
+    let var1_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "Var1".to_string(),
         vec![Arc::new(ExprValue::Int(5))],
-    )]
+    ))]
         .0;
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V1".into(),
@@ -266,11 +267,11 @@ async fn eval_with_variables_multiple_vars() {
     assert!(var1_constraints.contains(&expected1));
 
     // Verify Var2 constraint
-    let var2_constraints = &var_defs.vars[&(
+    let var2_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "Var2".to_string(),
         vec![Arc::new(ExprValue::Int(10))],
-    )]
+    ))]
         .0;
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V2".into(),
@@ -319,17 +320,17 @@ async fn eval_with_variables_var_with_multiple_params() {
     }
 
     // Check that MyVar(3, 7) was defined
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))]
-    )));
+    ))));
 
-    let my_var_constraints = &var_defs.vars[&(
+    let my_var_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
-    )]
+    ))]
         .0;
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
@@ -376,17 +377,17 @@ async fn eval_with_variables_with_let_expr() {
     }
 
     // Check that MyVar(10) was defined (bound = 5 * 2 = 10)
-    assert!(var_defs.vars.contains_key(&(
+    assert!(var_defs.vars.contains_key(&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(10))]
-    )));
+    ))));
 
-    let my_var_constraints = &var_defs.vars[&(
+    let my_var_constraints = &var_defs.vars[&Hashed::new((
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(10))],
-    )]
+    ))]
         .0;
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
