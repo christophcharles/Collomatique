@@ -771,7 +771,13 @@ impl<
                 ));
             }
 
-            let var_def = eval_history.into_var_def();
+            let var_def = eval_history.into_var_def().await.map_err(|e| match e {
+                EvalError::Panic(v) => ProblemError::Panic(v),
+                _ => panic!(
+                    "Evaluation should succeed (variables were validated): {:?}",
+                    e
+                ),
+            })?;
             (constraint_results, objective_results, var_def)
         };
 

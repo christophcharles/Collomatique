@@ -10,7 +10,7 @@ use super::variables::{ExternVar, IlpVar, ScriptVar};
 use crate::ast::{Span, Spanned};
 use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::semantics::{LocalEnvCheck, ResolvedPathKind, SimpleType, resolve_path};
-use collomatique_ilp::LinExpr;
+use collomatique_ilp::{Hashed, LinExpr};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -1215,24 +1215,11 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 module: var_module,
                 name: var_name,
             }) => {
-                let var_desc = eval_history
-                    .ast
-                    .global_env
-                    .get_vars()
-                    .get(&(var_module.clone(), var_name.clone()))
-                    .expect("Internal variable should exist after resolution");
-
-                eval_history.vars.insert(
-                    (var_module.clone(), var_name.clone(), args.clone()),
-                    var_desc.referenced_fn.clone(),
-                );
-                Box::pin(eval_history.add_fn_to_call_history(
-                    &var_desc.referenced_fn.0,
-                    &var_desc.referenced_fn.1,
+                eval_history.vars.insert(Hashed::new((
+                    var_module.clone(),
+                    var_name.clone(),
                     args.clone(),
-                    true,
-                ))
-                .await?;
+                )));
                 Ok(Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
                     ScriptVar::new(var_module, var_name, args),
                 )))))

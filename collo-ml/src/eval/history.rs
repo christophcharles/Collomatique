@@ -11,10 +11,12 @@ use super::variables::{HashedIlpVar, Origin};
 use crate::ast::Spanned;
 use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
-use collomatique_ilp::Constraint;
+use collomatique_ilp::{Constraint, Hashed};
 use derivative::Derivative;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+type VarKey<D> = (String, String, Vec<Arc<ExprValue<D>>>);
 
 #[derive(Debug)]
 pub struct EvalHistory<'a, D: DatabaseDriver> {
@@ -23,8 +25,7 @@ pub struct EvalHistory<'a, D: DatabaseDriver> {
         (String, String, Vec<Arc<ExprValue<D::Connection>>>),
         (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
     >,
-    pub(crate) vars:
-        HashMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
+    pub(crate) vars: HashSet<Hashed<VarKey<D::Connection>>>,
     pub(crate) queries: HashMap<
         (String, String, Vec<Arc<ExprValue<D::Connection>>>),
         Arc<ExprValue<D::Connection>>,
@@ -249,32 +250,65 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         Ok((Arc::unwrap_or_clone(result), origin))
     }
 
-    pub fn into_var_def(self) -> VariableDefinitions<D::Connection> {
+    pub async fn into_var_def(
+        &mut self,
+    ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
+        let mut computed: HashMap<
+            Hashed<VarKey<D::Connection>>,
+            (
+                Vec<Constraint<HashedIlpVar<D::Connection>>>,
+                Origin<D::Connection>,
+            ),
+        > = HashMap::new();
+
+        let mut pending = std::mem::take(&mut self.vars);
+        loop {
+            for hashed_key in pending {
+                if computed.contains_key(&hashed_key) {
+                    continue;
+                }
+                let (v_module, v_name, v_args) = &*hashed_key;
+                let var_desc = self
+                    .ast
+                    .global_env
+                    .get_vars()
+                    .get(&(v_module.clone(), v_name.clone()))
+                    .expect("Internal variable should exist");
+                let (fn_module, fn_name) = var_desc.referenced_fn.clone();
+
+                let (fn_call_result, new_origin) = Box::pin(self.add_fn_to_call_history(
+                    &fn_module,
+                    &fn_name,
+                    v_args.clone(),
+                    true,
+                ))
+                .await?;
+
+                let constraint = match &*fn_call_result {
+                    ExprValue::Constraint(c) => c
+                        .iter()
+                        .map(|c_with_o| c_with_o.constraint.clone())
+                        .collect::<Vec<_>>(),
+                    _ => panic!(
+                        "Fn call should have returned a constraint: {:?}",
+                        fn_call_result
+                    ),
+                };
+                computed.insert(hashed_key, (constraint, new_origin));
+            }
+            if self.vars.is_empty() {
+                break;
+            }
+            pending = std::mem::take(&mut self.vars);
+        }
+
         let mut var_def = VariableDefinitions {
             vars: HashMap::new(),
         };
-
-        for ((v_module, v_name, v_args), (fn_module, fn_name)) in self.vars {
-            let (fn_call_result, new_origin) = self
-                .funcs
-                .get(&(fn_module.clone(), fn_name.clone(), v_args.clone()))
-                .expect("Fn call should be valid");
-            let constraint = match &**fn_call_result {
-                ExprValue::Constraint(c) => c
-                    .iter()
-                    .map(|c_with_o| c_with_o.constraint.clone())
-                    .collect::<Vec<_>>(),
-                _ => panic!(
-                    "Fn call should have returned a constraint: {:?}",
-                    fn_call_result
-                ),
-            };
-            var_def
-                .vars
-                .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
+        for (hashed_key, value) in computed {
+            var_def.vars.insert(hashed_key.into_inner(), value);
         }
-
-        var_def
+        Ok(var_def)
     }
 }
 

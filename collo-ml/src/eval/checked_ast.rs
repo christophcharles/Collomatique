@@ -15,7 +15,7 @@ use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,
 };
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Derivative)]
@@ -163,7 +163,7 @@ impl<D: DatabaseDriver> CheckedAST<D> {
         EvalHistory {
             ast: self,
             funcs: HashMap::new(),
-            vars: HashMap::new(),
+            vars: HashSet::new(),
             queries: HashMap::new(),
         }
     }
@@ -189,6 +189,7 @@ impl<D: DatabaseDriver> CheckedAST<D> {
     > {
         let mut eval_history = self.start_eval_history();
         let (r, _o) = eval_history.eval_fn(module, fn_name, args).await?;
-        Ok((r, eval_history.into_var_def()))
+        let var_def = eval_history.into_var_def().await?;
+        Ok((r, var_def))
     }
 }
