@@ -371,7 +371,7 @@ impl<
 
     fn objectify_single_constraint(
         constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
-        origin: ConstraintDesc<D::Connection>,
+        constraint_desc: ConstraintDesc<D::Connection>,
         var: HashedProblemVar<D::Connection, V>,
     ) -> (
         Objective<HashedProblemVar<D::Connection, V>>,
@@ -386,7 +386,8 @@ impl<
                 let lin_expr = constraint.get_lhs().clone();
                 let c1 = lin_expr.leq(&var);
                 let c2 = var.geq(&LinExpr::constant(0.));
-                let constraints = vec![(c1, origin.clone()), (c2, origin.clone())];
+                let constraints =
+                    vec![(c1, constraint_desc.clone()), (c2, constraint_desc.clone())];
                 let objective = Objective::new(var, ObjectiveSense::Minimize);
                 (objective, constraints)
             }
@@ -395,7 +396,8 @@ impl<
                 let lin_expr = constraint.get_lhs().clone();
                 let c1 = lin_expr.leq(&var);
                 let c2 = lin_expr.geq(&(-&var));
-                let constraints = vec![(c1, origin.clone()), (c2, origin.clone())];
+                let constraints =
+                    vec![(c1, constraint_desc.clone()), (c2, constraint_desc.clone())];
                 let objective = Objective::new(var, ObjectiveSense::Minimize);
                 (objective, constraints)
             }
@@ -410,7 +412,7 @@ impl<
         mut constraints: impl ExactSizeIterator<
             Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
         >,
-        origin: ConstraintDesc<D::Connection>,
+        constraint_desc: ConstraintDesc<D::Connection>,
     ) -> (
         Objective<HashedProblemVar<D::Connection, V>>,
         Vec<(
@@ -430,7 +432,11 @@ impl<
         // With a single constraint, we can just defer to objectify_single_constraint
         if constraints.len() == 1 {
             let var = self.generate_helper_continuous_var();
-            return Self::objectify_single_constraint(constraints.next().unwrap(), origin, var);
+            return Self::objectify_single_constraint(
+                constraints.next().unwrap(),
+                constraint_desc,
+                var,
+            );
         }
 
         let c_count = constraints.len() as f64;
@@ -442,9 +448,9 @@ impl<
         for constraint in constraints {
             let var = self.generate_helper_continuous_var();
             let lin_expr = LinExpr::var(var.clone());
-            output.push((lin_expr.leq(&global_var), origin.clone()));
+            output.push((lin_expr.leq(&global_var), constraint_desc.clone()));
             let (c_obj, c_constraints) =
-                Self::objectify_single_constraint(constraint, origin.clone(), var);
+                Self::objectify_single_constraint(constraint, constraint_desc.clone(), var);
             obj = obj + c_obj;
             output.extend(c_constraints);
         }
@@ -455,7 +461,7 @@ impl<
     fn reify_single_constraint(
         &mut self,
         constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
-        origin: ConstraintDesc<D::Connection>,
+        constraint_desc: ConstraintDesc<D::Connection>,
         var: HashedProblemVar<D::Connection, V>,
     ) -> Vec<(
         Constraint<HashedProblemVar<D::Connection, V>>,
@@ -475,7 +481,7 @@ impl<
                     let zero = LinExpr::constant(0.);
                     var.eq(&zero)
                 };
-                return vec![(c, origin)];
+                return vec![(c, constraint_desc)];
             }
             1 => {
                 let single_var = vars
@@ -506,7 +512,7 @@ impl<
                         (true, false) => var.eq(&orig_var),
                         (false, true) => var.eq(&(&one - &orig_var)),
                     };
-                    return vec![(c, origin)];
+                    return vec![(c, constraint_desc)];
                 }
             }
             _ => {} // Generic case
@@ -530,9 +536,12 @@ impl<
                 let constraints = vec![
                     (
                         lin_expr.leq(&(max * (&one - &var) + &epsilon)),
-                        origin.clone(),
+                        constraint_desc.clone(),
                     ),
-                    (lin_expr.geq(&((min - 1.) * &var + &one - &epsilon)), origin),
+                    (
+                        lin_expr.geq(&((min - 1.) * &var + &one - &epsilon)),
+                        constraint_desc,
+                    ),
                 ];
                 constraints
             }
@@ -545,15 +554,23 @@ impl<
                 let lin_expr = constraint.get_lhs().clone();
                 let c1 = lin_expr.leq(&LinExpr::constant(0.));
                 let c2 = lin_expr.geq(&LinExpr::constant(0.));
-                let mut constraints = self.reify_single_constraint(&c1, origin.clone(), v1.clone());
-                constraints.extend(self.reify_single_constraint(&c2, origin.clone(), v2.clone()));
+                let mut constraints =
+                    self.reify_single_constraint(&c1, constraint_desc.clone(), v1.clone());
+                constraints.extend(self.reify_single_constraint(
+                    &c2,
+                    constraint_desc.clone(),
+                    v2.clone(),
+                ));
                 // Encode var as an AND between v1 and v2
                 let v1 = LinExpr::var(v1);
                 let v2 = LinExpr::var(v2);
                 let var = LinExpr::var(var);
-                constraints.push((var.leq(&v1), origin.clone()));
-                constraints.push((var.leq(&v2), origin.clone()));
-                constraints.push(((&v1 + &v2).leq(&(&var + &LinExpr::constant(1.))), origin));
+                constraints.push((var.leq(&v1), constraint_desc.clone()));
+                constraints.push((var.leq(&v2), constraint_desc.clone()));
+                constraints.push((
+                    (&v1 + &v2).leq(&(&var + &LinExpr::constant(1.))),
+                    constraint_desc,
+                ));
                 constraints
             }
         }
@@ -567,7 +584,7 @@ impl<
         mut constraints: impl ExactSizeIterator<
             Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
         >,
-        origin: ConstraintDesc<D::Connection>,
+        constraint_desc: ConstraintDesc<D::Connection>,
         var: HashedProblemVar<D::Connection, V>,
     ) -> Vec<(
         Constraint<HashedProblemVar<D::Connection, V>>,
@@ -581,10 +598,10 @@ impl<
         // and the variable should be always 1
         if constraints.len() == 0 {
             let var = LinExpr::var(var);
-            return vec![(var.eq(&LinExpr::constant(1.)), origin)];
+            return vec![(var.eq(&LinExpr::constant(1.)), constraint_desc)];
         }
         if constraints.len() == 1 {
-            return self.reify_single_constraint(constraints.next().unwrap(), origin, var);
+            return self.reify_single_constraint(constraints.next().unwrap(), constraint_desc, var);
         }
 
         // We reify each constraint with helper variables
@@ -594,14 +611,18 @@ impl<
         for constraint in constraints {
             let helper = self.generate_helper_var();
             helpers.push(helper.clone());
-            output.extend(self.reify_single_constraint(constraint, origin.clone(), helper));
+            output.extend(self.reify_single_constraint(
+                constraint,
+                constraint_desc.clone(),
+                helper,
+            ));
         }
 
         // Now let's combine all the helper variables in an AND op
         let var = LinExpr::var(var);
         for helper in &helpers {
             let h = LinExpr::var(helper.clone());
-            output.push((var.leq(&h), origin.clone()));
+            output.push((var.leq(&h), constraint_desc.clone()));
         }
         let rhs = var + LinExpr::constant((helpers.len() - 1) as f64);
         let mut lhs = LinExpr::constant(0.);
@@ -609,7 +630,7 @@ impl<
             let h = LinExpr::var(helper);
             lhs = lhs + h;
         }
-        output.push((lhs.leq(&rhs), origin));
+        output.push((lhs.leq(&rhs), constraint_desc));
 
         output
     }
@@ -862,9 +883,9 @@ impl<
                             .into_iter()
                             .map(|c_with_o| eval_data.clean_constraint(&c_with_o.constraint))
                             .collect();
-                        let new_origin = ConstraintDesc::Objectify;
-                        let (new_obj, new_constraints) =
-                            eval_data.objectify_constraints(cleaned_constraints.iter(), new_origin);
+                        let constraint_desc = ConstraintDesc::Objectify;
+                        let (new_obj, new_constraints) = eval_data
+                            .objectify_constraints(cleaned_constraints.iter(), constraint_desc);
                         obj = obj + new_obj;
                         eval_data.constraints.extend(new_constraints);
                     }
@@ -913,10 +934,10 @@ impl<
                 _ => panic!("Unexpected variable type to reify: {:?}", var),
             };
 
-            let new_origin = ConstraintDesc::Reified { var_name };
+            let constraint_desc = ConstraintDesc::Reified { var_name };
 
             let reified_constraints =
-                eval_data.reify_constraint(constraints.iter(), new_origin, var);
+                eval_data.reify_constraint(constraints.iter(), constraint_desc, var);
 
             eval_data.constraints.extend(reified_constraints);
         }
