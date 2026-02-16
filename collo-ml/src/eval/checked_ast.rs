@@ -175,10 +175,10 @@ impl<D: DatabaseDriver> CheckedAST<D> {
     pub fn start_eval_history(&self) -> EvalHistory<'_, D> {
         EvalHistory {
             ast: self,
-            funcs: BTreeMap::new(),
-            vars: BTreeMap::new(),
-            var_lists: BTreeMap::new(),
-            queries: BTreeMap::new(),
+            funcs: HashMap::new(),
+            vars: HashMap::new(),
+            var_lists: HashMap::new(),
+            queries: HashMap::new(),
         }
     }
 

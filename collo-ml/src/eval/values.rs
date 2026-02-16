@@ -18,6 +18,7 @@ use std::sync::Arc;
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = "", feature_allow_slow_enum = "true"),
@@ -45,6 +46,7 @@ pub enum ExprValue<D: DatabaseConnection> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = ""),

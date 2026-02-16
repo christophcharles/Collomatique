@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn error_unknown_function() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
     }
@@ -68,7 +68,7 @@ async fn error_unknown_function() {
 
 #[tokio::test]
 async fn error_wrong_return_type_for_constraint() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
     }

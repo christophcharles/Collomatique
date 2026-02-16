@@ -34,7 +34,7 @@ use std::collections::HashMap;
 /// ## Variables without objects
 ///
 /// ```ignore
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+/// #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 /// #[env(MyEnv)]
 /// enum Var {
 ///     TimeSlot {

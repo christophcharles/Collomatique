@@ -2,7 +2,7 @@ use super::tools::*;
 use collo_ml::EvalVar;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(Parameters)]
 pub enum Var {
     #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]

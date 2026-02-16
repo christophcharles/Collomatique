@@ -18,7 +18,7 @@ impl EdgeCaseEnv {
 // Test 2: Boundary Values
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 #[fix_with(0.0)]
 enum BoundaryVar {
@@ -78,7 +78,7 @@ fn test_boundary_values_fix() {
 // Test 3: Negative Ranges
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum NegativeRangeVar {
     Temperature {
@@ -130,7 +130,7 @@ fn test_negative_range() {
 // Test 4: Multiple Fields with Different Fix Behaviors
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum MultiFieldVar {
     // First field out of range triggers fix
@@ -202,7 +202,7 @@ fn test_multiple_field_fix_priority() {
 // Test 5: defer_fix Returns None for All Values
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum AlwaysValidVar {
     #[defer_fix(None)]
@@ -240,7 +240,7 @@ fn test_defer_fix_always_none() {
 // Test 6: defer_fix Returns Some for All Values
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum AlwaysInvalidVar {
     #[defer_fix(Some(99.0))]
@@ -268,7 +268,7 @@ fn test_defer_fix_always_some() {
 // Test 7: Complex fix_with Expression
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum ComplexFixVar {
     #[fix_with(
@@ -329,7 +329,7 @@ fn test_complex_fix_with_expression() {
 // Test 8: Unit Variant (No Fields)
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum UnitVariantVar {
     #[fix_with(5.0)]
@@ -378,7 +378,7 @@ fn test_unit_variant() {
 // Test 9: Boolean Fields
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum BoolVar {
     WithBool {
@@ -415,7 +415,7 @@ fn test_boolean_field_enumeration() {
 // Test 10: Unnamed Fields with Complex Expressions
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 #[env(EdgeCaseEnv)]
 enum UnnamedComplexVar {
     #[fix_with(if *v0 + *v1 > 10 { (*v0 + *v1) as f64 } else { 0.0 })]

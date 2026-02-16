@@ -13,21 +13,21 @@ use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct EvalHistory<'a, D: DatabaseDriver> {
     pub(crate) ast: &'a CheckedAST<D>,
-    pub(crate) funcs: BTreeMap<
+    pub(crate) funcs: HashMap<
         (String, String, Vec<Arc<ExprValue<D::Connection>>>),
         (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
     >,
     pub(crate) vars:
-        BTreeMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
+        HashMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
     pub(crate) var_lists:
-        BTreeMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
-    pub(crate) queries: BTreeMap<
+        HashMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
+    pub(crate) queries: HashMap<
         (String, String, Vec<Arc<ExprValue<D::Connection>>>),
         Arc<ExprValue<D::Connection>>,
     >,
@@ -253,8 +253,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 
     pub fn into_var_def(self) -> VariableDefinitions<D::Connection> {
         let mut var_def = VariableDefinitions {
-            vars: BTreeMap::new(),
-            var_lists: BTreeMap::new(),
+            vars: HashMap::new(),
+            var_lists: HashMap::new(),
         };
 
         for ((v_module, v_name, v_args), (fn_module, fn_name)) in self.vars {
@@ -318,8 +318,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
     pub vars:
-        BTreeMap<(String, String, Vec<Arc<ExprValue<D>>>), (Vec<Constraint<IlpVar<D>>>, Origin<D>)>,
-    pub var_lists: BTreeMap<
+        HashMap<(String, String, Vec<Arc<ExprValue<D>>>), (Vec<Constraint<IlpVar<D>>>, Origin<D>)>,
+    pub var_lists: HashMap<
         (String, String, Vec<Arc<ExprValue<D>>>),
         (Vec<Vec<Constraint<IlpVar<D>>>>, Origin<D>),
     >,
