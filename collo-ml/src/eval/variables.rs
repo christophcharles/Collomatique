@@ -18,6 +18,7 @@ use std::sync::Arc;
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialOrd(bound = ""),
     Ord(bound = ""),
     PartialEq(bound = ""),
@@ -65,6 +66,7 @@ impl<D: DatabaseConnection> std::fmt::Display for ScriptVar<D> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialOrd(bound = ""),
     Ord(bound = ""),
     PartialEq(bound = ""),
@@ -92,6 +94,7 @@ impl<D: DatabaseConnection> std::fmt::Display for ExternVar<D> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = "", feature_allow_slow_enum = "true"),
@@ -115,6 +118,7 @@ impl<D: DatabaseConnection> std::fmt::Display for IlpVar<D> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = ""),
@@ -149,6 +153,7 @@ impl<D: DatabaseConnection> std::fmt::Display for Origin<D> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
+    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = ""),

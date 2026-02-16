@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn list_constraint_reification() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,
@@ -126,7 +126,7 @@ async fn list_constraint_reification() {
 
 #[tokio::test]
 async fn list_constraint_reification_exact_count_with_param() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         X(i32), // Parameter from 0 to 99
     }

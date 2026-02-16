@@ -226,12 +226,13 @@ pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 ///
 /// We use this trait to check that indeed some basic properties are garanteed.
 pub trait UsableData:
-    std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync
+    std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync
 {
 }
 
-impl<T: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync> UsableData
-    for T
+impl<
+    T: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync,
+> UsableData for T
 {
 }
 
@@ -244,7 +245,7 @@ impl<T: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Syn
 /// always bigger than 0 and less than 1).
 ///
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Variable {
     integer_var: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,
@@ -1452,7 +1453,7 @@ impl<V: UsableData> ConfigData<V> {
     /// ```
     /// # use collomatique_ilp::ConfigData;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1465,7 +1466,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::C, 0.5);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1501,7 +1502,7 @@ impl<V: UsableData> ConfigData<V> {
     /// ```
     /// # use collomatique_ilp::ConfigData;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1514,7 +1515,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::C, 0.5);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1557,7 +1558,7 @@ impl<V: UsableData> ConfigData<V> {
     /// For instance, this works without failure:
     /// ```
     /// # use collomatique_ilp::ConfigData;
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1569,7 +1570,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::B, 0.0)
     ///     .set(V1::C, 0.5);
     ///
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1594,7 +1595,7 @@ impl<V: UsableData> ConfigData<V> {
     /// But this fails because of the C variable:
     /// ```
     /// # use collomatique_ilp::ConfigData;
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1606,7 +1607,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::B, 0.0)
     ///     .set(V1::C, 0.5);
     ///
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,

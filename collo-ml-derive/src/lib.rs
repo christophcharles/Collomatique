@@ -53,14 +53,14 @@ mod eval_var;
 ///
 /// - Must be applied to an enum
 /// - All `i32` fields must have `#[range(...)]` attribute
-/// - The enum must implement standard derives: `Clone, PartialEq, Eq, PartialOrd, Ord`
+/// - The enum must implement standard derives: `Clone, Hash, PartialEq, Eq, PartialOrd, Ord`
 ///
 /// # Examples
 ///
 /// ## Basic usage
 ///
 /// ```ignore
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
+/// #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, EvalVar)]
 /// #[env(MyEnv)]
 /// enum Var {
 ///     TimeSlot {

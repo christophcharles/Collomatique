@@ -85,10 +85,10 @@ pub(crate) struct EvalData<
     /// This starts with the variables from V.
     /// Then reified variables as well as
     /// helpers variables are added as needed.
-    pub(crate) vars_desc: BTreeMap<ProblemVar<D::Connection, V>, Variable>,
+    pub(crate) vars_desc: HashMap<ProblemVar<D::Connection, V>, Variable>,
 
     /// base variables list
-    pub(crate) original_var_list: BTreeMap<V, Variable>,
+    pub(crate) original_var_list: HashMap<V, Variable>,
 }
 
 impl<
@@ -767,7 +767,7 @@ impl<
             (constraint_results, objective_results, var_def)
         };
 
-        let original_var_list = V::vars(env);
+        let original_var_list: HashMap<V, Variable> = V::vars(env).into_iter().collect();
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
                 return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
