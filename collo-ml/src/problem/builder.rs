@@ -305,14 +305,9 @@ impl<
             .constraints
             .iter()
             .filter_map(|(c, d)| match d {
-                ConstraintDesc::InScript { origin: _ } => None,
-                ConstraintDesc::Objectify { origin: _ } => {
-                    Some((c.clone(), ExtraDesc::Orig(d.clone())))
-                }
-                ConstraintDesc::Reified {
-                    var_name: _,
-                    origin: _,
-                } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
+                ConstraintDesc::InScript { .. } => None,
+                ConstraintDesc::Objectify => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
+                ConstraintDesc::Reified { .. } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
             })
             .collect();
 
@@ -839,7 +834,7 @@ impl<
         }
 
         // Phase 3: Process objective results
-        for (module, fn_name, (fn_result, origin), coef, obj_sense) in objective_results {
+        for (module, fn_name, (fn_result, _origin), coef, obj_sense) in objective_results {
             let mut values_list: Vec<ExprValue<D::Connection>> = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
@@ -867,9 +862,7 @@ impl<
                             .into_iter()
                             .map(|c_with_o| eval_data.clean_constraint(&c_with_o.constraint))
                             .collect();
-                        let new_origin = ConstraintDesc::Objectify {
-                            origin: origin.clone(),
-                        };
+                        let new_origin = ConstraintDesc::Objectify;
                         let (new_obj, new_constraints) =
                             eval_data.objectify_constraints(cleaned_constraints.iter(), new_origin);
                         obj = obj + new_obj;
@@ -913,7 +906,7 @@ impl<
             constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
         }
         // Phase 5: Reify constraints
-        for (var, (constraints, origin)) in constraints_to_reify {
+        for (var, (constraints, _origin)) in constraints_to_reify {
             let var_name = match &*var {
                 ProblemVar::Reified(ReifiedVar {
                     module: _,
@@ -923,7 +916,7 @@ impl<
                 _ => panic!("Unexpected variable type to reify: {:?}", var),
             };
 
-            let new_origin = ConstraintDesc::Reified { var_name, origin };
+            let new_origin = ConstraintDesc::Reified { var_name };
 
             let reified_constraints =
                 eval_data.reify_constraint(constraints.iter(), new_origin, var);

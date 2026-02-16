@@ -55,9 +55,9 @@ pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
     Eq(bound = "")
 )]
 pub enum ConstraintDesc<D: DatabaseConnection> {
-    Reified { var_name: String, origin: Origin<D> },
+    Reified { var_name: String },
     InScript { origin: Origin<D> },
-    Objectify { origin: Origin<D> },
+    Objectify,
 }
 
 #[derive(Derivative)]
