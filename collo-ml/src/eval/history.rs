@@ -17,20 +17,17 @@ use derivative::Derivative;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-type VarKey<D> = (String, String, Vec<Arc<ExprValue<D>>>);
+type CallKey<D> = (String, String, Vec<Arc<ExprValue<D>>>);
 
 #[derive(Debug)]
 pub struct EvalHistory<'a, D: DatabaseDriver> {
     pub(crate) ast: &'a CheckedAST<D>,
     pub(crate) funcs: HashMap<
-        (String, String, Vec<Arc<ExprValue<D::Connection>>>),
+        Hashed<CallKey<D::Connection>>,
         (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
     >,
-    pub(crate) vars: HashSet<Hashed<VarKey<D::Connection>>>,
-    pub(crate) queries: HashMap<
-        (String, String, Vec<Arc<ExprValue<D::Connection>>>),
-        Arc<ExprValue<D::Connection>>,
-    >,
+    pub(crate) vars: HashSet<Hashed<CallKey<D::Connection>>>,
+    pub(crate) queries: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>>,
 }
 
 impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
@@ -108,10 +105,9 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             builder.register_identifier(arg_name, Arc::clone(arg));
         }
 
-        if let Some(r) = self
-            .funcs
-            .get(&(module.to_string(), fn_name.to_string(), args.clone()))
-        {
+        let key = Hashed::new((module.to_string(), fn_name.to_string(), args.clone()));
+
+        if let Some(r) = self.funcs.get(&key) {
             return Ok((Arc::clone(&r.0), r.1.clone()));
         }
 
@@ -129,10 +125,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         };
 
         let result = Arc::new(naked_result.with_origin(&origin));
-        self.funcs.insert(
-            (module.to_string(), fn_name.to_string(), args),
-            (Arc::clone(&result), origin.clone()),
-        );
+        self.funcs
+            .insert(key, (Arc::clone(&result), origin.clone()));
 
         Ok((result, origin))
     }
@@ -143,10 +137,9 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         name: &str,
         args: Vec<Arc<ExprValue<D::Connection>>>,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        if let Some(cached) =
-            self.queries
-                .get(&(module.to_string(), name.to_string(), args.clone()))
-        {
+        let key = Hashed::new((module.to_string(), name.to_string(), args.clone()));
+
+        if let Some(cached) = self.queries.get(&key) {
             return Ok(Arc::clone(cached));
         }
 
@@ -181,10 +174,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         match result {
             Ok(value) => {
                 let value = Arc::new(value);
-                self.queries.insert(
-                    (module.to_string(), name.to_string(), args),
-                    Arc::clone(&value),
-                );
+                self.queries.insert(key, Arc::clone(&value));
                 Ok(value)
             }
             Err(SqlQueryError::QueryFailed(msg)) => {
@@ -255,7 +245,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         mut self,
     ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
         let mut computed: HashMap<
-            Hashed<VarKey<D::Connection>>,
+            Hashed<CallKey<D::Connection>>,
             (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
         > = HashMap::new();
 
@@ -314,5 +304,5 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
-    pub vars: HashMap<Hashed<VarKey<D>>, (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>)>,
+    pub vars: HashMap<Hashed<CallKey<D>>, (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>)>,
 }
