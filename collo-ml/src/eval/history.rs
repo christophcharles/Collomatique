@@ -66,12 +66,11 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         fn_name: &str,
         args: Vec<Arc<ExprValue<D::Connection>>>,
         allow_private_and_dont_check_types: bool,
-    ) -> Result<(Arc<ExprValue<D::Connection>>, Origin<D::Connection>), EvalError<D::Connection>>
-    {
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         let key = Hashed::new((module.to_string(), fn_name.to_string(), args));
 
         if let Some(r) = self.funcs.get(&key) {
-            return Ok((Arc::clone(&r.0), r.1.clone()));
+            return Ok(Arc::clone(&r.0));
         }
 
         let fn_desc = self
@@ -128,10 +127,9 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         };
 
         let result = Arc::new(naked_result.with_origin(&origin));
-        self.funcs
-            .insert(key, (Arc::clone(&result), origin.clone()));
+        self.funcs.insert(key, (Arc::clone(&result), origin));
 
-        Ok((result, origin))
+        Ok(result)
     }
 
     pub(crate) async fn add_query_to_call_history(
@@ -230,7 +228,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         module: &str,
         fn_name: &str,
         args: Vec<ExprValue<D::Connection>>,
-    ) -> Result<(ExprValue<D::Connection>, Origin<D::Connection>), EvalError<D::Connection>> {
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
@@ -239,9 +237,9 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             checked_args.push(Arc::new(arg));
         }
 
-        let (result, origin) =
+        let result =
             Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false)).await?;
-        Ok((Arc::unwrap_or_clone(result), origin))
+        Ok(Arc::unwrap_or_clone(result))
     }
 
     pub async fn into_var_def(
@@ -267,7 +265,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                     .expect("Internal variable should exist");
                 let (fn_module, fn_name) = var_desc.referenced_fn.clone();
 
-                let (fn_call_result, new_origin) = Box::pin(self.add_fn_to_call_history(
+                let fn_call_result = Box::pin(self.add_fn_to_call_history(
                     &fn_module,
                     &fn_name,
                     v_args.clone(),
@@ -275,6 +273,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                 ))
                 .await?;
 
+                let fn_key = Hashed::new((fn_module, fn_name, v_args.clone()));
+                let new_origin = self.funcs.get(&fn_key).unwrap().1.clone();
                 computed.insert(hashed_key, (fn_call_result, new_origin));
             }
             if self.vars.is_empty() {

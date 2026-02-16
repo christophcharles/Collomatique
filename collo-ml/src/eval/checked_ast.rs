@@ -175,7 +175,7 @@ impl<D: DatabaseDriver> CheckedAST<D> {
         args: Vec<ExprValue<D::Connection>>,
     ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
         let mut eval_history = self.start_eval_history();
-        Ok(eval_history.eval_fn(module, fn_name, args).await?.0)
+        eval_history.eval_fn(module, fn_name, args).await
     }
 
     pub async fn eval_fn_with_variables(
@@ -188,7 +188,7 @@ impl<D: DatabaseDriver> CheckedAST<D> {
         EvalError<D::Connection>,
     > {
         let mut eval_history = self.start_eval_history();
-        let (r, _o) = eval_history.eval_fn(module, fn_name, args).await?;
+        let r = eval_history.eval_fn(module, fn_name, args).await?;
         let var_def = eval_history.into_var_def().await?;
         Ok((r, var_def))
     }

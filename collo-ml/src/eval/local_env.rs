@@ -1256,8 +1256,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 }
                 Ok(
                     Box::pin(eval_history.add_fn_to_call_history(&module, &func, eval_args, true))
-                        .await?
-                        .0,
+                        .await?,
                 )
             }
             ResolvedPathKind::Type(simple_type) => {

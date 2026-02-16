@@ -800,7 +800,7 @@ impl<
         };
 
         // Phase 2: Process constraint results
-        for (module, fn_name, (constraints_expr, _origin)) in constraint_results {
+        for (module, fn_name, constraints_expr) in constraint_results {
             let constraints = match constraints_expr {
                 ExprValue::Constraint(constraints) => constraints,
                 ExprValue::List(list)
@@ -834,7 +834,7 @@ impl<
         }
 
         // Phase 3: Process objective results
-        for (module, fn_name, (fn_result, _origin), coef, obj_sense) in objective_results {
+        for (module, fn_name, fn_result, coef, obj_sense) in objective_results {
             let mut values_list: Vec<ExprValue<D::Connection>> = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
