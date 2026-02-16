@@ -45,8 +45,7 @@ async fn eval_with_variables_simple_reified_var() {
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(5))],
-    ))]
-        .0;
+    ))];
 
     // MyVar(5) should have the constraint from base(5): $V(5) === 1
     assert_eq!(my_var_constraints.len(), 1);
@@ -105,8 +104,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3))],
-    ))]
-        .0;
+    ))];
     assert_eq!(my_var_3_constraints.len(), 1);
     let expected_3 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V".into(),
@@ -120,8 +118,7 @@ async fn eval_with_variables_multiple_calls_same_var() {
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(7))],
-    ))]
-        .0;
+    ))];
     assert_eq!(my_var_7_constraints.len(), 1);
     let expected_7 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V".into(),
@@ -187,8 +184,7 @@ async fn eval_with_variables_in_forall() {
             "main".to_string(),
             "MyVar".to_string(),
             vec![Arc::new(ExprValue::Int(i))],
-        ))]
-            .0;
+        ))];
         assert_eq!(my_var_constraints.len(), 1);
         let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
             "V".into(),
@@ -257,8 +253,7 @@ async fn eval_with_variables_multiple_vars() {
         "main".to_string(),
         "Var1".to_string(),
         vec![Arc::new(ExprValue::Int(5))],
-    ))]
-        .0;
+    ))];
     let expected1 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V1".into(),
         vec![Arc::new(ExprValue::Int(5))],
@@ -271,8 +266,7 @@ async fn eval_with_variables_multiple_vars() {
         "main".to_string(),
         "Var2".to_string(),
         vec![Arc::new(ExprValue::Int(10))],
-    ))]
-        .0;
+    ))];
     let expected2 = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V2".into(),
         vec![Arc::new(ExprValue::Int(10))],
@@ -330,8 +324,7 @@ async fn eval_with_variables_var_with_multiple_params() {
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(3)), Arc::new(ExprValue::Int(7))],
-    ))]
-        .0;
+    ))];
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V".into(),
@@ -387,8 +380,7 @@ async fn eval_with_variables_with_let_expr() {
         "main".to_string(),
         "MyVar".to_string(),
         vec![Arc::new(ExprValue::Int(10))],
-    ))]
-        .0;
+    ))];
     assert_eq!(my_var_constraints.len(), 1);
     let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
         "V".into(),

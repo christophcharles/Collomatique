@@ -880,13 +880,10 @@ impl<
         // Phase 4: Process reified variables
         let mut constraints_to_reify = HashMap::<
             HashedProblemVar<D::Connection, V>,
-            (
-                Vec<Constraint<HashedProblemVar<D::Connection, V>>>,
-                crate::eval::Origin<D::Connection>,
-            ),
+            Vec<Constraint<HashedProblemVar<D::Connection, V>>>,
         >::new();
 
-        for (hashed_key, (constraints, new_origin)) in var_def.vars {
+        for (hashed_key, constraints) in var_def.vars {
             let (var_module, var_name, var_args) = hashed_key.into_inner();
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
@@ -903,10 +900,10 @@ impl<
             eval_data
                 .vars_desc
                 .insert(new_var.clone(), Variable::binary());
-            constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
+            constraints_to_reify.insert(new_var, cleaned_constraints);
         }
         // Phase 5: Reify constraints
-        for (var, (constraints, _origin)) in constraints_to_reify {
+        for (var, constraints) in constraints_to_reify {
             let var_name = match &*var {
                 ProblemVar::Reified(ReifiedVar {
                     module: _,

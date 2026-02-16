@@ -22,10 +22,7 @@ type CallKey<D> = (String, String, Vec<Arc<ExprValue<D>>>);
 #[derive(Debug)]
 pub struct EvalHistory<'a, D: DatabaseDriver> {
     pub(crate) ast: &'a CheckedAST<D>,
-    pub(crate) funcs: HashMap<
-        Hashed<CallKey<D::Connection>>,
-        (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
-    >,
+    pub(crate) funcs: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>>,
     pub(crate) vars: HashSet<Hashed<CallKey<D::Connection>>>,
     pub(crate) queries: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>>,
 }
@@ -70,7 +67,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         let key = Hashed::new((module.to_string(), fn_name.to_string(), args));
 
         if let Some(r) = self.funcs.get(&key) {
-            return Ok(Arc::clone(&r.0));
+            return Ok(Arc::clone(r));
         }
 
         let fn_desc = self
@@ -127,7 +124,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         };
 
         let result = Arc::new(naked_result.with_origin(&origin));
-        self.funcs.insert(key, (Arc::clone(&result), origin));
+        self.funcs.insert(key, Arc::clone(&result));
 
         Ok(result)
     }
@@ -245,10 +242,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
     pub async fn into_var_def(
         mut self,
     ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
-        let mut computed: HashMap<
-            Hashed<CallKey<D::Connection>>,
-            (Arc<ExprValue<D::Connection>>, Origin<D::Connection>),
-        > = HashMap::new();
+        let mut computed: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>> =
+            HashMap::new();
 
         let mut pending = std::mem::take(&mut self.vars);
         loop {
@@ -273,9 +268,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                 ))
                 .await?;
 
-                let fn_key = Hashed::new((fn_module, fn_name, v_args.clone()));
-                let new_origin = self.funcs.get(&fn_key).unwrap().1.clone();
-                computed.insert(hashed_key, (fn_call_result, new_origin));
+                computed.insert(hashed_key, fn_call_result);
             }
             if self.vars.is_empty() {
                 break;
@@ -289,14 +282,14 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 
         let vars = computed
             .into_iter()
-            .map(|(hashed_key, (arc_result, origin))| {
+            .map(|(hashed_key, arc_result)| {
                 let constraints = match Arc::unwrap_or_clone(arc_result) {
                     ExprValue::Constraint(c) => {
                         c.into_iter().map(|c_with_o| c_with_o.constraint).collect()
                     }
                     other => panic!("Fn call should have returned a constraint: {:?}", other),
                 };
-                (hashed_key, (constraints, origin))
+                (hashed_key, constraints)
             })
             .collect();
 
@@ -307,5 +300,5 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
-    pub vars: HashMap<Hashed<CallKey<D>>, (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>)>,
+    pub vars: HashMap<Hashed<CallKey<D>>, Vec<Constraint<HashedIlpVar<D>>>>,
 }
