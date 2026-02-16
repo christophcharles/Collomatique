@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn constraint_list_return_type() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,

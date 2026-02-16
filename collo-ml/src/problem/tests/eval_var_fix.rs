@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_fix_forces_variable_values() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V(i32), // Parameter from 0 to 9
     }

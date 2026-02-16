@@ -13,7 +13,7 @@ async fn complete_interrogations_scheduling() {
     // - Each student has each subject exactly once over the 3 weeks
     // - Each teacher interrogates at most 1 student per week
 
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         StudentWithTeacher {
             student: i32, // 0..11

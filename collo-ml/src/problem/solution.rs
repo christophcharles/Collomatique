@@ -11,7 +11,7 @@ use crate::database::DatabaseConnection;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, DefaultRepr, LinExpr, Variable};
 use derivative::Derivative;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Derivative)]
 #[derivative(
@@ -24,7 +24,7 @@ pub struct Problem<D: DatabaseConnection, V: EvalVar> {
     problem: collomatique_ilp::Problem<ProblemVar<D, V>, ConstraintDesc<D>>,
     pub(crate) reification_problem_builder:
         collomatique_ilp::ProblemBuilder<ProblemVar<D, V>, ExtraDesc<D, V>>,
-    pub(crate) original_var_list: HashMap<V, Variable>,
+    pub(crate) original_var_list: BTreeMap<V, Variable>,
 }
 
 impl<D: DatabaseConnection, V: EvalVar> Problem<D, V> {
@@ -34,7 +34,7 @@ impl<D: DatabaseConnection, V: EvalVar> Problem<D, V> {
             ProblemVar<D, V>,
             ExtraDesc<D, V>,
         >,
-        original_var_list: HashMap<V, Variable>,
+        original_var_list: BTreeMap<V, Variable>,
     ) -> Self {
         Problem {
             problem,

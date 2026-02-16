@@ -62,7 +62,7 @@ use std::{
 /// assert_eq!(expr.get("B"), Some(-3.0)); // The coefficient for "B" is -3
 /// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
 /// ```
-#[derive(Debug, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
 pub struct LinExpr<V: UsableData> {
     coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
@@ -85,7 +85,7 @@ impl<V: UsableData> Default for LinExpr<V> {
 /// It is done so to simplify comparison between constraints.
 ///
 /// Normally, you don't have to handle EqSymbol directly.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum EqSymbol {
     /// Represents an "equal" ("=") symbol
     Equals,
@@ -105,7 +105,7 @@ pub enum EqSymbol {
 /// Internally, everything is sent to the left hand side and always compared to zero.
 ///
 /// [Constraint] is usually built using [LinExpr::leq], [LinExpr::eq] or [LinExpr::geq].
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Constraint<V: UsableData> {
     symbol: EqSymbol,
     expr: LinExpr<V>,
@@ -743,7 +743,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -753,7 +753,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -803,7 +803,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -813,7 +813,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -836,7 +836,7 @@ impl<V: UsableData> LinExpr<V> {
     /// However, this code will fail correctly because `V3` does not encore `C` correctly:
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -845,7 +845,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,
@@ -1373,7 +1373,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1384,7 +1384,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1419,7 +1419,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1430,7 +1430,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1465,7 +1465,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1476,7 +1476,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1500,7 +1500,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1511,7 +1511,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,

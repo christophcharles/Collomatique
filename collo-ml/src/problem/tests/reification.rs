@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn internal_reification() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,
@@ -139,7 +139,7 @@ async fn internal_reification() {
 
 #[tokio::test]
 async fn private_reification_does_not_leak() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,
@@ -267,7 +267,7 @@ async fn three_module_chain_define_reify_use() {
     // - Module 2 (reifications): imports module 1 and reifies its function
     // - Module 3 (main): imports module 2 and uses the reified variable
 
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,

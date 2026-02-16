@@ -72,12 +72,6 @@ impl<D: DatabaseConnection> Ord for DatabaseHandle<D> {
     }
 }
 
-impl<D: DatabaseConnection> std::hash::Hash for DatabaseHandle<D> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        (Arc::as_ptr(&self.inner) as *const () as usize).hash(state);
-    }
-}
-
 impl<D: DatabaseConnection> fmt::Debug for DatabaseHandle<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DatabaseHandle({})", self.name())

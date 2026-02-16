@@ -261,7 +261,7 @@ impl<V: UsableData> Objective<V> {
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Objective, ObjectiveSense};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -272,7 +272,7 @@ impl<V: UsableData> Objective<V> {
     /// let obj = Objective::new(expr, ObjectiveSense::Minimize);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -313,7 +313,7 @@ impl<V: UsableData> Objective<V> {
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Objective, ObjectiveSense};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -324,7 +324,7 @@ impl<V: UsableData> Objective<V> {
     /// let obj = Objective::new(expr, ObjectiveSense::Minimize);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,

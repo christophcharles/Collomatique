@@ -5,7 +5,7 @@ use super::*;
 
 #[tokio::test]
 async fn two_objectives_same_script() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,
@@ -165,7 +165,7 @@ async fn two_objectives_same_script() {
 
 #[tokio::test]
 async fn two_objectives_different_scripts() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,
@@ -338,7 +338,7 @@ async fn two_objectives_different_scripts() {
 
 #[tokio::test]
 async fn objectives_with_different_senses() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Var {
         V,
         W,

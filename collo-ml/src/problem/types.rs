@@ -19,7 +19,6 @@ use super::CompileError;
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = ""),
-    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = ""),
@@ -36,7 +35,6 @@ pub struct ReifiedVar<D: DatabaseConnection> {
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = ""),
-    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = "", feature_allow_slow_enum = "true"),
@@ -53,7 +51,6 @@ pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
 #[derivative(
     Clone(bound = ""),
     Debug(bound = ""),
-    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = "", feature_allow_slow_enum = "true"),
@@ -69,7 +66,6 @@ pub enum ConstraintDesc<D: DatabaseConnection> {
 #[derivative(
     Debug(bound = ""),
     Clone(bound = ""),
-    Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
     PartialOrd(bound = "", feature_allow_slow_enum = "true"),
