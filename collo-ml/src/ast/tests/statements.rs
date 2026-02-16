@@ -190,39 +190,12 @@ fn parse_reify_statement() {
             constraint_path,
             name,
             docstring,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 1);
             assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
             assert_eq!(name.node, "MyVar");
             assert!(docstring.is_empty());
-            assert!(!*var_list);
-        }
-        _ => panic!("Expected Reify statement"),
-    }
-}
-
-#[test]
-fn parse_reify_statement_with_var_list() {
-    let input = "reify my_constraint as $[MyVarList];";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    assert_eq!(file.statements.len(), 1);
-    match &file.statements[0].node {
-        Statement::Reify {
-            constraint_path,
-            name,
-            docstring,
-            var_list,
-            ..
-        } => {
-            assert_eq!(constraint_path.node.segments.len(), 1);
-            assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
-            assert_eq!(name.node, "MyVarList");
-            assert!(docstring.is_empty());
-            assert!(*var_list);
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -273,14 +246,12 @@ fn parse_reify_with_qualified_path() {
         Statement::Reify {
             constraint_path,
             name,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 2);
             assert_eq!(constraint_path.node.segments[0].node, "other_module");
             assert_eq!(constraint_path.node.segments[1].node, "my_constraint");
             assert_eq!(name.node, "MyVar");
-            assert!(!*var_list);
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -288,7 +259,7 @@ fn parse_reify_with_qualified_path() {
 
 #[test]
 fn parse_reify_with_deeply_qualified_path() {
-    let input = "reify a::b::c::my_constraint as $[VarList];";
+    let input = "reify a::b::c::my_constraint as $Var;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -297,7 +268,6 @@ fn parse_reify_with_deeply_qualified_path() {
         Statement::Reify {
             constraint_path,
             name,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 4);
@@ -305,8 +275,7 @@ fn parse_reify_with_deeply_qualified_path() {
             assert_eq!(constraint_path.node.segments[1].node, "b");
             assert_eq!(constraint_path.node.segments[2].node, "c");
             assert_eq!(constraint_path.node.segments[3].node, "my_constraint");
-            assert_eq!(name.node, "VarList");
-            assert!(*var_list);
+            assert_eq!(name.node, "Var");
         }
         _ => panic!("Expected Reify statement"),
     }

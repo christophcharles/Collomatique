@@ -735,7 +735,6 @@ async fn fn_using_reified_var() {
             let expected = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
                 vec![Arc::new(ExprValue::Int(5))],
             ))) + LinExpr::constant(10.);
             assert_eq!(lin_expr, expected);
@@ -771,7 +770,6 @@ async fn fn_calling_fn_with_reified_var() {
             let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
                 vec![Arc::new(ExprValue::Int(10))],
             )));
             assert_eq!(lin_expr, expected);

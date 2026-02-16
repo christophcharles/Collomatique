@@ -368,15 +368,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 ))
                 .await?
             }
-            Expr::VarListCall { module, name, args } => {
-                Box::pin(Arc::clone(&self).eval_var_list_call(
-                    eval_history,
-                    module.as_ref(),
-                    name,
-                    args,
-                ))
-                .await?
-            }
             Expr::ListComprehension {
                 body,
                 vars_and_collections,
@@ -440,8 +431,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             }
             ResolvedPathKind::Module(_)
             | ResolvedPathKind::ExternalVariable(_)
-            | ResolvedPathKind::InternalVariable { .. }
-            | ResolvedPathKind::VariableList { .. } => {
+            | ResolvedPathKind::InternalVariable { .. } => {
                 panic!("Module/Variable should not appear in IdentPath after semantic check")
             }
         }
@@ -473,92 +463,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             );
         }
         Ok(Arc::new(ExprValue::Struct(field_values)))
-    }
-
-    async fn eval_var_list_call(
-        self: Arc<Self>,
-        eval_history: &mut EvalHistory<'_, D>,
-        module: Option<&Spanned<String>>,
-        name: &Spanned<String>,
-        args: &[Arc<Spanned<crate::ast::Expr>>],
-    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let var_name_with_dollar = format!("$[{}]", name.node);
-
-        let segments = match module {
-            Some(mod_span) => vec![
-                mod_span.clone(),
-                Spanned::new(var_name_with_dollar, name.span.clone()),
-            ],
-            None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
-        };
-
-        let full_span = match module {
-            Some(mod_span) => Span {
-                start: mod_span.span.start,
-                end: name.span.end,
-            },
-            None => name.span.clone(),
-        };
-
-        let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
-
-        let mut evaluated_args: Vec<Arc<ExprValue<D::Connection>>> = Vec::with_capacity(args.len());
-        for x in args {
-            evaluated_args
-                .push(Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x))).await?);
-        }
-
-        match resolve_path(
-            &path,
-            self.current_module(),
-            &eval_history.ast.global_env,
-            Some(&*self),
-        ) {
-            Ok(ResolvedPathKind::VariableList {
-                module: var_module,
-                name: var_name,
-            }) => {
-                let var_lists = eval_history.ast.get_var_lists();
-                let var_list_fn = var_lists
-                    .get(&(var_module.clone(), var_name.clone()))
-                    .expect("Var list should be declared");
-
-                let (constraints, _origin) = Box::pin(eval_history.add_fn_to_call_history(
-                    &var_list_fn.0,
-                    &var_list_fn.1,
-                    evaluated_args.clone(),
-                    true,
-                ))
-                .await?;
-                eval_history.var_lists.insert(
-                    (var_module.clone(), var_name.clone(), evaluated_args.clone()),
-                    var_list_fn.clone(),
-                );
-
-                let constraint_count = match &*constraints {
-                    ExprValue::List(list) => list.len(),
-                    _ => panic!("Expected [Constraint]"),
-                };
-
-                Ok(Arc::new(ExprValue::List(
-                    (0..constraint_count)
-                        .map(|i| {
-                            Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                                ScriptVar::new(
-                                    var_module.clone(),
-                                    var_name.clone(),
-                                    Some(i),
-                                    evaluated_args.clone(),
-                                ),
-                            ))))
-                        })
-                        .collect(),
-                )))
-            }
-            _ => {
-                panic!("Valid var list expected (should have been caught by type checker)")
-            }
-        }
     }
 
     async fn eval_list_comprehension(
@@ -1330,7 +1234,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 ))
                 .await?;
                 Ok(Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                    ScriptVar::new(var_module, var_name, None, args),
+                    ScriptVar::new(var_module, var_name, args),
                 )))))
             }
             _ => panic!("Valid var expected (should have been caught by type checker)"),
@@ -1387,8 +1291,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             }
             ResolvedPathKind::Module(_)
             | ResolvedPathKind::ExternalVariable(_)
-            | ResolvedPathKind::InternalVariable { .. }
-            | ResolvedPathKind::VariableList { .. } => {
+            | ResolvedPathKind::InternalVariable { .. } => {
                 panic!("Module/Variable should not appear in GenericCall after semantic check")
             }
         }

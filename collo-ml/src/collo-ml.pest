@@ -75,9 +75,8 @@ reserved_keyword = {
 }
 
 // ========== Reify statements ==========
-reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ namespace_path ~ "as" ~ (var_name | var_list_name) ~ ";" }
+reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ namespace_path ~ "as" ~ var_name ~ ";" }
 var_name = ${ "$" ~ ident }
-var_list_name = ${ "$[" ~ ident ~ "]" }
 
 // ========== Let statements ==========
 let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
@@ -187,7 +186,6 @@ primary_expr = {
     list_range | // Must come before list_literal to parse correctly
     list_literal |
     var_call |
-    var_list_call |
     generic_call |   // path(args) - unifies fn_call + qualified_type_cast
     struct_call |    // path{fields} - unifies struct_type_cast + qualified_struct_cast
     string_literal |
@@ -239,7 +237,6 @@ list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
 list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 var_call = { (ident ~ "::")? ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
-var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 // Note: fn_call, qualified_type_cast, struct_type_cast, qualified_struct_cast, qualified_unit_value
 // are all unified into generic_call, struct_call, and namespace_path rules.
 // Supports trailing comma: f(1, 2,)

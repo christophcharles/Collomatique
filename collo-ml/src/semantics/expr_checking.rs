@@ -1895,99 +1895,6 @@ impl LocalCheckEnv {
                 }
             }
 
-            Expr::VarListCall { module, name, args } => {
-                // Build NamespacePath with $[name] format for the variable list name
-                let var_name_with_dollar = format!("$[{}]", name.node);
-
-                let segments = match module {
-                    Some(mod_span) => vec![
-                        mod_span.clone(),
-                        Spanned::new(var_name_with_dollar, name.span.clone()),
-                    ],
-                    None => vec![Spanned::new(var_name_with_dollar, name.span.clone())],
-                };
-
-                // Build the full span (from module start if present, to name end)
-                let full_span = match module {
-                    Some(mod_span) => Span {
-                        start: mod_span.span.start,
-                        end: name.span.end,
-                    },
-                    None => name.span.clone(),
-                };
-
-                let path = Spanned::new(crate::ast::NamespacePath { segments }, full_span);
-
-                // Use resolve_path instead of lookup_var_list
-                match resolve_path(&path, self.current_module(), global_env, None) {
-                    Ok(ResolvedPathKind::VariableList {
-                        module: var_module,
-                        name: var_name,
-                    }) => {
-                        // Mark variable list as used
-                        global_env.mark_var_list_used(&var_module, &var_name);
-
-                        // Get variable args from variable_lists
-                        let var_args = global_env
-                            .get_variable_list_args(&var_module, &var_name)
-                            .expect("Variable list should exist after resolution");
-
-                        // Check argument count
-                        if args.len() != var_args.len() {
-                            errors.push(SemError::ArgumentCountMismatch {
-                                identifier: name.node.clone(),
-                                span: args
-                                    .last()
-                                    .map(|a| a.span.clone())
-                                    .unwrap_or_else(|| name.span.clone()),
-                                expected: var_args.len(),
-                                found: args.len(),
-                            });
-                        }
-
-                        // Type-check each argument
-                        for (i, (arg, expected_type)) in
-                            args.iter().zip(var_args.iter()).enumerate()
-                        {
-                            let arg_type = Arc::clone(&self).check_expr(
-                                global_env,
-                                Arc::clone(arg),
-                                type_info,
-                                expr_types,
-                                resolved_types,
-                                errors,
-                            );
-
-                            if let Some(found_type) = arg_type
-                                && !found_type.is_subtype_of(expected_type)
-                            {
-                                errors.push(SemError::TypeMismatch {
-                                    span: arg.span.clone(),
-                                    expected: expected_type.clone(),
-                                    found: found_type,
-                                    context: format!(
-                                        "argument {} to variable list $[{}]",
-                                        i + 1,
-                                        name.node
-                                    ),
-                                });
-                            }
-                        }
-
-                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
-                    }
-                    Err(_) | Ok(_) => {
-                        // Path not found or resolved to something that's not a variable list
-                        errors.push(SemError::UnknownVariable {
-                            module: self.current_module().to_string(),
-                            var: name.node.clone(),
-                            span: name.span.clone(),
-                        });
-                        Some(SimpleType::List(SimpleType::LinExpr.into()).into())
-                    }
-                }
-            }
-
             // ========== Generic Calls: func(args), Type(x), Enum::Variant(x) ==========
             Expr::GenericCall { path, args } => {
                 // Use resolve_path to determine what this path refers to
@@ -2153,8 +2060,7 @@ impl LocalCheckEnv {
                         None
                     }
                     ResolvedPathKind::ExternalVariable(name)
-                    | ResolvedPathKind::InternalVariable { name, .. }
-                    | ResolvedPathKind::VariableList { name, .. } => {
+                    | ResolvedPathKind::InternalVariable { name, .. } => {
                         // Variables use $name or $$name syntax, not function call syntax
                         errors.push(SemError::UnknownIdentifer {
                             module: self.current_module().to_string(),
@@ -2227,8 +2133,7 @@ impl LocalCheckEnv {
                         None
                     }
                     ResolvedPathKind::ExternalVariable(name)
-                    | ResolvedPathKind::InternalVariable { name, .. }
-                    | ResolvedPathKind::VariableList { name, .. } => {
+                    | ResolvedPathKind::InternalVariable { name, .. } => {
                         // Cannot use struct syntax with variables
                         errors.push(SemError::UnknownType {
                             module: self.current_module().to_string(),
@@ -3067,8 +2972,7 @@ impl LocalCheckEnv {
                 None
             }
             ResolvedPathKind::ExternalVariable(name)
-            | ResolvedPathKind::InternalVariable { name, .. }
-            | ResolvedPathKind::VariableList { name, .. } => {
+            | ResolvedPathKind::InternalVariable { name, .. } => {
                 // Variables use $name or $$name syntax, not identifier syntax
                 errors.push(SemError::UnknownIdentifer {
                     module: self.current_module().to_string(),

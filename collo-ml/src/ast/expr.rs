@@ -57,12 +57,6 @@ pub enum Expr {
         name: Spanned<String>,
         args: Vec<Arc<Spanned<Expr>>>,
     },
-    /// Variable list call: $[VarList](args) or mod::$[VarList](args)
-    VarListCall {
-        module: Option<Spanned<String>>,
-        name: Spanned<String>,
-        args: Vec<Arc<Spanned<Expr>>>,
-    },
 
     // Elements
     None,

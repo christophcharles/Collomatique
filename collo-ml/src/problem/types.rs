@@ -29,7 +29,6 @@ pub type HashedProblemVar<D, V> = collomatique_ilp::Hashed<ProblemVar<D, V>>;
 pub struct ReifiedVar<D: DatabaseConnection> {
     pub(crate) module: String,
     pub(crate) name: String,
-    pub(crate) from_list: Option<usize>,
     pub(crate) params: Vec<Arc<ExprValue<D>>>,
 }
 

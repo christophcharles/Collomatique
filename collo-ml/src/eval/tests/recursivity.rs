@@ -501,35 +501,6 @@ async fn recursive_function_with_recursive_type() {
 // - reify_forward_reference: constraint_fn uses $Var() === 0
 // - reify_forward_reference_with_params: my_constraint uses $MyVar(x)
 //
-// The reify_forward_reference_list test is safe because use_vars doesn't
-// create a self-referential loop.
-
-#[tokio::test]
-async fn reify_forward_reference_list() {
-    let input = r#"
-        reify constraints as $[Vars];
-        pub let constraints(x: Int) -> [Constraint] = [x >== 0, x <== 10];
-        pub let use_vars(x: Int) -> LinExpr = sum v in $[Vars](x) { v };
-    "#;
-
-    let checked_ast =
-        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), HashMap::new())
-            .await
-            .expect("Should compile");
-
-    let result = checked_ast
-        .eval_fn("main", "use_vars", vec![ExprValue::Int(5)])
-        .await
-        .expect("Should evaluate");
-
-    match result {
-        ExprValue::LinExpr(_) => {
-            // LinExpr created successfully from summing the variable list
-        }
-        _ => panic!("Expected LinExpr"),
-    }
-}
-
 // =============================================================================
 // MIXED FORWARD REFERENCES
 // =============================================================================

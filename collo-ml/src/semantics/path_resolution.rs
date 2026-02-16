@@ -31,9 +31,6 @@ pub enum ResolvedPathKind {
 
     /// An internal variable (defined in source with $var)
     InternalVariable { module: String, name: String },
-
-    /// A variable list (defined in source with $$var_list)
-    VariableList { module: String, name: String },
 }
 
 /// Errors that can occur during path resolution
@@ -129,10 +126,6 @@ pub fn resolve_path<D: DatabaseDriver>(
                 name: n.clone(),
             }),
             Symbol::Variable(m, n) => Ok(ResolvedPathKind::InternalVariable {
-                module: m.clone(),
-                name: n.clone(),
-            }),
-            Symbol::VariableList(m, n) => Ok(ResolvedPathKind::VariableList {
                 module: m.clone(),
                 name: n.clone(),
             }),

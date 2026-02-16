@@ -189,7 +189,6 @@ impl Statement {
         let mut public = false;
         let mut constraint_path = None;
         let mut name = None;
-        let mut var_list = false;
 
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
@@ -226,18 +225,6 @@ impl Statement {
                         Span::from_pest(&inner_pair),
                     ));
                 }
-                Rule::var_list_name => {
-                    // var_name is "$[" ~ ident ~ "]", so we need to strip the $[...]
-                    name = Some(Spanned::new(
-                        inner_pair
-                            .as_str()
-                            .trim_start_matches("$[")
-                            .trim_end_matches("]")
-                            .to_string(),
-                        Span::from_pest(&inner_pair),
-                    ));
-                    var_list = true;
-                }
                 _ => {}
             }
         }
@@ -247,7 +234,6 @@ impl Statement {
             public,
             constraint_path: constraint_path.ok_or(AstError::MissingName(span.clone()))?,
             name: name.ok_or(AstError::MissingName(span))?,
-            var_list,
         })
     }
 
@@ -1185,7 +1171,6 @@ impl Expr {
             Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
             Rule::var_call => Self::from_var_call(inner),
-            Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::generic_call => Self::from_generic_call(inner),
             Rule::struct_call => Self::from_struct_call(inner),
             Rule::complex_type_cast => Self::from_complex_type_cast(inner),
@@ -1672,38 +1657,6 @@ impl Expr {
         };
 
         Ok(Expr::VarCall { module, name, args })
-    }
-
-    fn from_var_list_call(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
-        let span = Span::from_pest(&pair);
-        let mut idents = Vec::new();
-        let mut args = Vec::new();
-
-        for inner in pair.into_inner() {
-            match inner.as_rule() {
-                Rule::ident => {
-                    let name_span = Span::from_pest(&inner);
-                    idents.push(Spanned::new(inner.as_str().to_string(), name_span));
-                }
-                Rule::args => {
-                    args = parse_args(inner)?;
-                }
-                _ => {}
-            }
-        }
-
-        let (module, name) = match idents.len() {
-            1 => (None, idents.pop().unwrap()),
-            2 => {
-                let name = idents.pop().unwrap();
-                let module = idents.pop().unwrap();
-                (Some(module), name)
-            }
-            _ => return Err(AstError::MissingName(span)),
-        };
-
-        Ok(Expr::VarListCall { module, name, args })
     }
 
     fn from_namespace_path(pair: Pair<Rule>) -> Result<Self, AstError> {

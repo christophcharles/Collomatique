@@ -18,21 +18,6 @@ async fn reify_constraint_function() {
 }
 
 #[tokio::test]
-async fn reify_constraint_list() {
-    let input = r#"
-        pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
-        reify my_constraints as $[MyVars];
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Reify should work with constraint list function: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
 async fn reify_function_with_parameters() {
     let input = r#"
         pub let constraint(s: Int) -> Constraint = 0 === 1;
@@ -43,51 +28,6 @@ async fn reify_function_with_parameters() {
     assert!(
         errors.is_empty(),
         "Reify should work with parameterized constraint: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn reify_function_with_parameters_into_var_list() {
-    let input = r#"
-        pub let constraints(s: Int) -> [Constraint] = [0 === 1, 0 <== s];
-        reify constraints as $[MyVars];
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new()).await;
-
-    assert!(
-        errors.is_empty(),
-        "Reify should work with parameterized constraint lists: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn disallow_reify_constraint_list_into_simple_var() {
-    let input = r#"
-        pub let my_constraints() -> [Constraint] = [0 === 1, 1 <== 2];
-        reify my_constraints as $MyVars;
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Reify should not work with constraint list without a var_list: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
-async fn disallow_reify_constraint_into_var_list() {
-    let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
-        reify my_constraint as $[MyVars];
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new()).await;
-
-    assert!(
-        !errors.is_empty(),
-        "Reify should not work with single constraint into a var_list: {:?}",
         errors
     );
 }

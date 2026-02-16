@@ -27,21 +27,14 @@ pub type HashedIlpVar<D> = Hashed<IlpVar<D>>;
 pub struct ScriptVar<D: DatabaseConnection> {
     pub module: String,
     pub name: String,
-    pub from_list: Option<usize>,
     pub params: Vec<Arc<ExprValue<D>>>,
 }
 
 impl<D: DatabaseConnection> ScriptVar<D> {
-    pub fn new(
-        module: String,
-        name: String,
-        from_list: Option<usize>,
-        params: Vec<Arc<ExprValue<D>>>,
-    ) -> Self {
+    pub fn new(module: String, name: String, params: Vec<Arc<ExprValue<D>>>) -> Self {
         ScriptVar {
             module,
             name,
-            from_list,
             params,
         }
     }
@@ -51,14 +44,7 @@ impl<D: DatabaseConnection> std::fmt::Display for ScriptVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
         let params_str = params_str.join(", ");
-        match self.from_list {
-            Some(i) => {
-                write!(f, "${}({})[{}]", self.name, params_str, i)
-            }
-            None => {
-                write!(f, "${}({})", self.name, params_str)
-            }
-        }
+        write!(f, "${}({})", self.name, params_str)
     }
 }
 

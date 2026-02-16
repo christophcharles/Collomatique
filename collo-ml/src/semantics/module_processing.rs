@@ -55,7 +55,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
             queries: HashMap::new(),
             external_variables: variables.into_iter().collect(),
             internal_variables: HashMap::new(),
-            variable_lists: HashMap::new(),
             symbols: HashMap::new(),
             _phantom: std::marker::PhantomData,
         };
@@ -300,7 +299,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 if let crate::ast::Statement::Reify {
                     constraint_path,
                     name,
-                    var_list,
                     public,
                     ..
                 } = &statement.node
@@ -309,7 +307,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                         current_module,
                         constraint_path,
                         name,
-                        *var_list,
                         *public,
                         &mut type_info,
                         &mut errors,
@@ -419,16 +416,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
 
     fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
         for ((module, var_name), var_desc) in &self.internal_variables {
-            if !var_desc.public && !var_desc.used {
-                warnings.push(SemWarning::UnusedVariable {
-                    module: module.clone(),
-                    identifier: format!("{}::{}", module, var_name),
-                    span: var_desc.span.clone(),
-                });
-            }
-        }
-
-        for ((module, var_name), var_desc) in &self.variable_lists {
             if !var_desc.public && !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
                     module: module.clone(),
@@ -618,28 +605,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 conflicts.push((path.0.join("::"), existing.module_name().to_string()));
             } else {
                 symbol_map.insert(path, Symbol::Variable(mod_name, var_name));
-            }
-        }
-
-        // Collect variable lists to add
-        // Skip private variable lists when importing from another module
-        let var_lists_to_add: Vec<_> = self
-            .variable_lists
-            .iter()
-            .filter(|((mod_name, _), var_desc)| {
-                mod_name == source_module && (import_span.is_none() || var_desc.public)
-            })
-            .map(|((mod_name, var_name), _)| (mod_name.clone(), var_name.clone()))
-            .collect();
-
-        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
-        for (mod_name, var_name) in var_lists_to_add {
-            let dollar_var_name = format!("$[{}]", var_name);
-            let path = Self::make_symbol_path(prefix, &dollar_var_name);
-            if let Some(existing) = symbol_map.get(&path) {
-                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
-            } else {
-                symbol_map.insert(path, Symbol::VariableList(mod_name, var_name));
             }
         }
 
@@ -1384,7 +1349,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         current_module: &str,
         constraint_path: &Spanned<crate::ast::NamespacePath>,
         name: &Spanned<String>,
-        var_list: bool,
         public: bool,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -1437,11 +1401,7 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                 // Mark function as used
                 self.mark_fn_used(&fn_module, &fn_name);
 
-                let needed_output_type = ExprType::simple(if var_list {
-                    SimpleType::List(SimpleType::Constraint.into())
-                } else {
-                    SimpleType::Constraint
-                });
+                let needed_output_type = ExprType::simple(SimpleType::Constraint);
                 let correct_type = fn_type.0.output == needed_output_type;
                 if !correct_type {
                     let expected_type = FunctionType {
@@ -1465,71 +1425,36 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
                     return;
                 }
 
-                if var_list {
-                    match self.lookup_var_list(current_module, &name.node) {
-                        Some((_args, span)) => errors.push(SemError::VariableAlreadyDefined {
-                            module: current_module.to_string(),
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            here: Some(span),
-                        }),
-                        None => {
-                            if let Some(suggestion) =
-                                string_case::generate_suggestion_for_naming_convention(
-                                    &name.node,
-                                    string_case::NamingConvention::PascalCase,
-                                )
-                            {
-                                warnings.push(SemWarning::VariableNamingConvention {
-                                    module: current_module.to_string(),
-                                    identifier: name.node.clone(),
-                                    span: name.span.clone(),
-                                    suggestion,
-                                });
-                            }
-                            self.register_var_list(
-                                current_module,
+                match self.lookup_var(current_module, &name.node) {
+                    Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                        module: current_module.to_string(),
+                        identifier: name.node.clone(),
+                        span: name.span.clone(),
+                        here: span_opt,
+                    }),
+                    None => {
+                        if let Some(suggestion) =
+                            string_case::generate_suggestion_for_naming_convention(
                                 &name.node,
-                                fn_type.0.args.clone(),
-                                name.span.clone(),
-                                public,
-                                (fn_module.clone(), fn_name.clone()),
-                                type_info,
-                            );
+                                string_case::NamingConvention::PascalCase,
+                            )
+                        {
+                            warnings.push(SemWarning::VariableNamingConvention {
+                                module: current_module.to_string(),
+                                identifier: name.node.clone(),
+                                span: name.span.clone(),
+                                suggestion,
+                            });
                         }
-                    }
-                } else {
-                    match self.lookup_var(current_module, &name.node) {
-                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
-                            module: current_module.to_string(),
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            here: span_opt,
-                        }),
-                        None => {
-                            if let Some(suggestion) =
-                                string_case::generate_suggestion_for_naming_convention(
-                                    &name.node,
-                                    string_case::NamingConvention::PascalCase,
-                                )
-                            {
-                                warnings.push(SemWarning::VariableNamingConvention {
-                                    module: current_module.to_string(),
-                                    identifier: name.node.clone(),
-                                    span: name.span.clone(),
-                                    suggestion,
-                                });
-                            }
-                            self.register_var(
-                                current_module,
-                                &name.node,
-                                fn_type.0.args.clone(),
-                                name.span.clone(),
-                                public,
-                                (fn_module.clone(), fn_name.clone()),
-                                type_info,
-                            );
-                        }
+                        self.register_var(
+                            current_module,
+                            &name.node,
+                            fn_type.0.args.clone(),
+                            name.span.clone(),
+                            public,
+                            (fn_module.clone(), fn_name.clone()),
+                            type_info,
+                        );
                     }
                 }
             }

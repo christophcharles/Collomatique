@@ -159,25 +159,11 @@ impl<D: DatabaseDriver> CheckedAST<D> {
             .collect()
     }
 
-    pub fn get_var_lists(&self) -> HashMap<(String, String), (String, String)> {
-        self.global_env
-            .get_var_lists()
-            .iter()
-            .map(|((module, var_name), var_desc)| {
-                (
-                    (module.clone(), var_name.clone()),
-                    var_desc.referenced_fn.clone(),
-                )
-            })
-            .collect()
-    }
-
     pub fn start_eval_history(&self) -> EvalHistory<'_, D> {
         EvalHistory {
             ast: self,
             funcs: HashMap::new(),
             vars: HashMap::new(),
-            var_lists: HashMap::new(),
             queries: HashMap::new(),
         }
     }

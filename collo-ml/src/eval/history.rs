@@ -25,8 +25,6 @@ pub struct EvalHistory<'a, D: DatabaseDriver> {
     >,
     pub(crate) vars:
         HashMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
-    pub(crate) var_lists:
-        HashMap<(String, String, Vec<Arc<ExprValue<D::Connection>>>), (String, String)>,
     pub(crate) queries: HashMap<
         (String, String, Vec<Arc<ExprValue<D::Connection>>>),
         Arc<ExprValue<D::Connection>>,
@@ -254,7 +252,6 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
     pub fn into_var_def(self) -> VariableDefinitions<D::Connection> {
         let mut var_def = VariableDefinitions {
             vars: HashMap::new(),
-            var_lists: HashMap::new(),
         };
 
         for ((v_module, v_name, v_args), (fn_module, fn_name)) in self.vars {
@@ -277,39 +274,6 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                 .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
         }
 
-        for ((vl_module, vl_name, vl_args), (fn_module, fn_name)) in self.var_lists {
-            let (fn_call_result, new_origin) = self
-                .funcs
-                .get(&(fn_module.clone(), fn_name.clone(), vl_args.clone()))
-                .expect("Fn call should be valid");
-            let constraints: Vec<_> = match &**fn_call_result {
-                ExprValue::List(cs)
-                    if cs.iter().all(|x| matches!(&**x, ExprValue::Constraint(_))) =>
-                {
-                    cs.iter()
-                        .map(|c| match &**c {
-                            ExprValue::Constraint(c) => c
-                                .iter()
-                                .map(|c_with_o| c_with_o.constraint.clone())
-                                .collect::<Vec<_>>(),
-                            _ => panic!(
-                                "Elements of the returned list should be constraints: {:?}",
-                                c
-                            ),
-                        })
-                        .collect()
-                }
-                _ => panic!(
-                    "Fn call should have returned a constraint list: {:?}",
-                    fn_call_result
-                ),
-            };
-            var_def.var_lists.insert(
-                (vl_module, vl_name, vl_args),
-                (constraints, new_origin.clone()),
-            );
-        }
-
         var_def
     }
 }
@@ -320,9 +284,5 @@ pub struct VariableDefinitions<D: DatabaseConnection> {
     pub vars: HashMap<
         (String, String, Vec<Arc<ExprValue<D>>>),
         (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>),
-    >,
-    pub var_lists: HashMap<
-        (String, String, Vec<Arc<ExprValue<D>>>),
-        (Vec<Vec<Constraint<HashedIlpVar<D>>>>, Origin<D>),
     >,
 }

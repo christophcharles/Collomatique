@@ -138,35 +138,3 @@ async fn eval_cross_module_reified_variable() {
         _ => panic!("Expected LinExpr, got {:?}", result),
     }
 }
-
-#[tokio::test]
-async fn eval_cross_module_reified_variable_list() {
-    let mod_a = r#"
-        pub let checks(x: Int) -> [Constraint] = [x >== 0, x <== 10];
-        pub reify checks as $[CheckList];
-    "#;
-    let mod_b = r#"
-        import "mod_a" as a;
-        pub let use_check_list(x: Int) -> [LinExpr] = a::$[CheckList](x);
-    "#;
-
-    let checked_ast = compile_multi(&[("mod_a", mod_a), ("mod_b", mod_b)]).await;
-
-    let result = checked_ast
-        .eval_fn("mod_b", "use_check_list", vec![ExprValue::Int(5)])
-        .await
-        .expect("Should evaluate");
-
-    match result {
-        ExprValue::List(items) => {
-            assert_eq!(items.len(), 2);
-            for item in &items {
-                match &**item {
-                    ExprValue::LinExpr(_) => {}
-                    _ => panic!("Expected LinExpr in list, got {:?}", item),
-                }
-            }
-        }
-        _ => panic!("Expected List, got {:?}", result),
-    }
-}

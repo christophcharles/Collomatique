@@ -40,7 +40,6 @@ pub enum Statement {
         docstring: Vec<DocstringLine>,
         public: bool,
         constraint_path: Spanned<NamespacePath>,
-        var_list: bool,
         name: Spanned<String>,
     },
     TypeDecl {

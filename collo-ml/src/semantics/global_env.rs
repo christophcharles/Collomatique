@@ -54,12 +54,11 @@ pub type SymbolMap = HashMap<SymbolPath, Symbol>;
 /// A symbol in the symbol table, pointing to its definition location
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Symbol {
-    Module(String),               // module name
-    Function(String, String),     // (module, name)
-    Query(String, String),        // (module, name)
-    CustomType(String, String),   // (module, name)
-    Variable(String, String),     // (module, name)
-    VariableList(String, String), // (module, name)
+    Module(String),             // module name
+    Function(String, String),   // (module, name)
+    Query(String, String),      // (module, name)
+    CustomType(String, String), // (module, name)
+    Variable(String, String),   // (module, name)
 }
 
 impl Symbol {
@@ -71,7 +70,6 @@ impl Symbol {
             Symbol::Query(m, _) => m,
             Symbol::CustomType(m, _) => m,
             Symbol::Variable(m, _) => m,
-            Symbol::VariableList(m, _) => m,
         }
     }
 }
@@ -90,7 +88,6 @@ pub struct GlobalEnv<D: DatabaseDriver> {
     pub(crate) queries: HashMap<(String, String), QueryDesc>,     // (module, name) → desc
     pub(crate) external_variables: HashMap<String, ArgsType>,     // external, no module
     pub(crate) internal_variables: HashMap<(String, String), VariableDesc>, // (module, name) → desc
-    pub(crate) variable_lists: HashMap<(String, String), VariableDesc>, // (module, name) → desc
     pub(crate) symbols: HashMap<String, SymbolMap>,               // module → symbol table
     pub(crate) _phantom: std::marker::PhantomData<D>,
 }
@@ -251,10 +248,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         &self.internal_variables
     }
 
-    pub fn get_var_lists(&self) -> &HashMap<(String, String), VariableDesc> {
-        &self.variable_lists
-    }
-
     pub(crate) fn lookup_fn(&self, module: &str, name: &str) -> Option<(FunctionType, Span)> {
         let fn_desc = self
             .functions
@@ -402,53 +395,9 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
         type_info.types.insert(span, args_typ.into());
     }
 
-    pub(crate) fn lookup_var_list(&self, module: &str, name: &str) -> Option<(ArgsType, Span)> {
-        let var_desc = self
-            .variable_lists
-            .get(&(module.to_string(), name.to_string()))?;
-
-        Some((var_desc.args.clone(), var_desc.span.clone()))
-    }
-
-    pub(crate) fn mark_var_list_used(&mut self, module: &str, name: &str) {
-        if let Some(var_desc) = self
-            .variable_lists
-            .get_mut(&(module.to_string(), name.to_string()))
-        {
-            var_desc.used = true;
-        }
-    }
-
     /// Look up a symbol path in the symbol table for a given module
     pub fn lookup_symbol(&self, module: &str, path: &SymbolPath) -> Option<&Symbol> {
         self.symbols.get(module)?.get(path)
-    }
-
-    pub(crate) fn register_var_list(
-        &mut self,
-        module: &str,
-        name: &str,
-        args_typ: ArgsType,
-        span: Span,
-        public: bool,
-        referenced_fn: (String, String),
-        type_info: &mut TypeInfo,
-    ) {
-        let key = (module.to_string(), name.to_string());
-        assert!(!self.variable_lists.contains_key(&key));
-
-        self.variable_lists.insert(
-            key,
-            VariableDesc {
-                args: args_typ.clone(),
-                span: span.clone(),
-                used: should_be_used_by_default(name),
-                public,
-                referenced_fn,
-            },
-        );
-
-        type_info.types.insert(span, args_typ.into());
     }
 
     pub(crate) fn module_exists(&self, module: &str) -> bool {
@@ -465,13 +414,6 @@ impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Get the argument types for an external variable
     pub(crate) fn get_external_variable_args(&self, name: &str) -> Option<ArgsType> {
         self.external_variables.get(name).cloned()
-    }
-
-    /// Get the argument types for a variable list
-    pub(crate) fn get_variable_list_args(&self, module: &str, name: &str) -> Option<ArgsType> {
-        self.variable_lists
-            .get(&(module.to_string(), name.to_string()))
-            .map(|desc| desc.args.clone())
     }
 
     /// Breadth-first resolution: peel custom type wrappers one level at a time.

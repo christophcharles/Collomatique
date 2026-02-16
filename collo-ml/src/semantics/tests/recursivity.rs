@@ -415,21 +415,6 @@ async fn reify_forward_reference_with_params() {
 }
 
 #[tokio::test]
-async fn reify_forward_reference_list() {
-    let input = r#"
-        reify constraints as $[Vars];
-        pub let constraints(x: Int) -> [Constraint] = [x >== 0, x <== 10];
-        pub let use_vars(x: Int) -> LinExpr = sum v in $[Vars](x) { v };
-    "#;
-    let (_, errors, _) = analyze(input, HashMap::new()).await;
-    assert!(
-        errors.is_empty(),
-        "Reify forward reference to constraint list should work: {:?}",
-        errors
-    );
-}
-
-#[tokio::test]
 async fn multiple_reify_forward_references() {
     let input = r#"
         reify c1 as $V1;

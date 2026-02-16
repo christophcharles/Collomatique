@@ -654,13 +654,11 @@ impl<
             IlpVar::Script(ScriptVar {
                 module,
                 name,
-                from_list,
                 params,
                 ..
             }) => ProblemVar::Reified(ReifiedVar {
                 module: module.clone(),
                 name: name.clone(),
-                from_list: *from_list,
                 params: params.clone(),
             }),
         })
@@ -897,7 +895,6 @@ impl<
             let reified_var = ReifiedVar {
                 module: var_module,
                 name: var_name,
-                from_list: None,
                 params: var_args,
             };
             let new_var = Hashed::new(ProblemVar::Reified(reified_var));
@@ -907,37 +904,12 @@ impl<
                 .insert(new_var.clone(), Variable::binary());
             constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin));
         }
-        for ((var_list_module, var_list_name, var_list_args), (constraints_list, new_origin)) in
-            var_def.var_lists
-        {
-            for (i, constraints) in constraints_list.into_iter().enumerate() {
-                let cleaned_constraints: Vec<_> = constraints
-                    .into_iter()
-                    .map(|c| eval_data.clean_constraint(&c))
-                    .collect();
-
-                let reified_var = ReifiedVar {
-                    module: var_list_module.clone(),
-                    name: var_list_name.clone(),
-                    from_list: Some(i),
-                    params: var_list_args.clone(),
-                };
-                let new_var = Hashed::new(ProblemVar::Reified(reified_var));
-
-                eval_data
-                    .vars_desc
-                    .insert(new_var.clone(), Variable::binary());
-                constraints_to_reify.insert(new_var, (cleaned_constraints, new_origin.clone()));
-            }
-        }
-
         // Phase 5: Reify constraints
         for (var, (constraints, origin)) in constraints_to_reify {
             let var_name = match &*var {
                 ProblemVar::Reified(ReifiedVar {
                     module: _,
                     name,
-                    from_list: _,
                     params: _,
                 }) => name.clone(),
                 _ => panic!("Unexpected variable type to reify: {:?}", var),
