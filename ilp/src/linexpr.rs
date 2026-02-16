@@ -12,7 +12,7 @@ use crate::f64_is_positive;
 use super::{UsableData, f64_is_zero};
 use std::{
     borrow::Borrow,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
 };
 
 /// [LinExpr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
@@ -62,16 +62,48 @@ use std::{
 /// assert_eq!(expr.get("B"), Some(-3.0)); // The coefficient for "B" is -3
 /// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
 /// ```
-#[derive(Debug, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinExpr<V: UsableData> {
-    coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    coefs: HashMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
+}
+
+impl<V: UsableData> std::hash::Hash for LinExpr<V> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.constant.hash(state);
+        let mut combined: u64 = 0;
+        for (k, v) in &self.coefs {
+            let mut hasher = std::hash::DefaultHasher::new();
+            k.hash(&mut hasher);
+            v.hash(&mut hasher);
+            combined = combined.wrapping_add(std::hash::Hasher::finish(&hasher));
+        }
+        combined.hash(state);
+    }
+}
+
+impl<V: UsableData> Ord for LinExpr<V> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.constant.cmp(&other.constant).then_with(|| {
+            let mut self_entries: Vec<_> = self.coefs.iter().collect();
+            self_entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+            let mut other_entries: Vec<_> = other.coefs.iter().collect();
+            other_entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+            self_entries.cmp(&other_entries)
+        })
+    }
+}
+
+impl<V: UsableData> PartialOrd for LinExpr<V> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl<V: UsableData> Default for LinExpr<V> {
     fn default() -> Self {
         LinExpr {
-            coefs: BTreeMap::default(),
+            coefs: HashMap::default(),
             constant: ordered_float::OrderedFloat::default(),
         }
     }
@@ -127,7 +159,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     pub fn var<T: Into<V>>(name: T) -> Self {
         LinExpr {
-            coefs: BTreeMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
+            coefs: HashMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
             constant: ordered_float::OrderedFloat(0.0),
         }
     }
@@ -145,7 +177,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     pub fn constant(number: f64) -> Self {
         LinExpr {
-            coefs: BTreeMap::new(),
+            coefs: HashMap::new(),
             constant: ordered_float::OrderedFloat(number),
         }
     }
@@ -412,7 +444,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     pub fn reduce(&self, vars: &BTreeMap<V, f64>) -> LinExpr<V> {
         let mut new_constant = self.constant.into_inner();
-        let mut new_coefs = BTreeMap::new();
+        let mut new_coefs = HashMap::new();
 
         for (v, c) in &self.coefs {
             match vars.get(v) {
@@ -1547,7 +1579,9 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for LinExpr<V> {
             return Ok(());
         }
 
-        let mut it = self.coefs.iter().peekable();
+        let mut sorted_coefs: Vec<_> = self.coefs.iter().collect();
+        sorted_coefs.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        let mut it = sorted_coefs.iter().peekable();
         while let Some((key, value)) = it.next() {
             if value.is_sign_negative() {
                 write!(f, "({})*{}", value, key)?;
