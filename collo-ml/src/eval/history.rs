@@ -252,7 +252,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
     }
 
     pub async fn into_var_def(
-        &mut self,
+        mut self,
     ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
         let mut computed: HashMap<
             Hashed<VarKey<D::Connection>>,
@@ -290,9 +290,9 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             pending = std::mem::take(&mut self.vars);
         }
 
-        // Drop the func cache so each Arc's refcount decreases,
+        // Drop the history so each Arc's refcount decreases,
         // enabling try_unwrap to take ownership without cloning.
-        self.funcs.clear();
+        std::mem::drop(self);
 
         let vars = computed
             .into_iter()
