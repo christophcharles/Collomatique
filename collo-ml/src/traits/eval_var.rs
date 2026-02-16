@@ -52,7 +52,7 @@ use std::collections::HashMap;
 /// impl EvalVar for Var {
 ///     type Env = MyEnv;
 ///     fn field_schema() -> HashMap<String, Vec<ExprType>> { /* ... */ }
-///     fn vars(env: &MyEnv) -> BTreeMap<Self, Variable> { /* ... */ }
+///     fn vars(env: &MyEnv) -> HashMap<Self, Variable> { /* ... */ }
 ///     fn fix(&self, env: &MyEnv) -> Option<f64> { /* ... */ }
 /// }
 /// ```
@@ -100,7 +100,7 @@ pub trait EvalVar: UsableData {
     /// # Returns
     ///
     /// A map of all variable instances to their variable types.
-    fn vars(env: &Self::Env) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable>;
+    fn vars(env: &Self::Env) -> std::collections::HashMap<Self, collomatique_ilp::Variable>;
 
     /// Returns a fixed value for this variable instance, if it should be fixed.
     ///

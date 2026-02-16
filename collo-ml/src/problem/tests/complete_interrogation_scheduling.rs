@@ -13,7 +13,7 @@ async fn complete_interrogations_scheduling() {
     // - Each student has each subject exactly once over the 3 weeks
     // - Each teacher interrogates at most 1 student per week
 
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         StudentWithTeacher {
             student: i32, // 0..11
@@ -57,10 +57,8 @@ async fn complete_interrogations_scheduling() {
             }
         }
 
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            let mut vars = BTreeMap::new();
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
             // Only create variables for valid combinations
             for student in 0..11 {
                 for teacher in 0..12 {

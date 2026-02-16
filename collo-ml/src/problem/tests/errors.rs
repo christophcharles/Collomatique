@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn error_unknown_function() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
     }
@@ -17,10 +17,8 @@ async fn error_unknown_function() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
@@ -68,7 +66,7 @@ async fn error_unknown_function() {
 
 #[tokio::test]
 async fn error_wrong_return_type_for_constraint() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
     }
@@ -81,10 +79,8 @@ async fn error_wrong_return_type_for_constraint() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 

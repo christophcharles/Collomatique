@@ -21,8 +21,6 @@ pub type HashedIlpVar<D> = Hashed<IlpVar<D>>;
     Debug(bound = ""),
     Clone(bound = ""),
     Hash(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
@@ -69,8 +67,6 @@ impl<D: DatabaseConnection> std::fmt::Display for ScriptVar<D> {
     Debug(bound = ""),
     Clone(bound = ""),
     Hash(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
@@ -98,9 +94,7 @@ impl<D: DatabaseConnection> std::fmt::Display for ExternVar<D> {
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
-    Ord(bound = "", feature_allow_slow_enum = "true")
+    Eq(bound = "")
 )]
 pub enum IlpVar<D: DatabaseConnection> {
     Base(ExternVar<D>),
@@ -122,9 +116,7 @@ impl<D: DatabaseConnection> std::fmt::Display for IlpVar<D> {
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = "")
+    Eq(bound = "")
 )]
 pub struct Origin<D: DatabaseConnection> {
     pub module: String,
@@ -157,9 +149,7 @@ impl<D: DatabaseConnection> std::fmt::Display for Origin<D> {
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = "")
+    Eq(bound = "")
 )]
 pub struct ConstraintWithOrigin<D: DatabaseConnection> {
     pub constraint: Constraint<HashedIlpVar<D>>,

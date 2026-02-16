@@ -5,7 +5,7 @@ use super::*;
 
 #[tokio::test]
 async fn two_objectives_same_script() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -26,10 +26,8 @@ async fn two_objectives_same_script() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
@@ -165,7 +163,7 @@ async fn two_objectives_same_script() {
 
 #[tokio::test]
 async fn two_objectives_different_scripts() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -186,10 +184,8 @@ async fn two_objectives_different_scripts() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
@@ -338,7 +334,7 @@ async fn two_objectives_different_scripts() {
 
 #[tokio::test]
 async fn objectives_with_different_senses() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -359,10 +355,8 @@ async fn objectives_with_different_senses() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),

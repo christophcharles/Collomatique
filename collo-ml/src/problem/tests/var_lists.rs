@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn list_constraint_reification() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -23,10 +23,8 @@ async fn list_constraint_reification() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
@@ -126,7 +124,7 @@ async fn list_constraint_reification() {
 
 #[tokio::test]
 async fn list_constraint_reification_exact_count_with_param() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         X(i32), // Parameter from 0 to 99
     }
@@ -146,10 +144,8 @@ async fn list_constraint_reification_exact_count_with_param() {
             }
         }
 
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            let mut vars = BTreeMap::new();
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
             // Create a binary variable for each valid index
             for i in 0..100 {
                 vars.insert(Var::X(i), collomatique_ilp::Variable::binary());

@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn single_constraint_problem() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
     }
@@ -17,10 +17,8 @@ async fn single_constraint_problem() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
@@ -79,7 +77,7 @@ async fn single_constraint_problem() {
 
 #[tokio::test]
 async fn multiple_constraints_in_script() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -98,10 +96,8 @@ async fn multiple_constraints_in_script() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
@@ -200,7 +196,7 @@ async fn multiple_constraints_in_script() {
 
 #[tokio::test]
 async fn multiple_function_calls() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -214,10 +210,8 @@ async fn multiple_function_calls() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
@@ -304,7 +298,7 @@ async fn multiple_function_calls() {
 
 #[tokio::test]
 async fn constraints_from_different_modules() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -318,10 +312,8 @@ async fn constraints_from_different_modules() {
         fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])

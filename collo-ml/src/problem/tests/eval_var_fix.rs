@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_fix_forces_variable_values() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V(i32), // Parameter from 0 to 9
     }
@@ -24,10 +24,8 @@ async fn test_fix_forces_variable_values() {
             }
         }
 
-        fn vars(
-            _env: &NoObjectEnv,
-        ) -> std::collections::BTreeMap<Self, collomatique_ilp::Variable> {
-            let mut vars = BTreeMap::new();
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
             // Only include variables that are not fixed
             // In this case, only V(7) is not fixed
             vars.insert(Var::V(7), collomatique_ilp::Variable::binary());

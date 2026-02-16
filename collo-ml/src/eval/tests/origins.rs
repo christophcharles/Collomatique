@@ -447,7 +447,14 @@ async fn docstring_substitution_with_args() {
             assert_eq!(constraints.len(), 2);
 
             let mut constraints_vec: Vec<_> = constraints.iter().collect();
-            constraints_vec.sort_by_key(|c| &c.origin.as_ref().unwrap().args[0]);
+            constraints_vec.sort_by(|a, b| {
+                let arg_a = &a.origin.as_ref().unwrap().args[0];
+                let arg_b = &b.origin.as_ref().unwrap().args[0];
+                match (&**arg_a, &**arg_b) {
+                    (ExprValue::Int(a), ExprValue::Int(b)) => a.cmp(b),
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
 
             // First constraint: h(1)
             let constraint1 = &constraints_vec[0];

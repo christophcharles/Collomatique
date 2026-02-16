@@ -37,7 +37,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSol
 
 struct CbcModel<V: UsableData> {
     model: coin_cbc::Model,
-    cols: std::collections::BTreeMap<V, coin_cbc::Col>,
+    cols: std::collections::HashMap<V, coin_cbc::Col>,
 }
 
 impl Default for CbcSolver {
@@ -107,11 +107,11 @@ impl CbcSolver {
         problem: &Problem<V, C, P>,
     ) -> CbcModel<V> {
         use coin_cbc::Model;
-        use std::collections::BTreeMap;
+        use std::collections::HashMap;
 
         let mut model = Model::default();
 
-        let cols: BTreeMap<_, _> = problem
+        let cols: HashMap<_, _> = problem
             .get_variables()
             .iter()
             .map(|(var, desc)| {
@@ -181,7 +181,7 @@ impl CbcSolver {
     fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
         problem: &'a Problem<V, C, P>,
         sol: &coin_cbc::Solution,
-        cols: &std::collections::BTreeMap<V, coin_cbc::Col>,
+        cols: &std::collections::HashMap<V, coin_cbc::Col>,
     ) -> TimeLimitSolution<'a, V, C, P> {
         let raw_model = sol.raw();
 

@@ -258,7 +258,7 @@ impl<
         let mut eval_data = EvalData::new(self, env, db_connection).await?;
 
         for (constraint, _desc) in eval_data.constraints.iter_mut() {
-            let mut fixed_variables = BTreeMap::new();
+            let mut fixed_variables = HashMap::new();
             for var in constraint.variables() {
                 if fixed_variables.contains_key(&var) {
                     continue;
@@ -276,7 +276,7 @@ impl<
             }
             *constraint = constraint.reduce(&fixed_variables);
         }
-        let mut fixed_variables = BTreeMap::new();
+        let mut fixed_variables = HashMap::new();
         for var in eval_data.objective.get_function().variables() {
             if fixed_variables.contains_key(&var) {
                 continue;
@@ -486,7 +486,7 @@ impl<
                 // and construct a corresponding matching constraint
                 if var_type == Variable::binary() {
                     let f = |val: bool| {
-                        let reduced = constraint.reduce(&BTreeMap::from([(
+                        let reduced = constraint.reduce(&HashMap::from([(
                             single_var.clone(),
                             if val { 1.0 } else { 0.0 },
                         )]));
@@ -872,7 +872,7 @@ impl<
         }
 
         // Phase 4: Process reified variables
-        let mut constraints_to_reify = BTreeMap::<
+        let mut constraints_to_reify = HashMap::<
             ProblemVar<D::Connection, V>,
             (
                 Vec<Constraint<ProblemVar<D::Connection, V>>>,

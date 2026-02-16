@@ -25,7 +25,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for GoodSo
 
 struct GoodModel<V: UsableData> {
     unsolved_problem: good_lp::variable::UnsolvedProblem,
-    vars: std::collections::BTreeMap<V, good_lp::Variable>,
+    vars: std::collections::HashMap<V, good_lp::Variable>,
 }
 
 impl Default for GoodSolver {
@@ -59,10 +59,10 @@ impl GoodSolver {
         problem: &Problem<V, C, P>,
     ) -> GoodModel<V> {
         use good_lp::ProblemVariables;
-        use std::collections::BTreeMap;
+        use std::collections::HashMap;
 
         let mut pb_vars = ProblemVariables::new();
-        let vars: BTreeMap<_, _> = problem
+        let vars: HashMap<_, _> = problem
             .get_variables()
             .iter()
             .map(|(var, desc)| {
@@ -113,7 +113,7 @@ impl GoodSolver {
         problem: &Problem<V, C, P>,
     ) -> Option<(
         Box<dyn good_lp::Solution>,
-        std::collections::BTreeMap<V, good_lp::Variable>,
+        std::collections::HashMap<V, good_lp::Variable>,
     )> {
         use good_lp::SolverModel;
 
@@ -143,7 +143,7 @@ impl GoodSolver {
     fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
         problem: &'a Problem<V, C, P>,
         sol: Box<dyn good_lp::Solution>,
-        vars: &std::collections::BTreeMap<V, good_lp::Variable>,
+        vars: &std::collections::HashMap<V, good_lp::Variable>,
     ) -> Option<FeasableConfig<'a, V, C, P>> {
         let config_data =
             ConfigData::new().set_iter(vars.iter().map(|(v, var)| (v.clone(), sol.value(*var))));

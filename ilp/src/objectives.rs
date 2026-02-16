@@ -14,7 +14,7 @@ use super::{LinExpr, UsableData};
 ///
 /// This enum represents the sense in which
 /// we try to optimize the objective function
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ObjectiveSense {
     /// Minimize the objective function (default)
     #[default]
@@ -158,7 +158,7 @@ impl ObjectiveSense {
 /// are taken as their absolute values.
 ///
 /// If you still want to reverse an objective, you can by using [Objective::reverse] or [Objective::reversed].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Objective<V: UsableData> {
     /// linear expression to optimize
     func: LinExpr<V>,
@@ -368,7 +368,7 @@ impl<V: UsableData> Objective<V> {
     ///
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, objectives::{Objective, ObjectiveSense}};
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -376,7 +376,7 @@ impl<V: UsableData> Objective<V> {
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     /// let objective = Objective::new(expr, ObjectiveSense::Maximize);
     ///
-    /// let objective_reduced = objective.reduce(&BTreeMap::from([
+    /// let objective_reduced = objective.reduce(&HashMap::from([
     ///     (String::from("A"), -1.0),
     ///     (String::from("C"), 2.0),
     /// ]));
@@ -384,7 +384,7 @@ impl<V: UsableData> Objective<V> {
     /// let objective_expected = Objective::new(-3.0*&expr2 - 44.0, ObjectiveSense::Maximize);
     /// assert_eq!(objective_reduced, objective_expected);
     /// ```
-    pub fn reduce(&self, vars: &std::collections::BTreeMap<V, f64>) -> Objective<V> {
+    pub fn reduce(&self, vars: &std::collections::HashMap<V, f64>) -> Objective<V> {
         let new_func = self.func.reduce(vars);
 
         Objective {

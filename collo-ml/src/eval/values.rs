@@ -20,9 +20,7 @@ use std::sync::Arc;
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
-    Ord(bound = "", feature_allow_slow_enum = "true")
+    Eq(bound = "")
 )]
 pub enum ExprValue<D: DatabaseConnection> {
     None,
@@ -48,9 +46,7 @@ pub enum ExprValue<D: DatabaseConnection> {
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = "")
+    Eq(bound = "")
 )]
 pub struct CustomValue<D: DatabaseConnection> {
     /// The module where this type is defined

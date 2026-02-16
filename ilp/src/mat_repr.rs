@@ -17,7 +17,7 @@ pub mod sparse;
 
 use super::{Constraint, UsableData, Variable};
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::HashMap;
 
 /// Matrix representation of a problem
 ///
@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// The default representation if you don't specify it is given by [crate::DefaultRepr].
 pub trait ProblemRepr<V: UsableData>:
-    Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq + PartialOrd + Ord
+    Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq
 {
     /// The corresponding representation for configurations.
     ///
@@ -41,7 +41,7 @@ pub trait ProblemRepr<V: UsableData>:
 
     /// Builds a new representation from variables description
     /// and iterator over constraints.
-    fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
+    fn new<'a, T>(variables: &HashMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
         T: ExactSizeIterator<Item = &'a Constraint<V>>;
@@ -50,7 +50,7 @@ pub trait ProblemRepr<V: UsableData>:
     /// defined by a map between variables and their values.
     fn config_from<'a>(
         &'a self,
-        vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+        vars: &HashMap<V, ordered_float::OrderedFloat<f64>>,
     ) -> Self::Config<'a>;
 }
 
@@ -61,13 +61,13 @@ pub trait ProblemRepr<V: UsableData>:
 ///
 /// Each [ConfigRepr] is associated with a [ProblemRepr] through [ProblemRepr::Config].
 pub trait ConfigRepr<'a, V: UsableData>:
-    PartialEq + Eq + PartialOrd + Ord + Sized + Clone + std::fmt::Debug + Send + Sync
+    PartialEq + Eq + Sized + Clone + std::fmt::Debug + Send + Sync
 {
     /// Returns the list of unsatisfied constraints by the current configuration
     /// for its parent [ProblemRepr].
     ///
     /// The list can be empty if all the constraints are satisfied.
-    fn unsatisfied_constraints(&self) -> BTreeSet<usize>;
+    fn unsatisfied_constraints(&self) -> Vec<usize>;
 
     /// Returns true if the configuration is feasable.
     ///

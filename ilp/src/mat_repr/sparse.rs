@@ -21,7 +21,7 @@ use super::{ConfigRepr, ProblemRepr};
 use crate::{Constraint, UsableData, Variable, f64_is_positive, f64_is_zero, linexpr::EqSymbol};
 
 use sprs::{CsMat, CsVec, TriMat};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
@@ -35,7 +35,7 @@ pub struct SprsProblem<V: UsableData> {
     mat: CsMat<f64>,
     constants: CsVec<f64>,
     constraint_symbols: Vec<EqSymbol>,
-    variable_map: BTreeMap<V, usize>,
+    variable_map: HashMap<V, usize>,
 }
 
 impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
@@ -45,7 +45,7 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
         V: 'a,
         Self: 'a;
 
-    fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
+    fn new<'a, T>(variables: &HashMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
         T: ExactSizeIterator<Item = &'a Constraint<V>>,
@@ -53,15 +53,10 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
         let n = constraints.len();
         let p = variables.len();
 
-        // Fast O(1) lookup by reference for matrix construction
-        let fast_lookup: HashMap<&V, usize> =
-            variables.keys().enumerate().map(|(i, v)| (v, i)).collect();
-
-        // Owned map for storage (used in config_from + Ord impl)
-        let variable_map: BTreeMap<_, _> = variables
-            .iter()
+        let variable_map: HashMap<V, usize> = variables
+            .keys()
             .enumerate()
-            .map(|(i, v)| (v.0.clone(), i))
+            .map(|(i, v)| (v.clone(), i))
             .collect();
 
         let mut mat_tri = TriMat::new((n, p));
@@ -77,7 +72,7 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
                     continue;
                 }
 
-                let j = fast_lookup[var];
+                let j = variable_map[var];
                 mat_tri.add_triplet(i, j, val);
             }
 
@@ -101,30 +96,25 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
 
     fn config_from<'a>(
         &'a self,
-        vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+        vars: &HashMap<V, ordered_float::OrderedFloat<f64>>,
     ) -> SprsConfig<'a, V> {
         let p = self.mat.shape().1;
 
-        let mut indices = Vec::new();
-        let mut data = Vec::new();
+        // Collect (index, value) pairs and sort by index — CsVec requires sorted indices
+        let mut entries: Vec<(usize, f64)> = vars
+            .iter()
+            .filter_map(|(name, value)| {
+                let v = value.into_inner();
+                if f64_is_zero(v) {
+                    return None;
+                }
+                let i = self.variable_map[name];
+                Some((i, v))
+            })
+            .collect();
+        entries.sort_by_key(|(i, _)| *i);
 
-        let mut last_i = 0usize;
-        for (name, value) in vars {
-            let v = value.into_inner();
-            if f64_is_zero(v) {
-                continue;
-            }
-
-            let i = self.variable_map[name];
-
-            // Consistency check
-            assert!(i >= last_i);
-            last_i = i;
-
-            indices.push(i);
-            data.push(v);
-        }
-
+        let (indices, data): (Vec<_>, Vec<_>) = entries.into_iter().unzip();
         let values = CsVec::new(p, indices, data);
 
         SprsConfig {
@@ -136,63 +126,20 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
 
 impl<V: UsableData> PartialEq for SprsProblem<V> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == std::cmp::Ordering::Equal
+        self.constraint_symbols == other.constraint_symbols
+            && self.variable_map == other.variable_map
+            && self.mat.shape() == other.mat.shape()
+            && (&self.mat - &other.mat)
+                .iter()
+                .all(|(f, _)| f64_is_zero(*f))
+            && self.constants.dim() == other.constants.dim()
+            && (&self.constants - &other.constants)
+                .iter()
+                .all(|(_, f)| f64_is_zero(*f))
     }
 }
 
 impl<V: UsableData> Eq for SprsProblem<V> {}
-
-impl<V: UsableData> Ord for SprsProblem<V> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let ord_symb = self.constraint_symbols.cmp(&other.constraint_symbols);
-        if ord_symb != std::cmp::Ordering::Equal {
-            return ord_symb;
-        }
-
-        let ord_var_map = self.variable_map.cmp(&other.variable_map);
-        if ord_var_map != std::cmp::Ordering::Equal {
-            return ord_var_map;
-        }
-
-        let s1 = self.mat.shape();
-        let s2 = other.mat.shape();
-
-        assert_eq!(s1, s2);
-
-        let diff = &self.mat - &other.mat;
-
-        for (f, _coord) in diff.iter() {
-            let v = ordered_float::OrderedFloat(*f);
-            let ord = v.cmp(&ordered_float::OrderedFloat(0.0));
-            if ord != std::cmp::Ordering::Equal {
-                return ord;
-            }
-        }
-
-        let l1 = self.constants.dim();
-        let l2 = other.constants.dim();
-
-        assert_eq!(l1, l2);
-
-        let diff = &self.constants - &other.constants;
-
-        for (_i, f) in diff.iter() {
-            let v = ordered_float::OrderedFloat(*f);
-            let ord = v.cmp(&ordered_float::OrderedFloat(0.0));
-            if ord != std::cmp::Ordering::Equal {
-                return ord;
-            }
-        }
-
-        std::cmp::Ordering::Equal
-    }
-}
-
-impl<V: UsableData> PartialOrd for SprsProblem<V> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 /// Implementation of a configuration representation ([ConfigRepr])
 /// using [sprs] as a backend.
@@ -205,12 +152,12 @@ pub struct SprsConfig<'a, V: UsableData> {
 }
 
 impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
-    fn unsatisfied_constraints(&self) -> BTreeSet<usize> {
+    fn unsatisfied_constraints(&self) -> Vec<usize> {
         let column = &self.pb_repr.mat * &self.values + &self.pb_repr.constants;
 
         assert_eq!(column.dim(), self.pb_repr.constraint_symbols.len());
 
-        let mut result = BTreeSet::new();
+        let mut result = Vec::new();
 
         for (i, v) in column.iter() {
             let symb = self.pb_repr.constraint_symbols[i];
@@ -218,12 +165,12 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
             match symb {
                 EqSymbol::Equals => {
                     if !f64_is_zero(*v) {
-                        result.insert(i);
+                        result.push(i);
                     }
                 }
                 EqSymbol::LessThan => {
                     if f64_is_positive(*v) {
-                        result.insert(i);
+                        result.push(i);
                     }
                 }
             }
@@ -235,40 +182,12 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
 
 impl<'a, V: UsableData> PartialEq for SprsConfig<'a, V> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == std::cmp::Ordering::Equal
+        self.pb_repr == other.pb_repr
+            && self.values.dim() == other.values.dim()
+            && (&self.values - &other.values)
+                .iter()
+                .all(|(_, f)| f64_is_zero(*f))
     }
 }
 
 impl<'a, V: UsableData> Eq for SprsConfig<'a, V> {}
-
-impl<'a, V: UsableData> Ord for SprsConfig<'a, V> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let ord = self.pb_repr.cmp(other.pb_repr);
-        if ord != std::cmp::Ordering::Equal {
-            return ord;
-        }
-
-        let l1 = self.values.dim();
-        let l2 = other.values.dim();
-
-        assert_eq!(l1, l2);
-
-        let diff = &self.values - &other.values;
-
-        for (_i, f) in diff.iter() {
-            let v = ordered_float::OrderedFloat(*f);
-            let ord = v.cmp(&ordered_float::OrderedFloat(0.0));
-            if ord != std::cmp::Ordering::Equal {
-                return ord;
-            }
-        }
-
-        std::cmp::Ordering::Equal
-    }
-}
-
-impl<'a, V: UsableData> PartialOrd for SprsConfig<'a, V> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}

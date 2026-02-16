@@ -22,8 +22,6 @@ use super::CompileError;
     Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
-    PartialOrd(bound = ""),
-    Ord(bound = ""),
     Clone(bound = "")
 )]
 pub struct ReifiedVar<D: DatabaseConnection> {
@@ -39,8 +37,6 @@ pub struct ReifiedVar<D: DatabaseConnection> {
     Hash(bound = ""),
     PartialEq(bound = ""),
     Eq(bound = ""),
-    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
-    Ord(bound = "", feature_allow_slow_enum = "true"),
     Clone(bound = "")
 )]
 pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
@@ -55,9 +51,7 @@ pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
     Debug(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
-    Ord(bound = "", feature_allow_slow_enum = "true")
+    Eq(bound = "")
 )]
 pub enum ConstraintDesc<D: DatabaseConnection> {
     Reified { var_name: String, origin: Origin<D> },
@@ -71,9 +65,7 @@ pub enum ConstraintDesc<D: DatabaseConnection> {
     Clone(bound = ""),
     Hash(bound = ""),
     PartialEq(bound = ""),
-    Eq(bound = ""),
-    PartialOrd(bound = "", feature_allow_slow_enum = "true"),
-    Ord(bound = "", feature_allow_slow_enum = "true")
+    Eq(bound = "")
 )]
 pub enum ExtraDesc<D: DatabaseConnection, V: EvalVar> {
     Orig(ConstraintDesc<D>),
