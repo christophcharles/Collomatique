@@ -5,7 +5,9 @@
 //! - `EvalData`: Internal data structure for evaluation
 
 use super::solution::Problem;
-use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
+use super::types::{
+    ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemError, ProblemVar, ReifiedVar,
+};
 use crate::database::DatabaseDriver;
 use crate::eval::{
     CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, ScriptVar,
@@ -14,7 +16,7 @@ use crate::semantics::ArgsType;
 use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
-use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
+use collomatique_ilp::{Constraint, Hashed, LinExpr, Objective, ObjectiveSense, Variable};
 use derivative::Derivative;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -68,12 +70,12 @@ pub(crate) struct EvalData<
 
     /// List of constraints incrementally built (populated during build())
     pub(crate) constraints: Vec<(
-        Constraint<ProblemVar<D::Connection, V>>,
+        Constraint<HashedProblemVar<D::Connection, V>>,
         ConstraintDesc<D::Connection>,
     )>,
 
     /// Objective function (populated during build())
-    pub(crate) objective: Objective<ProblemVar<D::Connection, V>>,
+    pub(crate) objective: Objective<HashedProblemVar<D::Connection, V>>,
 
     /// Internal ID.
     ///
@@ -87,7 +89,7 @@ pub(crate) struct EvalData<
     /// This starts with the variables from V.
     /// Then reified variables as well as
     /// helpers variables are added as needed.
-    pub(crate) vars_desc: HashMap<ProblemVar<D::Connection, V>, Variable>,
+    pub(crate) vars_desc: HashMap<HashedProblemVar<D::Connection, V>, Variable>,
 
     /// base variables list
     pub(crate) original_var_list: HashMap<V, Variable>,
@@ -263,13 +265,14 @@ impl<
                 if fixed_variables.contains_key(&var) {
                     continue;
                 }
-                let ProblemVar::Base(v) = var else {
+                let ProblemVar::Base(v) = &*var else {
                     continue;
                 };
+                let v = v.clone();
                 let Some(value) = v.fix(eval_data.env) else {
                     continue;
                 };
-                fixed_variables.insert(ProblemVar::Base(v), value);
+                fixed_variables.insert(var, value);
             }
             if fixed_variables.is_empty() {
                 continue;
@@ -281,13 +284,14 @@ impl<
             if fixed_variables.contains_key(&var) {
                 continue;
             }
-            let ProblemVar::Base(v) = var else {
+            let ProblemVar::Base(v) = &*var else {
                 continue;
             };
+            let v = v.clone();
             let Some(value) = v.fix(eval_data.env) else {
                 continue;
             };
-            fixed_variables.insert(ProblemVar::Base(v), value);
+            fixed_variables.insert(var, value);
         }
         if !fixed_variables.is_empty() {
             eval_data.objective = eval_data.objective.reduce(&fixed_variables);
@@ -334,24 +338,24 @@ impl<
     V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
 > EvalData<'a, D, V>
 {
-    fn generate_helper_var(&mut self) -> ProblemVar<D::Connection, V> {
-        let new_var = ProblemVar::Helper(self.current_helper_id);
+    fn generate_helper_var(&mut self) -> HashedProblemVar<D::Connection, V> {
+        let new_var = Hashed::new(ProblemVar::Helper(self.current_helper_id));
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::binary());
         self.current_helper_id += 1;
         new_var
     }
 
-    fn generate_helper_continuous_var(&mut self) -> ProblemVar<D::Connection, V> {
-        let new_var = ProblemVar::Helper(self.current_helper_id);
+    fn generate_helper_continuous_var(&mut self) -> HashedProblemVar<D::Connection, V> {
+        let new_var = Hashed::new(ProblemVar::Helper(self.current_helper_id));
         self.vars_desc
             .insert(new_var.clone(), collomatique_ilp::Variable::continuous());
         self.current_helper_id += 1;
         new_var
     }
 
-    fn get_variable_type(&self, v: &ProblemVar<D::Connection, V>) -> Variable {
-        match v {
+    fn get_variable_type(&self, v: &HashedProblemVar<D::Connection, V>) -> Variable {
+        match &**v {
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
@@ -370,13 +374,13 @@ impl<
     }
 
     fn objectify_single_constraint(
-        constraint: &Constraint<ProblemVar<D::Connection, V>>,
+        constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
         origin: ConstraintDesc<D::Connection>,
-        var: ProblemVar<D::Connection, V>,
+        var: HashedProblemVar<D::Connection, V>,
     ) -> (
-        Objective<ProblemVar<D::Connection, V>>,
+        Objective<HashedProblemVar<D::Connection, V>>,
         Vec<(
-            Constraint<ProblemVar<D::Connection, V>>,
+            Constraint<HashedProblemVar<D::Connection, V>>,
             ConstraintDesc<D::Connection>,
         )>,
     ) {
@@ -407,12 +411,14 @@ impl<
     /// necessary constraints to enforce define the helper variables.
     fn objectify_constraints<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<D::Connection, V>>>,
+        mut constraints: impl ExactSizeIterator<
+            Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
+        >,
         origin: ConstraintDesc<D::Connection>,
     ) -> (
-        Objective<ProblemVar<D::Connection, V>>,
+        Objective<HashedProblemVar<D::Connection, V>>,
         Vec<(
-            Constraint<ProblemVar<D::Connection, V>>,
+            Constraint<HashedProblemVar<D::Connection, V>>,
             ConstraintDesc<D::Connection>,
         )>,
     )
@@ -452,11 +458,11 @@ impl<
 
     fn reify_single_constraint(
         &mut self,
-        constraint: &Constraint<ProblemVar<D::Connection, V>>,
+        constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
         origin: ConstraintDesc<D::Connection>,
-        var: ProblemVar<D::Connection, V>,
+        var: HashedProblemVar<D::Connection, V>,
     ) -> Vec<(
-        Constraint<ProblemVar<D::Connection, V>>,
+        Constraint<HashedProblemVar<D::Connection, V>>,
         ConstraintDesc<D::Connection>,
     )> {
         let vars = constraint.get_lhs().variables();
@@ -562,11 +568,13 @@ impl<
     /// to enforce this.
     fn reify_constraint<'b>(
         &mut self,
-        mut constraints: impl ExactSizeIterator<Item = &'b Constraint<ProblemVar<D::Connection, V>>>,
+        mut constraints: impl ExactSizeIterator<
+            Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
+        >,
         origin: ConstraintDesc<D::Connection>,
-        var: ProblemVar<D::Connection, V>,
+        var: HashedProblemVar<D::Connection, V>,
     ) -> Vec<(
-        Constraint<ProblemVar<D::Connection, V>>,
+        Constraint<HashedProblemVar<D::Connection, V>>,
         ConstraintDesc<D::Connection>,
     )>
     where
@@ -610,8 +618,8 @@ impl<
         output
     }
 
-    fn clean_var(&self, var: &HashedIlpVar<D::Connection>) -> ProblemVar<D::Connection, V> {
-        match &**var {
+    fn clean_var(&self, var: &HashedIlpVar<D::Connection>) -> HashedProblemVar<D::Connection, V> {
+        Hashed::new(match &**var {
             IlpVar::Base(extern_var) => {
                 if self.builder.base_vars.contains_key(&extern_var.name) {
                     ProblemVar::Base(match extern_var.try_into() {
@@ -655,20 +663,20 @@ impl<
                 from_list: *from_list,
                 params: params.clone(),
             }),
-        }
+        })
     }
 
     fn clean_constraint(
         &self,
         constraint: &Constraint<HashedIlpVar<D::Connection>>,
-    ) -> Constraint<ProblemVar<D::Connection, V>> {
+    ) -> Constraint<HashedProblemVar<D::Connection, V>> {
         constraint.transmute(|v| self.clean_var(v))
     }
 
     fn clean_lin_expr(
         &self,
         lin_expr: &LinExpr<HashedIlpVar<D::Connection>>,
-    ) -> LinExpr<ProblemVar<D::Connection, V>> {
+    ) -> LinExpr<HashedProblemVar<D::Connection, V>> {
         lin_expr.transmute(|v| self.clean_var(v))
     }
 
@@ -778,7 +786,7 @@ impl<
 
         let vars_desc = original_var_list
             .iter()
-            .map(|(name, desc)| (ProblemVar::Base(name.clone()), desc.clone()))
+            .map(|(name, desc)| (Hashed::new(ProblemVar::Base(name.clone())), desc.clone()))
             .collect();
 
         let mut eval_data = EvalData {
@@ -873,9 +881,9 @@ impl<
 
         // Phase 4: Process reified variables
         let mut constraints_to_reify = HashMap::<
-            ProblemVar<D::Connection, V>,
+            HashedProblemVar<D::Connection, V>,
             (
-                Vec<Constraint<ProblemVar<D::Connection, V>>>,
+                Vec<Constraint<HashedProblemVar<D::Connection, V>>>,
                 crate::eval::Origin<D::Connection>,
             ),
         >::new();
@@ -892,7 +900,7 @@ impl<
                 from_list: None,
                 params: var_args,
             };
-            let new_var = ProblemVar::Reified(reified_var);
+            let new_var = Hashed::new(ProblemVar::Reified(reified_var));
 
             eval_data
                 .vars_desc
@@ -914,7 +922,7 @@ impl<
                     from_list: Some(i),
                     params: var_list_args.clone(),
                 };
-                let new_var = ProblemVar::Reified(reified_var);
+                let new_var = Hashed::new(ProblemVar::Reified(reified_var));
 
                 eval_data
                     .vars_desc
@@ -925,7 +933,7 @@ impl<
 
         // Phase 5: Reify constraints
         for (var, (constraints, origin)) in constraints_to_reify {
-            let var_name = match &var {
+            let var_name = match &*var {
                 ProblemVar::Reified(ReifiedVar {
                     module: _,
                     name,

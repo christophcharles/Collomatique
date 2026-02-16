@@ -16,6 +16,8 @@ use thiserror::Error;
 
 use super::CompileError;
 
+pub type HashedProblemVar<D, V> = collomatique_ilp::Hashed<ProblemVar<D, V>>;
+
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = ""),
