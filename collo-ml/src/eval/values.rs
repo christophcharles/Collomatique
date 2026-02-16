@@ -7,7 +7,7 @@
 use derivative::Derivative;
 
 use super::database::DatabaseHandle;
-use super::variables::{ConstraintWithOrigin, IlpVar, Origin};
+use super::variables::{ConstraintWithOrigin, HashedIlpVar, Origin};
 use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
 use collomatique_ilp::{Constraint, LinExpr};
@@ -28,7 +28,7 @@ pub enum ExprValue<D: DatabaseConnection> {
     None,
     Int(i32),
     Bool(bool),
-    LinExpr(LinExpr<IlpVar<D>>),
+    LinExpr(LinExpr<HashedIlpVar<D>>),
     Constraint(Vec<ConstraintWithOrigin<D>>),
     String(String),
     List(Vec<Arc<ExprValue<D>>>),
@@ -130,14 +130,14 @@ impl<D: DatabaseConnection> From<bool> for ExprValue<D> {
     }
 }
 
-impl<D: DatabaseConnection> From<LinExpr<IlpVar<D>>> for ExprValue<D> {
-    fn from(value: LinExpr<IlpVar<D>>) -> Self {
+impl<D: DatabaseConnection> From<LinExpr<HashedIlpVar<D>>> for ExprValue<D> {
+    fn from(value: LinExpr<HashedIlpVar<D>>) -> Self {
         ExprValue::LinExpr(value)
     }
 }
 
-impl<D: DatabaseConnection> From<Constraint<IlpVar<D>>> for ExprValue<D> {
-    fn from(value: Constraint<IlpVar<D>>) -> Self {
+impl<D: DatabaseConnection> From<Constraint<HashedIlpVar<D>>> for ExprValue<D> {
+    fn from(value: Constraint<HashedIlpVar<D>>) -> Self {
         ExprValue::Constraint(Vec::from([ConstraintWithOrigin {
             constraint: value,
             origin: None,

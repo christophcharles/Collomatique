@@ -27,7 +27,9 @@ pub use database::{
 };
 pub use history::{EvalHistory, VariableDefinitions};
 pub use values::{CustomValue, ExprValue};
-pub use variables::{ConstraintWithOrigin, ExternVar, IlpVar, Origin, ScriptVar, strip_origins};
+pub use variables::{
+    ConstraintWithOrigin, ExternVar, HashedIlpVar, IlpVar, Origin, ScriptVar, strip_origins,
+};
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]

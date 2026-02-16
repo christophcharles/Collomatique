@@ -7,7 +7,7 @@
 use super::checked_ast::{CheckedAST, EvalError};
 use super::local_env::LocalEvalEnv;
 use super::values::ExprValue;
-use super::variables::{IlpVar, Origin};
+use super::variables::{HashedIlpVar, Origin};
 use crate::ast::Spanned;
 use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
@@ -317,10 +317,12 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
-    pub vars:
-        HashMap<(String, String, Vec<Arc<ExprValue<D>>>), (Vec<Constraint<IlpVar<D>>>, Origin<D>)>,
+    pub vars: HashMap<
+        (String, String, Vec<Arc<ExprValue<D>>>),
+        (Vec<Constraint<HashedIlpVar<D>>>, Origin<D>),
+    >,
     pub var_lists: HashMap<
         (String, String, Vec<Arc<ExprValue<D>>>),
-        (Vec<Vec<Constraint<IlpVar<D>>>>, Origin<D>),
+        (Vec<Vec<Constraint<HashedIlpVar<D>>>>, Origin<D>),
     >,
 }

@@ -7,7 +7,9 @@
 use super::solution::Problem;
 use super::types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
 use crate::database::DatabaseDriver;
-use crate::eval::{CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, IlpVar, ScriptVar};
+use crate::eval::{
+    CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, ScriptVar,
+};
 use crate::semantics::ArgsType;
 use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
@@ -608,8 +610,8 @@ impl<
         output
     }
 
-    fn clean_var(&self, var: &IlpVar<D::Connection>) -> ProblemVar<D::Connection, V> {
-        match var {
+    fn clean_var(&self, var: &HashedIlpVar<D::Connection>) -> ProblemVar<D::Connection, V> {
+        match &**var {
             IlpVar::Base(extern_var) => {
                 if self.builder.base_vars.contains_key(&extern_var.name) {
                     ProblemVar::Base(match extern_var.try_into() {
@@ -658,14 +660,14 @@ impl<
 
     fn clean_constraint(
         &self,
-        constraint: &Constraint<IlpVar<D::Connection>>,
+        constraint: &Constraint<HashedIlpVar<D::Connection>>,
     ) -> Constraint<ProblemVar<D::Connection, V>> {
         constraint.transmute(|v| self.clean_var(v))
     }
 
     fn clean_lin_expr(
         &self,
-        lin_expr: &LinExpr<IlpVar<D::Connection>>,
+        lin_expr: &LinExpr<HashedIlpVar<D::Connection>>,
     ) -> LinExpr<ProblemVar<D::Connection, V>> {
         lin_expr.transmute(|v| self.clean_var(v))
     }
@@ -881,7 +883,7 @@ impl<
         for ((var_module, var_name, var_args), (constraints, new_origin)) in var_def.vars {
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c: Constraint<IlpVar<D::Connection>>| eval_data.clean_constraint(&c))
+                .map(|c: Constraint<HashedIlpVar<D::Connection>>| eval_data.clean_constraint(&c))
                 .collect();
 
             let reified_var = ReifiedVar {
