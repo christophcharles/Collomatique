@@ -65,9 +65,15 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         module: &str,
         fn_name: &str,
         args: Vec<Arc<ExprValue<D::Connection>>>,
-        allow_private: bool,
+        allow_private_and_dont_check_types: bool,
     ) -> Result<(Arc<ExprValue<D::Connection>>, Origin<D::Connection>), EvalError<D::Connection>>
     {
+        let key = Hashed::new((module.to_string(), fn_name.to_string(), args));
+
+        if let Some(r) = self.funcs.get(&key) {
+            return Ok((Arc::clone(&r.0), r.1.clone()));
+        }
+
         let fn_desc = self
             .ast
             .global_env
@@ -75,10 +81,11 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             .get(&(module.to_string(), fn_name.to_string()))
             .ok_or(EvalError::UnknownFunction(fn_name.to_string()))?;
 
-        if !allow_private && !fn_desc.public {
+        if !allow_private_and_dont_check_types && !fn_desc.public {
             return Err(EvalError::UnknownFunction(fn_name.to_string()));
         }
 
+        let args = &key.inner().2;
         if fn_desc.typ.args.len() != args.len() {
             return Err(EvalError::ArgumentCountMismatch {
                 identifier: fn_name.to_string(),
@@ -95,20 +102,16 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
-            if !arg.fits_in_typ(arg_typ) {
-                return Err(EvalError::TypeMismatch {
-                    param,
-                    expected: arg_typ.clone(),
-                    found: ExprValue::clone(arg),
-                });
+            if !allow_private_and_dont_check_types {
+                if !arg.fits_in_typ(arg_typ) {
+                    return Err(EvalError::TypeMismatch {
+                        param,
+                        expected: arg_typ.clone(),
+                        found: ExprValue::clone(arg),
+                    });
+                }
             }
             builder.register_identifier(arg_name, Arc::clone(arg));
-        }
-
-        let key = Hashed::new((module.to_string(), fn_name.to_string(), args.clone()));
-
-        if let Some(r) = self.funcs.get(&key) {
-            return Ok((Arc::clone(&r.0), r.1.clone()));
         }
 
         let local_env = builder.build_subscope();
