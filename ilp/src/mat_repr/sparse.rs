@@ -21,7 +21,7 @@ use super::{ConfigRepr, ProblemRepr};
 use crate::{Constraint, UsableData, Variable, f64_is_positive, f64_is_zero, linexpr::EqSymbol};
 
 use sprs::{CsMat, CsVec, TriMat};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[cfg(test)]
 mod tests;
@@ -53,6 +53,11 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
         let n = constraints.len();
         let p = variables.len();
 
+        // Fast O(1) lookup by reference for matrix construction
+        let fast_lookup: HashMap<&V, usize> =
+            variables.keys().enumerate().map(|(i, v)| (v, i)).collect();
+
+        // Owned map for storage (used in config_from + Ord impl)
         let variable_map: BTreeMap<_, _> = variables
             .iter()
             .enumerate()
@@ -72,7 +77,7 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
                     continue;
                 }
 
-                let j = variable_map[var];
+                let j = fast_lookup[var];
                 mat_tri.add_triplet(i, j, val);
             }
 

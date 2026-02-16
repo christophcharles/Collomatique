@@ -284,6 +284,14 @@ impl<V: UsableData> LinExpr<V> {
         self.coefs.keys().cloned().collect()
     }
 
+    /// Returns an iterator over references to the variables that appear in the expression.
+    ///
+    /// This is a zero-allocation alternative to [LinExpr::variables] when you only need
+    /// to inspect the variables without owning them.
+    pub fn variable_refs(&self) -> impl Iterator<Item = &V> {
+        self.coefs.keys()
+    }
+
     /// Returns an iterator over the variables that appears in the expression and their associated coefficients
     ///
     ///
@@ -1057,6 +1065,13 @@ impl<V: UsableData> Constraint<V> {
     /// You can use [Constraint::clean] to remove the 0 coefficients.
     pub fn variables(&self) -> BTreeSet<V> {
         self.expr.variables()
+    }
+
+    /// Returns an iterator over references to the variables that appear in the constraint.
+    ///
+    /// This is a zero-allocation alternative to [Constraint::variables].
+    pub fn variable_refs(&self) -> impl Iterator<Item = &V> {
+        self.expr.variable_refs()
     }
 
     /// Returns an iterator over the variables that appear in the constraint and their associated values.

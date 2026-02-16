@@ -985,9 +985,9 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// Returns None if no problem is detected, otherwise returns the undeclared variable.
     fn check_variables_in_expr(&self, expr: &LinExpr<V>) -> Option<V> {
-        expr.variables()
-            .into_iter()
-            .find(|var| !self.variables.contains_key(var))
+        expr.variable_refs()
+            .find(|var| !self.variables.contains_key(*var))
+            .cloned()
     }
 }
 
