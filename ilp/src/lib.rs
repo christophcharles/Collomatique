@@ -230,9 +230,8 @@ pub trait UsableData:
 {
 }
 
-impl<
-    T: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync,
-> UsableData for T
+impl<T: std::fmt::Debug + std::hash::Hash + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync>
+    UsableData for T
 {
 }
 
