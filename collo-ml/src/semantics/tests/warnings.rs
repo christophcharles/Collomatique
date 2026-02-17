@@ -61,7 +61,7 @@ async fn parameter_naming_convention_correct() {
 #[tokio::test]
 async fn variable_naming_convention_snake_case() {
     let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
+        pub let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $my_var;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
@@ -78,7 +78,7 @@ async fn variable_naming_convention_snake_case() {
 #[tokio::test]
 async fn variable_naming_convention_correct() {
     let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
+        pub let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $MyVar;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
@@ -367,7 +367,7 @@ async fn no_warning_when_private_function_called() {
 #[tokio::test]
 async fn function_used_in_reify() {
     let input = r#"
-        let my_constraint() -> Constraint = 0 === 1;
+        let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $MyVar;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;

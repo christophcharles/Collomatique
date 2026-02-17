@@ -761,7 +761,7 @@ async fn match_returning_constraint() {
     let input = r#"
         pub let f(x: Int | Bool) -> Constraint = match x {
             i as Int { $V(LinExpr(i)) === 0 }
-            b as Bool { if b { trivial } else { 1 === 0 } }
+            b as Bool { if b { trivial } else { infeasible } }
         };
     "#;
 
@@ -811,7 +811,7 @@ async fn match_complex_type_dispatch() {
     let input = r#"
         pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
             i as Int { $V(LinExpr(i)) === 0 }
-            b as Bool { if b { trivial } else { 1 === 0 } }
+            b as Bool { if b { trivial } else { infeasible } }
             lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;
