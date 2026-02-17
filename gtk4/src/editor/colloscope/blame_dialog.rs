@@ -14,6 +14,7 @@ pub struct Dialog {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComputationState {
+    AwaitingRecompilation,
     ComputingConstraints,
     RecomputingWarnings,
     ResultAvailable(Result<Vec<String>, String>),
@@ -36,6 +37,13 @@ pub enum DialogInput {
 }
 
 impl Dialog {
+    fn is_awaiting_recompilation(&self) -> bool {
+        match &self.warnings {
+            ComputationState::AwaitingRecompilation => true,
+            _ => false,
+        }
+    }
+
     fn is_constructing_constraints(&self) -> bool {
         match &self.warnings {
             ComputationState::ComputingConstraints => true,
@@ -85,6 +93,27 @@ impl SimpleComponent for Dialog {
                     gtk::Box {
                         set_orientation: gtk::Orientation::Vertical,
                         set_hexpand: true,
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 10,
+                            #[watch]
+                            set_visible: model.is_awaiting_recompilation(),
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            adw::Spinner {
+                                set_size_request: (30,30),
+                            },
+                            gtk::Label {
+                                set_label: "En attente de recompilation du code ColloML...",
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                        },
                         gtk::Box {
                             set_hexpand: true,
                             set_vexpand: true,
