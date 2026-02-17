@@ -20,12 +20,14 @@ pub enum DbType {
     Int(bool),
     Bool(bool),
     String(bool),
+    Null,
 }
 
 impl DbType {
     pub fn is_nullable(&self) -> bool {
         match self {
             DbType::Int(n) | DbType::Bool(n) | DbType::String(n) => *n,
+            DbType::Null => true,
         }
     }
 
@@ -34,6 +36,7 @@ impl DbType {
             DbType::Int(_) => DbType::Int(true),
             DbType::Bool(_) => DbType::Bool(true),
             DbType::String(_) => DbType::String(true),
+            DbType::Null => DbType::Null,
         }
     }
 
@@ -47,6 +50,10 @@ impl DbType {
                 // If SQL column is nullable, declared must also be nullable
                 !sql_null || *decl_null
             }
+            (DbType::Null, DbType::Int(sql_null))
+            | (DbType::Null, DbType::Bool(sql_null))
+            | (DbType::Null, DbType::String(sql_null)) => *sql_null,
+            (DbType::Null, DbType::Null) => true,
             _ => false,
         }
     }
@@ -61,6 +68,7 @@ impl fmt::Display for DbType {
             DbType::Bool(false) => write!(f, "Bool"),
             DbType::String(true) => write!(f, "?String"),
             DbType::String(false) => write!(f, "String"),
+            DbType::Null => write!(f, "None"),
         }
     }
 }
@@ -284,6 +292,7 @@ impl DatabaseConnection for SqliteDatabaseConnection {
                     "INTEGER" | "INT" => DbType::Int(false),
                     "TEXT" => DbType::String(false),
                     "BOOLEAN" | "BOOL" => DbType::Bool(false),
+                    "NULL" => DbType::Null,
                     _ => {
                         return Err(SqlQueryError::UnsupportedDescribeType {
                             column: name,

@@ -1,0 +1,58 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+
+type StudentSubjectSlotWeek = {
+    slot_id: SlotId,
+    global_week: ?GlobalWeek,
+};
+
+query student_subject_slots_in_range(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek) -> [StudentSubjectSlotWeek] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT s.id AS slot_id, ow.global_week_number AS global_week
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?2
+AND ow.global_week_number >= ?3 AND ow.global_week_number <= ?4
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM student_excluded_periods stxp
+    WHERE stxp.student_id = ?1
+      AND stxp.period_id = ow.period_id
+)
+AND EXISTS (
+    SELECT 1 FROM assignments a
+    WHERE a.student_id = ?1
+      AND a.subject_id = ?2
+      AND a.period_id = ow.period_id
+)
+";
+
+/// Exactement `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
+pub let enforce_exact_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
+    sum data in student_subject_slots_in_range(db, student_id, subject_id, week_start, week_end) {
+        $StudentAtInterrogation(db, student_id, data.slot_id, data.global_week cast! GlobalWeek)
+    } === target;
