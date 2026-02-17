@@ -53,8 +53,19 @@ AND EXISTS (
 )
 ";
 
-/// Exactement `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
-pub let enforce_exact_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
+let count_interrogations(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek) -> LinExpr =
     sum data in student_subject_slots_in_range(db, student_id, subject_id, week_start, week_end) {
         $StudentAtInterrogation(db, student_id, data.slot_id, data.global_week cast! GlobalWeek)
-    } === target;
+    };
+
+/// Exactement `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
+pub let enforce_exact_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
+    count_interrogations(db, student_id, subject_id, week_start, week_end) === target;
+
+/// Au moins `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
+pub let enforce_min_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
+    count_interrogations(db, student_id, subject_id, week_start, week_end) >== target;
+
+/// Au plus `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
+pub let enforce_max_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
+    count_interrogations(db, student_id, subject_id, week_start, week_end) <== target;
