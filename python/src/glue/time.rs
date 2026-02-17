@@ -98,6 +98,11 @@ impl Time {
         PyString::new(self_.py(), output.as_str())
     }
 
+    fn __str__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{}", self_.internal);
+        PyString::new(self_.py(), output.as_str())
+    }
+
     #[new]
     fn new(h: u32, m: u32) -> PyResult<Self> {
         let Some(time) = chrono::NaiveTime::from_hms_milli_opt(h, m, 0, 0) else {
@@ -139,6 +144,16 @@ impl Weekday {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", self_);
         PyString::new(self_.py(), output.as_str())
+    }
+
+    fn __str__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{}", collomatique_time::Weekday::from(self_.clone()));
+        PyString::new(self_.py(), output.as_str())
+    }
+
+    fn capitalize(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = collomatique_time::Weekday::from(self_.clone()).capitalize();
+        PyString::new(self_.py(), output)
     }
 }
 
@@ -183,6 +198,13 @@ pub struct SlotStart {
 impl SlotStart {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+
+    fn __str__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let weekday = collomatique_time::Weekday::from(self_.weekday.clone()).capitalize();
+        let time = format!("{}", self_.start_time.internal);
+        let output = format!("{} {}", weekday, time);
         PyString::new(self_.py(), output.as_str())
     }
 

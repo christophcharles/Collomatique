@@ -13,6 +13,7 @@
     adwaita-icon-theme,
     python3,
     clippy,
+    python3Packages,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -39,6 +40,7 @@ rustPlatform.buildRustPackage rec {
         cbc # We need it for tests
         clippy
         python3
+        python3Packages.xlsxwriter
     ];
 
     buildInputs = [
@@ -50,6 +52,7 @@ rustPlatform.buildRustPackage rec {
         wayland
         adwaita-icon-theme
         python3
+        python3Packages.xlsxwriter
     ];
 
     preFixup = ''
