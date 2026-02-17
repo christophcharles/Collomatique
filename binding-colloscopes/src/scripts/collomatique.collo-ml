@@ -9,6 +9,7 @@ import "collomatique_students_have_groups" as students_have_groups;
 import "collomatique_students_per_group_for_subject" as students_per_group_for_subject;
 import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicity_afab;
 import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
+import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_students_per_group" as students_per_group;
 
 pub let default_constraint(db: Db) -> Constraint =
@@ -21,7 +22,8 @@ pub let default_constraint(db: Db) -> Constraint =
     incompats::constraint(db) and
     groups_filled_by_ascending_order::constraint(db) and
     periodicity_amount_in_year::constraint(db) and
-    periodicity_afab::constraint(db);
+    periodicity_afab::constraint(db) and
+    forbidden_groups::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
     limits::objective(db) + [interrogation_cost::objective(db)];

@@ -184,6 +184,12 @@ WHERE
               AND wpdw.period_id = ?2
               AND wpdw.week_index = ?3
         )
+    )
+    AND EXISTS (
+        SELECT 1 FROM assignments a
+        WHERE a.subject_id = s.subject_id
+          AND a.period_id = ?2
+          AND a.student_id = ?1
     );
 ";
 
@@ -215,6 +221,12 @@ WHERE
               AND wpdw.period_id = ?2
               AND wpdw.week_index = ?3
         )
+    )
+    AND EXISTS (
+        SELECT 1 FROM assignments a
+        WHERE a.subject_id = s.subject_id
+          AND a.period_id = ?2
+          AND a.student_id = ?1
     );
 ";
 
@@ -265,3 +277,55 @@ query week_count_internal(db: Db) -> ?Int =
     "SELECT COUNT(*) AS week_count FROM period_weeks";
 
 pub let last_global_week(db: Db) -> GlobalWeek = GlobalWeek((week_count_internal(db) cast! Int) - 1);
+
+query student_enrollment_check(db: Db, student: StudentId, slot: SlotId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+),
+slot_info AS (
+    SELECT s.subject_id FROM slots s WHERE s.id = ?2
+),
+target_week AS (
+    SELECT period_id FROM ordered_weeks WHERE global_week_number = ?3
+)
+SELECT 1 AS enrolled
+FROM assignments a
+JOIN slot_info si ON a.subject_id = si.subject_id
+JOIN target_week tw ON a.period_id = tw.period_id
+WHERE a.student_id = ?1
+LIMIT 1
+";
+
+pub let is_student_enrolled_for_interrogation(db: Db, student: StudentId, slot: SlotId, week: GlobalWeek) -> Bool =
+    student_enrollment_check(db, student, slot, week) == 1;
+
+pub query students_for_subject_period_group_list(db: Db, group_list: GroupListId, subject: SubjectId, period: PeriodId) -> [StudentId] = "
+SELECT s.id AS student_id
+FROM students s
+WHERE
+  (
+    (
+      EXISTS (SELECT 1 FROM group_lists gl WHERE gl.id = ?1 AND gl.filling_type = 'automatic')
+      AND NOT EXISTS (
+        SELECT 1 FROM automatic_group_excluded_students ages
+        WHERE ages.group_list_id = ?1 AND ages.student_id = s.id
+      )
+    )
+    OR
+    EXISTS (
+      SELECT 1 FROM prefilled_group_students pgs
+      WHERE pgs.group_list_id = ?1 AND pgs.student_id = s.id
+    )
+  )
+  AND EXISTS (
+    SELECT 1 FROM assignments a
+    WHERE a.subject_id = ?2 AND a.period_id = ?3 AND a.student_id = s.id
+  )
+";

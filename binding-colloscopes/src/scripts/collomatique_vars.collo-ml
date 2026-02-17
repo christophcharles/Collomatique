@@ -40,22 +40,26 @@ let student_at_interrogation_in_group(student: StudentId, slot: SlotId, week: Gl
 pub reify student_at_interrogation_in_group as $StudentAtInterrogationInGroup;
 
 let student_at_interrogation(db: Db, student: StudentId, slot: SlotId, week: GlobalWeek) -> Constraint =
-    match group_list_for_interrogation(db, slot, week) {
-        gl as GroupListId {
-            if group_list_is_prefilled(db, gl) {
-                $GroupInInterrogation(
-                    slot, week, student_prefilled_group(db, student, gl) ?? GroupNum(-1)
-                )
-            } else {
-                sum group in groups_for_group_list(db, gl) {
-                    $StudentAtInterrogationInGroup(student, slot, week, gl, group)
+    if is_student_enrolled_for_interrogation(db, student, slot, week) {
+        match group_list_for_interrogation(db, slot, week) {
+            gl as GroupListId {
+                if group_list_is_prefilled(db, gl) {
+                    $GroupInInterrogation(
+                        slot, week, student_prefilled_group(db, student, gl) ?? GroupNum(-1)
+                    )
+                } else {
+                    sum group in groups_for_group_list(db, gl) {
+                        $StudentAtInterrogationInGroup(student, slot, week, gl, group)
+                    }
                 }
             }
-        }
-        _ as None {
-            0
-        }
-    } >== 1; // Test for bigger than one: we can't actually exceed it but this will save some reification constraints
+            _ as None {
+                0
+            }
+        } >== 1 // Test for bigger than one: we can't actually exceed it but this will save some reification constraints
+    } else {
+        infeasible
+    };
 
 pub reify student_at_interrogation as $StudentAtInterrogation;
 
