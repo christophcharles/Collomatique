@@ -43,6 +43,34 @@ impl DbType {
                     Err(DbConversionError)
                 }
             }
+            4 => {
+                // Check for {None, Int, String, Bool} in any order → DbType::Any
+                // This matches SQLite's unknown column type (e.g. computed columns in CTEs).
+                let mut has_none = false;
+                let mut has_int = false;
+                let mut has_string = false;
+                let mut has_bool = false;
+                for st in &resolved {
+                    let inner = env
+                        .resolve_type_until_several_or_not_custom(&ExprType::from(st.clone()))
+                        .ok_or(DbConversionError)?;
+                    if inner.len() != 1 {
+                        return Err(DbConversionError);
+                    }
+                    match &inner[0] {
+                        SimpleType::None => has_none = true,
+                        SimpleType::Int => has_int = true,
+                        SimpleType::String => has_string = true,
+                        SimpleType::Bool => has_bool = true,
+                        _ => return Err(DbConversionError),
+                    }
+                }
+                if has_none && has_int && has_string && has_bool {
+                    Ok(DbType::Any)
+                } else {
+                    Err(DbConversionError)
+                }
+            }
             _ => Err(DbConversionError),
         }
     }

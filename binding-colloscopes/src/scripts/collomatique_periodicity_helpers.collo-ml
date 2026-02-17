@@ -4,7 +4,9 @@ import "collomatique_types" as *;
 
 type StudentSubjectSlotWeek = {
     slot_id: SlotId,
-    global_week: ?GlobalWeek,
+    // SQLite cannot determine the type of computed columns in the request,
+    // so this must accept any possible SQL type.
+    global_week: ?GlobalWeek | String | Bool,
 };
 
 query student_subject_slots_in_range(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek) -> [StudentSubjectSlotWeek] = "

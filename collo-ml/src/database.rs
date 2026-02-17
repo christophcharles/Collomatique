@@ -20,14 +20,14 @@ pub enum DbType {
     Int(bool),
     Bool(bool),
     String(bool),
-    Null,
+    Any,
 }
 
 impl DbType {
     pub fn is_nullable(&self) -> bool {
         match self {
             DbType::Int(n) | DbType::Bool(n) | DbType::String(n) => *n,
-            DbType::Null => true,
+            DbType::Any => true,
         }
     }
 
@@ -36,24 +36,25 @@ impl DbType {
             DbType::Int(_) => DbType::Int(true),
             DbType::Bool(_) => DbType::Bool(true),
             DbType::String(_) => DbType::String(true),
-            DbType::Null => DbType::Null,
+            DbType::Any => DbType::Any,
         }
     }
 
     /// Check whether a SQL column type (`self`) is assignable to a declared ColloML type.
     /// Base types must match; if the SQL column is nullable, the declared type must also be nullable.
+    /// `Any` (unknown SQL type) only assigns to `Any`; everything assigns to `Any`.
     pub fn is_assignable_to(&self, declared: &DbType) -> bool {
         match (self, declared) {
+            // Everything assigns to Any
+            (_, DbType::Any) => true,
+            // Any only assigns to Any (handled above)
+            (DbType::Any, _) => false,
             (DbType::Int(sql_null), DbType::Int(decl_null))
             | (DbType::Bool(sql_null), DbType::Bool(decl_null))
             | (DbType::String(sql_null), DbType::String(decl_null)) => {
                 // If SQL column is nullable, declared must also be nullable
                 !sql_null || *decl_null
             }
-            (DbType::Null, DbType::Int(sql_null))
-            | (DbType::Null, DbType::Bool(sql_null))
-            | (DbType::Null, DbType::String(sql_null)) => *sql_null,
-            (DbType::Null, DbType::Null) => true,
             _ => false,
         }
     }
@@ -68,7 +69,7 @@ impl fmt::Display for DbType {
             DbType::Bool(false) => write!(f, "Bool"),
             DbType::String(true) => write!(f, "?String"),
             DbType::String(false) => write!(f, "String"),
-            DbType::Null => write!(f, "None"),
+            DbType::Any => write!(f, "Any"),
         }
     }
 }
@@ -292,7 +293,7 @@ impl DatabaseConnection for SqliteDatabaseConnection {
                     "INTEGER" | "INT" => DbType::Int(false),
                     "TEXT" => DbType::String(false),
                     "BOOLEAN" | "BOOL" => DbType::Bool(false),
-                    "NULL" => DbType::Null,
+                    "NULL" => DbType::Any,
                     _ => {
                         return Err(SqlQueryError::UnsupportedDescribeType {
                             column: name,
