@@ -773,7 +773,7 @@ impl<
                     args.clone()
                 };
                 let result = eval_history
-                    .eval_fn(module, fn_name, eval_args)
+                    .eval_fn_no_origin(module, fn_name, eval_args)
                     .await
                     .map_err(|e| match e {
                         EvalError::Panic(v) => ProblemError::Panic(v),

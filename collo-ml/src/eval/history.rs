@@ -40,7 +40,8 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                 result.push_str(&part.prefix);
                 if let Some(expr) = &part.expr {
                     let eval_result =
-                        Box::pin(Arc::clone(local_env).eval_expr(self, Arc::clone(expr))).await?;
+                        Box::pin(Arc::clone(local_env).eval_expr(self, Arc::clone(expr), false))
+                            .await?;
                     match &*eval_result {
                         ExprValue::String(s) => result.push_str(s),
                         // Expression is wrapped in String(...) at parse time,
@@ -63,6 +64,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         fn_name: &str,
         args: Vec<Arc<ExprValue<D::Connection>>>,
         allow_private_and_dont_check_types: bool,
+        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         let key = Hashed::new((module.to_string(), fn_name.to_string(), args));
 
@@ -111,19 +113,27 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         }
 
         let local_env = builder.build_subscope();
-        let naked_result =
-            Box::pin(Arc::clone(&local_env).eval_expr(self, Arc::clone(&fn_desc.body))).await;
-        let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
-        let naked_result = naked_result?;
+        let naked_result = Box::pin(Arc::clone(&local_env).eval_expr(
+            self,
+            Arc::clone(&fn_desc.body),
+            keep_track_of_origin,
+        ))
+        .await;
 
-        let origin = Origin {
-            module: module.to_string(),
-            fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
-            args: args.clone(),
-            pretty_docstring,
+        let result = if keep_track_of_origin {
+            let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
+            let naked_result = naked_result?;
+            let origin = Origin {
+                module: module.to_string(),
+                fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
+                args: args.clone(),
+                pretty_docstring,
+            };
+            Arc::new(naked_result.with_origin(&origin))
+        } else {
+            naked_result?
         };
 
-        let result = Arc::new(naked_result.with_origin(&origin));
         self.funcs.insert(key, Arc::clone(&result));
 
         Ok(result)
@@ -235,7 +245,28 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
         }
 
         let result =
-            Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false)).await?;
+            Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false, true))
+                .await?;
+        Ok(Arc::unwrap_or_clone(result))
+    }
+
+    pub async fn eval_fn_no_origin(
+        &mut self,
+        module: &str,
+        fn_name: &str,
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
+        let mut checked_args = vec![];
+        for (param, arg) in args.into_iter().enumerate() {
+            if !self.validate_value(&arg) {
+                return Err(EvalError::InvalidExprValue { param });
+            }
+            checked_args.push(Arc::new(arg));
+        }
+
+        let result =
+            Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false, false))
+                .await?;
         Ok(Arc::unwrap_or_clone(result))
     }
 
@@ -265,6 +296,7 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
                     &fn_name,
                     v_args.clone(),
                     true,
+                    false,
                 ))
                 .await?;
 
