@@ -11,6 +11,13 @@ type ArbitraryBlockData = {
     count_max: ?Int,
 };
 
+type ArbitraryBlockGapData = {
+    subject_id: SubjectId,
+    student_id: ?StudentId,
+    gap_first_week: ?GlobalWeek | String | Bool,
+    gap_last_week: ?GlobalWeek | String | Bool,
+};
+
 type AfabSeparationData = {
     subject_id: SubjectId,
     student_id: StudentId,
@@ -45,6 +52,56 @@ JOIN periodicity_week_blocks pwb
 JOIN assignments a ON a.subject_id = bb.subject_id
 ";
 
+query subjects_students_afab_gaps(db: Db) -> [ArbitraryBlockGapData] = "
+WITH RECURSIVE
+block_bounds(subject_id, block_index, first_week, last_week) AS (
+    SELECT pwb.subject_id, pwb.block_index,
+        pwb.delay_in_weeks,
+        pwb.delay_in_weeks + pwb.size_in_weeks - 1
+    FROM periodicity_week_blocks pwb
+    WHERE pwb.block_index = 0
+    UNION ALL
+    SELECT pwb.subject_id, pwb.block_index,
+        bb.last_week + 1 + pwb.delay_in_weeks,
+        bb.last_week + 1 + pwb.delay_in_weeks + pwb.size_in_weeks - 1
+    FROM block_bounds bb
+    JOIN periodicity_week_blocks pwb
+        ON pwb.subject_id = bb.subject_id
+        AND pwb.block_index = bb.block_index + 1
+),
+last_week_num AS (
+    SELECT COUNT(*) - 1 AS val FROM period_weeks
+),
+gaps(subject_id, gap_first_week, gap_last_week) AS (
+    -- Before first block
+    SELECT bb.subject_id, 0, bb.first_week - 1
+    FROM block_bounds bb
+    WHERE bb.block_index = 0
+    UNION ALL
+    -- Between consecutive blocks
+    SELECT b1.subject_id, b1.last_week + 1, b2.first_week - 1
+    FROM block_bounds b1
+    JOIN block_bounds b2
+        ON b2.subject_id = b1.subject_id
+        AND b2.block_index = b1.block_index + 1
+    UNION ALL
+    -- After last block
+    SELECT bb.subject_id, bb.last_week + 1, lw.val
+    FROM block_bounds bb
+    CROSS JOIN last_week_num lw
+    WHERE NOT EXISTS (
+        SELECT 1 FROM block_bounds bb2
+        WHERE bb2.subject_id = bb.subject_id
+          AND bb2.block_index = bb.block_index + 1
+    )
+)
+SELECT DISTINCT g.subject_id, a.student_id,
+    g.gap_first_week, g.gap_last_week
+FROM gaps g
+JOIN assignments a ON a.subject_id = g.subject_id
+WHERE g.gap_first_week <= g.gap_last_week
+";
+
 query subjects_students_afab_separation(db: Db) -> [AfabSeparationData] = "
 SELECT DISTINCT sip.subject_id, a.student_id,
        sip.afab_minimum_week_separation AS min_sep
@@ -65,9 +122,15 @@ let enforce_block_count(db: Db, data: ArbitraryBlockData) -> Constraint =
         }
     };
 
+let enforce_no_interrogations_in_gap(db: Db, data: ArbitraryBlockGapData) -> Constraint =
+    helpers::enforce_exact_interrogation_count(db, data.student_id cast! StudentId, data.subject_id, data.gap_first_week cast! GlobalWeek, data.gap_last_week cast! GlobalWeek, 0);
+
 pub let constraint(db: Db) -> Constraint =
     forall data in subjects_students_arbitrary_blocks(db) {
         enforce_block_count(db, data)
+    } and
+    forall data in subjects_students_afab_gaps(db) {
+        enforce_no_interrogations_in_gap(db, data)
     } and
     forall data in subjects_students_afab_separation(db) {
         helpers::enforce_min_separation(db, data.student_id, data.subject_id, data.min_sep ?? 0)
