@@ -1,13 +1,14 @@
 use gtk::prelude::{TextBufferExt, TextViewExt, WidgetExt};
-use relm4::{gtk, Component};
+use relm4::{Component, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt};
 
-use tokio::io::AsyncBufReadExt;
-use tokio::io::BufReader;
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use std::io::BufRead;
+use std::io::BufReader;
 
 use std::io::Write;
 
-use collomatique_rpc::{CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
 
 #[derive(Debug)]
 pub enum RpcLoggerInput {
@@ -31,8 +32,10 @@ enum BufferOp {
 
 pub struct RpcLogger {
     buffer_op: Option<BufferOp>,
-    child_process: Option<std::process::Child>,
-    child_stdin: Option<std::process::ChildStdin>,
+    child_process: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+    child_stdin: Option<Box<dyn std::io::Write + Send>>,
+    pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
+    current_cmd: String,
 }
 
 impl RpcLogger {
@@ -41,11 +44,20 @@ impl RpcLogger {
     }
 }
 
-#[derive(Debug)]
 pub enum LoggerCommandOutput {
     CheckRunning,
-    NewStdoutData(String, BufReader<tokio::process::ChildStdout>),
-    NewStderrData(String, BufReader<tokio::process::ChildStderr>),
+    NewStdoutData(String, BufReader<Box<dyn std::io::Read + Send>>),
+}
+
+impl std::fmt::Debug for LoggerCommandOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoggerCommandOutput::CheckRunning => f.debug_tuple("CheckRunning").finish(),
+            LoggerCommandOutput::NewStdoutData(line, _reader) => {
+                f.debug_tuple("NewStdoutData").field(line).finish()
+            }
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -59,6 +71,7 @@ impl Component for RpcLogger {
         #[root]
         gtk::ScrolledWindow {
             set_hexpand: true,
+            set_vexpand: true,
             set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
             set_margin_all: 5,
             #[name(text_view)]
@@ -87,6 +100,8 @@ impl Component for RpcLogger {
             buffer_op: None,
             child_process: None,
             child_stdin: None,
+            pty_master: None,
+            current_cmd: String::new(),
         };
 
         let widgets = view_output!();
@@ -98,92 +113,121 @@ impl Component for RpcLogger {
         match message {
             RpcLoggerInput::RunRcpEngine(init_msg) => {
                 if self.is_running() {
-                    panic!("A Python engine is already running!");
+                    panic!("An RPC engine is already running!");
                 }
                 self.buffer_op = Some(BufferOp::Clear);
+                self.current_cmd.clear();
 
-                let child_result = std::process::Command::new(std::env::current_exe().unwrap())
-                    .arg("--rpc-engine")
-                    .stdin(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .spawn();
+                let pty_system = native_pty_system();
 
-                match child_result {
-                    Ok(mut child) => {
-                        let stdout_opt = child.stdout.take();
-                        let stderr_opt = child.stderr.take();
-                        let stdin_opt = child.stdin.take();
-
-                        self.child_process = Some(child);
-                        if let Some(stdout) = stdout_opt {
-                            match tokio::process::ChildStdout::from_std(stdout) {
-                                Ok(stdout) => {
-                                    let stdout_buf = BufReader::new(stdout);
-                                    self.wait_stdout_data(sender.clone(), stdout_buf);
-                                }
-                                Err(e) => {
-                                    sender
-                                        .output(RpcLoggerOutput::Error(format!(
-                                            "Erreur à l'acquisition de la sortie standard : {}",
-                                            e.to_string()
-                                        )))
-                                        .unwrap();
-                                }
-                            };
-                        }
-                        if let Some(stderr) = stderr_opt {
-                            match tokio::process::ChildStderr::from_std(stderr) {
-                                Ok(stderr) => {
-                                    let stderr_buf = BufReader::new(stderr);
-                                    self.wait_stderr_data(sender.clone(), stderr_buf);
-                                }
-                                Err(e) => {
-                                    sender
-                                        .output(RpcLoggerOutput::Error(format!(
-                                            "Erreur à l'acquisition de la sortie d'erreur : {}",
-                                            e.to_string()
-                                        )))
-                                        .unwrap();
-                                }
-                            };
-                        }
-                        match stdin_opt {
-                            Some(stdin) => {
-                                self.child_stdin = Some(stdin);
-                            }
-                            None => {
-                                sender
-                                    .output(RpcLoggerOutput::Error(format!(
-                                        "Erreur à l'acquisition de l'entrée standard"
-                                    )))
-                                    .unwrap();
-                            }
-                        }
-
-                        self.send_text_cmd(sender.clone(), init_msg.into_text_msg());
-                        self.schedule_check(sender);
+                // Create PTY with reasonable terminal size
+                let pair = match pty_system.openpty(PtySize {
+                    rows: 36,
+                    cols: 120,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                }) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        sender
+                            .output(RpcLoggerOutput::Error(format!(
+                                "Erreur à  la création du PTY : {}",
+                                e
+                            )))
+                            .unwrap();
+                        sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
+                        return;
                     }
+                };
+
+                // Disable echo on the PTY
+                #[cfg(unix)]
+                {
+                    let fd = pair
+                        .master
+                        .as_raw_fd()
+                        .expect("Should have a raw fd on UNIX platform");
+                    unsafe {
+                        let mut termios: libc::termios = std::mem::zeroed();
+                        libc::tcgetattr(fd, &mut termios);
+                        termios.c_lflag &= !libc::ECHO; // Disable echo
+                        termios.c_lflag &= !libc::ECHONL; // Disable newline echo too
+                        libc::tcsetattr(fd, libc::TCSANOW, &termios);
+                    }
+                }
+
+                // Build command
+                let mut cmd = CommandBuilder::new(std::env::current_exe().unwrap());
+                cmd.arg("--rpc-engine");
+
+                // Spawn the child in the PTY
+                let child = match pair.slave.spawn_command(cmd) {
+                    Ok(c) => c,
                     Err(e) => {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'exécution du sous-processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                         sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
+                        return;
+                    }
+                };
+
+                // Get reader from master (this is stdout+stderr combined)
+                let reader_result = pair.master.try_clone_reader();
+
+                match reader_result {
+                    Ok(reader) => {
+                        let buf_reader = std::io::BufReader::new(reader);
+                        self.wait_stdout_data(sender.clone(), buf_reader);
+                    }
+                    Err(e) => {
+                        sender
+                            .output(RpcLoggerOutput::Error(format!(
+                                "Erreur à l'acquisition du reader PTY : {}",
+                                e
+                            )))
+                            .unwrap();
                     }
                 }
+
+                // Get writer for stdin
+                let writer = pair.master.take_writer();
+                match writer {
+                    Ok(writer) => {
+                        self.child_stdin = Some(writer);
+                    }
+                    Err(e) => {
+                        sender
+                            .output(RpcLoggerOutput::Error(format!(
+                                "Erreur à l'acquisition de l'entrée standard : {}",
+                                e
+                            )))
+                            .unwrap();
+                    }
+                }
+
+                self.child_process = Some(child);
+                self.pty_master = Some(pair.master);
+                // Don't need slave anymore
+                drop(pair.slave);
+
+                let encoded_msg = EncodedMsg::from(init_msg);
+                self.send_text_cmd(sender.clone(), encoded_msg.encode());
+                self.schedule_check(sender);
             }
             RpcLoggerInput::KillProcess => {
                 if let Some(mut child) = self.child_process.take() {
                     self.child_stdin = None;
+                    self.pty_master = None;
 
                     if let Err(e) = child.kill() {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'arrêt du processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -191,7 +235,7 @@ impl Component for RpcLogger {
                         sender
                             .output(RpcLoggerOutput::Error(format!(
                                 "Erreur à l'arrêt du processus : {}",
-                                e.to_string()
+                                e
                             )))
                             .unwrap();
                     }
@@ -200,7 +244,8 @@ impl Component for RpcLogger {
                 }
             }
             RpcLoggerInput::SendMsg(out_msg) => {
-                self.send_text_cmd(sender, out_msg.into_text_msg());
+                let encoded_msg = EncodedMsg::from(out_msg);
+                self.send_text_cmd(sender, encoded_msg.encode());
             }
         }
     }
@@ -223,10 +268,10 @@ impl Component for RpcLogger {
                             self.child_process = None;
                             if !s.success() {
                                 sender
-                                    .output(RpcLoggerOutput::Error(match s.code() {
-                                        Some(v) => format!("Processus arrêté avec le statut {}", v),
-                                        None => "Processus arrêté mais aucun statut reçu".into(),
-                                    }))
+                                    .output(RpcLoggerOutput::Error(format!(
+                                        "Processus arrêté avec le statut {}",
+                                        s.exit_code()
+                                    )))
                                     .unwrap();
                             }
                             sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
@@ -243,28 +288,41 @@ impl Component for RpcLogger {
                     }
                 }
             }
-            LoggerCommandOutput::NewStderrData(data, stderr_buf) => {
-                self.buffer_op = Some(BufferOp::Insert(data));
-                if self.child_process.is_some() {
-                    self.wait_stderr_data(sender, stderr_buf);
-                }
-            }
             LoggerCommandOutput::NewStdoutData(data, stdout_buf) => {
-                let complete_cmd = CompleteCmdMsg::from_text_msg(&data);
+                if !EncodedMsg::check_if_msg(&data) {
+                    self.buffer_op = Some(BufferOp::Insert(data));
+                    if self.child_process.is_some() {
+                        self.wait_stdout_data(sender, stdout_buf);
+                    }
+                    return;
+                }
+
+                self.current_cmd += &data;
+                if !EncodedMsg::check_if_end(&data) {
+                    if self.child_process.is_some() {
+                        self.wait_stdout_data(sender, stdout_buf);
+                    }
+                    return;
+                }
+
+                let encoded_msg = EncodedMsg::from_raw_string(self.current_cmd.clone());
+                self.current_cmd.clear();
+
+                let complete_cmd = encoded_msg.and_then(CompleteCmdMsg::try_from);
                 let cmd = match complete_cmd {
                     Ok(c) => match c {
                         CompleteCmdMsg::CmdMsg(cmd) => Ok(cmd),
                         CompleteCmdMsg::GracefulExit => {
                             self.child_stdin = None;
-                            if let Some(mut child_process) = self.child_process.take() {
-                                if let Err(e) = child_process.wait() {
-                                    sender
-                                        .output(RpcLoggerOutput::Error(format!(
-                                            "Erreur à l'arrêt du processus : {}",
-                                            e.to_string()
-                                        )))
-                                        .unwrap();
-                                }
+                            if let Some(mut child_process) = self.child_process.take()
+                                && let Err(e) = child_process.wait()
+                            {
+                                sender
+                                    .output(RpcLoggerOutput::Error(format!(
+                                        "Erreur à l'arrêt du processus : {}",
+                                        e
+                                    )))
+                                    .unwrap();
                             }
                             sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
                             return;
@@ -274,7 +332,6 @@ impl Component for RpcLogger {
                 };
 
                 sender.output(RpcLoggerOutput::Cmd(cmd)).unwrap();
-                // Process content and turn into command
                 if self.child_process.is_some() {
                     self.wait_stdout_data(sender, stdout_buf);
                 }
@@ -312,10 +369,8 @@ impl RpcLogger {
         if let Some(BufferOp::Insert(content)) = self.buffer_op.take() {
             let mut end_iter = widgets.text_buffer.end_iter();
             widgets.text_buffer.insert(&mut end_iter, &content);
-            let mut end_iter = widgets.text_buffer.end_iter();
-            widgets
-                .text_view
-                .scroll_to_iter(&mut end_iter, 0., false, 0., 0.);
+            let cursor_mark = widgets.text_buffer.get_insert();
+            widgets.text_view.scroll_mark_onscreen(&cursor_mark);
         }
     }
 }
@@ -331,24 +386,12 @@ impl RpcLogger {
     fn wait_stdout_data(
         &mut self,
         sender: ComponentSender<Self>,
-        mut stdout_buf: BufReader<tokio::process::ChildStdout>,
+        mut stdout_buf: BufReader<Box<dyn std::io::Read + Send>>,
     ) {
-        sender.oneshot_command(async move {
+        sender.spawn_oneshot_command(move || {
             let mut line = String::new();
-            stdout_buf.read_line(&mut line).await.unwrap();
+            stdout_buf.read_line(&mut line).unwrap();
             LoggerCommandOutput::NewStdoutData(line, stdout_buf)
-        });
-    }
-
-    fn wait_stderr_data(
-        &mut self,
-        sender: ComponentSender<Self>,
-        mut stderr_buf: BufReader<tokio::process::ChildStderr>,
-    ) {
-        sender.oneshot_command(async move {
-            let mut line = String::new();
-            stderr_buf.read_line(&mut line).await.unwrap();
-            LoggerCommandOutput::NewStderrData(line, stderr_buf)
         });
     }
 
@@ -362,20 +405,7 @@ impl RpcLogger {
                 sender
                     .output(RpcLoggerOutput::Error(format!(
                         "Erreur dans une RPC : {}",
-                        e.to_string()
-                    )))
-                    .unwrap();
-                return;
-            }
-            let result = stdin.write_all("\r\n".as_bytes());
-            if let Err(e) = result {
-                if e.kind() == std::io::ErrorKind::BrokenPipe {
-                    return;
-                }
-                sender
-                    .output(RpcLoggerOutput::Error(format!(
-                        "Erreur dans une RPC : {}",
-                        e.to_string()
+                        e
                     )))
                     .unwrap();
                 return;
@@ -388,10 +418,9 @@ impl RpcLogger {
                 sender
                     .output(RpcLoggerOutput::Error(format!(
                         "Erreur dans une RPC : {}",
-                        e.to_string()
+                        e
                     )))
                     .unwrap();
-                return;
             }
         }
     }

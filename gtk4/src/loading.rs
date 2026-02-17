@@ -1,7 +1,7 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::RelmWidgetExt;
-use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, WorkerController};
+use relm4::{adw, gtk};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 

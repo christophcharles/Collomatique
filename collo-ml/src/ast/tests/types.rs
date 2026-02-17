@@ -12,7 +12,9 @@ fn parse_int_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Int));
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Int"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -26,7 +28,9 @@ fn parse_bool_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Bool));
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Bool"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -40,7 +44,9 @@ fn parse_linexpr_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::LinExpr));
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("LinExpr"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -54,7 +60,30 @@ fn parse_constraint_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Constraint));
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(
+                output_type.node.types[0]
+                    .node
+                    .inner
+                    .matches_str("Constraint")
+            );
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_string_type() {
+    let input = r#"let f() -> String = "hello";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("String"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -68,7 +97,9 @@ fn parse_custom_object_type() {
 
     match &file.statements[0].node {
         Statement::Let { output_type, .. } => {
-            assert!(matches!(output_type.node, TypeName::Object(ref s) if s == "Student"));
+            assert_eq!(output_type.node.types.len(), 1);
+            assert_eq!(output_type.node.types[0].node.maybe_count, 0);
+            assert!(output_type.node.types[0].node.inner.matches_str("Student"));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -83,12 +114,18 @@ fn parse_simple_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Int));
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0].node.inner.matches_str("Int"));
+                }
+                _ => panic!("Expected List type"),
             }
-            _ => panic!("Expected List type"),
-        },
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -100,29 +137,46 @@ fn parse_list_of_bool() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Bool));
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(inner_typename.node.types[0].node.inner.matches_str("Bool"));
+                }
+                _ => panic!("Expected List type"),
             }
-            _ => panic!("Expected List type"),
-        },
+        }
         _ => panic!("Expected Let statement"),
     }
 }
 
 #[test]
 fn parse_list_of_object() {
-    let input = "let f() -> [Student] = @[Student];";
+    let input = "let f() -> [Student] = students;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Object(ref s) if s == "Student"));
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("Student")
+                    );
+                }
+                _ => panic!("Expected List type"),
             }
-            _ => panic!("Expected List type"),
-        },
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -134,15 +188,24 @@ fn parse_nested_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { params, .. } => match &params[0].typ.node {
-            TypeName::List(inner1) => match &**inner1 {
-                TypeName::List(inner2) => {
-                    assert!(matches!(**inner2, TypeName::Int));
+        Statement::Let { params, .. } => {
+            assert_eq!(params[0].typ.node.types.len(), 1);
+            let outer_type = &params[0].typ.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(middle_typename) => {
+                    assert_eq!(middle_typename.node.types.len(), 1);
+                    match &middle_typename.node.types[0].node.inner {
+                        SimpleTypeName::List(inner_typename) => {
+                            assert_eq!(inner_typename.node.types.len(), 1);
+                            assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                            assert!(inner_typename.node.types[0].node.inner.matches_str("Int"));
+                        }
+                        _ => panic!("Expected nested List type"),
+                    }
                 }
-                _ => panic!("Expected nested list"),
-            },
-            _ => panic!("Expected list type"),
-        },
+                _ => panic!("Expected List type"),
+            }
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -154,18 +217,35 @@ fn parse_deeply_nested_list_type() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { params, .. } => match &params[0].typ.node {
-            TypeName::List(inner1) => match &**inner1 {
-                TypeName::List(inner2) => match &**inner2 {
-                    TypeName::List(inner3) => {
-                        assert!(matches!(**inner3, TypeName::Bool));
+        Statement::Let { params, .. } => {
+            assert_eq!(params[0].typ.node.types.len(), 1);
+            let outer_type = &params[0].typ.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(level1_typename) => {
+                    assert_eq!(level1_typename.node.types.len(), 1);
+                    match &level1_typename.node.types[0].node.inner {
+                        SimpleTypeName::List(level2_typename) => {
+                            assert_eq!(level2_typename.node.types.len(), 1);
+                            match &level2_typename.node.types[0].node.inner {
+                                SimpleTypeName::List(level3_typename) => {
+                                    assert_eq!(level3_typename.node.types.len(), 1);
+                                    assert_eq!(level3_typename.node.types[0].node.maybe_count, 0);
+                                    assert!(
+                                        level3_typename.node.types[0]
+                                            .node
+                                            .inner
+                                            .matches_str("Bool")
+                                    );
+                                }
+                                _ => panic!("Expected deeply nested List type"),
+                            }
+                        }
+                        _ => panic!("Expected nested List type"),
                     }
-                    _ => panic!("Expected third level list"),
-                },
-                _ => panic!("Expected second level list"),
-            },
-            _ => panic!("Expected first level list"),
-        },
+                }
+                _ => panic!("Expected List type"),
+            }
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -177,12 +257,23 @@ fn parse_list_of_linexpr() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::LinExpr));
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("LinExpr")
+                    );
+                }
+                _ => panic!("Expected List type"),
             }
-            _ => panic!("Expected List type"),
-        },
+        }
         _ => panic!("Expected Let statement"),
     }
 }
@@ -194,12 +285,51 @@ fn parse_list_of_constraint() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { output_type, .. } => match &output_type.node {
-            TypeName::List(inner) => {
-                assert!(matches!(**inner, TypeName::Constraint));
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("Constraint")
+                    );
+                }
+                _ => panic!("Expected List type"),
             }
-            _ => panic!("Expected List type"),
-        },
+        }
+        _ => panic!("Expected Let statement"),
+    }
+}
+
+#[test]
+fn parse_list_of_string() {
+    let input = r#"let f() -> [String] = ["a", "b"];"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { output_type, .. } => {
+            assert_eq!(output_type.node.types.len(), 1);
+            let outer_type = &output_type.node.types[0].node;
+            match &outer_type.inner {
+                SimpleTypeName::List(inner_typename) => {
+                    assert_eq!(inner_typename.node.types.len(), 1);
+                    assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("String")
+                    );
+                }
+                _ => panic!("Expected List type"),
+            }
+        }
         _ => panic!("Expected Let statement"),
     }
 }

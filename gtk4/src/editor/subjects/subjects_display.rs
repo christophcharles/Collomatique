@@ -1,8 +1,8 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
-use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
 pub struct PeriodData {
@@ -13,7 +13,7 @@ pub struct PeriodData {
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub subject_params: collomatique_state_colloscopes::SubjectParameters,
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub periods: Vec<PeriodData>,
     pub subject_id: collomatique_state_colloscopes::SubjectId,
     pub subject_count: usize,
@@ -23,7 +23,7 @@ pub struct EntryData {
 pub struct Entry {
     index: DynamicIndex,
     subject_params: collomatique_state_colloscopes::SubjectParameters,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     periods: FactoryVecDeque<Period>,
     subject_id: collomatique_state_colloscopes::SubjectId,
     subject_count: usize,
@@ -115,26 +115,32 @@ impl Entry {
                     periodicity_in_weeks,
                 )
             }
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block, minimum_week_separation } => {
-                match minimum_week_separation.get() {
-                    1 => format!(
-                        "<b>Périodicité :</b> {} semaines (par bloc)",
-                        weeks_per_block,
-                    ),
-                    _ => format!(
-                        "<b>Périodicité :</b> {} semaines (par bloc - séparation de {} semaines minimum)",
-                        weeks_per_block,
-                        minimum_week_separation.get(),
-                    )
-                }
-            }
-            SubjectPeriodicity::AmountForEveryArbitraryBlock { blocks: _ , minimum_week_separation} => {
-                match *minimum_week_separation {
-                    0 => "<b>Périodicité :</b> découpage en blocs".into(),
-                    1 => "<b>Périodicité :</b> découpage en blocs (séparation de 1 semaine minimum) ".into(),
-                    _ => format!("<b>Périodicité :</b> découpage en blocs (séparation de {} semaines minimum)", *minimum_week_separation),
-                }
-            }
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => match minimum_week_separation.get() {
+                1 => format!(
+                    "<b>Périodicité :</b> {} semaines (par bloc)",
+                    weeks_per_block,
+                ),
+                _ => format!(
+                    "<b>Périodicité :</b> {} semaines (par bloc - séparation de {} semaines minimum)",
+                    weeks_per_block,
+                    minimum_week_separation.get(),
+                ),
+            },
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks: _,
+                minimum_week_separation,
+            } => match *minimum_week_separation {
+                0 => "<b>Périodicité :</b> découpage en blocs".into(),
+                1 => "<b>Périodicité :</b> découpage en blocs (séparation de 1 semaine minimum) "
+                    .into(),
+                _ => format!(
+                    "<b>Périodicité :</b> découpage en blocs (séparation de {} semaines minimum)",
+                    *minimum_week_separation
+                ),
+            },
         }
     }
 
@@ -155,7 +161,7 @@ impl Entry {
     }
 
     fn update_period(
-        global_first_week: Option<collomatique_time::NaiveMondayDate>,
+        global_first_week: Option<collomatique_time::WeekStart>,
         period_num: usize,
         first_week_in_period: usize,
         week_count: usize,
@@ -225,7 +231,7 @@ impl FactoryComponent for Entry {
                     add_css_class: "spacer",
                 },
                 gtk::Button {
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Supprimer la matière"),
                     connect_clicked => EntryInput::DeleteClicked,
@@ -343,7 +349,7 @@ impl FactoryComponent for Entry {
         crate::tools::factories::update_vec_deque(
             &mut model.periods,
             transformed_data.into_iter(),
-            |x| PeriodInput::UpdateData(x),
+            PeriodInput::UpdateData,
         );
 
         model
@@ -389,7 +395,7 @@ impl FactoryComponent for Entry {
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods,
                     transformed_data.into_iter(),
-                    |x| PeriodInput::UpdateData(x),
+                    PeriodInput::UpdateData,
                 );
             }
             EntryInput::EditClicked => {
@@ -427,7 +433,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct PeriodSwitchData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub period_num: usize,
     pub first_week_in_period: usize,
     pub week_count: usize,

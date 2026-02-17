@@ -97,7 +97,7 @@ pub struct Entry {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum EntryContent {
-    ValidEntry(ValidEntry),
+    ValidEntry(Box<ValidEntry>),
     UnknownEntry,
 }
 
@@ -110,7 +110,7 @@ impl<'de> Deserialize<'de> for EntryContent {
 
         use serde::de::IntoDeserializer;
         match ValidEntry::deserialize(value.into_deserializer()) {
-            Ok(valid_entry) => Ok(EntryContent::ValidEntry(valid_entry)),
+            Ok(valid_entry) => Ok(EntryContent::ValidEntry(Box::new(valid_entry))),
             Err(_) => Ok(EntryContent::UnknownEntry),
         }
     }

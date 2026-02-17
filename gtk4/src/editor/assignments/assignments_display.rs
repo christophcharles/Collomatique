@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::glib::SignalHandlerId;
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
-use relm4::FactorySender;
 use relm4::{Component, ComponentController, Controller};
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
     pub period_id: collomatique_state_colloscopes::PeriodId,
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_num: usize,
     pub week_count: usize,
     pub filtered_subjects: Vec<(
@@ -284,7 +284,7 @@ impl FactoryComponent for PeriodEntry {
                     .unwrap();
             }
             PeriodEntryInput::SubjectDropdownChanged(num) => {
-                self.current_subject = num.map(|x| self.data.filtered_subjects[x].0.clone());
+                self.current_subject = num.map(|x| self.data.filtered_subjects[x].0);
             }
             PeriodEntryInput::AssignAll => {
                 let Some(subject_id) = self.current_subject else {
@@ -494,7 +494,7 @@ impl RelmColumn for SubjectColumn {
         let student_id = item.data.student_id;
         let subject_id = self.subject_id;
         item.handler_ids.insert(
-            subject_id.clone(),
+            subject_id,
             root.connect_active_notify(move |widget| {
                 let status = widget.is_active();
                 sender.input(PeriodEntryInput::UpdateStatus(

@@ -1,47 +1,37 @@
 use adw::prelude::{EditableExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
-use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    students: collomatique_state_colloscopes::students::Students,
-
-    ordered_students: Vec<(collomatique_state_colloscopes::StudentId, String, String)>,
 
     selected_name: String,
     selected_students_per_group_minimum: u32,
     selected_students_per_group_maximum: u32,
-    selected_group_count_minimum: u32,
-    selected_group_count_maximum: u32,
-    excluded_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
+    selected_max_group_count: u32,
+    group_name_data: Vec<String>,
 
-    student_entries: FactoryVecDeque<StudentEntry>,
+    group_name_entries: FactoryVecDeque<GroupNameEntry>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(
-        collomatique_state_colloscopes::group_lists::GroupListParameters,
-        collomatique_state_colloscopes::students::Students,
-    ),
+    Show(collomatique_state_colloscopes::group_lists::GroupListParameters),
     Cancel,
     Accept,
 
     UpdateSelectedName(String),
     UpdateStudentsPerGroupMinimum(u32),
     UpdateStudentsPerGroupMaximum(u32),
-    UpdateGroupCountMinimum(u32),
-    UpdateGroupCountMaximum(u32),
-
-    UpdateStudentStatus(usize, bool),
+    UpdateMaxGroupCount(u32),
+    UpdateGroupName(usize, String),
 }
 
 #[derive(Debug)]
@@ -156,38 +146,16 @@ impl SimpleComponent for Dialog {
                             },
                         },
                         adw::PreferencesGroup {
-                            set_title: "Nombre de groupes",
-                            set_description: Some("Nombre total de groupes dans la liste"),
+                            set_title: "Groupes de colles",
+                            set_description: Some("Nombre et noms des groupes"),
                             set_margin_all: 5,
                             set_hexpand: true,
                             adw::SpinRow {
                                 set_hexpand: true,
-                                set_title: "Minimum",
+                                set_title: "Nombre de groupe",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 0.,
-                                    #[watch]
-                                    set_upper: model.selected_group_count_maximum as f64,
-                                    set_step_increment: 1.,
-                                    set_page_increment: 5.,
-                                },
-                                set_wrap: false,
-                                set_snap_to_ticks: true,
-                                set_numeric: true,
-                                #[track(model.should_redraw)]
-                                set_value: model.selected_group_count_minimum as f64,
-                                connect_value_notify[sender] => move |widget| {
-                                    let groups_count_min_u32 = widget.value() as u32;
-                                    sender.input(DialogInput::UpdateGroupCountMinimum(groups_count_min_u32));
-                                },
-                            },
-                            adw::SpinRow {
-                                set_hexpand: true,
-                                set_title: "Maximum",
-                                #[wrap(Some)]
-                                set_adjustment = &gtk::Adjustment {
-                                    #[watch]
-                                    set_lower: model.selected_group_count_minimum as f64,
                                     set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
@@ -196,20 +164,19 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.selected_group_count_maximum as f64,
+                                set_value: model.selected_max_group_count as f64,
                                 connect_value_notify[sender] => move |widget| {
-                                    let groups_count_max_u32 = widget.value() as u32;
-                                    sender.input(DialogInput::UpdateGroupCountMaximum(groups_count_max_u32));
+                                    let max_group_count = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateMaxGroupCount(max_group_count));
                                 },
                             },
                         },
                         #[local_ref]
-                        student_entries_widget -> adw::PreferencesGroup {
-                            set_title: "Élèves dans la liste",
+                        group_name_entries_widget -> adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: !model.ordered_students.is_empty(),
+                            set_visible: model.selected_max_group_count > 0,
                         },
                     },
                 },
@@ -222,29 +189,24 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let student_entries = FactoryVecDeque::builder()
+        let group_name_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |msg| match msg {
-                StudentOutput::UpdateStatus(num, status) => {
-                    DialogInput::UpdateStudentStatus(num, status)
-                }
+                GroupNameOutput::UpdateName(num, name) => DialogInput::UpdateGroupName(num, name),
             });
 
         let model = Dialog {
             hidden: true,
             should_redraw: false,
-            students: collomatique_state_colloscopes::students::Students::default(),
-            ordered_students: vec![],
             selected_name: String::new(),
             selected_students_per_group_minimum: 1,
-            selected_group_count_maximum: 3,
-            selected_group_count_minimum: 0,
             selected_students_per_group_maximum: u32::MAX,
-            student_entries,
-            excluded_students: BTreeSet::new(),
+            selected_max_group_count: 16,
+            group_name_data: vec![String::new(); 16],
+            group_name_entries,
         };
 
-        let student_entries_widget = model.student_entries.widget();
+        let group_name_entries_widget = model.group_name_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -253,23 +215,12 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(group_list_data, students) => {
+            DialogInput::Show(group_list_data) => {
                 self.hidden = false;
                 self.should_redraw = true;
-                self.students = students;
-                self.update_ordered_students();
                 self.update_from_data(group_list_data);
 
-                crate::tools::factories::update_vec_deque(
-                    &mut self.student_entries,
-                    self.ordered_students
-                        .iter()
-                        .map(|(id, firstname, surname)| StudentData {
-                            name: format!("{} {}", firstname, surname),
-                            included: !self.excluded_students.contains(id),
-                        }),
-                    |data| StudentInput::UpdateData(data),
-                );
+                self.update_group_name_entries();
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -298,26 +249,16 @@ impl SimpleComponent for Dialog {
                 }
                 self.selected_students_per_group_maximum = selected_students_per_group_maximum;
             }
-            DialogInput::UpdateGroupCountMinimum(selected_group_count_minimum) => {
-                if self.selected_group_count_minimum == selected_group_count_minimum {
+            DialogInput::UpdateMaxGroupCount(selected_max_group_count) => {
+                if self.selected_max_group_count == selected_max_group_count {
                     return;
                 }
-                self.selected_group_count_minimum = selected_group_count_minimum;
+                self.selected_max_group_count = selected_max_group_count;
+                self.update_group_name_entries();
             }
-            DialogInput::UpdateGroupCountMaximum(selected_group_count_maximum) => {
-                if self.selected_group_count_maximum == selected_group_count_maximum {
-                    return;
-                }
-                self.selected_group_count_maximum = selected_group_count_maximum;
-            }
-            DialogInput::UpdateStudentStatus(student_num, new_status) => {
-                assert!(student_num < self.ordered_students.len());
-                let student_id = self.ordered_students[student_num].0;
-
-                if new_status {
-                    self.excluded_students.remove(&student_id);
-                } else {
-                    self.excluded_students.insert(student_id);
+            DialogInput::UpdateGroupName(group_num, name) => {
+                if group_num < self.group_name_data.len() {
+                    self.group_name_data[group_num] = name;
                 }
             }
         }
@@ -333,26 +274,6 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn update_ordered_students(&mut self) {
-        self.ordered_students = self
-            .students
-            .student_map
-            .iter()
-            .map(|(student_id, student)| {
-                (
-                    student_id.clone(),
-                    student.desc.firstname.clone(),
-                    student.desc.surname.clone(),
-                )
-            })
-            .collect();
-
-        self.ordered_students
-            .sort_by_key(|(id, firstname, surname)| {
-                (surname.clone(), firstname.clone(), id.clone())
-            });
-    }
-
     fn update_from_data(
         &mut self,
         data: collomatique_state_colloscopes::group_lists::GroupListParameters,
@@ -360,9 +281,16 @@ impl Dialog {
         self.selected_name = data.name;
         self.selected_students_per_group_minimum = data.students_per_group.start().get();
         self.selected_students_per_group_maximum = data.students_per_group.end().get();
-        self.selected_group_count_minimum = *data.group_count.start();
-        self.selected_group_count_maximum = *data.group_count.end();
-        self.excluded_students = data.excluded_students;
+        self.selected_max_group_count = data.group_names.len() as u32;
+        self.group_name_data = data
+            .group_names
+            .iter()
+            .map(|opt| {
+                opt.as_ref()
+                    .map(|s| s.clone().into_inner())
+                    .unwrap_or_default()
+            })
+            .collect();
     }
 
     fn generate_data(&self) -> collomatique_state_colloscopes::group_lists::GroupListParameters {
@@ -370,59 +298,83 @@ impl Dialog {
             name: self.selected_name.clone(),
             students_per_group: NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()
                 ..=NonZeroU32::new(self.selected_students_per_group_maximum).unwrap(),
-            group_count: self.selected_group_count_minimum..=self.selected_group_count_maximum,
-            excluded_students: self.excluded_students.clone(),
+            group_names: self
+                .group_name_data
+                .iter()
+                .take(self.selected_max_group_count as usize)
+                .map(|s| non_empty_string::NonEmptyString::new(s.clone()).ok())
+                .collect(),
         }
+    }
+
+    fn update_group_name_entries(&mut self) {
+        let entries_count = self.selected_max_group_count as usize;
+
+        // Resize group_name_data if needed
+        if entries_count > self.group_name_data.len() {
+            self.group_name_data.resize(entries_count, String::new());
+        }
+
+        // Sync factory with model
+        crate::tools::factories::update_vec_deque(
+            &mut self.group_name_entries,
+            self.group_name_data
+                .iter()
+                .take(entries_count)
+                .enumerate()
+                .map(|(num, name)| GroupNameData {
+                    name: name.clone(),
+                    group_num: num,
+                }),
+            GroupNameInput::UpdateData,
+        );
     }
 }
 
+// Group name entry factory component
 #[derive(Debug, Clone)]
-struct StudentData {
+struct GroupNameData {
     name: String,
-    included: bool,
+    group_num: usize,
 }
 
 #[derive(Debug)]
-struct StudentEntry {
-    data: StudentData,
+struct GroupNameEntry {
+    data: GroupNameData,
     index: DynamicIndex,
     should_redraw: bool,
 }
 
 #[derive(Debug, Clone)]
-enum StudentInput {
-    UpdateData(StudentData),
-
-    UpdateStatus(bool),
+enum GroupNameInput {
+    UpdateData(GroupNameData),
+    UpdateName(String),
 }
 
 #[derive(Debug)]
-enum StudentOutput {
-    UpdateStatus(usize, bool),
+enum GroupNameOutput {
+    UpdateName(usize, String),
 }
 
 #[relm4::factory]
-impl FactoryComponent for StudentEntry {
-    type Init = StudentData;
-    type Input = StudentInput;
-    type Output = StudentOutput;
+impl FactoryComponent for GroupNameEntry {
+    type Init = GroupNameData;
+    type Input = GroupNameInput;
+    type Output = GroupNameOutput;
     type CommandOutput = ();
     type ParentWidget = adw::PreferencesGroup;
 
     view! {
         #[root]
-        adw::SwitchRow {
+        adw::EntryRow {
             set_hexpand: true,
-            set_use_markup: false,
             #[watch]
-            set_title: &self.data.name,
+            set_title: &format!("Nom du groupe {}", self.data.group_num + 1),
             #[track(self.should_redraw)]
-            set_active: self.data.included,
-            connect_active_notify[sender] => move |widget| {
-                let status = widget.is_active();
-                sender.input(
-                    StudentInput::UpdateStatus(status)
-                );
+            set_text: &self.data.name,
+            connect_text_notify[sender] => move |widget| {
+                let text: String = widget.text().into();
+                sender.input(GroupNameInput::UpdateName(text));
             },
         }
     }
@@ -450,19 +402,19 @@ impl FactoryComponent for StudentEntry {
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         self.should_redraw = false;
         match msg {
-            StudentInput::UpdateData(new_data) => {
+            GroupNameInput::UpdateData(new_data) => {
                 self.data = new_data;
                 self.should_redraw = true;
             }
-            StudentInput::UpdateStatus(new_status) => {
-                if self.data.included == new_status {
+            GroupNameInput::UpdateName(new_name) => {
+                if self.data.name == new_name {
                     return;
                 }
-                self.data.included = new_status;
+                self.data.name = new_name.clone();
                 sender
-                    .output(StudentOutput::UpdateStatus(
+                    .output(GroupNameOutput::UpdateName(
                         self.index.current_index(),
-                        new_status,
+                        new_name,
                     ))
                     .unwrap();
             }

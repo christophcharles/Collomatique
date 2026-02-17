@@ -302,7 +302,7 @@ where
 
     /// Remove all columns.
     pub fn clear_columns(&mut self) {
-        for (_column_name, column) in &self.columns {
+        for column in self.columns.values() {
             self.view.remove_column(column);
         }
         self.columns.clear();

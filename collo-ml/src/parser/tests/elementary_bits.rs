@@ -87,15 +87,15 @@ fn fn_call_rejects_wrong_brackets() {
 }
 
 #[test]
-fn fn_call_rejects_trailing_comma() {
+fn fn_call_accepts_trailing_comma() {
     let cases = vec!["compute(x, )", "func(a, b, )"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (trailing comma): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
             case,
-            result
+            result.err()
         );
     }
 }
@@ -248,15 +248,15 @@ fn var_call_rejects_wrong_brackets() {
 }
 
 #[test]
-fn var_call_rejects_trailing_comma() {
+fn var_call_accepts_trailing_comma() {
     let cases = vec!["$Var(x, )", "$V(a, b, )"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (trailing comma): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
             case,
-            result
+            result.err()
         );
     }
 }
@@ -436,6 +436,15 @@ fn type_primitive_types() {
 }
 
 #[test]
+fn do_not_reject_types_starting_like_primitive_types() {
+    let cases = vec!["Interrogation", "Boolean", "Constraints"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
 fn type_custom_types() {
     let cases = vec!["Student", "Week", "Room", "MyType", "CustomType"];
     for case in cases {
@@ -506,13 +515,13 @@ fn type_rejects_missing_opening_bracket() {
 }
 
 #[test]
-fn type_rejects_empty_brackets() {
+fn type_accepts_empty_brackets() {
     let cases = vec!["[]", "[[]]"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (empty brackets): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (empty brackets): {:?}",
             case,
             result
         );

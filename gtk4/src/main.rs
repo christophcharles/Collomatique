@@ -23,58 +23,13 @@ struct Args {
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
 
-    /// TEMPORARY PARAMETER: do not open the gtk4 gui but launch the resolution of the colloscope
-    #[arg(long, default_value_t = false)]
-    solve: bool,
+    /// Export file to SQLite database instead of opening GUI
+    #[arg(long, value_name = "OUTPUT")]
+    export: Option<PathBuf>,
 
     /// Everything after gets passed through to GTK.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     gtk_options: Vec<String>,
-}
-
-fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
-    use anyhow::anyhow;
-
-    let Some(path) = file else {
-        return Err(anyhow!("You must specify a file to open and solve"));
-    };
-
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-
-    let result = rt.block_on(collomatique_storage::load_data_from_file(&path));
-
-    let (data, caveats) = match result {
-        Ok(r) => r,
-        Err(e) => {
-            return Err(anyhow!("Failed to load file: {:?}", e));
-        }
-    };
-
-    for caveat in caveats {
-        println!("Caveat: {:?}", caveat);
-    }
-
-    println!("\nBuilding ILP problem...");
-
-    let problem_with_translators =
-        collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_collo_params(
-            &data.get_inner_data().params,
-        )
-        .expect("Data should be complete for resolution");
-
-    println!("Start resolution...");
-
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let solution = problem_with_translators
-        .problem
-        .solve(&solver)
-        .map(|x| x.into_solution());
-
-    println!("\n\nPotential solution: {:?}", solution);
-
-    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -84,8 +39,29 @@ fn main() -> Result<(), anyhow::Error> {
         return collomatique_rpc_engine::run_rpc_engine();
     }
 
-    if args.solve {
-        return try_solve(args.file);
+    if let Some(export_path) = args.export {
+        let input_file = args
+            .file
+            .ok_or_else(|| anyhow::anyhow!("--export requires an input file argument"))?;
+
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(async {
+            let (data, _caveats) = collomatique_storage::load_data_from_file(&input_file)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to load file: {:?}", e))?;
+
+            let pool = sqlx::SqlitePool::connect(":memory:").await?;
+            collomatique_sqlite_state::create_schema(&pool).await?;
+
+            collomatique_sqlite_state::inner_data_to_sqlite(&pool, data.get_inner_data()).await?;
+
+            collomatique_sqlite_state::export_to_file(&pool, &export_path).await?;
+
+            println!("Exported to {}", export_path.display());
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        return Ok(());
     }
 
     let payload = collomatique_gtk4::AppInit {

@@ -1,27 +1,32 @@
-use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
+use collo_ml::problem::ConstraintDesc;
+use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+mod blame_dialog;
 mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
+use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collo_ml::SqliteDatabaseDriver,
+    collomatique_binding_colloscopes::vars::Var,
+>;
+
 #[derive(Debug)]
 pub enum ColloscopeInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::subjects::Subjects,
-        collomatique_state_colloscopes::slots::Slots,
-        collomatique_state_colloscopes::teachers::Teachers,
-        collomatique_state_colloscopes::students::Students,
-        collomatique_state_colloscopes::group_lists::GroupLists,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
+        Option<Result<ProblemBuilder, SimpleProblemError>>,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -33,21 +38,73 @@ pub enum ColloscopeInput {
         usize,
     ),
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+
+    SolveColloscopeClicked,
+
+    ShowBlamedConstraints,
+}
+
+#[derive(Debug)]
+pub enum ColloscopeCommandOutput {
+    DebouncedStart(std::time::Instant),
+    IlpProblemComputed(Result<IlpProblem, String>),
+    IlpReprComputed(IlpRepr),
+}
+
+#[derive(Debug)]
+pub enum ColloscopeOutput {
+    UpdateOp(ColloscopeUpdateOp),
+    SolveColloscopeClicked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IlpProblem {
+    env: collomatique_state_colloscopes::colloscope_params::Parameters,
+    problem: collo_ml::problem::Problem<
+        collo_ml::SqliteDatabaseConnection,
+        collomatique_binding_colloscopes::vars::Var,
+    >,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IlpRepr {
+    ilp_problem: IlpProblem,
+    colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ComputationState {
+    AwaitingRecompilation(std::time::Instant),
+    ComputingConstraints,
+    RecomputingWarnings,
+    ResultAvailable(Result<IlpRepr, String>),
+}
+
+impl ComputationState {
+    fn as_ref(&self) -> Option<&Result<IlpRepr, String>> {
+        match self {
+            ComputationState::ResultAvailable(res) => Some(res),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IlpProblemBuilder {
+    builder: ProblemBuilder,
+    ilp_repr: ComputationState,
 }
 
 pub struct Colloscope {
-    periods: collomatique_state_colloscopes::periods::Periods,
-    subjects: collomatique_state_colloscopes::subjects::Subjects,
-    slots: collomatique_state_colloscopes::slots::Slots,
-    teachers: collomatique_state_colloscopes::teachers::Teachers,
-    students: collomatique_state_colloscopes::students::Students,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     group_list_dialog: Controller<group_list_dialog::Dialog>,
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
+    blame_dialog: Controller<blame_dialog::Dialog>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -55,14 +112,90 @@ pub struct Colloscope {
         collomatique_state_colloscopes::PeriodId,
         usize,
     )>,
+
+    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleProblemError>>,
+}
+
+impl Colloscope {
+    fn get_ilp_repr(&self) -> Option<&Result<IlpRepr, String>> {
+        self.ilp_problem_builder
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .and_then(|b| b.ilp_repr.as_ref())
+    }
+
+    fn is_awaiting_recompilation(&self) -> bool {
+        match &self.ilp_problem_builder {
+            None => true,
+            Some(Ok(builder)) => {
+                matches!(builder.ilp_repr, ComputationState::AwaitingRecompilation(_))
+            }
+            Some(Err(_)) => false,
+        }
+    }
+
+    fn is_constructing_constraints(&self) -> bool {
+        match &self.ilp_problem_builder {
+            None => false,
+            Some(Ok(builder)) => matches!(builder.ilp_repr, ComputationState::ComputingConstraints),
+            Some(Err(_)) => false,
+        }
+    }
+
+    fn is_rebuilding_warnings(&self) -> bool {
+        match &self.ilp_problem_builder {
+            None => false,
+            Some(Ok(builder)) => matches!(builder.ilp_repr, ComputationState::RecomputingWarnings),
+            Some(Err(_)) => false,
+        }
+    }
+
+    fn has_warnings(&self) -> bool {
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => !ilp_repr.warnings.is_empty(),
+            _ => false,
+        }
+    }
+
+    fn has_compilation_error(&self) -> bool {
+        match &self.ilp_problem_builder {
+            Some(Err(_)) => true,
+            Some(Ok(_)) => false,
+            None => false,
+        }
+    }
+
+    fn has_evaluation_error(&self) -> bool {
+        match &self.ilp_problem_builder {
+            Some(Err(_)) => false,
+            Some(Ok(builder)) => {
+                matches!(&builder.ilp_repr, ComputationState::ResultAvailable(Err(_)))
+            }
+            None => false,
+        }
+    }
+
+    fn has_success(&self) -> bool {
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => ilp_repr.warnings.is_empty(),
+            _ => false,
+        }
+    }
+
+    fn generate_warning_text(&self) -> String {
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
+            _ => String::new(),
+        }
+    }
 }
 
 #[relm4::component(pub)]
 impl Component for Colloscope {
     type Input = ColloscopeInput;
-    type Output = ColloscopeUpdateOp;
+    type Output = ColloscopeOutput;
     type Init = ();
-    type CommandOutput = ();
+    type CommandOutput = ColloscopeCommandOutput;
 
     view! {
         #[root]
@@ -83,6 +216,105 @@ impl Component for Colloscope {
                         set_label: "Colloscope",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
+                    gtk::Button {
+                        set_margin_start: 5,
+                        add_css_class: "flat",
+                        set_tooltip: "Afficher les erreurs du colloscope",
+                        connect_clicked => ColloscopeInput::ShowBlamedConstraints,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                #[watch]
+                                set_visible: model.is_awaiting_recompilation(),
+                                adw::Spinner {
+                                    set_halign: gtk::Align::Start,
+                                },
+                                gtk::Label {
+                                    set_label: "<i><small>Compilation de ColloML...</small></i>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                #[watch]
+                                set_visible: model.is_constructing_constraints(),
+                                adw::Spinner {
+                                    set_halign: gtk::Align::Start,
+                                },
+                                gtk::Label {
+                                    set_label: "<i><small>Construction des contraintes...</small></i>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                #[watch]
+                                set_visible: model.is_rebuilding_warnings(),
+                                adw::Spinner {
+                                    set_halign: gtk::Align::Start,
+                                },
+                                gtk::Label {
+                                    set_label: "<i><small>Vérification du colloscope...</small></i>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                #[watch]
+                                set_visible: model.has_success(),
+                                gtk::Image {
+                                    set_icon_name: Some("emblem-ok-symbolic"),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                add_css_class: "error",
+                                #[watch]
+                                set_visible: model.has_compilation_error(),
+                                gtk::Image {
+                                    set_icon_name: Some("dialog-error-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "<b>Erreur de compilation</b>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                add_css_class: "error",
+                                #[watch]
+                                set_visible: model.has_evaluation_error(),
+                                gtk::Image {
+                                    set_icon_name: Some("dialog-error-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "<b>Erreur d'évaluation</b>",
+                                    set_use_markup: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                add_css_class: "warning",
+                                #[watch]
+                                set_visible: model.has_warnings(),
+                                gtk::Image {
+                                    set_icon_name: Some("dialog-warning-symbolic"),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &model.generate_warning_text(),
+                                    set_use_markup: true,
+                                },
+                            },
+                        },
+                    },
                     gtk::Box {
                         set_hexpand: true,
                         set_orientation: gtk::Orientation::Horizontal,
@@ -90,12 +322,12 @@ impl Component for Colloscope {
                     gtk::Button {
                         add_css_class: "frame",
                         add_css_class: "accent",
-                        set_sensitive: false,
                         set_margin_all: 5,
                         adw::ButtonContent {
-                            set_icon_name: "run-build-configure",
+                            set_icon_name: "system-run-symbolic",
                             set_label: "Générer le colloscope automatiquement",
                         },
+                        connect_clicked => ColloscopeInput::SolveColloscopeClicked,
                     },
                 },
                 #[local_ref]
@@ -109,6 +341,8 @@ impl Component for Colloscope {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
+                #[watch]
+                set_visible: !model.colloscope.group_lists.is_empty(),
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -116,7 +350,7 @@ impl Component for Colloscope {
                     gtk::Label {
                         set_halign: gtk::Align::Start,
                         set_margin_top: 10,
-                        set_label: "Listes de groupes",
+                        set_label: "Groupes à répartir",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
                     gtk::ScrolledWindow {
@@ -131,15 +365,6 @@ impl Component for Colloscope {
                                 set_hexpand: true,
                                 add_css_class: "boxed-list",
                                 set_selection_mode: gtk::SelectionMode::None,
-                                #[watch]
-                                set_visible: !model.colloscope.group_lists.is_empty(),
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<i>Aucune liste à afficher</i>",
-                                set_use_markup: true,
-                                #[watch]
-                                set_visible: model.colloscope.group_lists.is_empty(),
                             },
                             gtk::Box {
                                 set_hexpand: true,
@@ -194,13 +419,13 @@ impl Component for Colloscope {
                 }
             });
 
+        let blame_dialog = blame_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let model = Colloscope {
-            periods: collomatique_state_colloscopes::periods::Periods::default(),
-            subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
-            slots: collomatique_state_colloscopes::slots::Slots::default(),
-            teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
-            students: collomatique_state_colloscopes::students::Students::default(),
-            group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
+            params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
             group_list_entries,
             group_list_dialog,
@@ -208,6 +433,8 @@ impl Component for Colloscope {
             colloscope_display,
             interrogation_dialog,
             edited_interrogation: None,
+            ilp_problem_builder: None,
+            blame_dialog,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -219,22 +446,56 @@ impl Component for Colloscope {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ColloscopeInput::Update(
-                periods,
-                subjects,
-                slots,
-                teachers,
-                students,
-                group_lists,
-                colloscope,
-            ) => {
-                self.periods = periods;
-                self.subjects = subjects;
-                self.slots = slots;
-                self.teachers = teachers;
-                self.students = students;
-                self.group_lists = group_lists;
+            ColloscopeInput::Update(params, colloscope, builder) => {
+                self.params = params;
                 self.colloscope = colloscope;
+
+                match builder {
+                    None => {
+                        self.ilp_problem_builder = None;
+                        self.update_blame_dialog();
+                    }
+                    Some(Err(e)) => {
+                        self.ilp_problem_builder = Some(Err(e));
+                        self.update_blame_dialog();
+                    }
+                    Some(Ok(pb_builder)) => match &self.ilp_problem_builder {
+                        None | Some(Err(_)) => {
+                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
+                                builder: pb_builder,
+                                ilp_repr: ComputationState::AwaitingRecompilation(
+                                    std::time::Instant::now(),
+                                ),
+                            }));
+                            self.debounce_compute(sender.clone());
+                        }
+                        Some(Ok(old_builder)) if old_builder.builder != pb_builder => {
+                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
+                                builder: pb_builder,
+                                ilp_repr: ComputationState::AwaitingRecompilation(
+                                    std::time::Instant::now(),
+                                ),
+                            }));
+                            self.debounce_compute(sender.clone());
+                        }
+                        Some(Ok(old_builder)) => {
+                            match &old_builder.ilp_repr {
+                                ComputationState::ResultAvailable(Ok(ilp_repr)) => {
+                                    if ilp_repr.ilp_problem.env != self.params {
+                                        self.debounce_compute(sender.clone());
+                                    } else if ilp_repr.colloscope != self.colloscope {
+                                        let ilp_problem = ilp_repr.ilp_problem.clone();
+                                        self.recompute_warnings(sender.clone(), ilp_problem);
+                                    }
+                                    // else: nothing changed, do nothing
+                                }
+                                _ => {
+                                    self.debounce_compute(sender.clone());
+                                }
+                            }
+                        }
+                    },
+                }
 
                 self.update_group_list_entries();
                 self.update_colloscope_display();
@@ -244,8 +505,9 @@ impl Component for Colloscope {
                 self.group_list_dialog
                     .sender()
                     .send(group_list_dialog::DialogInput::Show(
-                        self.students.clone(),
-                        self.group_lists
+                        self.params.students.clone(),
+                        self.params
+                            .group_lists
                             .group_list_map
                             .get(&group_list_id)
                             .cloned()
@@ -264,9 +526,11 @@ impl Component for Colloscope {
                     .take()
                     .expect("A group list id should have been stored for edition");
                 sender
-                    .output(ColloscopeUpdateOp::UpdateColloscopeGroupList(
-                        group_list_id,
-                        collo_group_list,
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                            group_list_id,
+                            collo_group_list,
+                        ),
                     ))
                     .unwrap();
             }
@@ -274,10 +538,12 @@ impl Component for Colloscope {
                 self.edited_interrogation = Some((slot_id, period_id, week_in_period));
 
                 let (subject_id, _pos) = self
+                    .params
                     .slots
                     .find_slot_subject_and_position(slot_id)
                     .expect("Slot ID should be valid");
                 let period_associations = self
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(&period_id)
@@ -286,6 +552,7 @@ impl Component for Colloscope {
                     .get(&subject_id)
                     .expect("A group list is needed to be able to edit a slot");
                 let group_list = self
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -323,43 +590,234 @@ impl Component for Colloscope {
                     .take()
                     .expect("Interrogation information should have been stored for edition");
                 sender
-                    .output(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                        period_id,
-                        slot_id,
-                        week_in_period,
-                        interrogation,
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                            period_id,
+                            slot_id,
+                            week_in_period,
+                            interrogation,
+                        ),
                     ))
                     .unwrap();
             }
+            ColloscopeInput::SolveColloscopeClicked => {
+                sender
+                    .output(ColloscopeOutput::SolveColloscopeClicked)
+                    .unwrap();
+            }
+            ColloscopeInput::ShowBlamedConstraints => {
+                self.blame_dialog
+                    .sender()
+                    .send(blame_dialog::DialogInput::Show)
+                    .unwrap();
+            }
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            ColloscopeCommandOutput::IlpProblemComputed(result) => {
+                match result {
+                    Ok(ilp_problem) => {
+                        if ilp_problem.env != self.params {
+                            return; // Ignore old computation that are no longer relevant
+                        }
+                        self.recompute_warnings(sender, ilp_problem);
+                    }
+                    Err(msg) => {
+                        self.update_ilp_repr(ComputationState::ResultAvailable(Err(msg)));
+                    }
+                }
+            }
+            ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
+                if ilp_repr.ilp_problem.env != self.params {
+                    return; // Ignore old computation that are no longer relevant
+                }
+                self.update_ilp_repr(ComputationState::ResultAvailable(Ok(ilp_repr)));
+            }
+            ColloscopeCommandOutput::DebouncedStart(instant) => match &self.ilp_problem_builder {
+                Some(b) => match b {
+                    Ok(builder) => match builder.ilp_repr {
+                        ComputationState::AwaitingRecompilation(t) => {
+                            if t == instant {
+                                self.compute_ilp_repr(sender);
+                            }
+                        }
+                        _ => {}
+                    },
+                    Err(_) => {}
+                },
+                None => {}
+            },
         }
     }
 }
 
 impl Colloscope {
+    fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
+        self.update_ilp_repr(ComputationState::RecomputingWarnings);
+
+        let colloscope = self.colloscope.clone();
+
+        sender.spawn_oneshot_command(move || {
+            let config_data = collomatique_binding_colloscopes::convert::build_complete_config(
+                &ilp_problem.env,
+                &colloscope,
+            );
+            let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+            let sol = ilp_problem
+                .problem
+                .solution_from_data(&config_data, &solver)
+                .expect("There should be a complete ilp config for the colloscope");
+            let warnings = sol
+                .blame()
+                .map(|(_constraint, desc)| {
+                    let ConstraintDesc::InScript { origin } = desc else {
+                        panic!(
+                            "Reification constraints should all be satisfied! {:?}",
+                            desc
+                        )
+                    };
+
+                    origin.to_string()
+                })
+                .collect();
+            ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
+                ilp_problem,
+                colloscope,
+                warnings,
+            })
+        });
+    }
+
+    fn debounce_compute(&mut self, sender: ComponentSender<Self>) {
+        let instant = std::time::Instant::now();
+        self.update_ilp_repr(ComputationState::AwaitingRecompilation(instant.clone()));
+
+        sender.oneshot_command(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            ColloscopeCommandOutput::DebouncedStart(instant)
+        });
+    }
+
+    fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
+        self.update_ilp_repr(ComputationState::ComputingConstraints);
+
+        let builder = self
+            .ilp_problem_builder
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .builder
+            .clone();
+        let params = self.params.clone();
+        let colloscope = self.colloscope.clone();
+
+        sender.oneshot_command(async move {
+            let result: Result<IlpProblem, String> = async {
+                let inner_data = collomatique_state_colloscopes::InnerData { params, colloscope };
+                let env = inner_data.params.clone();
+
+                let pool = sqlx::SqlitePool::connect(":memory:")
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                collomatique_sqlite_state::create_schema(&pool)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                let db_conn = collo_ml::SqliteDatabaseDriver::new_connection("collomatique", &pool)
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+
+                let problem = builder
+                    .build(&env, Some(db_conn))
+                    .await
+                    .map_err(|e| format!("{}", e))?;
+                Ok(IlpProblem { env, problem })
+            }
+            .await;
+
+            match result {
+                Ok(ilp_problem) => ColloscopeCommandOutput::IlpProblemComputed(Ok(ilp_problem)),
+                Err(msg) => ColloscopeCommandOutput::IlpProblemComputed(Err(msg)),
+            }
+        });
+    }
+
+    fn update_blame_dialog(&self) {
+        let ilp_repr_opt = match &self.ilp_problem_builder {
+            Some(r) => match r {
+                Ok(b) => match &b.ilp_repr {
+                    ComputationState::AwaitingRecompilation(_) => {
+                        blame_dialog::ComputationState::AwaitingRecompilation
+                    }
+                    ComputationState::ComputingConstraints => {
+                        blame_dialog::ComputationState::ComputingConstraints
+                    }
+                    ComputationState::RecomputingWarnings => {
+                        blame_dialog::ComputationState::RecomputingWarnings
+                    }
+                    ComputationState::ResultAvailable(r) => {
+                        blame_dialog::ComputationState::ResultAvailable(
+                            r.as_ref()
+                                .map(|x| x.warnings.clone())
+                                .map_err(|e| e.clone()),
+                        )
+                    }
+                },
+                Err(e) => blame_dialog::ComputationState::ResultAvailable(Err(e.to_string())),
+            },
+            None => blame_dialog::ComputationState::ComputingConstraints,
+        };
+
+        self.blame_dialog
+            .sender()
+            .send(blame_dialog::DialogInput::Update(ilp_repr_opt))
+            .unwrap();
+    }
+
+    fn update_ilp_repr(&mut self, ilp_repr: ComputationState) {
+        let Some(Ok(ref mut builder)) = self.ilp_problem_builder else {
+            return;
+        };
+        builder.ilp_repr = ilp_repr;
+        self.update_blame_dialog();
+    }
+
     fn update_group_list_entries(&mut self) {
         let mut group_lists_vec: Vec<_> = self
+            .params
             .group_lists
             .group_list_map
             .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: id.clone(),
+                id: *id,
                 group_list: group_list.clone(),
                 collo_group_list: self
                     .colloscope
                     .group_lists
                     .get(id)
-                    .expect("Group list ID should be valid")
+                    .expect("Non-prefilled group list should have colloscope entry")
                     .clone(),
-                total_student_count: self.students.student_map.len(),
+                total_student_count: self.params.students.student_map.len(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id.clone()));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
             group_lists_vec.into_iter(),
-            |data| group_lists_display::EntryInput::UpdateData(data),
+            group_lists_display::EntryInput::UpdateData,
         );
     }
 
@@ -367,12 +825,12 @@ impl Colloscope {
         self.colloscope_display
             .sender()
             .send(colloscope_display::DisplayInput::Update(
-                self.periods.clone(),
-                self.subjects.clone(),
-                self.slots.clone(),
-                self.teachers.clone(),
-                self.students.clone(),
-                self.group_lists.clone(),
+                self.params.periods.clone(),
+                self.params.subjects.clone(),
+                self.params.slots.clone(),
+                self.params.teachers.clone(),
+                self.params.students.clone(),
+                self.params.group_lists.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();

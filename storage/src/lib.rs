@@ -15,7 +15,7 @@ mod encode;
 mod json;
 
 pub use decode::{Caveat, DecodeError};
-pub use json::{Version, CURRENT_SPEC_VERSION};
+pub use json::{CURRENT_SPEC_VERSION, Version};
 
 use collomatique_state_colloscopes::Data;
 use std::collections::BTreeSet;

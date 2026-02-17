@@ -104,8 +104,13 @@ impl TeachersUpdateOp {
                 None
             }
             Self::DeleteTeacher(teacher_id) => {
-                for (_subject_id, subject_slots) in
-                    &data.get_data().get_inner_data().params.slots.subject_map
+                for subject_slots in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .values()
                 {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {

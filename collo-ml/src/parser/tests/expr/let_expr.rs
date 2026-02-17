@@ -98,7 +98,7 @@ fn let_in_with_constraints() {
 fn let_in_chained_with_different_expressions() {
     let cases = vec![
         "let a = 1 { let b = a + 1 { let c = b * 2 { c + a } } }",
-        "let x = [1, 2, 3] { let y = |x| { x union y } }",
+        "let x = [1, 2, 3] { let y = |x| { x + y } }",
         "let n = 5 { let doubled = n * 2 { forall i in [0..doubled] { $V(i) === 1 } } }",
     ];
     for case in cases {

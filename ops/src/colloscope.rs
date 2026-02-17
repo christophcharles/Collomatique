@@ -82,7 +82,7 @@ impl ColloscopeUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<RulesUpdateWarning>> {
+    ) -> Option<CleaningOp<ColloscopeUpdateWarning>> {
         None
     }
 
@@ -185,7 +185,7 @@ impl ColloscopeUpdateOp {
 
     pub fn get_desc(&self) -> (OpCategory, String) {
         (
-            OpCategory::Rules,
+            OpCategory::Colloscope,
             match self {
                 ColloscopeUpdateOp::UpdateColloscopeGroupList(_id, _list) => {
                     "Mettre à jour une liste de groupe du colloscope".into()

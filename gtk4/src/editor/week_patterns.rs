@@ -1,11 +1,11 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::WeekPatternsUpdateOp;
 
@@ -177,7 +177,7 @@ impl WeekPatterns {
             .week_pattern_map
             .iter()
             .map(|(id, week_pattern)| EntryData {
-                id: id.clone(),
+                id: *id,
                 name: week_pattern.name.clone(),
             })
             .collect();
@@ -187,7 +187,7 @@ impl WeekPatterns {
         crate::tools::factories::update_vec_deque(
             &mut self.week_pattern_entries,
             week_patterns_vec.into_iter(),
-            |data| EntryInput::UpdateData(data),
+            EntryInput::UpdateData,
         );
     }
 }
@@ -254,7 +254,7 @@ impl FactoryComponent for Entry {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
-                set_icon_name: "edit-delete",
+                set_icon_name: "edit-delete-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
                 set_tooltip_text: Some("Supprimer le modèle"),
@@ -263,9 +263,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(
@@ -287,12 +285,12 @@ impl FactoryComponent for Entry {
             }
             EntryInput::EditClicked => {
                 sender
-                    .output(EntryOutput::EditWeekPattern(self.data.id.clone()))
+                    .output(EntryOutput::EditWeekPattern(self.data.id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {
                 sender
-                    .output(EntryOutput::DeleteWeekPattern(self.data.id.clone()))
+                    .output(EntryOutput::DeleteWeekPattern(self.data.id))
                     .unwrap();
             }
         }

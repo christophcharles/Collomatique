@@ -1,0 +1,77 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
+
+type SubjectPeriodGroupData = {
+    subject_id: SubjectId,
+    period_id: PeriodId,
+    group_list_id: GroupListId,
+    group_num: GroupNum,
+    min_students: Int,
+    max_students: Int,
+};
+
+query subject_period_groups(db: Db) -> [SubjectPeriodGroupData] = "
+SELECT
+    glsa.subject_id AS subject_id,
+    glsa.period_id AS period_id,
+    glsa.group_list_id AS group_list_id,
+    glgn.group_index AS group_num,
+    sip.students_per_group_min AS min_students,
+    sip.students_per_group_max AS max_students
+FROM group_list_subject_associations glsa
+JOIN group_list_group_names glgn ON glgn.group_list_id = glsa.group_list_id
+JOIN subject_interrogation_params sip ON sip.subject_id = glsa.subject_id
+";
+
+query students_for_subject_period_group_list(db: Db, group_list: GroupListId, subject: SubjectId, period: PeriodId) -> [StudentId] = "
+SELECT s.id AS student_id
+FROM students s
+WHERE
+  (
+    (
+      EXISTS (SELECT 1 FROM group_lists gl WHERE gl.id = ?1 AND gl.filling_type = 'automatic')
+      AND NOT EXISTS (
+        SELECT 1 FROM automatic_group_excluded_students ages
+        WHERE ages.group_list_id = ?1 AND ages.student_id = s.id
+      )
+    )
+    OR
+    EXISTS (
+      SELECT 1 FROM prefilled_group_students pgs
+      WHERE pgs.group_list_id = ?1 AND pgs.student_id = s.id
+    )
+  )
+  AND EXISTS (
+    SELECT 1 FROM assignments a
+    WHERE a.subject_id = ?2 AND a.period_id = ?3 AND a.student_id = s.id
+  )
+";
+
+let count_students_in_group(db: Db, data: SubjectPeriodGroupData) -> LinExpr =
+    sum student_id in students_for_subject_period_group_list(db, data.group_list_id, data.subject_id, data.period_id) {
+        $StudentInGroup(student_id, data.group_list_id, data.group_num)
+    };
+
+let group_has_students_for_subject(db: Db, group_list_id: GroupListId, group_num: GroupNum, subject_id: SubjectId, period_id: PeriodId) -> Constraint =
+    sum student_id in students_for_subject_period_group_list(db, group_list_id, subject_id, period_id) {
+        $StudentInGroup(student_id, group_list_id, group_num)
+    } >== 1;
+
+reify group_has_students_for_subject as $GroupHasStudentsForSubject;
+
+/// Au moins `data.min_students` élèves dans le groupe `data.group_num` pour la matière `data.subject_id` sur la période `data.period_id`
+let enforce_min_students_per_group(db: Db, data: SubjectPeriodGroupData) -> Constraint =
+    count_students_in_group(db, data) >==
+        data.min_students * $GroupHasStudentsForSubject(db, data.group_list_id, data.group_num, data.subject_id, data.period_id);
+
+/// Au plus `data.max_students` élèves dans le groupe `data.group_num` pour la matière `data.subject_id` sur la période `data.period_id`
+let enforce_max_students_per_group(db: Db, data: SubjectPeriodGroupData) -> Constraint =
+    count_students_in_group(db, data) <== data.max_students;
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in subject_period_groups(db) {
+        enforce_min_students_per_group(db, data) and
+        enforce_max_students_per_group(db, data)
+    };

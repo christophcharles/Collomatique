@@ -17,7 +17,7 @@ impl GroupListId {
 
 impl From<&collomatique_state_colloscopes::GroupListId> for GroupListId {
     fn from(value: &collomatique_state_colloscopes::GroupListId) -> Self {
-        GroupListId { id: value.clone() }
+        GroupListId { id: *value }
     }
 }
 
@@ -29,7 +29,7 @@ impl From<collomatique_state_colloscopes::GroupListId> for GroupListId {
 
 impl From<&GroupListId> for collomatique_state_colloscopes::GroupListId {
     fn from(value: &GroupListId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 
@@ -45,7 +45,7 @@ pub struct GroupList {
     #[pyo3(set, get)]
     pub parameters: GroupListParameters,
     #[pyo3(set, get)]
-    pub prefilled_groups: Vec<PrefilledGroup>,
+    pub filling: GroupListFilling,
 }
 
 #[pymethods]
@@ -54,7 +54,9 @@ impl GroupList {
     fn new(parameters: GroupListParameters) -> Self {
         GroupList {
             parameters,
-            prefilled_groups: vec![],
+            filling: GroupListFilling::Automatic {
+                excluded_students: BTreeSet::new(),
+            },
         }
     }
 
@@ -68,12 +70,7 @@ impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList 
     fn from(value: collomatique_state_colloscopes::group_lists::GroupList) -> Self {
         GroupList {
             parameters: value.params.into(),
-            prefilled_groups: value
-                .prefilled_groups
-                .groups
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
+            filling: value.filling.into(),
         }
     }
 }
@@ -91,11 +88,7 @@ pub struct GroupListParameters {
     #[pyo3(set, get)]
     pub students_per_group_max: NonZeroU32,
     #[pyo3(set, get)]
-    pub group_count_min: u32,
-    #[pyo3(set, get)]
-    pub group_count_max: u32,
-    #[pyo3(set, get)]
-    pub excluded_students: BTreeSet<StudentId>,
+    pub group_names: Vec<Option<String>>,
 }
 
 #[pymethods]
@@ -106,9 +99,7 @@ impl GroupListParameters {
             name,
             students_per_group_min: NonZeroU32::new(2).unwrap(),
             students_per_group_max: NonZeroU32::new(3).unwrap(),
-            group_count_min: 0,
-            group_count_max: 1,
-            excluded_students: BTreeSet::new(),
+            group_names: vec![None; 16],
         }
     }
 
@@ -126,12 +117,10 @@ impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
             name: value.name,
             students_per_group_min: *value.students_per_group.start(),
             students_per_group_max: *value.students_per_group.end(),
-            group_count_min: *value.group_count.start(),
-            group_count_max: *value.group_count.end(),
-            excluded_students: value
-                .excluded_students
+            group_names: value
+                .group_names
                 .into_iter()
-                .map(|x| x.into())
+                .map(|opt| opt.map(|s| s.into_inner()))
                 .collect(),
         }
     }
@@ -144,12 +133,74 @@ impl From<GroupListParameters>
         collomatique_state_colloscopes::group_lists::GroupListParameters {
             name: value.name,
             students_per_group: value.students_per_group_min..=value.students_per_group_max,
-            group_count: value.group_count_min..=value.group_count_max,
-            excluded_students: value
-                .excluded_students
+            group_names: value
+                .group_names
                 .into_iter()
-                .map(|x| x.into())
+                .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
                 .collect(),
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupListFilling {
+    Prefilled {
+        groups: Vec<PrefilledGroup>,
+    },
+    Automatic {
+        excluded_students: BTreeSet<StudentId>,
+    },
+}
+
+#[pymethods]
+impl GroupListFilling {
+    #[staticmethod]
+    fn prefilled(groups: Vec<PrefilledGroup>) -> Self {
+        GroupListFilling::Prefilled { groups }
+    }
+
+    #[staticmethod]
+    fn automatic(excluded_students: BTreeSet<StudentId>) -> Self {
+        GroupListFilling::Automatic { excluded_students }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_state_colloscopes::group_lists::GroupListFilling> for GroupListFilling {
+    fn from(value: collomatique_state_colloscopes::group_lists::GroupListFilling) -> Self {
+        match value {
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+                GroupListFilling::Prefilled {
+                    groups: groups.into_iter().map(|x| x.into()).collect(),
+                }
+            }
+            collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                excluded_students,
+            } => GroupListFilling::Automatic {
+                excluded_students: excluded_students.into_iter().map(|x| x.into()).collect(),
+            },
+        }
+    }
+}
+
+impl From<GroupListFilling> for collomatique_state_colloscopes::group_lists::GroupListFilling {
+    fn from(value: GroupListFilling) -> Self {
+        match value {
+            GroupListFilling::Prefilled { groups } => {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                    groups: groups.into_iter().map(|x| x.into()).collect(),
+                }
+            }
+            GroupListFilling::Automatic { excluded_students } => {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                    excluded_students: excluded_students.into_iter().map(|x| x.into()).collect(),
+                }
+            }
         }
     }
 }
@@ -158,11 +209,7 @@ impl From<GroupListParameters>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefilledGroup {
     #[pyo3(set, get)]
-    pub name: String,
-    #[pyo3(set, get)]
     pub students: BTreeSet<StudentId>,
-    #[pyo3(set, get)]
-    pub sealed: bool,
 }
 
 #[pymethods]
@@ -170,9 +217,7 @@ impl PrefilledGroup {
     #[new]
     fn new() -> Self {
         PrefilledGroup {
-            name: String::new(),
             students: BTreeSet::new(),
-            sealed: false,
         }
     }
 
@@ -185,12 +230,7 @@ impl PrefilledGroup {
 impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
     fn from(value: collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
         PrefilledGroup {
-            name: match value.name {
-                None => String::new(),
-                Some(n) => n.into_inner(),
-            },
             students: value.students.into_iter().map(|x| x.into()).collect(),
-            sealed: value.sealed,
         }
     }
 }
@@ -198,9 +238,7 @@ impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for Prefi
 impl From<PrefilledGroup> for collomatique_state_colloscopes::group_lists::PrefilledGroup {
     fn from(value: PrefilledGroup) -> Self {
         collomatique_state_colloscopes::group_lists::PrefilledGroup {
-            name: non_empty_string::NonEmptyString::new(value.name).ok(),
             students: value.students.into_iter().map(|x| x.into()).collect(),
-            sealed: value.sealed,
         }
     }
 }

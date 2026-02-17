@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "ilp", "solver", "solver-colloscopes", "solver-groups", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "solver-glue", "collo-ml"]
+members = [ "gtk4", "state", "ilp", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "collo-ml", "collo-ml-derive", "binding-colloscopes", "sqlite-state"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,3 +18,6 @@ clap = "4.5"
 ordered-float = "4.2"
 chrono = "0.4"
 non-empty-string = "0.2.6"
+pest = "2.8"
+sqlx = { version = "0.8.6", features = [ "sqlite", "runtime-tokio", "macros" ] }
+const_format = "0.2"

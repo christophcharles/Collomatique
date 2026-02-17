@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
+use relm4::RelmWidgetExt;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
-use relm4::FactorySender;
-use relm4::RelmWidgetExt;
 
 #[derive(Debug)]
 pub struct EntryData {
@@ -50,16 +50,10 @@ impl Entry {
     }
 
     fn generate_group_count_text(&self) -> String {
-        let range = &self.data.group_list.params.group_count;
-        if range.start() == range.end() {
-            format!("<b>Nombre de groupes :</b> {}", range.start())
-        } else {
-            format!(
-                "<b>Nombre de groupes :</b> {} à {}",
-                range.start(),
-                range.end()
-            )
-        }
+        format!(
+            "<b>Nombre de groupes :</b> {}",
+            self.data.group_list.params.group_names.len()
+        )
     }
 }
 
@@ -137,21 +131,13 @@ impl FactoryComponent for Entry {
                 set_label: "Liste préremplie",
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.group_list.prefilled_groups.is_empty() && !self.data.group_list.is_sealed(),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::End,
-                set_margin_end: 5,
-                set_label: "Liste scellée",
-                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
-                #[watch]
-                set_visible: self.data.group_list.is_sealed(),
+                set_visible: self.data.group_list.is_prefilled(),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
-                set_icon_name: "edit-delete",
+                set_icon_name: "edit-delete-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
                 set_tooltip_text: Some("Supprimer la liste"),
@@ -160,9 +146,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(
@@ -184,17 +168,17 @@ impl FactoryComponent for Entry {
             }
             EntryInput::EditClicked => {
                 sender
-                    .output(EntryOutput::EditGroupList(self.data.id.clone()))
+                    .output(EntryOutput::EditGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::PrefillClicked => {
                 sender
-                    .output(EntryOutput::PrefillGroupList(self.data.id.clone()))
+                    .output(EntryOutput::PrefillGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {
                 sender
-                    .output(EntryOutput::DeleteGroupList(self.data.id.clone()))
+                    .output(EntryOutput::DeleteGroupList(self.data.id))
                     .unwrap();
             }
         }

@@ -12,8 +12,8 @@ pub mod good_lp;
 
 use super::{FeasableConfig, Problem};
 
-use super::mat_repr::ProblemRepr;
 use super::UsableData;
+use super::mat_repr::ProblemRepr;
 
 /// Solver trait
 ///

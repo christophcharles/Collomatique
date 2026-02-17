@@ -1,3 +1,5 @@
+#![allow(clippy::op_ref)]
+
 //! This module defines [LinExpr] and [Constraint].
 //! These structs are used to represent linear expressions and constraints for
 //! integer linear optimization problems within collomatique.
@@ -5,8 +7,13 @@
 #[cfg(test)]
 mod tests;
 
-use super::{f64_is_zero, UsableData};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::f64_is_positive;
+
+use super::{UsableData, f64_is_zero};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+};
 
 /// [LinExpr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
 ///
@@ -17,11 +24,11 @@ use std::collections::{BTreeMap, BTreeSet};
 /// You can use [LinExpr::var]. This builds an expression containing only one variable with coefficient one.
 /// ```
 /// # use collomatique_ilp::linexpr::LinExpr;
-/// # use std::collections::BTreeSet;
+/// # use std::collections::HashSet;
 /// // expr represents the linear expression : "1*A"
 /// let expr = LinExpr::<String>::var("A");
 ///
-/// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
+/// assert_eq!(expr.variables(), HashSet::from([String::from("A")])); // There is only "A"
 /// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
 /// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
 /// ```
@@ -29,18 +36,18 @@ use std::collections::{BTreeMap, BTreeSet};
 /// You can use [LinExpr::constant]. This builds a constant expression containing no variables.
 /// ```
 /// # use collomatique_ilp::linexpr::LinExpr;
-/// # use std::collections::BTreeSet;
+/// # use std::collections::HashSet;
 /// // expr represents the constant linear expression equals to 42
 /// let expr = LinExpr::<String>::constant(42.0);
 ///
-/// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
+/// assert_eq!(expr.variables(), HashSet::new()); // There are no variables
 /// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
 /// ```
 ///
 /// More complex expressions are then built using overloaded operations
 /// ```
 /// # use collomatique_ilp::linexpr::LinExpr;
-/// # use std::collections::BTreeSet;
+/// # use std::collections::HashSet;
 /// let expr1 = LinExpr::<String>::var("A");
 /// let expr2 = LinExpr::<String>::var("B");
 /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -50,21 +57,35 @@ use std::collections::{BTreeMap, BTreeSet};
 /// // Note you can use i32 or f64 in your operations
 ///
 /// // There are 2 variables : A and B
-/// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+/// assert_eq!(expr.variables(), HashSet::from([String::from("A"), String::from("B")]));
 /// assert_eq!(expr.get("A"), Some(2.0)); // The coefficient for "A" is 2
 /// assert_eq!(expr.get("B"), Some(-3.0)); // The coefficient for "B" is -3
 /// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
 /// ```
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinExpr<V: UsableData> {
-    coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    coefs: HashMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
+}
+
+impl<V: UsableData> std::hash::Hash for LinExpr<V> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.constant.hash(state);
+        let mut combined: u64 = 0;
+        for (k, v) in &self.coefs {
+            let mut hasher = std::hash::DefaultHasher::new();
+            k.hash(&mut hasher);
+            v.hash(&mut hasher);
+            combined = combined.wrapping_add(std::hash::Hasher::finish(&hasher));
+        }
+        combined.hash(state);
+    }
 }
 
 impl<V: UsableData> Default for LinExpr<V> {
     fn default() -> Self {
         LinExpr {
-            coefs: BTreeMap::default(),
+            coefs: HashMap::default(),
             constant: ordered_float::OrderedFloat::default(),
         }
     }
@@ -78,7 +99,7 @@ impl<V: UsableData> Default for LinExpr<V> {
 /// It is done so to simplify comparison between constraints.
 ///
 /// Normally, you don't have to handle EqSymbol directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub enum EqSymbol {
     /// Represents an "equal" ("=") symbol
     Equals,
@@ -98,7 +119,7 @@ pub enum EqSymbol {
 /// Internally, everything is sent to the left hand side and always compared to zero.
 ///
 /// [Constraint] is usually built using [LinExpr::leq], [LinExpr::eq] or [LinExpr::geq].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub struct Constraint<V: UsableData> {
     symbol: EqSymbol,
     expr: LinExpr<V>,
@@ -110,17 +131,17 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// // expr represents the linear expression : "1*A"
     /// let expr = LinExpr::<String>::var("A");
     ///
-    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
+    /// assert_eq!(expr.variables(), HashSet::from([String::from("A")])); // There is only "A"
     /// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
     /// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
     /// ```
     pub fn var<T: Into<V>>(name: T) -> Self {
         LinExpr {
-            coefs: BTreeMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
+            coefs: HashMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
             constant: ordered_float::OrderedFloat(0.0),
         }
     }
@@ -129,16 +150,16 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// // expr represents the constant linear expression equals to 42
     /// let expr = LinExpr::<String>::constant(42.0);
     ///
-    /// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
+    /// assert_eq!(expr.variables(), HashSet::new()); // There are no variables
     /// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
     /// ```
     pub fn constant(number: f64) -> Self {
         LinExpr {
-            coefs: BTreeMap::new(),
+            coefs: HashMap::new(),
             constant: ordered_float::OrderedFloat(number),
         }
     }
@@ -207,7 +228,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -215,13 +236,13 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
     ///
     /// // There are 2 variables: "A" and "B"
-    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(expr.variables(), HashSet::from([String::from("A"), String::from("B")]));
     /// ```
     ///
     /// This set can be empty :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr = LinExpr::<String>::constant(42.0);
     ///
     /// assert!(expr.variables().is_empty()); // There are no variables
@@ -232,17 +253,25 @@ impl<V: UsableData> LinExpr<V> {
     /// and having 0 as a coefficient :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// assert!(expr1.variables().is_empty()); // There are no variables
     ///
     /// let expr2 = 0 * LinExpr::<String>::var("A");
     /// // There is actually one variable eventhough its coefficient is 0
-    /// assert_eq!(expr2.variables(), BTreeSet::from([String::from("A")]));
+    /// assert_eq!(expr2.variables(), HashSet::from([String::from("A")]));
     /// ```
     /// You can use [LinExpr::clean] to remove the 0 coefficients.
-    pub fn variables(&self) -> BTreeSet<V> {
+    pub fn variables(&self) -> HashSet<V> {
         self.coefs.keys().cloned().collect()
+    }
+
+    /// Returns an iterator over references to the variables that appear in the expression.
+    ///
+    /// This is a zero-allocation alternative to [LinExpr::variables] when you only need
+    /// to inspect the variables without owning them.
+    pub fn variable_refs(&self) -> impl Iterator<Item = &V> {
+        self.coefs.keys()
     }
 
     /// Returns an iterator over the variables that appears in the expression and their associated coefficients
@@ -250,7 +279,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -258,7 +287,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
     ///
     /// // There are 2 variables: "A" and "B"
-    /// assert_eq!(expr.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([
+    /// assert_eq!(expr.coefficients().map(|(x,y)| (x.clone(), y)).collect::<HashMap<_,_>>(), HashMap::from([
     ///     (String::from("A"), 2.0),
     ///     (String::from("B"), -3.0)
     /// ]));
@@ -267,7 +296,7 @@ impl<V: UsableData> LinExpr<V> {
     /// This set can be empty :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr = LinExpr::<String>::constant(42.0);
     ///
     /// assert!(expr.coefficients().len() == 0); // There are no variables
@@ -278,13 +307,13 @@ impl<V: UsableData> LinExpr<V> {
     /// and having 0 as a coefficient :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::{BTreeSet,BTreeMap};
+    /// # use std::collections::{HashSet,HashMap};
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// assert!(expr1.coefficients().len() == 0); // There are no variables
     ///
     /// let expr2 = 0 * LinExpr::<String>::var("A");
     /// // There is actually one variable eventhough its coefficient is 0
-    /// assert_eq!(expr2.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
+    /// assert_eq!(expr2.coefficients().map(|(x,y)| (x.clone(), y)).collect::<HashMap<_,_>>(), HashMap::from([(String::from("A"),0.0)]));
     /// ```
     /// You can use [LinExpr::clean] to remove the 0 coefficients.
     pub fn coefficients(&self) -> impl ExactSizeIterator<Item = (&V, f64)> {
@@ -301,7 +330,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -310,18 +339,18 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// // So far, the variables "A" and "B" both appear
     /// // eventhough "B" has a 0 in front of it
-    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(expr.variables(), HashSet::from([String::from("A"), String::from("B")]));
     ///
     /// // This should remove the "B" which has a zero coefficient:
     /// expr.clean();
     ///
-    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")]));
+    /// assert_eq!(expr.variables(), HashSet::from([String::from("A")]));
     /// ```
     ///
     /// Other variables and coefficients are unchanged:
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -347,7 +376,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -389,13 +418,13 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
-    /// let expr_reduced = expr.reduce(&BTreeMap::from([
+    /// let expr_reduced = expr.reduce(&HashMap::from([
     ///     (String::from("A"), -1.0),
     ///     (String::from("C"), 2.0),
     /// ]));
@@ -403,9 +432,9 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr_expected = -3.0*&expr2 - 44.0;
     /// assert_eq!(expr_reduced, expr_expected);
     /// ```
-    pub fn reduce(&self, vars: &BTreeMap<V, f64>) -> LinExpr<V> {
+    pub fn reduce(&self, vars: &HashMap<V, f64>) -> LinExpr<V> {
         let mut new_constant = self.constant.into_inner();
-        let mut new_coefs = BTreeMap::new();
+        let mut new_coefs = HashMap::new();
 
         for (v, c) in &self.coefs {
             match vars.get(v) {
@@ -441,21 +470,21 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     ///
-    /// let bad_eval = expr.eval(&BTreeMap::from([
+    /// let bad_eval = expr.eval(&HashMap::from([
     ///     (String::from("A"), -1.0),
     ///     (String::from("C"), 2.0),
     /// ]));
     /// let bad_eval_expected = Err(-3.0*&expr2 - 44.0);
     /// assert_eq!(bad_eval, bad_eval_expected);
     ///
-    /// let good_eval = expr.eval(&BTreeMap::from([
+    /// let good_eval = expr.eval(&HashMap::from([
     ///     (String::from("A"), -1.0),
     ///     (String::from("B"), -3.0),
     ///     (String::from("C"), 2.0),
@@ -463,7 +492,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let good_eval_expected = Ok(-35.0);
     /// assert_eq!(good_eval, good_eval_expected);
     /// ```
-    pub fn eval(&self, vars: &BTreeMap<V, f64>) -> Result<f64, LinExpr<V>> {
+    pub fn eval(&self, vars: &HashMap<V, f64>) -> Result<f64, LinExpr<V>> {
         let reduced = self.reduce(vars);
 
         if !reduced.coefs.is_empty() {
@@ -487,41 +516,41 @@ impl<V: UsableData> LinExpr<V> {
     /// For instance:
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::binary()),
     /// ]);
     /// let minimum_expected = -45.0; // Here all variables have a range so we can actually find a bound
     /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     /// ]);
     /// let minimum_expected = -f64::INFINITY; // Because no range is given to B, there is no lower bound
     /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_negative()),
     /// ]);
     /// let minimum_expected = -f64::INFINITY; // Because B is not bounded from above, there is no lower bound for the linear expr
     /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_positive()),
     /// ]);
     /// let minimum_expected = -42.0; // But if B is bounded from above, there is a lower bound for the linear expr
     /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
     /// ```
-    pub fn compute_minimum(&self, vars: &BTreeMap<V, super::Variable>) -> f64 {
+    pub fn compute_minimum(&self, vars: &HashMap<V, super::Variable>) -> f64 {
         *self.compute_range(vars).start()
     }
 
@@ -539,41 +568,41 @@ impl<V: UsableData> LinExpr<V> {
     /// For instance:
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::binary()),
     /// ]);
     /// let maximum_expected = -40.0; // Here all variables have a range so we can actually find a bound
     /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     /// ]);
     /// let maximum_expected = f64::INFINITY; // Because no range is given to B, there is no upper bound
     /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_negative()),
     /// ]);
     /// let maximum_expected = -40.0; // If B is bounded from below, there is an upper bound for the linear expr
     /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_positive()),
     /// ]);
     /// let maximum_expected = f64::INFINITY; // But if B is not bounded from below, there is no upper bound for the linear expr
     /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
     /// ```
-    pub fn compute_maximum(&self, vars: &BTreeMap<V, super::Variable>) -> f64 {
+    pub fn compute_maximum(&self, vars: &HashMap<V, super::Variable>) -> f64 {
         *self.compute_range(vars).end()
     }
 
@@ -593,31 +622,31 @@ impl<V: UsableData> LinExpr<V> {
     /// For instance:
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::binary()),
     /// ]);
     /// assert_eq!(expr.compute_range(&ranges), -45.0..=-40.0);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     /// ]);
     /// assert_eq!(expr.compute_range(&ranges), -f64::INFINITY..=f64::INFINITY);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_negative()),
     /// ]);
     /// assert_eq!(expr.compute_range(&ranges), -f64::INFINITY..=-40.0);
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::non_positive()),
     /// ]);
@@ -625,13 +654,77 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     pub fn compute_range(
         &self,
-        vars: &BTreeMap<V, super::Variable>,
+        vars: &HashMap<V, super::Variable>,
     ) -> std::ops::RangeInclusive<f64> {
+        self.compute_range_with(|v| vars.get(v).cloned())
+    }
+
+    /// Returns the range of possible values of an expression from a closure.
+    ///
+    /// Compared to [Self::compute_range], [Self::compute_range_with] takes a closure.
+    /// This means we can evaluate dynamically what variables should be defined. This is useful in some
+    /// contexts.
+    ///
+    /// This will return the range of possible values for the expression given a range
+    /// of possible values for each variable. This is the absolutely worst case scenario.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// If there is no minimum, then -infinity is given for the lower bound. This means that arbitrarily low values
+    /// are possible.
+    /// If there is no maximum, then +infinity is given for the upper bound. This means that arbitrarily high values
+    /// are possible.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::HashMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::binary()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(ranges), -45.0..=-40.0);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -f64::INFINITY..=f64::INFINITY);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::non_negative()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -f64::INFINITY..=-40.0);
+    ///
+    /// let ranges = |v: &str| match v {
+    ///     "A" => Some(Variable::binary()),
+    ///     "B" => Some(Variable::non_positive()),
+    ///     _ => None,
+    /// };
+    /// assert_eq!(expr.compute_range_with(&ranges), -42.0..=f64::INFINITY);
+    /// ```
+    pub fn compute_range_with<U: ?Sized, F: FnMut(&U) -> Option<super::Variable>>(
+        &self,
+        mut f: F,
+    ) -> std::ops::RangeInclusive<f64>
+    where
+        V: Borrow<U>,
+    {
         let mut minimum = self.constant.0;
         let mut maximum = self.constant.0;
 
         for (var, coef) in &self.coefs {
-            let var_def = vars.get(var);
+            let var_def = f(var.borrow());
             let var_range = match var_def {
                 Some(def) => {
                     let min_value = def.get_min().unwrap_or(-f64::INFINITY);
@@ -672,7 +765,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -682,7 +775,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -732,7 +825,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -742,7 +835,7 @@ impl<V: UsableData> LinExpr<V> {
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -765,7 +858,7 @@ impl<V: UsableData> LinExpr<V> {
     /// However, this code will fail correctly because `V3` does not encore `C` correctly:
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -774,7 +867,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
     ///
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,
@@ -810,7 +903,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -837,7 +930,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -858,7 +951,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -878,6 +971,31 @@ impl<V: UsableData> LinExpr<V> {
 }
 
 impl<V: UsableData> Constraint<V> {
+    /// Returns true if the constraints is trivially true
+    ///
+    /// A constraint is trivially true if there are no variables in it
+    /// and it is indeed satisfied
+    pub fn is_trivially_true(&self) -> bool {
+        self.trivially_eval() == Some(true)
+    }
+
+    /// Evaluate a trivial constraint
+    ///
+    /// A constraint is trivial if there are no variable in it.
+    /// Trivial evaluating a constraint is taking a trivial constraint
+    /// and getting its truth value.
+    ///
+    /// If the constraint is not trivial, return `None`.
+    pub fn trivially_eval(&self) -> Option<bool> {
+        if !self.expr.coefs.is_empty() {
+            return None;
+        }
+        Some(match self.symbol {
+            EqSymbol::Equals => f64_is_zero(self.expr.constant.0),
+            EqSymbol::LessThan => !f64_is_positive(self.expr.constant.0),
+        })
+    }
+
     /// Returns the variables that appear in the constraint.
     ///
     /// As for [LinExpr::variables], if a variable has a zero coefficient
@@ -885,7 +1003,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -895,13 +1013,13 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&expr4);
     ///
     /// // There are 3 variables: "A", "B" and "C"
-    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B"), String::from("C")]));
+    /// assert_eq!(constraint.variables(), HashSet::from([String::from("A"), String::from("B"), String::from("C")]));
     /// ```
     ///
     /// This set can be empty :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
     ///
@@ -915,7 +1033,7 @@ impl<V: UsableData> Constraint<V> {
     /// and having 0 as a coefficient :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
     /// let constraint1 = expr1.leq(&expr2);
@@ -924,11 +1042,18 @@ impl<V: UsableData> Constraint<V> {
     /// let expr3 = 0 * LinExpr::<String>::var("A");
     /// let constraint2 = (&expr1 + &expr3).leq(&expr2);
     /// // There is actually one variable eventhough its coefficient is 0
-    /// assert_eq!(constraint2.variables(), BTreeSet::from([String::from("A")]));
+    /// assert_eq!(constraint2.variables(), HashSet::from([String::from("A")]));
     /// ```
     /// You can use [Constraint::clean] to remove the 0 coefficients.
-    pub fn variables(&self) -> BTreeSet<V> {
+    pub fn variables(&self) -> HashSet<V> {
         self.expr.variables()
+    }
+
+    /// Returns an iterator over references to the variables that appear in the constraint.
+    ///
+    /// This is a zero-allocation alternative to [Constraint::variables].
+    pub fn variable_refs(&self) -> impl Iterator<Item = &V> {
+        self.expr.variable_refs()
     }
 
     /// Returns an iterator over the variables that appear in the constraint and their associated values.
@@ -938,7 +1063,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -948,7 +1073,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&expr4);
     ///
     /// // There are 3 variables: "A", "B" and "C"
-    /// assert_eq!(constraint.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([
+    /// assert_eq!(constraint.coefficients().map(|(x,y)| (x.clone(), y)).collect::<HashMap<_,_>>(), HashMap::from([
     ///     (String::from("A"),2.0),
     ///     (String::from("B"),-3.0),
     ///     (String::from("C"),-1.0)
@@ -958,7 +1083,7 @@ impl<V: UsableData> Constraint<V> {
     /// This set can be empty :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
     ///
@@ -972,7 +1097,7 @@ impl<V: UsableData> Constraint<V> {
     /// and having 0 as a coefficient :
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
     /// let constraint1 = expr1.leq(&expr2);
@@ -981,7 +1106,7 @@ impl<V: UsableData> Constraint<V> {
     /// let expr3 = 0 * LinExpr::<String>::var("A");
     /// let constraint2 = (&expr1 + &expr3).leq(&expr2);
     /// // There is actually one variable eventhough its coefficient is 0
-    /// assert_eq!(constraint2.coefficients().map(|(x,y)| (x.clone(),y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
+    /// assert_eq!(constraint2.coefficients().map(|(x,y)| (x.clone(),y)).collect::<HashMap<_,_>>(), HashMap::from([(String::from("A"),0.0)]));
     /// ```
     /// You can use [Constraint::clean] to remove the 0 coefficients.
     pub fn coefficients(&self) -> impl ExactSizeIterator<Item = (&V, f64)> {
@@ -1133,7 +1258,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -1143,12 +1268,12 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// // So far, the variables "A" and "B" both appear
     /// // eventhough "B" has a 0 in front of it
-    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(constraint.variables(), HashSet::from([String::from("A"), String::from("B")]));
     ///
     /// // This should remove the "B" which has a zero coefficient:
     /// constraint.clean();
     ///
-    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A")]));
+    /// assert_eq!(constraint.variables(), HashSet::from([String::from("A")]));
     /// ```
     pub fn clean(&mut self) {
         self.expr.clean();
@@ -1161,7 +1286,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeSet;
+    /// # use std::collections::HashSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -1171,13 +1296,13 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// // So far, the variables "A" and "B" both appear
     /// // eventhough "B" has a 0 in front of it
-    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(constraint.variables(), HashSet::from([String::from("A"), String::from("B")]));
     ///
     /// // This should remove the "B" which has a zero coefficient:
     /// let new_constraint = constraint.cleaned();
     ///
-    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
-    /// assert_eq!(new_constraint.variables(), BTreeSet::from([String::from("A")]));
+    /// assert_eq!(constraint.variables(), HashSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(new_constraint.variables(), HashSet::from([String::from("A")]));
     /// ```
     pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
@@ -1199,7 +1324,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     /// let expr3 = LinExpr::<String>::constant(42.0);
@@ -1207,7 +1332,7 @@ impl<V: UsableData> Constraint<V> {
     /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
     /// let constraint = expr.leq(&LinExpr::constant(0.0));
     ///
-    /// let constraint_reduced = constraint.reduce(&BTreeMap::from([
+    /// let constraint_reduced = constraint.reduce(&HashMap::from([
     ///     (String::from("A"), -1.0),
     ///     (String::from("C"), 2.0),
     /// ]));
@@ -1215,7 +1340,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint_expected = (-3.0*&expr2 - 44.0).leq(&LinExpr::constant(0.0));
     /// assert_eq!(constraint_reduced, constraint_expected);
     /// ```
-    pub fn reduce(&self, vars: &BTreeMap<V, f64>) -> Constraint<V> {
+    pub fn reduce(&self, vars: &HashMap<V, f64>) -> Constraint<V> {
         let new_expr = self.expr.reduce(vars);
 
         Constraint {
@@ -1237,21 +1362,21 @@ impl<V: UsableData> Constraint<V> {
     /// For instance:
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
-    /// # use std::collections::BTreeMap;
+    /// # use std::collections::HashMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
     ///
     /// let constraint1 = (2.0*&expr1 - 3.0*&expr2).leq(&LinExpr::constant(0.0));
     /// let constraint2 = (2.0*&expr1 - 3.0*&expr2).leq(&LinExpr::constant(-4.0));
     ///
-    /// let ranges = BTreeMap::from([
+    /// let ranges = HashMap::from([
     ///     (String::from("A"), Variable::binary()),
     ///     (String::from("B"), Variable::binary()),
     /// ]);
     /// assert_eq!(constraint1.range_check(&ranges), true); // It is possible to satisfy constraint1 with binary variable
     /// assert_eq!(constraint2.range_check(&ranges), false); // No binary variable will ever satisfy constraint2 (because the lhs >= -3.0).
     /// ```
-    pub fn range_check(&self, vars: &BTreeMap<V, super::Variable>) -> bool {
+    pub fn range_check(&self, vars: &HashMap<V, super::Variable>) -> bool {
         match self.symbol {
             EqSymbol::Equals => {
                 let possible_range = self.expr.compute_range(vars);
@@ -1277,7 +1402,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1288,7 +1413,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1323,7 +1448,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1334,7 +1459,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1369,7 +1494,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1380,7 +1505,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1404,7 +1529,7 @@ impl<V: UsableData> Constraint<V> {
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1415,7 +1540,7 @@ impl<V: UsableData> Constraint<V> {
     /// let constraint = expr.leq(&LinExpr::constant(4.0));
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,
@@ -1451,7 +1576,9 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for LinExpr<V> {
             return Ok(());
         }
 
-        let mut it = self.coefs.iter().peekable();
+        let mut sorted_coefs: Vec<_> = self.coefs.iter().collect();
+        sorted_coefs.sort_by(|(a, _), (b, _)| a.to_string().cmp(&b.to_string()));
+        let mut it = sorted_coefs.iter().peekable();
         while let Some((key, value)) = it.next() {
             if value.is_sign_negative() {
                 write!(f, "({})*{}", value, key)?;
@@ -1494,25 +1621,50 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for Constraint<V> {
     }
 }
 
+impl<V: UsableData> std::ops::AddAssign<&LinExpr<V>> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: &LinExpr<V>) {
+        for (key, value) in rhs.coefs.iter() {
+            if let Some(coef) = self.coefs.get_mut(key) {
+                *coef += value;
+            } else {
+                self.coefs.insert(key.clone(), *value);
+            }
+        }
+        self.constant += rhs.constant;
+    }
+}
+
+impl<V: UsableData> std::ops::AddAssign<LinExpr<V>> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: LinExpr<V>) {
+        *self += &rhs;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<&LinExpr<V>> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: &LinExpr<V>) {
+        for (key, value) in rhs.coefs.iter() {
+            if let Some(coef) = self.coefs.get_mut(key) {
+                *coef -= value;
+            } else {
+                self.coefs.insert(key.clone(), -*value);
+            }
+        }
+        self.constant -= rhs.constant;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<LinExpr<V>> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: LinExpr<V>) {
+        *self -= &rhs;
+    }
+}
+
 impl<V: UsableData> std::ops::Add for &LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: &LinExpr<V>) -> Self::Output {
-        let mut output = LinExpr {
-            coefs: self.coefs.clone(),
-            constant: self.constant,
-        };
-
-        for (key, value) in rhs.coefs.iter() {
-            if let Some(coef) = output.coefs.get_mut(key) {
-                *coef += value;
-            } else {
-                output.coefs.insert(key.clone(), *value);
-            }
-        }
-
-        output.constant += rhs.constant;
-
+        let mut output = self.clone();
+        output += rhs;
         output
     }
 }
@@ -1569,7 +1721,7 @@ impl<V: UsableData> std::ops::Add<f64> for LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: f64) -> Self::Output {
-        &self + &rhs
+        &self + rhs
     }
 }
 
@@ -1601,7 +1753,7 @@ impl<V: UsableData> std::ops::Add<i32> for LinExpr<V> {
     type Output = LinExpr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
-        &self + &rhs
+        &self + rhs
     }
 }
 
@@ -1689,7 +1841,7 @@ impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for f64 {
     type Output = LinExpr<V>;
 
     fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 
@@ -1721,7 +1873,7 @@ impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for i32 {
     type Output = LinExpr<V>;
 
     fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 

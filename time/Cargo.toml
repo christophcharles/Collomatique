@@ -7,3 +7,4 @@ authors.workspace = true
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 chrono = { workspace = true, features = [ "clock", "serde" ] }
+thiserror.workspace = true

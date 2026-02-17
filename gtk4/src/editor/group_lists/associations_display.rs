@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use adw::prelude::{ComboRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
-use relm4::factory::FactoryView;
-use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
 use relm4::RelmWidgetExt;
+use relm4::factory::FactoryView;
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{adw, gtk};
 
 #[derive(Debug)]
@@ -160,12 +160,12 @@ impl PeriodEntry {
                 .subjects
                 .iter()
                 .map(|(id, subject)| SubjectEntryData {
-                    subject_id: id.clone(),
+                    subject_id: *id,
                     group_list_id: self.data.group_list_associations.get(id).cloned(),
                     subject: subject.clone(),
                     group_lists: self.data.group_lists.clone(),
                 }),
-            |data| SubjectEntryInput::UpdateData(data),
+            SubjectEntryInput::UpdateData,
         );
     }
 }
@@ -209,11 +209,11 @@ impl SubjectEntry {
             .data
             .group_lists
             .iter()
-            .map(|(id, group_list)| (id.clone(), group_list.params.name.clone()))
+            .map(|(id, group_list)| (*id, group_list.params.name.clone()))
             .collect();
 
         self.ordered_group_lists
-            .sort_by_key(|(id, name)| (name.clone(), id.clone()));
+            .sort_by_key(|(id, name)| (name.clone(), *id));
     }
 
     fn generate_group_lists_model(&self) -> gtk::StringList {
@@ -272,7 +272,7 @@ impl FactoryComponent for SubjectEntry {
             #[track(self.should_redraw)]
             set_selected: self.group_list_selected,
             connect_selected_notify[sender] => move |widget| {
-                let selected = widget.selected() as u32;
+                let selected = widget.selected();
                 sender.input(SubjectEntryInput::UpdateSelectedGroupList(selected));
             },
         },

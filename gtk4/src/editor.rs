@@ -3,16 +3,23 @@ use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::prelude::Cast;
 use relm4::prelude::{ComponentController, RelmWidgetExt};
-use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use relm4::{adw, gtk};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
+use collomatique_binding_colloscopes::scripts::SimpleProblemError;
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
+type ProblemBuilder = collo_ml::problem::ProblemBuilder<
+    collo_ml::SqliteDatabaseDriver,
+    collomatique_binding_colloscopes::vars::Var,
+>;
+
+use crate::editor::colloscope::ColloscopeOutput;
 use crate::tools;
 
 mod error_dialog;
@@ -23,7 +30,8 @@ mod colloscope;
 mod general_planning;
 mod group_lists;
 mod incompats;
-mod run_script;
+mod main_script;
+mod run_second_instance;
 mod settings;
 mod slots;
 mod students;
@@ -54,7 +62,8 @@ pub enum EditorInput {
     CancelOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
-    NewStateFromScript(AppState<Data, Desc>),
+    NewStateFromSecondInstance(AppState<Data, Desc>),
+    SolveColloscopeClicked,
 }
 
 #[derive(Debug)]
@@ -76,6 +85,10 @@ pub enum EditorCommandOutput {
     ScriptNotChosen,
     ScriptLoaded(PathBuf, String),
     ScriptLoadingFailed(PathBuf, String),
+    MainScriptCompiled {
+        source: Option<String>,
+        result: Result<ProblemBuilder, SimpleProblemError>,
+    },
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -101,7 +114,8 @@ enum PanelNumbers {
     Assignments = 7,
     GroupLists = 8,
     ExtraSettings = 9,
-    Colloscope = 10,
+    MainScript = 10,
+    Colloscope = 11,
 }
 
 impl PanelNumbers {
@@ -117,6 +131,7 @@ impl PanelNumbers {
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
             PanelNumbers::ExtraSettings,
+            PanelNumbers::MainScript,
             PanelNumbers::Colloscope,
         ]
         .into_iter()
@@ -134,6 +149,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
             PanelNumbers::ExtraSettings => "extra_settings",
+            PanelNumbers::MainScript => "main_script",
             PanelNumbers::Colloscope => "colloscope",
         }
     }
@@ -150,14 +166,26 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
+            PanelNumbers::MainScript => "Script ColloML (avancé)",
             PanelNumbers::Colloscope => "Colloscope",
         }
     }
 }
 
+#[derive(Clone)]
+enum MainScriptAst {
+    /// No compilation has been attempted yet
+    Uninitialized,
+    /// Compilation is in progress (async task running)
+    Compiling,
+    /// Compilation completed with a result
+    Ready(Result<ProblemBuilder, SimpleProblemError>),
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data, Desc>,
+    main_script_ast: MainScriptAst,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
@@ -180,9 +208,10 @@ pub struct EditorPanel {
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
     settings: Controller<settings::Settings>,
+    main_script: Controller<main_script::MainScript>,
     colloscope: Controller<colloscope::Colloscope>,
     check_script_dialog: Controller<check_script::Dialog>,
-    run_script_dialog: Controller<run_script::Dialog>,
+    run_second_instance_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
@@ -397,36 +426,28 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        let ast_option = match &self.main_script_ast {
+            MainScriptAst::Ready(result) => Some(result.clone()),
+            _ => None,
+        };
+        self.main_script
+            .sender()
+            .send(main_script::MainScriptInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .main_script
+                    .clone(),
+                ast_option.clone(),
+            ))
+            .unwrap();
         self.colloscope
             .sender()
             .send(colloscope::ColloscopeInput::Update(
-                self.data.get_data().get_inner_data().params.periods.clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .clone(),
-                self.data.get_data().get_inner_data().params.slots.clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .teachers
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .students
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .group_lists
-                    .clone(),
+                self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
+                ast_option,
             ))
             .unwrap();
     }
@@ -443,8 +464,8 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
-            collomatique_ops::OpCategory::Rules => None,
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
+            collomatique_ops::OpCategory::MainScript => Some(PanelNumbers::MainScript),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
         }
     }
@@ -684,11 +705,21 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
-        let colloscope = colloscope::Colloscope::builder()
+        let main_script = main_script::MainScript::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::MainScript(op))
             });
+
+        let colloscope =
+            colloscope::Colloscope::builder()
+                .launch(())
+                .forward(sender.input_sender(), |op| match op {
+                    ColloscopeOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+                    }
+                    ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
+                });
 
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
@@ -699,12 +730,12 @@ impl Component for EditorPanel {
                 }
             });
 
-        let run_script_dialog = run_script::Dialog::builder()
+        let run_second_instance_dialog = run_second_instance::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                run_script::DialogOutput::NewData(new_data) => {
-                    EditorInput::NewStateFromScript(new_data)
+                run_second_instance::DialogOutput::NewData(new_data) => {
+                    EditorInput::NewStateFromSecondInstance(new_data)
                 }
             });
 
@@ -728,6 +759,7 @@ impl Component for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
+            main_script_ast: MainScriptAst::Uninitialized,
             dirty: false,
             toast_info: None,
             pages_names,
@@ -745,9 +777,10 @@ impl Component for EditorPanel {
             incompats,
             group_lists,
             settings,
+            main_script,
             colloscope,
             check_script_dialog,
-            run_script_dialog,
+            run_second_instance_dialog,
             warning_op_dialog,
         };
         let widgets = view_output!();
@@ -764,6 +797,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
+                PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
             };
             widgets
@@ -784,9 +818,12 @@ impl Component for EditorPanel {
                 dirty,
             } => {
                 self.file_name = file_name;
-                self.data = AppState::new(data);
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(AppState::new(data)),
+                    sender.clone(),
+                );
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
@@ -833,8 +870,8 @@ impl Component for EditorPanel {
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
-                    self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
-                    self.data.undo().expect("Should be able to undo");
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
+                    self.update_data_and_recompile_main_script(DataUpdate::Undo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -843,7 +880,7 @@ impl Component for EditorPanel {
                 if self.data.can_redo() {
                     let (cat, _) = self.data.get_redo_name().expect("Should be able to redo");
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
-                    self.data.redo().expect("Should be able to redo");
+                    self.update_data_and_recompile_main_script(DataUpdate::Redo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -881,7 +918,10 @@ impl Component for EditorPanel {
             }
             EditorInput::CommitUpdateOp(new_state) => {
                 self.dirty = true;
-                self.data = new_state;
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(new_state),
+                    sender.clone(),
+                );
                 // Update interface anyway, this is useful if we need to restore
                 // some GUI element to the correct state in case of error
                 self.send_msg_for_interface_update(sender);
@@ -908,22 +948,33 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::RunScript(path, script) => {
-                self.run_script_dialog
+                self.run_second_instance_dialog
                     .sender()
-                    .send(run_script::DialogInput::Run(
-                        path,
-                        script,
+                    .send(run_second_instance::DialogInput::Run(
+                        run_second_instance::RunType::Script(path, script),
                         self.data.clone(),
                     ))
                     .unwrap();
             }
-            EditorInput::NewStateFromScript(new_data) => {
-                self.data = new_data;
+            EditorInput::NewStateFromSecondInstance(new_data) => {
+                self.update_data_and_recompile_main_script(
+                    DataUpdate::Replace(new_data),
+                    sender.clone(),
+                );
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::SolveColloscopeClicked => {
+                self.run_second_instance_dialog
+                    .sender()
+                    .send(run_second_instance::DialogInput::Run(
+                        run_second_instance::RunType::SolveColloscope,
+                        self.data.clone(),
+                    ))
+                    .unwrap();
             }
         }
     }
@@ -980,6 +1031,26 @@ impl Component for EditorPanel {
                     .output(EditorOutput::PythonLoadingError(path, error))
                     .unwrap();
             }
+            EditorCommandOutput::MainScriptCompiled { source, result } => {
+                // Check if source code still matches current data
+                let current_source = self
+                    .data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .main_script
+                    .clone();
+                if source != current_source {
+                    // Script changed since compilation started - ignore stale result
+                    return;
+                }
+
+                // Update the AST field
+                self.main_script_ast = MainScriptAst::Ready(result);
+
+                // Trigger interface update
+                self.send_msg_for_interface_update(sender);
+            }
         }
     }
 
@@ -1016,6 +1087,74 @@ impl Component for EditorPanel {
     }
 }
 
+enum DataUpdate {
+    Undo,
+    Redo,
+    Replace(AppState<Data, Desc>),
+}
+
+impl EditorPanel {
+    fn update_data_and_recompile_main_script(
+        &mut self,
+        update: DataUpdate,
+        sender: ComponentSender<Self>,
+    ) {
+        let previous_script = self
+            .data
+            .get_data()
+            .get_inner_data()
+            .params
+            .main_script
+            .clone();
+
+        // Update self.data based on the update type
+        match update {
+            DataUpdate::Undo => {
+                self.data.undo().expect("Should be able to undo");
+            }
+            DataUpdate::Redo => {
+                self.data.redo().expect("Should be able to redo");
+            }
+            DataUpdate::Replace(new_state) => {
+                self.data = new_state;
+            }
+        }
+
+        if (self.data.get_data().get_inner_data().params.main_script == previous_script)
+            && !matches!(self.main_script_ast, MainScriptAst::Uninitialized)
+        {
+            return;
+        }
+
+        // Set to Compiling to indicate compilation in progress
+        self.main_script_ast = MainScriptAst::Compiling;
+
+        // Get the current main script source
+        let source = self
+            .data
+            .get_data()
+            .get_inner_data()
+            .params
+            .main_script
+            .clone();
+
+        sender.oneshot_command(async move {
+            use collomatique_binding_colloscopes::scripts::{
+                default_problem_builder, get_default_main_module,
+            };
+
+            let main_module = source
+                .as_deref()
+                .unwrap_or_else(|| get_default_main_module());
+
+            let result =
+                default_problem_builder::<collo_ml::SqliteDatabaseDriver>(main_module).await;
+
+            EditorCommandOutput::MainScriptCompiled { source, result }
+        });
+    }
+}
+
 impl EditorPanel {
     fn update_toast(&mut self, widgets: &mut <Self as Component>::Widgets) {
         if let Some(toast_info) = self.toast_info.take() {
@@ -1036,13 +1175,13 @@ impl EditorPanel {
 }
 
 fn generate_week_title(
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     week_number: usize,
 ) -> String {
     match global_first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
-                .inner()
+                .monday()
                 .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
                 .expect("Valid start date");
             let end_date = start_date
@@ -1051,8 +1190,8 @@ fn generate_week_title(
             format!(
                 "Semaine {} du {} au {}",
                 week_number + 1,
-                start_date.format("%d/%m/%Y").to_string(),
-                end_date.format("%d/%m/%Y").to_string(),
+                start_date.format("%d/%m/%Y"),
+                end_date.format("%d/%m/%Y"),
             )
         }
         None => {
@@ -1062,7 +1201,7 @@ fn generate_week_title(
 }
 
 fn generate_period_title(
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     index: usize,
     first_week_num: usize,
     week_count: usize,
@@ -1078,7 +1217,7 @@ fn generate_period_title(
 
 fn generate_week_succession_title(
     name: &str,
-    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: &Option<collomatique_time::WeekStart>,
     index: usize,
     first_week_num: usize,
     week_count: usize,
@@ -1093,7 +1232,7 @@ fn generate_week_succession_title(
     match global_first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
-                .inner()
+                .monday()
                 .checked_add_days(chrono::Days::new(7 * (first_week_num as u64)))
                 .expect("Valid start date");
             let end_date = start_date
@@ -1104,8 +1243,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaines {} à {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                     end_week,
                 )
@@ -1114,8 +1253,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaine {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                 )
             }

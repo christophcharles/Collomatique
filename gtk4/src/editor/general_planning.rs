@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::GeneralPlanningUpdateOp;
 
@@ -19,7 +19,7 @@ pub enum GeneralPlanningInput {
 
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
-    FirstWeekChanged(collomatique_time::NaiveMondayDate),
+    FirstWeekChanged(collomatique_time::WeekStart),
 
     AddPeriodClicked,
     WeekCountSelected(usize),
@@ -59,7 +59,7 @@ impl GeneralPlanning {
             "<b><big>Début de la première semaine de colles :</big></b> {}",
             match &self.periods.first_week {
                 Some(date) => {
-                    date.inner().format("%d/%m/%Y").to_string()
+                    date.monday().format("%d/%m/%Y").to_string()
                 }
                 None => "non sélectionné".to_string(),
             }
@@ -123,7 +123,7 @@ impl Component for GeneralPlanning {
                         gtk::Button {
                             #[watch]
                             set_sensitive: model.periods.first_week.is_some(),
-                            set_icon_name: "edit-delete",
+                            set_icon_name: "edit-delete-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Effacer"),
                             connect_clicked => GeneralPlanningInput::DeleteFirstWeekClicked,
@@ -248,7 +248,7 @@ impl Component for GeneralPlanning {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
                             desc: desc.clone(),
-                            period_id: id.clone(),
+                            period_id: *id,
                         })
                     })
                     .collect::<Vec<_>>();
@@ -256,7 +256,7 @@ impl Component for GeneralPlanning {
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods_list,
                     new_data.into_iter(),
-                    |data| periods_display::EntryInput::UpdateData(data),
+                    periods_display::EntryInput::UpdateData,
                 );
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {
@@ -270,7 +270,7 @@ impl Component for GeneralPlanning {
                     .send(select_start_date::DialogInput::Show(
                         match &self.periods.first_week {
                             Some(date) => date.clone(),
-                            None => collomatique_time::NaiveMondayDate::from_today(),
+                            None => collomatique_time::WeekStart::from_today(),
                         },
                     ))
                     .unwrap();

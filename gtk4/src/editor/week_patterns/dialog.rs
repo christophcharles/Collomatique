@@ -3,11 +3,11 @@ use chrono::Datelike;
 use gtk::prelude::{
     AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
 };
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -259,7 +259,7 @@ impl SimpleComponent for Dialog {
                 let Some(global_first_week) = &self.periods.first_week else {
                     panic!("Even calendar weeks needs a first week data");
                 };
-                let first_week_number = global_first_week.inner().iso_week().week();
+                let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 0;
                 for status in &mut self.week_pattern.weeks {
@@ -273,7 +273,7 @@ impl SimpleComponent for Dialog {
                 let Some(global_first_week) = &self.periods.first_week else {
                     panic!("Odd calendar weeks needs a first week data");
                 };
-                let first_week_number = global_first_week.inner().iso_week().week();
+                let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 1;
                 for status in &mut self.week_pattern.weeks {
@@ -357,13 +357,12 @@ impl Dialog {
                     first_week_num: current_first_week,
                     period_desc: desc.iter().map(|x| x.interrogations).collect(),
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
-                        .into_iter()
                         .map(|index| {
-                            self.week_pattern
+                            *self
+                                .week_pattern
                                 .weeks
                                 .get(index)
                                 .expect("Week pattern should be large enough at this point")
-                                .clone()
                         })
                         .collect(),
                 })
@@ -373,14 +372,14 @@ impl Dialog {
         crate::tools::factories::update_vec_deque(
             &mut self.period_entries,
             new_data.into_iter(),
-            |data| PeriodInput::UpdateData(data),
+            PeriodInput::UpdateData,
         );
     }
 }
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     period_desc: Vec<bool>,
     weeks_in_pattern: Vec<bool>,
@@ -516,14 +515,14 @@ impl PeriodEntry {
                     status_in_period: self.data.period_desc[index],
                     status_in_pattern: *status_in_pattern,
                 }),
-            |data| WeekInput::UpdateData(data),
+            WeekInput::UpdateData,
         );
     }
 }
 
 #[derive(Debug, Clone)]
 struct WeekData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     status_in_period: bool,
     status_in_pattern: bool,

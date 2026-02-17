@@ -3,8 +3,7 @@
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
 use crate::ids::{
-    GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
-    WeekPatternId,
+    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
 };
 
 use super::*;
@@ -30,8 +29,8 @@ pub struct Parameters {
     pub slots: slots::Slots,
     pub incompats: incompats::Incompats,
     pub group_lists: group_lists::GroupLists,
-    pub rules: rules::Rules,
     pub settings: settings::Settings,
+    pub main_script: Option<String>,
 }
 
 impl Parameters {
@@ -126,7 +125,7 @@ impl Parameters {
 
     /// Promotes an u64 to a [SlotId] if it is valid
     pub fn validate_slot_id(&self, id: u64) -> Option<SlotId> {
-        for (_subject_id, subject_slots) in &self.slots.subject_map {
+        for subject_slots in self.slots.subject_map.values() {
             for (slot_id, _slot) in &subject_slots.ordered_slots {
                 if slot_id.inner() == id {
                     return Some(*slot_id);
@@ -156,16 +155,6 @@ impl Parameters {
             .contains_key(&temp_group_list_id)
         {
             return Some(temp_group_list_id);
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [RuleId] if it is valid
-    pub fn validate_rule_id(&self, id: u64) -> Option<RuleId> {
-        let temp_rule_id = unsafe { RuleId::new(id) };
-        if self.rules.rule_map.contains_key(&temp_rule_id) {
-            return Some(temp_rule_id);
         }
 
         None
@@ -206,9 +195,8 @@ impl Parameters {
             });
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
-        let rule_ids = self.rules.rule_map.keys().map(|x| x.inner());
 
-        let existing_ids = student_ids
+        student_ids
             .chain(period_ids)
             .chain(subject_ids)
             .chain(teacher_ids)
@@ -216,9 +204,6 @@ impl Parameters {
             .chain(slot_ids)
             .chain(incompat_ids)
             .chain(group_list_ids)
-            .chain(rule_ids);
-
-        existing_ids
     }
 
     /// USED INTERNALLY
@@ -325,7 +310,7 @@ impl Parameters {
     ///
     /// checks all the invariants in subject data
     fn check_teachers_data_consistency(&self) -> Result<(), InvariantError> {
-        for (_teacher_id, teacher) in &self.teachers.teacher_map {
+        for teacher in self.teachers.teacher_map.values() {
             if Self::validate_teacher_internal(teacher, &self.subjects).is_err() {
                 return Err(InvariantError::InvalidTeacher);
             }
@@ -365,7 +350,7 @@ impl Parameters {
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
-        for (_student_id, student) in &self.students.student_map {
+        for student in self.students.student_map.values() {
             if Self::validate_student_internal(student, period_ids).is_err() {
                 return Err(InvariantError::InvalidStudent);
             }
@@ -437,10 +422,10 @@ impl Parameters {
                 subject_id,
             ));
         }
-        if let Some(week_pattern_id) = &slot.week_pattern {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
-            }
+        if let Some(week_pattern_id) = &slot.week_pattern
+            && !week_pattern_ids.contains(week_pattern_id)
+        {
+            return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
         }
         let Some(subject) = subjects.find_subject(subject_id) else {
             return Err(SlotError::InvalidSubjectId(subject_id));
@@ -448,11 +433,8 @@ impl Parameters {
         let Some(params) = &subject.parameters.interrogation_parameters else {
             return Err(SlotError::SubjectHasNoInterrogation(subject_id));
         };
-        if collomatique_time::SlotWithDuration::new(
-            slot.start_time.clone(),
-            params.duration.clone(),
-        )
-        .is_none()
+        if collomatique_time::SlotWithDuration::new(slot.start_time.clone(), params.duration)
+            .is_none()
         {
             return Err(SlotError::SlotOverlapsWithNextDay);
         }
@@ -525,10 +507,10 @@ impl Parameters {
         if !subject_ids.contains(&incompat.subject_id) {
             return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
         }
-        if let Some(week_pattern_id) = &incompat.week_pattern_id {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
-            }
+        if let Some(week_pattern_id) = &incompat.week_pattern_id
+            && !week_pattern_ids.contains(week_pattern_id)
+        {
+            return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
         }
         Ok(())
     }
@@ -554,7 +536,7 @@ impl Parameters {
         week_pattern_ids: &BTreeSet<WeekPatternId>,
         subject_ids: &BTreeSet<SubjectId>,
     ) -> Result<(), InvariantError> {
-        for (_incompat_id, incompat) in &self.incompats.incompat_map {
+        for incompat in self.incompats.incompat_map.values() {
             if Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).is_err() {
                 return Err(InvariantError::InvalidIncompat);
             }
@@ -565,43 +547,48 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
+    /// Checks that group list parameters are valid
     fn validate_group_list_params_internal(
         params: &group_lists::GroupListParameters,
-        students: &students::Students,
     ) -> Result<(), GroupListError> {
-        if params.group_count.is_empty() {
-            return Err(GroupListError::GroupCountRangeIsEmpty);
-        }
         if params.students_per_group.is_empty() {
             return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
         }
-        for student_id in &params.excluded_students {
-            if !students.student_map.contains_key(student_id) {
-                return Err(GroupListError::InvalidStudentId(*student_id));
-            }
-        }
         Ok(())
     }
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
-    fn validate_group_list_prefilled_groups_internal(
-        prefilled_groups: &group_lists::GroupListPrefilledGroups,
+    /// Checks that group list filling is valid
+    fn validate_group_list_filling_internal(
+        filling: &group_lists::GroupListFilling,
         students: &students::Students,
-        excluded_students: &BTreeSet<StudentId>,
+        group_names_len: usize,
     ) -> Result<(), GroupListError> {
-        if !prefilled_groups.check_duplicated_student() {
-            return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
-        }
-        for group in &prefilled_groups.groups {
-            for student_id in &group.students {
-                if !students.student_map.contains_key(student_id) {
-                    return Err(GroupListError::InvalidStudentId(*student_id));
+        match filling {
+            group_lists::GroupListFilling::Prefilled { groups } => {
+                if groups.len() != group_names_len {
+                    return Err(GroupListError::PrefillGroupCountMismatch {
+                        expected: group_names_len,
+                        actual: groups.len(),
+                    });
                 }
-                if excluded_students.contains(student_id) {
-                    return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+                if !filling.check_duplicated_student() {
+                    return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
+                }
+                for group in groups {
+                    for student_id in &group.students {
+                        if !students.student_map.contains_key(student_id) {
+                            return Err(GroupListError::InvalidStudentId(*student_id));
+                        }
+                    }
+                }
+            }
+            group_lists::GroupListFilling::Automatic { excluded_students } => {
+                for student_id in excluded_students {
+                    if !students.student_map.contains_key(student_id) {
+                        return Err(GroupListError::InvalidStudentId(*student_id));
+                    }
                 }
             }
         }
@@ -610,16 +597,16 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks that an incompat is valid
+    /// Checks that a group list is valid
     fn validate_group_list_internal(
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        Self::validate_group_list_params_internal(&group_list.params, students)?;
-        Self::validate_group_list_prefilled_groups_internal(
-            &group_list.prefilled_groups,
+        Self::validate_group_list_params_internal(&group_list.params)?;
+        Self::validate_group_list_filling_internal(
+            &group_list.filling,
             students,
-            &group_list.params.excluded_students,
+            group_list.params.group_names.len(),
         )?;
         Ok(())
     }
@@ -659,82 +646,9 @@ impl Parameters {
                 }
             }
         }
-        for (_group_list_id, group_list) in &self.group_lists.group_list_map {
+        for group_list in self.group_lists.group_list_map.values() {
             if Self::validate_group_list_internal(group_list, &self.students).is_err() {
                 return Err(InvariantError::InvalidGroupList);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a rule is valid
-    fn validate_logic_rule_internal(
-        logic_rule: &rules::LogicRule,
-        slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError> {
-        match logic_rule {
-            rules::LogicRule::And(l1, l2) => {
-                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
-                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Or(l1, l2) => {
-                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
-                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Not(l) => {
-                Self::validate_logic_rule_internal(l.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Variable(slot_id) => {
-                if !slot_ids.contains(slot_id) {
-                    return Err(RuleError::InvalidSlotId(*slot_id));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a rule is valid
-    fn validate_rule_internal(
-        rule: &rules::Rule,
-        period_ids: &BTreeSet<PeriodId>,
-        slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError> {
-        for period_id in &rule.excluded_periods {
-            if !period_ids.contains(period_id) {
-                return Err(RuleError::InvalidPeriodId(*period_id));
-            }
-        }
-
-        Self::validate_logic_rule_internal(&rule.desc, slot_ids)?;
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a rule before commiting a rule op
-    pub(crate) fn validate_rule(&self, rule: &rules::Rule) -> Result<(), RuleError> {
-        let period_ids = self.build_period_ids();
-        let slot_ids = self.build_slot_ids();
-        Self::validate_rule_internal(rule, &period_ids, &slot_ids)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in rules data
-    fn check_rules_data_consistency(
-        &self,
-        period_ids: &BTreeSet<PeriodId>,
-        slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), InvariantError> {
-        for (_rule_id, rule) in &self.rules.rule_map {
-            if Self::validate_rule_internal(rule, period_ids, slot_ids).is_err() {
-                return Err(InvariantError::InvalidRule);
             }
         }
 
@@ -748,7 +662,7 @@ impl Parameters {
         &self,
         settings: &settings::Settings,
     ) -> Result<(), SettingsError> {
-        for (student_id, _limits) in &settings.students {
+        for student_id in settings.students.keys() {
             if !self.students.student_map.contains_key(student_id) {
                 return Err(SettingsError::InvalidStudentId(*student_id));
             }
@@ -806,7 +720,7 @@ impl Parameters {
         &self,
         total_week_count: usize,
     ) -> Result<(), InvariantError> {
-        for (_week_pattern_id, week_pattern) in &self.week_patterns.week_pattern_map {
+        for week_pattern in self.week_patterns.week_pattern_map.values() {
             if Self::validate_week_pattern_internal(week_pattern, total_week_count).is_err() {
                 return Err(InvariantError::InvalidWeekPattern);
             }
@@ -855,21 +769,6 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Build the set of SlotId
-    ///
-    /// This is useful to check that references are valid
-    fn build_slot_ids(&self) -> BTreeSet<SlotId> {
-        self.slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
-            })
-            .collect()
-    }
-
-    /// USED INTERNALLY
-    ///
     /// Checks that there are no duplicate ids in this specific colloscope params
     fn check_no_duplicate_ids(&self) -> bool {
         let mut ids_so_far = BTreeSet::new();
@@ -894,7 +793,6 @@ impl Parameters {
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
-        let slot_ids = self.build_slot_ids();
         let total_week_count = self
             .periods
             .ordered_period_list
@@ -909,7 +807,6 @@ impl Parameters {
         self.check_slots_data_consistency(&week_pattern_ids)?;
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
         self.check_group_lists_data_consistency()?;
-        self.check_rules_data_consistency(&period_ids, &slot_ids)?;
         self.check_settings_data_consistency()?;
         self.check_week_pattern_data_consistency(total_week_count)?;
 

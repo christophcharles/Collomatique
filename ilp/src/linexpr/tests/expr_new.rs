@@ -18,7 +18,7 @@ fn expr_var_has_empty_coef_for_other_var() {
 fn expr_var_has_correct_list_of_vars() {
     let expr = LinExpr::<String>::var("A");
 
-    assert_eq!(expr.variables(), BTreeSet::from([String::from("A")]));
+    assert_eq!(expr.variables(), HashSet::from([String::from("A")]));
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn expr_constant_returns_correct_constant() {
 fn expr_constant_has_empty_list_of_vars() {
     let expr = LinExpr::<String>::constant(3.0);
 
-    assert_eq!(expr.variables(), BTreeSet::new());
+    assert_eq!(expr.variables(), HashSet::new());
 }
 
 #[test]
@@ -65,5 +65,5 @@ fn expr_default_has_no_coef() {
 fn expr_default_has_empty_list_of_vars() {
     let expr = LinExpr::<String>::default();
 
-    assert_eq!(expr.variables(), BTreeSet::new());
+    assert_eq!(expr.variables(), HashSet::new());
 }

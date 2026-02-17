@@ -33,6 +33,93 @@ fn literal_accepts_booleans() {
 }
 
 #[test]
+fn literal_accepts_basic_strings() {
+    let cases = vec![
+        r#""hello""#,
+        r#""world""#,
+        r#""""#, // empty string
+        r#""Hello, World!""#,
+        r#""with spaces""#,
+        r#""123 numbers""#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn literal_accepts_strings_with_newlines() {
+    let cases = vec![
+        "\"hello\nworld\"",
+        "\"line1\nline2\nline3\"",
+        "\"\n\"", // just a newline
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should parse string with newlines: {:?}",
+            result
+        );
+    }
+}
+
+#[test]
+fn literal_accepts_strings_with_unicode() {
+    let cases = vec![r#""Hello 世界""#, r#""café""#, r#""😀🎉""#];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn literal_accepts_strings_with_tildes_for_quotes() {
+    let cases = vec![
+        r#"~"He said "hello""~"#,
+        r#"~"Contains " quote"~"#,
+        r#"~~"Has "~ sequence"~~"#,
+        r#"~~~"Has "~~ pattern"~~~"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn literal_rejects_unclosed_strings() {
+    let cases = vec![r#""unclosed"#, "\"no closing quote"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(
+            result.is_err(),
+            "Should reject unclosed string '{}': {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
+fn literal_rejects_mismatched_tilde_delimiters() {
+    let cases = vec![
+        r#"~"missing closing tilde""#,
+        r#"~~"too few closing tildes"~"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(
+            result.is_err(),
+            "Should reject mismatched tildes '{}': {:?}",
+            case,
+            result
+        );
+    }
+}
+
+#[test]
 fn literal_accepts_simple_paths() {
     let cases = vec!["x", "student", "week", "flag", "value", "_private"];
     for case in cases {

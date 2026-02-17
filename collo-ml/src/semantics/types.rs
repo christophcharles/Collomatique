@@ -1,0 +1,1017 @@
+use super::errors::SemWarning;
+use super::{GlobalEnv, ResolvedPathKind, SemError};
+
+use crate::database::DatabaseDriver;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+};
+
+/// Helper to resolve a type path using the symbol table
+fn resolve_type_path<D: DatabaseDriver>(
+    segments: Vec<String>,
+    current_module: &str,
+    global_env: &GlobalEnv<D>,
+) -> Option<SimpleType> {
+    // Construct a fake Spanned<NamespacePath> for resolve_path
+    let dummy_span = crate::ast::Span { start: 0, end: 0 };
+    let namespace_path = crate::ast::NamespacePath {
+        segments: segments
+            .into_iter()
+            .map(|s| crate::ast::Spanned::new(s, dummy_span.clone()))
+            .collect(),
+    };
+    let spanned_path = crate::ast::Spanned::new(namespace_path, dummy_span);
+
+    match super::resolve_path(&spanned_path, current_module, global_env, None) {
+        Ok(ResolvedPathKind::Type(simple_type)) => Some(simple_type),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests;
+
+/// Represents a type that appears in a sum type
+///
+/// These can be primitive types (Int, Bool, LinExpr, etc)
+/// or custom types, lists, tuples, structs, etc.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SimpleType {
+    Never,
+    Int,
+    Bool,
+    None,
+    LinExpr,
+    Constraint,
+    String,
+    EmptyList,
+    List(ExprType),
+    /// Custom type with optional variant: Custom(module, root, variant)
+    /// - Custom("main", "MyType", None) for simple custom types
+    /// - Custom("main", "Result", Some("Ok")) for enum variants like Result::Ok
+    Custom(String, String, Option<String>),
+    Tuple(Vec<ExprType>),               // (Int, Bool), (Int, Bool, String), etc.
+    Struct(BTreeMap<String, ExprType>), // {field1: Type1, field2: Type2}
+    DatabaseSchema(String),             // #{ "CREATE TABLE..." } - stores the schema SQL string
+}
+
+/// Represents a sum type (or a simple type if there is only one type in it)
+///
+/// Invariants:
+/// - there is always at least one type in it
+/// - no type is the sum is a subtype of another in the sum
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExprType {
+    variants: BTreeSet<SimpleType>,
+}
+
+impl SimpleType {
+    pub fn is_primitive_type(&self) -> bool {
+        matches!(
+            self,
+            SimpleType::Int
+                | SimpleType::Bool
+                | SimpleType::LinExpr
+                | SimpleType::Constraint
+                | SimpleType::None
+                | SimpleType::String
+        )
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, SimpleType::None)
+    }
+
+    pub fn is_list(&self) -> bool {
+        matches!(self, SimpleType::List(_) | SimpleType::EmptyList)
+    }
+
+    pub fn is_empty_list(&self) -> bool {
+        matches!(self, SimpleType::EmptyList)
+    }
+
+    pub fn is_lin_expr(&self) -> bool {
+        matches!(self, SimpleType::LinExpr)
+    }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, SimpleType::Int)
+    }
+
+    pub fn is_bool(&self) -> bool {
+        matches!(self, SimpleType::Bool)
+    }
+
+    pub fn is_string(&self) -> bool {
+        matches!(self, SimpleType::String)
+    }
+
+    pub fn is_constraint(&self) -> bool {
+        matches!(self, SimpleType::Constraint)
+    }
+
+    pub fn is_list_of_constraints(&self) -> bool {
+        match self {
+            SimpleType::List(inner) => inner.is_constraint(),
+            _ => false,
+        }
+    }
+
+    pub fn get_inner_list_type(&self) -> Option<&ExprType> {
+        match self {
+            SimpleType::List(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
+    pub fn to_inner_list_type(self) -> Option<ExprType> {
+        match self {
+            SimpleType::List(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
+    pub fn is_custom(&self) -> bool {
+        matches!(self, SimpleType::Custom(_, _, _))
+    }
+
+    pub fn get_inner_custom_type(&self) -> Option<(&String, &String, &Option<String>)> {
+        match self {
+            SimpleType::Custom(module, root, variant) => Some((module, root, variant)),
+            _ => None,
+        }
+    }
+
+    pub fn to_inner_custom_type(self) -> Option<(String, String, Option<String>)> {
+        match self {
+            SimpleType::Custom(module, root, variant) => Some((module, root, variant)),
+            _ => None,
+        }
+    }
+
+    /// Get the module name of a custom type
+    pub fn get_custom_module(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(module, _, _) => Some(module),
+            _ => None,
+        }
+    }
+
+    /// Get the root name of a custom type (for both simple custom types and enum variants)
+    pub fn get_custom_root(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(_, root, _) => Some(root),
+            _ => None,
+        }
+    }
+
+    /// Get the variant name if this is an enum variant type
+    pub fn get_custom_variant(&self) -> Option<&String> {
+        match self {
+            SimpleType::Custom(_, _, Some(variant)) => Some(variant),
+            _ => None,
+        }
+    }
+
+    pub fn is_arithmetic(&self) -> bool {
+        matches!(self, SimpleType::Int | SimpleType::LinExpr)
+    }
+
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, SimpleType::Tuple(_))
+    }
+
+    pub fn get_tuple_elements(&self) -> Option<&Vec<ExprType>> {
+        match self {
+            SimpleType::Tuple(elements) => Some(elements),
+            _ => None,
+        }
+    }
+
+    pub fn is_struct(&self) -> bool {
+        matches!(self, SimpleType::Struct(_))
+    }
+
+    pub fn get_struct_fields(&self) -> Option<&BTreeMap<String, ExprType>> {
+        match self {
+            SimpleType::Struct(fields) => Some(fields),
+            _ => None,
+        }
+    }
+
+    pub fn is_database_schema(&self) -> bool {
+        matches!(self, SimpleType::DatabaseSchema(_))
+    }
+
+    pub fn get_database_schema(&self) -> Option<&String> {
+        match self {
+            SimpleType::DatabaseSchema(schema) => Some(schema),
+            _ => None,
+        }
+    }
+
+    /// Check if two database schemas are compatible (one is subtype of the other).
+    /// For now, this is simple string equality. This function exists to allow
+    /// for future improvements (e.g., semantic schema comparison).
+    pub fn database_schema_is_subtype(schema1: &str, schema2: &str) -> bool {
+        schema1 == schema2
+    }
+
+    pub fn is_concrete(&self) -> bool {
+        match self {
+            SimpleType::List(inner) => inner.is_concrete(),
+            SimpleType::Tuple(elements) => elements.iter().all(|e| e.is_concrete()),
+            SimpleType::Struct(fields) => fields.values().all(|t| t.is_concrete()),
+            _ => true,
+        }
+    }
+
+    pub fn into_concrete(self) -> Option<ConcreteType> {
+        if !self.is_concrete() {
+            return None;
+        }
+        Some(ConcreteType { simple_typ: self })
+    }
+
+    pub fn is_subtype_of(&self, other: &Self) -> bool {
+        match (self, other) {
+            // Most types are either equal or distinct
+            (a, b) if a == b => true,
+            // Never is a subtype of everything
+            (SimpleType::Never, _) => true,
+            // Empty lists are subtypes of all lists
+            (SimpleType::EmptyList, SimpleType::List(_)) => true,
+            // For lists we have to recursively check
+            (SimpleType::List(inner1), SimpleType::List(inner2)) => {
+                // otherwise we defer to the sum types
+                inner1.is_subtype_of(inner2)
+            }
+            // Tuples are covariant: (A, B) <: (A', B') if A <: A' and B <: B'
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1
+                        .iter()
+                        .zip(elems2.iter())
+                        .all(|(e1, e2)| e1.is_subtype_of(e2))
+            }
+            // Structs: same fields with subtype relationship
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| v1.is_subtype_of(v2))
+                            .unwrap_or(false)
+                    })
+            }
+            // Enum variant is a subtype of its root enum type
+            // Custom(module, root, Some(variant)) <: Custom(module, root, None)
+            (SimpleType::Custom(mod1, root1, Some(_)), SimpleType::Custom(mod2, root2, None)) => {
+                mod1 == mod2 && root1 == root2
+            }
+            // Database schema types - use helper function for comparison
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            // For all other combinations with DatabaseSchema, it's not a subtype
+            // (Never is already handled at the top)
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
+            // For all other combination, it's not
+            _ => false,
+        }
+    }
+
+    pub fn can_convert_to(&self, target: &ConcreteType) -> bool {
+        let target = target.inner();
+        match (self, target) {
+            // Can convert (and this is a no-op) if we have the same as target typ
+            (a, b) if a == b => true,
+            // Int can be converted to LinExpr
+            (SimpleType::Int, SimpleType::LinExpr) => true,
+            // Empty lists can be converted to any other list type
+            (SimpleType::EmptyList, SimpleType::List(_)) => true,
+            // For list, we have to do that recursively
+            (SimpleType::List(inner1), SimpleType::List(inner2)) => {
+                let inner2_simple = inner2
+                    .as_simple()
+                    .expect("target type should be concrete and so simple");
+                let inner2_concrete = inner2_simple
+                    .clone()
+                    .into_concrete()
+                    .expect("target type should be concrete");
+                inner1.can_convert_to(&inner2_concrete)
+            }
+            // Tuples: element-wise conversion
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1.iter().zip(elems2.iter()).all(|(e1, e2)| {
+                        let e2_simple = e2
+                            .as_simple()
+                            .expect("target type should be concrete and so simple");
+                        let e2_concrete = e2_simple
+                            .clone()
+                            .into_concrete()
+                            .expect("target type should be concrete");
+                        e1.can_convert_to(&e2_concrete)
+                    })
+            }
+            // Structs: field-wise conversion
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| {
+                                let v2_simple = v2
+                                    .as_simple()
+                                    .expect("target type should be concrete and so simple");
+                                let v2_concrete = v2_simple
+                                    .clone()
+                                    .into_concrete()
+                                    .expect("target type should be concrete");
+                                v1.can_convert_to(&v2_concrete)
+                            })
+                            .unwrap_or(false)
+                    })
+            }
+            // Database schema - use helper function (conversion allowed if subtype)
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
+            // Anything can convert to String
+            (_, SimpleType::String) => true,
+            // Anything else: no conversion
+            _ => false,
+        }
+    }
+
+    pub fn overlaps_with(&self, other: &SimpleType) -> bool {
+        match (self, other) {
+            // Same primitive types always overlap
+            (SimpleType::Int, SimpleType::Int)
+            | (SimpleType::Bool, SimpleType::Bool)
+            | (SimpleType::None, SimpleType::None)
+            | (SimpleType::LinExpr, SimpleType::LinExpr)
+            | (SimpleType::Constraint, SimpleType::Constraint)
+            | (SimpleType::String, SimpleType::String) => true,
+
+            // Custom types overlap if:
+            // - Same module, root, and variant (exact match)
+            // - One is a variant and the other is the root enum (variant overlaps with root)
+            // - Different variants of the same enum don't overlap (they're disjoint)
+            (
+                SimpleType::Custom(mod1, root1, variant1),
+                SimpleType::Custom(mod2, root2, variant2),
+            ) => {
+                if mod1 != mod2 || root1 != root2 {
+                    false // Different modules or roots never overlap
+                } else {
+                    match (variant1, variant2) {
+                        // Same exact type
+                        (None, None) | (Some(_), Some(_)) if variant1 == variant2 => true,
+                        // Variant overlaps with root enum
+                        (Some(_), None) | (None, Some(_)) => true,
+                        // Different variants don't overlap
+                        _ => false,
+                    }
+                }
+            }
+
+            // Never overlaps with everything: it is a subtype of everything
+            (SimpleType::Never, _) | (_, SimpleType::Never) => true,
+
+            // Tuples overlap if same arity and all elements overlap
+            (SimpleType::Tuple(elems1), SimpleType::Tuple(elems2)) => {
+                elems1.len() == elems2.len()
+                    && elems1
+                        .iter()
+                        .zip(elems2.iter())
+                        .all(|(e1, e2)| e1.overlaps_with(e2))
+            }
+
+            // Tuples don't overlap with non-tuples
+            (SimpleType::Tuple(_), _) | (_, SimpleType::Tuple(_)) => false,
+
+            // Structs overlap if same fields and all field types overlap
+            (SimpleType::Struct(fields1), SimpleType::Struct(fields2)) => {
+                fields1.len() == fields2.len()
+                    && fields1.keys().all(|k| fields2.contains_key(k))
+                    && fields1.iter().all(|(k, v1)| {
+                        fields2
+                            .get(k)
+                            .map(|v2| v1.overlaps_with(v2))
+                            .unwrap_or(false)
+                    })
+            }
+
+            // Structs don't overlap with non-structs
+            (SimpleType::Struct(_), _) | (_, SimpleType::Struct(_)) => false,
+
+            // Database schema types overlap if one is subtype of the other
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2) || Self::database_schema_is_subtype(s2, s1)
+            }
+
+            // Database schema doesn't overlap with non-database-schema types
+            // (except Never, which is already handled)
+            (SimpleType::DatabaseSchema(_), _) | (_, SimpleType::DatabaseSchema(_)) => false,
+
+            // Different primitive types don't overlap
+            (SimpleType::Int, _)
+            | (_, SimpleType::Int)
+            | (SimpleType::Bool, _)
+            | (_, SimpleType::Bool)
+            | (SimpleType::None, _)
+            | (_, SimpleType::None)
+            | (SimpleType::LinExpr, _)
+            | (_, SimpleType::LinExpr)
+            | (SimpleType::Constraint, _)
+            | (_, SimpleType::Constraint)
+            | (SimpleType::Custom(_, _, _), _)
+            | (_, SimpleType::Custom(_, _, _))
+            | (SimpleType::String, _)
+            | (_, SimpleType::String) => false,
+
+            // Lists all overlap: the empty list is an example of all types
+            (SimpleType::EmptyList, SimpleType::EmptyList)
+            | (SimpleType::List(_), SimpleType::EmptyList)
+            | (SimpleType::EmptyList, SimpleType::List(_))
+            | (SimpleType::List(_), SimpleType::List(_)) => true,
+        }
+    }
+}
+
+impl SimpleType {
+    fn assert_invariant(&self) {
+        match self {
+            SimpleType::List(inner) => inner.assert_invariant(),
+            SimpleType::Tuple(elements) => {
+                for elem in elements {
+                    elem.assert_invariant();
+                }
+            }
+            SimpleType::Struct(fields) => {
+                for field_type in fields.values() {
+                    field_type.assert_invariant();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+impl std::fmt::Display for SimpleType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimpleType::Never => write!(f, "Never"),
+            SimpleType::None => write!(f, "None"),
+            SimpleType::Bool => write!(f, "Bool"),
+            SimpleType::Int => write!(f, "Int"),
+            SimpleType::LinExpr => write!(f, "LinExpr"),
+            SimpleType::Constraint => write!(f, "Constraint"),
+            SimpleType::String => write!(f, "String"),
+            SimpleType::EmptyList => write!(f, "[]"),
+            SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
+            SimpleType::Custom(_, root, None) => write!(f, "{}", root),
+            SimpleType::Custom(_, root, Some(variant)) => write!(f, "{}::{}", root, variant),
+            SimpleType::Tuple(elements) => {
+                let types: Vec<_> = elements.iter().map(|t| t.to_string()).collect();
+                write!(f, "({})", types.join(", "))
+            }
+            SimpleType::Struct(fields) => {
+                let field_strs: Vec<_> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect();
+                write!(f, "{{{}}}", field_strs.join(", "))
+            }
+            SimpleType::DatabaseSchema(schema) => {
+                // Truncate for display if too long
+                let str_literal = if schema.len() > 50 {
+                    format!("{}...", &schema[..47])
+                } else {
+                    schema.clone()
+                };
+                let mut closing_delim = String::from("\"");
+                while str_literal.contains(&closing_delim) {
+                    closing_delim.push('~');
+                }
+                write!(
+                    f,
+                    "#{{{}{}{}}}",
+                    closing_delim.chars().rev().collect::<String>(),
+                    str_literal,
+                    closing_delim
+                )
+            }
+        }
+    }
+}
+
+impl From<SimpleType> for ExprType {
+    fn from(value: SimpleType) -> Self {
+        ExprType::simple(value)
+    }
+}
+
+/// Context-aware type conversion from AST types
+///
+/// These methods are used during semantic analysis when we have access to
+/// the GlobalEnv for type resolution via the symbol table.
+impl SimpleType {
+    /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
+    /// using resolve_path for consistent symbol table lookup.
+    pub fn from_ast<D: DatabaseDriver>(
+        value: crate::ast::SimpleTypeName,
+        current_module: &str,
+        global_env: &GlobalEnv<D>,
+        mut warnings: Option<&mut Vec<SemWarning>>,
+    ) -> Result<Self, TypeResolutionError> {
+        use crate::ast::SimpleTypeName;
+        match value {
+            SimpleTypeName::Path(path) => {
+                // Extract segments from the namespace path
+                let segments: Vec<String> =
+                    path.node.segments.iter().map(|s| s.node.clone()).collect();
+                let path_str = segments.join("::");
+                // Use resolve_type_path which goes through resolve_path
+                match resolve_type_path(segments, current_module, global_env) {
+                    Some(simple_type) => Ok(simple_type),
+                    None => Err(TypeResolutionError::UnknownType(path_str)),
+                }
+            }
+            SimpleTypeName::EmptyList => Ok(SimpleType::EmptyList),
+            SimpleTypeName::List(inner) => Ok(SimpleType::List(ExprType::from_ast(
+                inner,
+                current_module,
+                global_env,
+                warnings.as_deref_mut(),
+            )?)),
+            SimpleTypeName::Tuple(elements) => {
+                let mut converted = Vec::with_capacity(elements.len());
+                for e in elements {
+                    let resolved =
+                        ExprType::from_ast(e, current_module, global_env, warnings.as_deref_mut())?;
+                    converted.push(resolved);
+                }
+                Ok(SimpleType::Tuple(converted))
+            }
+            SimpleTypeName::Struct(fields) => {
+                let mut converted = BTreeMap::new();
+                for (name, typ) in fields {
+                    if let Some(ref mut w) = warnings
+                        && let Some(suggestion) =
+                            super::string_case::generate_suggestion_for_naming_convention(
+                                &name.node,
+                                super::string_case::NamingConvention::SnakeCase,
+                            )
+                    {
+                        w.push(SemWarning::FieldNamingConvention {
+                            module: current_module.to_string(),
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            suggestion,
+                        });
+                    }
+                    let resolved = ExprType::from_ast(
+                        typ,
+                        current_module,
+                        global_env,
+                        warnings.as_deref_mut(),
+                    )?;
+                    converted.insert(name.node, resolved);
+                }
+                Ok(SimpleType::Struct(converted))
+            }
+            SimpleTypeName::DatabaseSchema(schema) => Ok(SimpleType::DatabaseSchema(schema)),
+        }
+    }
+}
+
+impl ExprType {
+    /// Convert an AST TypeName to an ExprType, resolving named types
+    /// using resolve_path for consistent symbol table lookup.
+    pub fn from_ast<D: DatabaseDriver>(
+        value: crate::ast::Spanned<crate::ast::TypeName>,
+        current_module: &str,
+        global_env: &GlobalEnv<D>,
+        mut warnings: Option<&mut Vec<SemWarning>>,
+    ) -> Result<Self, SemError> {
+        if value.node.types.is_empty() {
+            panic!("It should not be possible to form 0-length typenames");
+        }
+        let mut flattened = Vec::with_capacity(value.node.types.len());
+        for typ in value.node.types {
+            let inner_typ = SimpleType::from_ast(
+                typ.node.inner.clone(),
+                current_module,
+                global_env,
+                warnings.as_deref_mut(),
+            )
+            .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
+            let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
+            match typ.node.maybe_count {
+                0 => flattened.push(spanned_inner),
+                1 => {
+                    if spanned_inner.node.is_none() {
+                        return Err(SemError::OptionMarkerOnNone(spanned_inner.span));
+                    }
+                    flattened.push(crate::ast::Spanned::new(
+                        SimpleType::None,
+                        spanned_inner.span.clone(),
+                    ));
+                    flattened.push(spanned_inner);
+                }
+                _ => {
+                    return Err(SemError::MultipleOptionMarkers {
+                        typ: spanned_inner.node,
+                        span: spanned_inner.span,
+                    });
+                }
+            };
+        }
+        use std::collections::BTreeMap;
+        let mut span_map = BTreeMap::new();
+        for spanned_typ in flattened {
+            let current_span = spanned_typ.span.clone();
+            let old_span_opt = span_map.insert(spanned_typ.node.clone(), spanned_typ.span);
+            if let Some(old_span) = old_span_opt {
+                return Err(SemError::MultipleTypeInSum {
+                    typ: spanned_typ.node,
+                    span1: current_span,
+                    span2: old_span,
+                    sum_span: value.span,
+                });
+            }
+        }
+        let variants: BTreeSet<_> = span_map.keys().cloned().collect();
+        if let Some((variant1, variant2)) = ExprType::check_subtypes(&variants) {
+            let span1 = span_map.remove(variant1).unwrap();
+            let span2 = span_map.remove(variant2).unwrap();
+            return Err(SemError::SubtypeAndTypePresent {
+                typ1: variant1.clone(),
+                span1,
+                typ2: variant2.clone(),
+                span2,
+                sum_span: value.span,
+            });
+        }
+        Ok(ExprType { variants }.assert_before_return())
+    }
+}
+
+/// Error type for type resolution (before we have span information)
+#[derive(Debug, Clone)]
+pub enum TypeResolutionError {
+    UnknownType(String),
+    /// Wraps a SemError from nested type resolution (List/Tuple elements)
+    Nested(Box<SemError>),
+}
+
+impl TypeResolutionError {
+    pub fn into_sem_error(self, module: &str, span: crate::ast::Span) -> SemError {
+        match self {
+            TypeResolutionError::UnknownType(typ) => SemError::UnknownType {
+                module: module.to_string(),
+                typ,
+                span,
+            },
+            TypeResolutionError::Nested(e) => *e,
+        }
+    }
+}
+
+impl From<SemError> for TypeResolutionError {
+    fn from(e: SemError) -> Self {
+        TypeResolutionError::Nested(Box::new(e))
+    }
+}
+
+impl std::fmt::Display for ExprType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let types: Vec<_> = self.variants.iter().map(|t| t.to_string()).collect();
+        write!(f, "{}", types.join(" | "))
+    }
+}
+
+impl ExprType {
+    fn check_subtypes(variants: &BTreeSet<SimpleType>) -> Option<(&SimpleType, &SimpleType)> {
+        for variant1 in variants {
+            for variant2 in variants {
+                if variant1 == variant2 {
+                    continue;
+                }
+                if variant1.is_subtype_of(variant2) {
+                    return Some((variant1, variant2));
+                }
+            }
+        }
+        None
+    }
+
+    fn clean_subtypes(variants: &mut BTreeSet<SimpleType>) {
+        while let Some((variant1, _variant2)) = Self::check_subtypes(variants) {
+            let v = variant1.clone();
+            variants.remove(&v);
+        }
+    }
+
+    fn assert_invariant(&self) {
+        assert!(
+            !self.variants.is_empty(),
+            "ExprType should always have at least one variant"
+        );
+        if let Some((variant1, variant2)) = Self::check_subtypes(&self.variants) {
+            panic!(
+                "{} is a subtype of {} and both present in ExprType; this is forbidden",
+                variant1, variant2,
+            );
+        }
+        for variant in &self.variants {
+            variant.assert_invariant();
+        }
+    }
+
+    fn assert_before_return(self) -> Self {
+        self.assert_invariant();
+        self
+    }
+}
+
+impl ExprType {
+    pub fn simple(typ: SimpleType) -> ExprType {
+        ExprType {
+            variants: BTreeSet::from([typ]),
+        }
+        .assert_before_return()
+    }
+
+    pub fn maybe(typ: SimpleType) -> Option<ExprType> {
+        if typ.is_none() {
+            return None;
+        }
+        Some(
+            ExprType {
+                variants: BTreeSet::from([SimpleType::None, typ]),
+            }
+            .assert_before_return(),
+        )
+    }
+
+    pub fn sum(types: impl IntoIterator<Item = SimpleType>) -> Option<Self> {
+        let mut variants: BTreeSet<_> = types.into_iter().collect();
+
+        if variants.is_empty() {
+            return None;
+        }
+        Self::clean_subtypes(&mut variants);
+        Some(Self { variants }.assert_before_return())
+    }
+
+    /// Create an ExprType from a collection of SimpleType variants
+    /// Unlike `sum`, this doesn't return None for empty input - it requires at least one variant
+    pub fn from_variants(types: impl IntoIterator<Item = SimpleType>) -> Self {
+        let mut variants: BTreeSet<_> = types.into_iter().collect();
+        assert!(
+            !variants.is_empty(),
+            "from_variants requires at least one variant"
+        );
+        Self::clean_subtypes(&mut variants);
+        Self { variants }.assert_before_return()
+    }
+
+    pub fn is_simple(&self) -> bool {
+        assert!(
+            !self.variants.is_empty(),
+            "ExprType should always carry at least one type"
+        );
+        self.variants.len() == 1
+    }
+
+    pub fn as_simple(&self) -> Option<&SimpleType> {
+        if !self.is_simple() {
+            return None;
+        }
+        Some(
+            self.variants
+                .iter()
+                .next()
+                .expect("ExprType should always carry at least one type"),
+        )
+    }
+
+    pub fn to_simple(self) -> Option<SimpleType> {
+        if !self.is_simple() {
+            return None;
+        }
+        Some(
+            self.variants
+                .into_iter()
+                .next()
+                .expect("ExprType should always carry at least one type"),
+        )
+    }
+
+    pub fn is_primitive_type(&self) -> bool {
+        self.as_simple()
+            .map(|x| x.is_primitive_type())
+            .unwrap_or(false)
+    }
+
+    pub fn is_concrete(&self) -> bool {
+        assert!(
+            !self.variants.is_empty(),
+            "ExprType should always carry at least one type"
+        );
+        if self.variants.len() != 1 {
+            return false;
+        }
+        let variant = self.variants.iter().next().unwrap();
+        variant.is_concrete()
+    }
+
+    pub fn get_inner_list_type(&self) -> Option<ExprType> {
+        let mut variants = vec![];
+        for v in &self.variants {
+            if let SimpleType::List(inner) = v {
+                variants.extend(inner.variants.iter().cloned())
+            }
+        }
+        if variants.is_empty() {
+            None
+        } else {
+            ExprType::sum(variants)
+        }
+    }
+
+    pub fn has_list(&self) -> bool {
+        self.variants.iter().any(|x| x.is_list())
+    }
+
+    pub fn is_list(&self) -> bool {
+        self.variants.iter().all(|x| x.is_list())
+    }
+
+    pub fn is_empty_list(&self) -> bool {
+        self.as_simple().map(|x| x.is_empty_list()).unwrap_or(false)
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.as_simple().map(|x| x.is_none()).unwrap_or(false)
+    }
+
+    pub fn contains(&self, typ: &SimpleType) -> bool {
+        self.variants.iter().any(|x| x == typ)
+    }
+
+    pub fn is_lin_expr(&self) -> bool {
+        self.as_simple().map(|x| x.is_lin_expr()).unwrap_or(false)
+    }
+
+    pub fn is_int(&self) -> bool {
+        self.as_simple().map(|x| x.is_int()).unwrap_or(false)
+    }
+
+    pub fn is_bool(&self) -> bool {
+        self.as_simple().map(|x| x.is_bool()).unwrap_or(false)
+    }
+
+    pub fn is_string(&self) -> bool {
+        self.as_simple().map(|x| x.is_string()).unwrap_or(false)
+    }
+
+    pub fn is_constraint(&self) -> bool {
+        self.as_simple().map(|x| x.is_constraint()).unwrap_or(false)
+    }
+
+    pub fn is_database_schema(&self) -> bool {
+        self.as_simple()
+            .map(|x| x.is_database_schema())
+            .unwrap_or(false)
+    }
+
+    pub fn is_list_of_constraints(&self) -> bool {
+        self.as_simple()
+            .map(|x| x.is_list_of_constraints())
+            .unwrap_or(false)
+    }
+
+    pub fn is_arithmetic(&self) -> bool {
+        self.variants.iter().all(|x| x.is_arithmetic())
+    }
+
+    pub fn get_variants(&self) -> &BTreeSet<SimpleType> {
+        &self.variants
+    }
+
+    pub fn into_variants(self) -> BTreeSet<SimpleType> {
+        self.variants
+    }
+
+    /// Returns an optional version of this type (adds None to the variants)
+    pub fn make_optional(self) -> ExprType {
+        let mut variants = self.variants;
+        variants.insert(SimpleType::None);
+        Self::clean_subtypes(&mut variants);
+        ExprType { variants }.assert_before_return()
+    }
+
+    pub fn is_subtype_of(&self, other: &Self) -> bool {
+        for variant in &self.variants {
+            if other.variants.iter().all(|x| !variant.is_subtype_of(x)) {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn can_convert_to(&self, target: &ConcreteType) -> bool {
+        self.variants.iter().all(|x| x.can_convert_to(target))
+    }
+
+    pub fn unify_with(&self, other: &ExprType) -> ExprType {
+        Self::sum(self.variants.union(&other.variants).cloned())
+            .expect("There should be at least one variant")
+    }
+
+    pub fn cross_check<F: FnMut(&SimpleType, &SimpleType) -> Result<SimpleType, SemError>>(
+        &self,
+        other: &ExprType,
+        errors: &mut Vec<SemError>,
+        mut f: F,
+    ) -> Option<ExprType> {
+        let mut variants = BTreeSet::new();
+        for v1 in &self.variants {
+            for v2 in &other.variants {
+                match f(v1, v2) {
+                    Ok(t) => {
+                        variants.insert(t);
+                    }
+                    Err(e) => {
+                        errors.push(e);
+                        return None;
+                    }
+                }
+            }
+        }
+        assert!(
+            !variants.is_empty(),
+            "There should be at least one variant in the output"
+        );
+
+        Self::sum(variants)
+    }
+
+    pub fn overlaps_with(&self, other: &ExprType) -> bool {
+        for variant in &self.variants {
+            if other.variants.iter().any(|o| variant.overlaps_with(o)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn substract(&self, other: &ExprType) -> Option<ExprType> {
+        let variants = self
+            .variants
+            .iter()
+            .filter(|x| !other.variants.iter().any(|y| x.is_subtype_of(y)))
+            .cloned();
+        ExprType::sum(variants)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ConcreteType {
+    simple_typ: SimpleType,
+}
+
+impl ConcreteType {
+    pub fn inner(&self) -> &SimpleType {
+        &self.simple_typ
+    }
+
+    pub fn into_inner(self) -> SimpleType {
+        self.simple_typ
+    }
+}
+
+impl Deref for ConcreteType {
+    type Target = SimpleType;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
+impl std::fmt::Display for ConcreteType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner())
+    }
+}

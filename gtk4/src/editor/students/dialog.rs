@@ -1,10 +1,10 @@
 use adw::prelude::{EditableExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -217,7 +217,7 @@ impl SimpleComponent for Dialog {
                 crate::tools::factories::update_vec_deque(
                     &mut self.period_entries,
                     transformed_data.into_iter(),
-                    |x| PeriodInput::UpdateData(x),
+                    PeriodInput::UpdateData,
                 );
             }
             DialogInput::Cancel => {
@@ -279,7 +279,7 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     week_count: usize,
     enable: bool,

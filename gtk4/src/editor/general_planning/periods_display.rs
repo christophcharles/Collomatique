@@ -1,12 +1,12 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
-use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_num: usize,
     pub desc: Vec<collomatique_state_colloscopes::periods::WeekDesc>,
     pub period_id: collomatique_state_colloscopes::PeriodId,
@@ -15,7 +15,7 @@ pub struct EntryData {
 #[derive(Debug)]
 pub struct Entry {
     index: DynamicIndex,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     first_week_num: usize,
     period_id: collomatique_state_colloscopes::PeriodId,
     weeks: FactoryVecDeque<Week>,
@@ -61,13 +61,13 @@ impl Entry {
     }
 
     fn update_week(
-        global_first_week: Option<collomatique_time::NaiveMondayDate>,
+        global_first_week: Option<collomatique_time::WeekStart>,
         first_week_in_period: usize,
         week_num_in_period: usize,
         state: collomatique_state_colloscopes::periods::WeekDesc,
     ) -> WeekData {
         WeekData {
-            global_first_week: global_first_week,
+            global_first_week,
             first_week_in_period,
             week_num_in_period,
             state,
@@ -122,7 +122,7 @@ impl FactoryComponent for Entry {
                     connect_clicked => EntryInput::MergeClicked,
                 },
                 gtk::Button {
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Supprimer la période"),
                     connect_clicked => EntryInput::DeleteClicked,
@@ -169,7 +169,7 @@ impl FactoryComponent for Entry {
                     state,
                 )
             }),
-            |x| WeekInput::UpdateData(x),
+            WeekInput::UpdateData,
         );
 
         model
@@ -204,7 +204,7 @@ impl FactoryComponent for Entry {
                             state,
                         )
                     }),
-                    |x| WeekInput::UpdateData(x),
+                    WeekInput::UpdateData,
                 );
             }
             EntryInput::EditClicked => {
@@ -243,7 +243,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct WeekData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_in_period: usize,
     pub week_num_in_period: usize,
     pub state: collomatique_state_colloscopes::periods::WeekDesc,

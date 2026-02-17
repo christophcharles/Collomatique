@@ -13,7 +13,7 @@ pub struct Periods {
     ///
     /// The date might not be set but of course, this will hinder
     /// the eventual pretty output
-    pub first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub first_week: Option<collomatique_time::WeekStart>,
 
     /// Ordered list of periods
     ///
@@ -74,7 +74,7 @@ impl Periods {
             first_week += desc.len();
         }
 
-        return None;
+        None
     }
 
     /// Finds the position of a period by id and gives the total number of weeks up to and including the
@@ -92,7 +92,7 @@ impl Periods {
             }
         }
 
-        return None;
+        None
     }
 
     /// Finds a period by id
@@ -113,6 +113,6 @@ impl Periods {
             first_week += desc.len();
         }
 
-        return None;
+        None
     }
 }

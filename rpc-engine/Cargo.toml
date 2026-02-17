@@ -7,4 +7,11 @@ authors.workspace = true
 [dependencies]
 collomatique-rpc = { path = "../rpc" }
 collomatique-python = { path = "../python" }
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
+collomatique-ilp = { path = "../ilp" }
+collomatique-ops = { path = "../ops" }
+collomatique-sqlite-state = { path = "../sqlite-state" }
 anyhow.workspace = true
+tokio.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }

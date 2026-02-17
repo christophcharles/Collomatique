@@ -2,13 +2,13 @@ use super::*;
 
 use std::num::NonZeroU32;
 
-use collomatique_time::NonZeroDurationInMinutes;
+use collomatique_time::NonZeroMinutes;
 use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[pyclass]
 pub struct NaiveMondayDate {
-    internal: collomatique_time::NaiveMondayDate,
+    internal: collomatique_time::WeekStart,
 }
 
 #[pymethods]
@@ -21,24 +21,24 @@ impl NaiveMondayDate {
     #[new]
     fn new(year: i32, month: u32, day: u32) -> PyResult<Self> {
         let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, day) else {
-            return Err(PyValueError::new_err(format!("Invalid date")));
+            return Err(PyValueError::new_err("Invalid date".to_string()));
         };
 
-        let Some(internal) = collomatique_time::NaiveMondayDate::new(date) else {
-            return Err(PyValueError::new_err(format!("Not a monday")));
+        let Some(internal) = collomatique_time::WeekStart::new(date) else {
+            return Err(PyValueError::new_err("Not a monday".to_string()));
         };
 
         Ok(NaiveMondayDate { internal })
     }
 }
 
-impl From<collomatique_time::NaiveMondayDate> for NaiveMondayDate {
-    fn from(value: collomatique_time::NaiveMondayDate) -> Self {
+impl From<collomatique_time::WeekStart> for NaiveMondayDate {
+    fn from(value: collomatique_time::WeekStart) -> Self {
         NaiveMondayDate { internal: value }
     }
 }
 
-impl From<NaiveMondayDate> for collomatique_time::NaiveMondayDate {
+impl From<NaiveMondayDate> for collomatique_time::WeekStart {
     fn from(value: NaiveMondayDate) -> Self {
         value.internal
     }
@@ -60,7 +60,7 @@ impl NaiveDate {
     #[new]
     fn new(year: i32, month: u32, day: u32) -> PyResult<Self> {
         let Some(internal) = chrono::NaiveDate::from_ymd_opt(year, month, day) else {
-            return Err(PyValueError::new_err(format!("Invalid date")));
+            return Err(PyValueError::new_err("Invalid date".to_string()));
         };
 
         Ok(NaiveDate { internal })
@@ -68,7 +68,7 @@ impl NaiveDate {
 
     fn round_to_week(self_: PyRef<'_, Self>) -> NaiveMondayDate {
         NaiveMondayDate {
-            internal: collomatique_time::NaiveMondayDate::round_from(self_.internal),
+            internal: collomatique_time::WeekStart::round_from(self_.internal),
         }
     }
 }
@@ -88,7 +88,7 @@ impl From<NaiveDate> for chrono::NaiveDate {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[pyclass]
 pub struct Time {
-    internal: collomatique_time::TimeOnMinutes,
+    internal: collomatique_time::WholeMinuteTime,
 }
 
 #[pymethods]
@@ -101,22 +101,22 @@ impl Time {
     #[new]
     fn new(h: u32, m: u32) -> PyResult<Self> {
         let Some(time) = chrono::NaiveTime::from_hms_milli_opt(h, m, 0, 0) else {
-            return Err(PyValueError::new_err(format!("Invalid time")));
+            return Err(PyValueError::new_err("Invalid time".to_string()));
         };
 
         let internal =
-            collomatique_time::TimeOnMinutes::new(time).expect("Time should be on minute");
+            collomatique_time::WholeMinuteTime::new(time).expect("Time should be on minute");
         Ok(Time { internal })
     }
 }
 
-impl From<collomatique_time::TimeOnMinutes> for Time {
-    fn from(value: collomatique_time::TimeOnMinutes) -> Self {
+impl From<collomatique_time::WholeMinuteTime> for Time {
+    fn from(value: collomatique_time::WholeMinuteTime) -> Self {
         Time { internal: value }
     }
 }
 
-impl From<Time> for collomatique_time::TimeOnMinutes {
+impl From<Time> for collomatique_time::WholeMinuteTime {
     fn from(value: Time) -> Self {
         value.internal
     }
@@ -259,7 +259,7 @@ impl TryFrom<SlotWithDuration> for collomatique_time::SlotWithDuration {
             weekday: value.start_time.weekday.into(),
             start_time: value.start_time.start_time.into(),
         };
-        let duration = NonZeroDurationInMinutes::from(value.duration_in_minutes);
+        let duration = NonZeroMinutes::from(value.duration_in_minutes);
         value.duration_in_minutes;
         collomatique_time::SlotWithDuration::new(slot_start, duration)
             .ok_or(SlotWithDurationError::SlotOverlapsWithNextDay)

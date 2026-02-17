@@ -1,0 +1,89 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in time_slot_student_pairs(db)
+        where |get_slots_for_student_during(db, data.student_id, TimeSlotDesc {
+            period_id: data.period_id cast! PeriodId, // panic if for some reason we got NULL
+            week: data.week cast! LocalWeek, // panic if for some reason we got NULL
+            day: data.day,
+            start_time: data.start_time cast! Time, // panic if for some reason we got NULL
+            duration: time_resolution(db),
+        })| > 1 {
+        at_most_one_interrogation(db, data)
+    };
+
+/// L'élève `data.student_id` ne peut avoir plus d'une colle la semaine `data.global_week` le jour `data.day` à `data.start_time` pendant `time_resolution(db)`
+let at_most_one_interrogation(db: Db, data: TimeSlotStudentData) -> Constraint =
+    let desc = TimeSlotDesc {
+        period_id: data.period_id cast! PeriodId, // panic if for some reason we got NULL
+        week: data.week cast! LocalWeek, // panic if for some reason we got NULL
+        day: data.day,
+        start_time: data.start_time cast! Time, // panic if for some reason we got NULL
+        duration: time_resolution(db),
+    } {
+        sum slot_id in get_slots_for_student_during(db, data.student_id, desc) {
+            $StudentAtInterrogation(db, data.student_id, slot_id, data.global_week)
+        } <== 1
+    };
+
+type TimeSlotStudentData = {
+    student_id: StudentId,
+    day: WeekdayNum,
+    start_time: ?Time,
+    global_week: GlobalWeek,
+    period_id: ?PeriodId,
+    week: ?LocalWeek,
+};
+
+query time_slot_student_pairs_internal(db: Db, resolution: Duration) -> [TimeSlotStudentData] = "
+WITH RECURSIVE
+time_steps(start_time) AS (
+    SELECT 0
+    UNION ALL
+    SELECT start_time + ?1
+    FROM time_steps
+    WHERE start_time + ?1 < 1440
+),
+ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT
+    st.id AS student_id,
+    d.day AS day,
+    ts.start_time AS start_time,
+    ow.global_week_number AS global_week,
+    ow.period_id AS period_id,
+    ow.week_index AS week
+FROM students st
+CROSS JOIN ordered_weeks ow
+CROSS JOIN (SELECT 0 AS day UNION ALL SELECT 1 UNION ALL SELECT 2
+    UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+    UNION ALL SELECT 6) d
+CROSS JOIN time_steps ts
+WHERE EXISTS (
+    SELECT 1
+    FROM slots s
+    JOIN subject_interrogation_params sip ON sip.subject_id = s.subject_id
+    WHERE s.day = d.day
+      AND s.start_time < ts.start_time + ?1
+      AND ts.start_time < s.start_time + sip.duration_minutes
+);
+";
+
+let time_slot_student_pairs(db: Db) -> [TimeSlotStudentData] =
+    time_slot_student_pairs_internal(db, time_resolution(db));

@@ -1,206 +1,306 @@
 use super::*;
+use std::sync::Arc;
 
-#[test]
-fn simple_number() {
-    let input = "pub let f() -> Int = 42;";
-    let types = HashMap::new();
+#[tokio::test]
+async fn simple_string() {
+    let input = r#"pub let f() -> String = "Hello world!";"#;
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String("Hello world!".into()));
+}
+
+#[tokio::test]
+async fn string_with_quotes() {
+    let input = r#"pub let f() -> String = ~"Hello "quotes""~;"#;
+
+    let vars = HashMap::new();
+
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
+
+    let result = checked_ast
+        .eval_fn("main", "f", vec![])
+        .await
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String(r#"Hello "quotes""#.into()));
+}
+
+#[tokio::test]
+async fn pass_string() {
+    let input = "pub let f(str: String) -> String = str;";
+
+    let vars = HashMap::new();
+
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
+
+    let result = checked_ast
+        .eval_fn("main", "f", vec![ExprValue::String("Hello world!".into())])
+        .await
+        .expect("Should evaluate");
+    assert_eq!(result, ExprValue::String("Hello world!".into()));
+}
+
+#[tokio::test]
+async fn simple_number() {
+    let input = "pub let f() -> Int = 42;";
+
+    let vars = HashMap::new();
+
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
+
+    let result = checked_ast
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(42));
 }
 
-#[test]
-fn negative_number() {
+#[tokio::test]
+async fn negative_number() {
     let input = "pub let f() -> Int = -5;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(-5));
 }
 
-#[test]
-fn boolean_true() {
+#[tokio::test]
+async fn boolean_true() {
     let input = "pub let f() -> Bool = true;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn boolean_false() {
+#[tokio::test]
+async fn boolean_false() {
     let input = "pub let f() -> Bool = false;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Bool(false));
 }
 
-#[test]
-fn boolean_list() {
+#[tokio::test]
+async fn boolean_list() {
     let input = "pub let f() -> [Bool] = [true, false, true];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            ExprType::Bool,
-            BTreeSet::from([
-                ExprValue::Bool(true),
-                ExprValue::Bool(false),
-                ExprValue::Bool(true),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Bool(true)),
+            Arc::new(ExprValue::Bool(false)),
+            Arc::new(ExprValue::Bool(true)),
+        ]))
     );
 }
 
-#[test]
-fn number_list() {
+#[tokio::test]
+async fn number_list() {
     let input = "pub let f() -> [Int] = [0, 42, -1];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)])
-        )
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(42)),
+            Arc::new(ExprValue::Int(-1))
+        ]))
     );
 }
 
-#[test]
-fn cardinality_of_fixed_list() {
+#[tokio::test]
+async fn cardinality_of_fixed_list() {
     let input = "pub let f() -> Int = |[0, 42, -1]|;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(3));
 }
 
-#[test]
-fn cardinality_of_list_in_param() {
+#[tokio::test]
+async fn cardinality_of_list_in_param() {
     let input = "pub let f(list: [Int]) -> Int = |list|;";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
+            "main",
             "f",
-            vec![ExprValue::List(
-                ExprType::Int,
-                BTreeSet::from([ExprValue::Int(0), ExprValue::Int(42), ExprValue::Int(-1)]),
-            )],
+            vec![ExprValue::List(Vec::from([
+                Arc::new(ExprValue::Int(0)),
+                Arc::new(ExprValue::Int(42)),
+                Arc::new(ExprValue::Int(-1)),
+            ]))],
         )
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(3));
 }
 
-#[test]
-fn range() {
+#[tokio::test]
+async fn range() {
     let input = "pub let f() -> [Int] = [-3..2];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(
-            ExprType::Int,
-            BTreeSet::from([
-                ExprValue::Int(-3),
-                ExprValue::Int(-2),
-                ExprValue::Int(-1),
-                ExprValue::Int(0),
-                ExprValue::Int(1),
-            ])
-        )
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(-3)),
+            Arc::new(ExprValue::Int(-2)),
+            Arc::new(ExprValue::Int(-1)),
+            Arc::new(ExprValue::Int(0)),
+            Arc::new(ExprValue::Int(1)),
+        ]))
     );
 }
 
-#[test]
-fn empty_range() {
+#[tokio::test]
+async fn empty_range() {
     let input = "pub let f() -> [Int] = [0..0];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
-#[test]
-fn empty_range_with_end_below_start() {
+#[tokio::test]
+async fn empty_range_with_end_below_start() {
     let input = "pub let f() -> [Int] = [3..-2];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
-    assert_eq!(result, ExprValue::List(ExprType::Int, BTreeSet::new()));
+    assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
-#[test]
-fn range_with_one_element() {
+#[tokio::test]
+async fn range_with_one_element() {
     let input = "pub let f() -> [Int] = [4..5];";
-    let types = HashMap::new();
+
     let vars = HashMap::new();
 
-    let checked_ast = CheckedAST::new(input, types, vars).expect("Should compile");
+    let checked_ast =
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     assert_eq!(
         result,
-        ExprValue::List(ExprType::Int, BTreeSet::from([ExprValue::Int(4)]))
+        ExprValue::List(Vec::from([Arc::new(ExprValue::Int(4))]))
     );
 }

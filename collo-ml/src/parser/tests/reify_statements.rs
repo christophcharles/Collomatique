@@ -34,21 +34,6 @@ fn reify_statement_minimal_structure() {
 }
 
 #[test]
-fn reify_statement_minimal_structure_with_var_list() {
-    // Most basic valid reify statements
-    let cases = vec![
-        "reify x as $[X];",
-        "reify constraint as $[Var];",
-        "reify check as $[Check];",
-        "reify rule as $[Rule];",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::reify_statement, case);
-        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
-    }
-}
-
-#[test]
 fn reify_statement_with_descriptive_names() {
     let cases = vec![
         "reify my_constraint as $MyVar;",
@@ -65,8 +50,8 @@ fn reify_statement_with_descriptive_names() {
 #[test]
 fn reify_statement_with_single_docstring() {
     let cases = vec![
-        "## This reifies a constraint\nreify my_constraint as $MyVar;",
-        "## Check validity\nreify is_valid as $Valid;",
+        "/// This reifies a constraint\nreify my_constraint as $MyVar;",
+        "/// Check validity\nreify is_valid as $Valid;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -77,8 +62,8 @@ fn reify_statement_with_single_docstring() {
 #[test]
 fn reify_statement_with_multiple_docstrings() {
     let cases = vec![
-        "## First line\n## Second line\nreify student_has_subject as $HasSubject;",
-        "## Documentation\n## More docs\n## Even more\nreify check as $Check;",
+        "/// First line\n/// Second line\nreify student_has_subject as $HasSubject;",
+        "/// Documentation\n/// More docs\n/// Even more\nreify check as $Check;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -89,10 +74,10 @@ fn reify_statement_with_multiple_docstrings() {
 #[test]
 fn reify_statement_with_varied_whitespace() {
     let cases = vec![
-        "reify x as $X;",                      // minimal
-        "reify   constraint   as   $Var  ;",   // extra spaces
-        "reify\nconstraint\nas\n$Var\n;",      // newlines
-        "reify constraint as $Var; # comment", // trailing comment
+        "reify x as $X;",                       // minimal
+        "reify   constraint   as   $Var  ;",    // extra spaces
+        "reify\nconstraint\nas\n$Var\n;",       // newlines
+        "reify constraint as $Var; // comment", // trailing comment
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -218,10 +203,10 @@ fn reify_statement_allows_keyword_prefixes_in_names() {
 #[test]
 fn reify_statement_realistic_examples() {
     let cases = vec![
-        "## Ensure each student has at least one slot per week\nreify has_any_slot_per_week as $HasSlot;",
-        "## Room capacity constraint\nreify room_capacity_check as $CapacityOK;",
-        "## Student availability constraint\nreify student_available as $Available;",
-        "## Maximum colles per week\nreify max_colles_per_week as $MaxColles;",
+        "/// Ensure each student has at least one slot per week\nreify has_any_slot_per_week as $HasSlot;",
+        "/// Room capacity constraint\nreify room_capacity_check as $CapacityOK;",
+        "/// Student availability constraint\nreify student_available as $Available;",
+        "/// Maximum colles per week\nreify max_colles_per_week as $MaxColles;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
@@ -231,8 +216,8 @@ fn reify_statement_realistic_examples() {
 
 #[test]
 fn reify_statement_complete_example() {
-    let input = r#"## Check if student has any slot in subject for a week
-## This is used to ensure proper distribution
+    let input = r#"/// Check if student has any slot in subject for a week
+/// This is used to ensure proper distribution
 reify has_any_slot_in_subject as $HasSubject;"#;
     let result = ColloMLParser::parse(Rule::reify_statement, input);
     assert!(
@@ -397,7 +382,7 @@ fn reify_statement_rejects_inline_expressions() {
     // Reify only accepts identifiers, not inline constraint expressions
     let cases = vec![
         "reify ($V() <= 10) as $MyVar;",
-        "reify (forall x in @[X] { $V(x) >= 0 }) as $Check;",
+        "reify (forall x in x_list { $V(x) >= 0 }) as $Check;",
         "reify $V() == 1 as $IsOne;",
         "reify 5 + 3 as $Result;",
     ];
@@ -518,8 +503,8 @@ fn reify_statement_rejects_reserved_keywords_as_variable_names() {
 }
 
 #[test]
-fn reify_statement_rejects_pub_modifier() {
-    // Reify statements cannot have pub modifier (only let statements can)
+fn reify_statement_accepts_pub_modifier() {
+    // Reify statements can have pub modifier for module visibility
     let cases = vec![
         "pub reify constraint as $Var;",
         "pub reify check as $Check;",
@@ -527,8 +512,8 @@ fn reify_statement_rejects_pub_modifier() {
     for case in cases {
         let result = ColloMLParser::parse(Rule::reify_statement, case);
         assert!(
-            result.is_err(),
-            "Should reject '{}' (pub not allowed on reify): {:?}",
+            result.is_ok(),
+            "Should accept '{}' (pub allowed on reify): {:?}",
             case,
             result
         );

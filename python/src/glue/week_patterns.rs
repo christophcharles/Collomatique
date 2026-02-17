@@ -17,7 +17,7 @@ impl WeekPatternId {
 
 impl From<&collomatique_state_colloscopes::WeekPatternId> for WeekPatternId {
     fn from(value: &collomatique_state_colloscopes::WeekPatternId) -> Self {
-        WeekPatternId { id: value.clone() }
+        WeekPatternId { id: *value }
     }
 }
 
@@ -29,7 +29,7 @@ impl From<collomatique_state_colloscopes::WeekPatternId> for WeekPatternId {
 
 impl From<&WeekPatternId> for collomatique_state_colloscopes::WeekPatternId {
     fn from(value: &WeekPatternId) -> Self {
-        value.id.clone().into()
+        value.id
     }
 }
 

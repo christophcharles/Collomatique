@@ -50,7 +50,7 @@ fn control_flow_if_with_variables() {
     let cases = vec![
         "if x > 5 { $V1(x) } else { $V2(x) }",
         "if condition { 10 } else { 20 }",
-        "if flag { sum x in @[X] { $V(x) } } else { 0 }",
+        "if flag { sum x in x_list { $V(x) } } else { 0 }",
         "2 * (if x { $V(x) } else { $W(x) })",
     ];
     for case in cases {
@@ -77,7 +77,7 @@ fn control_flow_if_with_constraints() {
     let cases = vec![
         "if flag { $V1(x) <= 10 } else { $V2(x) <= 10 }",
         "if x > 5 { $V(x) === 1 } else { $V(x) === 0 }",
-        "if condition { forall y in @[Y] { $V(y) >== 0 } } else { $V(z) === 0 }",
+        "if condition { forall y in y_list { $V(y) >== 0 } } else { $V(z) === 0 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

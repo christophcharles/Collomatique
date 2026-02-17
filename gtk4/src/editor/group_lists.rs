@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::GroupListsUpdateOp;
 
@@ -26,7 +26,7 @@ pub enum GroupListsInput {
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
     GroupListParamsSelected(collomatique_state_colloscopes::group_lists::GroupListParameters),
-    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups),
+    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListFilling),
 }
 
 #[derive(Debug)]
@@ -90,7 +90,7 @@ impl Component for GroupLists {
                             set_sensitive: false,
                             set_margin_all: 5,
                             adw::ButtonContent {
-                                set_icon_name: "run-build-configure",
+                                set_icon_name: "system-run-symbolic",
                                 set_label: "Générer des listes automatiquement",
                             },
                         },
@@ -221,14 +221,11 @@ impl Component for GroupLists {
                     collomatique_state_colloscopes::group_lists::GroupListParameters::default();
                 let max_group_count = (self.students.student_map.len() as u32)
                     / (group_list_params.students_per_group.start().get());
-                group_list_params.group_count = 0..=max_group_count.max(1);
+                group_list_params.group_names = vec![None; max_group_count.max(1) as usize];
 
                 self.params_dialog
                     .sender()
-                    .send(params_dialog::DialogInput::Show(
-                        group_list_params,
-                        self.students.clone(),
-                    ))
+                    .send(params_dialog::DialogInput::Show(group_list_params))
                     .unwrap();
             }
             GroupListsInput::EditGroupList(group_list_id) => {
@@ -242,10 +239,7 @@ impl Component for GroupLists {
                 self.params_selection_reason = GroupListParamsSelectionReason::Edit(group_list_id);
                 self.params_dialog
                     .sender()
-                    .send(params_dialog::DialogInput::Show(
-                        group_list_params,
-                        self.students.clone(),
-                    ))
+                    .send(params_dialog::DialogInput::Show(group_list_params))
                     .unwrap();
             }
             GroupListsInput::PrefillGroupList(group_list_id) => {
@@ -255,17 +249,8 @@ impl Component for GroupLists {
                     .get(&group_list_id)
                     .expect("Group list ID should be valid")
                     .clone();
-                let filtered_students = self
-                    .students
-                    .student_map
-                    .iter()
-                    .filter_map(|(student_id, student)| {
-                        if group_list.params.excluded_students.contains(student_id) {
-                            return None;
-                        }
-                        Some((student_id.clone(), student.clone()))
-                    })
-                    .collect();
+                // Pass all students - exclusion is now handled in the prefill dialog
+                let filtered_students = self.students.student_map.clone();
                 self.prefill_group_list_id = Some(group_list_id);
                 self.prefill_dialog
                     .sender()
@@ -294,13 +279,13 @@ impl Component for GroupLists {
                     }
                 }
             }
-            GroupListsInput::GroupListPrefillSelected(prefill) => {
+            GroupListsInput::GroupListPrefillSelected(filling) => {
                 let group_list_id = self
                     .prefill_group_list_id
                     .take()
                     .expect("There should be a currently edited group list ID");
                 sender
-                    .output(GroupListsUpdateOp::PrefillGroupList(group_list_id, prefill))
+                    .output(GroupListsUpdateOp::SetFilling(group_list_id, filling))
                     .unwrap();
             }
         }
@@ -314,17 +299,17 @@ impl GroupLists {
             .group_list_map
             .iter()
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: id.clone(),
+                id: *id,
                 group_list: group_list.clone(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id.clone()));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
             group_lists_vec.into_iter(),
-            |data| group_lists_display::EntryInput::UpdateData(data),
+            group_lists_display::EntryInput::UpdateData,
         );
     }
 
@@ -336,7 +321,7 @@ impl GroupLists {
             .enumerate()
             .scan(0usize, |acc, (num, (id, desc))| {
                 let out = associations_display::PeriodEntryData {
-                    period_id: id.clone(),
+                    period_id: *id,
                     period_text: super::generate_week_succession_title(
                         "Associations pour la période",
                         &self.periods.first_week,
@@ -352,11 +337,9 @@ impl GroupLists {
                             if subject.excluded_periods.contains(id) {
                                 return None;
                             }
-                            if subject.parameters.interrogation_parameters.is_none() {
-                                return None;
-                            }
+                            subject.parameters.interrogation_parameters.as_ref()?;
 
-                            Some((subject_id.clone(), subject.clone()))
+                            Some((*subject_id, subject.clone()))
                         })
                         .collect(),
                     group_list_associations: self
@@ -376,7 +359,7 @@ impl GroupLists {
         crate::tools::factories::update_vec_deque(
             &mut self.period_entries,
             periods_vec.into_iter(),
-            |data| associations_display::PeriodEntryInput::UpdateData(data),
+            associations_display::PeriodEntryInput::UpdateData,
         );
     }
 }

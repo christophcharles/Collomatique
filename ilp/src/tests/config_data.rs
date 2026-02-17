@@ -101,7 +101,7 @@ fn check_config_data_var_detects_missing_variables() {
 
     assert_eq!(
         report.missing_variables,
-        BTreeSet::from([
+        HashSet::from([
             String::from("x21"),
             String::from("x22"),
             String::from("y11"),
@@ -128,7 +128,7 @@ fn check_config_data_var_detects_excess_variables() {
 
     assert_eq!(
         report.excess_variables,
-        BTreeSet::from([String::from("z"), String::from("w"), String::from("t")])
+        HashSet::from([String::from("z"), String::from("w"), String::from("t")])
     );
 }
 
@@ -147,7 +147,11 @@ fn check_config_data_var_detects_non_conforming_variables() {
 
     assert_eq!(
         report.non_conforming_variables,
-        BTreeSet::from([String::from("x21"), String::from("y12")])
+        HashSet::from([
+            String::from("x12"),
+            String::from("x21"),
+            String::from("y12")
+        ])
     );
 }
 
@@ -184,7 +188,7 @@ fn build_config_works_on_valid_config() {
 
     assert_eq!(
         config.get_values(),
-        BTreeMap::from([
+        HashMap::from([
             (String::from("x11"), 0.0),
             (String::from("x12"), 0.0),
             (String::from("x21"), 0.0),

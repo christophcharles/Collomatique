@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
+use crate::ops::ColloscopeOp;
 
 /// Description of a colloscope
 ///
@@ -27,6 +28,7 @@ impl Colloscope {
             .group_lists
             .group_list_map
             .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(group_list_id, _group_list)| (*group_list_id, ColloscopeGroupList::new_empty()))
             .collect();
 
@@ -46,6 +48,63 @@ impl Colloscope {
             period_map,
             group_lists,
         }
+    }
+
+    pub fn update_ops(&self, other: Self) -> Option<Vec<ColloscopeOp>> {
+        let mut output = vec![];
+
+        if self.group_lists.len() != other.group_lists.len() {
+            return None;
+        }
+        for (group_list_id, other_group_list) in other.group_lists {
+            let group_list = self.group_lists.get(&group_list_id)?;
+
+            if *group_list != other_group_list {
+                output.push(ColloscopeOp::UpdateGroupList(
+                    group_list_id,
+                    other_group_list,
+                ));
+            }
+        }
+
+        if self.period_map.len() != other.period_map.len() {
+            return None;
+        }
+        for (period_id, other_period) in other.period_map {
+            let period = self.period_map.get(&period_id)?;
+            if period.slot_map.len() != other_period.slot_map.len() {
+                return None;
+            }
+            for (slot_id, other_slot) in other_period.slot_map {
+                let slot = period.slot_map.get(&slot_id)?;
+                if slot.interrogations.len() != other_slot.interrogations.len() {
+                    return None;
+                }
+                for (week_in_period, other_interrogation_opt) in
+                    other_slot.interrogations.into_iter().enumerate()
+                {
+                    let interrogation_opt = slot.interrogations.get(week_in_period)?;
+                    if interrogation_opt.is_some() != other_interrogation_opt.is_some() {
+                        return None;
+                    }
+                    let (Some(interrogation), Some(other_interrogation)) =
+                        (interrogation_opt, other_interrogation_opt)
+                    else {
+                        continue;
+                    };
+                    if *interrogation != other_interrogation {
+                        output.push(ColloscopeOp::UpdateInterrogation(
+                            period_id,
+                            slot_id,
+                            week_in_period,
+                            other_interrogation,
+                        ));
+                    }
+                }
+            }
+        }
+
+        Some(output)
     }
 }
 
@@ -67,20 +126,32 @@ impl Colloscope {
             period.validate_against_params(*period_id, params)?;
         }
 
-        if self.group_lists.len() != params.group_lists.group_list_map.len() {
-            return Err(ColloscopeError::WrongPeriodCountInColloscopeData);
-        }
-
+        // Validate group lists: should contain exactly non-prefilled group lists
         for (group_list_id, group_list) in &self.group_lists {
             let Some(params_group_list) = params.group_lists.group_list_map.get(group_list_id)
             else {
                 return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
             };
+            if params_group_list.is_prefilled() {
+                return Err(ColloscopeError::PrefilledGroupListInColloscope(
+                    *group_list_id,
+                ));
+            }
             group_list.validate_against_params(
                 *group_list_id,
                 &params_group_list.params,
+                &params_group_list.filling,
                 &params.students,
             )?;
+        }
+
+        // Check all non-prefilled group lists are present
+        for (group_list_id, group_list) in &params.group_lists.group_list_map {
+            if !group_list.is_prefilled() && !self.group_lists.contains_key(group_list_id) {
+                return Err(ColloscopeError::MissingNonPrefilledGroupList(
+                    *group_list_id,
+                ));
+            }
         }
 
         Ok(())
@@ -103,11 +174,10 @@ impl Colloscope {
                 .period_map
                 .get(period_id)
                 .expect("Period Id should be valid");
-            if let Some(collo_slot) = collo_period.slot_map.get(&slot_id) {
-                if !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
-                {
-                    return false;
-                }
+            if let Some(collo_slot) = collo_period.slot_map.get(&slot_id)
+                && !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
+            {
+                return false;
             }
 
             current_first_week += period_desc.len();
@@ -297,7 +367,6 @@ impl ColloscopeSlot {
         let period = &params.periods.ordered_period_list[period_pos].1;
 
         let first_week: usize = (0..period_pos)
-            .into_iter()
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
@@ -356,7 +425,6 @@ impl ColloscopeSlot {
         let period = &params.periods.ordered_period_list[period_pos].1;
 
         let first_week_num: usize = (0..period_pos)
-            .into_iter()
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
@@ -415,10 +483,10 @@ impl ColloscopeSlot {
                 continue;
             }
 
-            if let Some(interrogation) = interrogation_opt {
-                if !interrogation.is_empty() {
-                    return false;
-                }
+            if let Some(interrogation) = interrogation_opt
+                && !interrogation.is_empty()
+            {
+                return false;
             }
         }
 
@@ -480,7 +548,7 @@ impl ColloscopeInterrogation {
                     .get(group_list_id)
                     .expect("Group list id should be valid");
 
-                group_list.params.group_count.end() + 1
+                group_list.params.group_names.len() as u32
             }
         };
 
@@ -510,32 +578,6 @@ impl ColloscopeGroupList {
         self.groups_for_students.is_empty()
     }
 
-    pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
-        for (group_num, group) in group_list.prefilled_groups.groups.iter().enumerate() {
-            for student_id in &group.students {
-                let Some(stored_num) = self.groups_for_students.get(student_id) else {
-                    return false;
-                };
-                if *stored_num != group_num as u32 {
-                    return false;
-                }
-            }
-        }
-
-        for (student_id, group) in &self.groups_for_students {
-            let group_index = *group as usize;
-            if let Some(group) = group_list.prefilled_groups.groups.get(group_index) {
-                if group.sealed {
-                    if !group.students.contains(student_id) {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        true
-    }
-
     /// Builds an empty group list compatible with the given parameters
     ///
     /// `group_list_id` refers to the group list in the parameters to start from.
@@ -555,14 +597,16 @@ impl ColloscopeGroupList {
         &self,
         group_list_id: GroupListId,
         group_list_params: &super::group_lists::GroupListParameters,
+        group_list_filling: &super::group_lists::GroupListFilling,
         students: &super::students::Students,
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
-        let first_forbidden_value = *group_list_params.group_count.end();
+        let first_forbidden_value = group_list_params.group_names.len() as u32;
+        let excluded_students = group_list_filling.excluded_students();
 
         for (student_id, group_num) in &self.groups_for_students {
-            if group_list_params.excluded_students.contains(student_id) {
+            if excluded_students.contains(student_id) {
                 return Err(ColloscopeError::ExcludedStudentInGroupList(
                     group_list_id,
                     *student_id,

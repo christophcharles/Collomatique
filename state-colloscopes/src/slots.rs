@@ -58,8 +58,7 @@ impl Slot {
 
         if let Some(week_pattern_id) = self.week_pattern {
             let pattern = week_patterns.get_pattern(week_pattern_id);
-            for i in 0..base_pattern.len() {
-                let base_status = &mut base_pattern[i];
+            for (i, base_status) in base_pattern.iter_mut().enumerate() {
                 let week_pattern_status = match pattern.get(first_week + i) {
                     Some(val) => *val,
                     None => true,

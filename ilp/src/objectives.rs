@@ -1,3 +1,5 @@
+#![allow(clippy::op_ref)]
+
 //! Objective module
 //!
 //! This modules mainly defines [ObjectiveSense] and [Objective].
@@ -12,7 +14,7 @@ use super::{LinExpr, UsableData};
 ///
 /// This enum represents the sense in which
 /// we try to optimize the objective function
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ObjectiveSense {
     /// Minimize the objective function (default)
     #[default]
@@ -156,7 +158,7 @@ impl ObjectiveSense {
 /// are taken as their absolute values.
 ///
 /// If you still want to reverse an objective, you can by using [Objective::reverse] or [Objective::reversed].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Objective<V: UsableData> {
     /// linear expression to optimize
     func: LinExpr<V>,
@@ -259,7 +261,7 @@ impl<V: UsableData> Objective<V> {
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Objective, ObjectiveSense};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -270,7 +272,7 @@ impl<V: UsableData> Objective<V> {
     /// let obj = Objective::new(expr, ObjectiveSense::Minimize);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -311,7 +313,7 @@ impl<V: UsableData> Objective<V> {
     /// ```
     /// # use collomatique_ilp::{linexpr::LinExpr, Objective, ObjectiveSense};
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -322,7 +324,7 @@ impl<V: UsableData> Objective<V> {
     /// let obj = Objective::new(expr, ObjectiveSense::Minimize);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -348,6 +350,45 @@ impl<V: UsableData> Objective<V> {
     pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, f: F) -> Objective<U> {
         Objective {
             func: self.func.into_transmuted(f),
+            sense: self.sense,
+        }
+    }
+
+    /// Reduce an objective by replacing part or all
+    /// of its variables by values.
+    ///
+    /// This function takes a list of values for some variables
+    /// and substitute these values into the objective.
+    /// The result is a new objective (which might be trivial).
+    /// This can be understood as a partial evaluation of the objective.
+    ///
+    /// The list of variables can contain variables that do not appear in
+    /// the objective. It can also omit variables that do appear since
+    /// the evaluation is only partial. As such, this function can't fail.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, objectives::{Objective, ObjectiveSense}};
+    /// # use std::collections::HashMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    /// let objective = Objective::new(expr, ObjectiveSense::Maximize);
+    ///
+    /// let objective_reduced = objective.reduce(&HashMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    ///
+    /// let objective_expected = Objective::new(-3.0*&expr2 - 44.0, ObjectiveSense::Maximize);
+    /// assert_eq!(objective_reduced, objective_expected);
+    /// ```
+    pub fn reduce(&self, vars: &std::collections::HashMap<V, f64>) -> Objective<V> {
+        let new_func = self.func.reduce(vars);
+
+        Objective {
+            func: new_func,
             sense: self.sense,
         }
     }
@@ -411,7 +452,7 @@ impl<V: UsableData> std::ops::Mul<&Objective<V>> for f64 {
     type Output = Objective<V>;
 
     fn mul(self, rhs: &Objective<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 
@@ -443,7 +484,7 @@ impl<V: UsableData> std::ops::Mul<&Objective<V>> for i32 {
     type Output = Objective<V>;
 
     fn mul(self, rhs: &Objective<V>) -> Self::Output {
-        (&self) * rhs
+        &self * rhs
     }
 }
 

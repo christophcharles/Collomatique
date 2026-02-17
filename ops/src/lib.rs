@@ -36,10 +36,10 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod group_lists;
 pub use group_lists::*;
-pub mod rules;
-pub use rules::*;
 pub mod settings;
 pub use settings::*;
+pub mod main_script;
+pub use main_script::*;
 pub mod colloscope;
 pub use colloscope::*;
 
@@ -57,8 +57,8 @@ pub enum OpCategory {
     Slots,
     Incompatibilities,
     GroupLists,
-    Rules,
     Settings,
+    MainScript,
     Colloscope,
 }
 
@@ -73,8 +73,8 @@ pub enum UpdateOp {
     Slots(SlotsUpdateOp),
     Incompatibilities(IncompatibilitiesUpdateOp),
     GroupLists(GroupListsUpdateOp),
-    Rules(RulesUpdateOp),
     Settings(SettingsUpdateOp),
+    MainScript(MainScriptUpdateOp),
     Colloscope(ColloscopeUpdateOp),
 }
 
@@ -99,9 +99,9 @@ pub enum UpdateError {
     #[error(transparent)]
     GroupLists(#[from] GroupListsUpdateError),
     #[error(transparent)]
-    Rules(#[from] RulesUpdateError),
-    #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
+    #[error(transparent)]
+    MainScript(#[from] MainScriptUpdateError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeUpdateError),
 }
@@ -117,8 +117,8 @@ pub enum UpdateWarning {
     Slots(SlotsUpdateWarning),
     Incompatibilities(IncompatibilitiesUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
-    Rules(RulesUpdateWarning),
     Settings(SettingsUpdateWarning),
+    MainScript(MainScriptUpdateWarning),
     Colloscope(ColloscopeUpdateWarning),
 }
 
@@ -176,15 +176,15 @@ impl From<GroupListsUpdateWarning> for UpdateWarning {
     }
 }
 
-impl From<RulesUpdateWarning> for UpdateWarning {
-    fn from(value: RulesUpdateWarning) -> Self {
-        UpdateWarning::Rules(value)
-    }
-}
-
 impl From<SettingsUpdateWarning> for UpdateWarning {
     fn from(value: SettingsUpdateWarning) -> Self {
         UpdateWarning::Settings(value)
+    }
+}
+
+impl From<MainScriptUpdateWarning> for UpdateWarning {
+    fn from(value: MainScriptUpdateWarning) -> Self {
+        UpdateWarning::MainScript(value)
     }
 }
 
@@ -209,8 +209,8 @@ impl UpdateWarning {
             UpdateWarning::Slots(w) => w.build_desc_from_data(data),
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
-            UpdateWarning::Rules(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
+            UpdateWarning::MainScript(w) => w.build_desc_from_data(data),
             UpdateWarning::Colloscope(w) => w.build_desc_from_data(data),
         }
     }
@@ -281,9 +281,11 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => {
                 CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
             UpdateOp::Settings(settings_op) => {
                 CleaningOp::downcast(settings_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::MainScript(main_script_op) => {
+                CleaningOp::downcast(main_script_op.get_next_cleaning_op(data))
             }
             UpdateOp::Colloscope(colloscope_op) => {
                 CleaningOp::downcast(colloscope_op.get_next_cleaning_op(data))
@@ -332,12 +334,12 @@ impl UpdateOp {
                 let result = group_list_op.apply_no_cleaning(data)?;
                 Ok(result.map(|x| x.into()))
             }
-            UpdateOp::Rules(rule_op) => {
-                let result = rule_op.apply_no_cleaning(data)?;
-                Ok(result.map(|x| x.into()))
-            }
             UpdateOp::Settings(settings_op) => {
                 settings_op.apply_no_cleaning(data)?;
+                Ok(None)
+            }
+            UpdateOp::MainScript(main_script_op) => {
+                main_script_op.apply_no_cleaning(data)?;
                 Ok(None)
             }
             UpdateOp::Colloscope(colloscope_op) => {
@@ -382,8 +384,8 @@ impl UpdateOp {
             UpdateOp::Slots(slot_op) => slot_op.get_desc(),
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
-            UpdateOp::Rules(rule_op) => rule_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
+            UpdateOp::MainScript(main_script_op) => main_script_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
         }
     }

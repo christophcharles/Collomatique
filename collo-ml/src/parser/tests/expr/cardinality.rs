@@ -7,7 +7,7 @@ use super::*;
 
 #[test]
 fn cardinality_accepts_simple_collections() {
-    let cases = vec!["|@[Student]|", "|@[Week]|", "|@[Int]|"];
+    let cases = vec!["|students|", "|weeks|", "|numbers|"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
@@ -39,12 +39,7 @@ fn cardinality_accepts_list_literals() {
 
 #[test]
 fn cardinality_accepts_set_operations() {
-    let cases = vec![
-        "|@[Student] \\ excluded|",
-        "|a union b|",
-        "|group1 inter group2|",
-        "|(a union b) \\ c|",
-    ];
+    let cases = vec!["|students - excluded|", "|a + b|", "|(a + b) - c|"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
@@ -54,11 +49,11 @@ fn cardinality_accepts_set_operations() {
 #[test]
 fn cardinality_in_arithmetic() {
     let cases = vec![
-        "|@[Student]| + 1",
+        "|students| + 1",
         "|collection| * 2",
-        "5 + |@[Week]|",
-        "|@[Student]| * $Var(x)",
-        "(|@[Student]|) * $Var(x)",
+        "5 + |weeks|",
+        "|students| * $Var(x)",
+        "(|students|) * $Var(x)",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -69,9 +64,9 @@ fn cardinality_in_arithmetic() {
 #[test]
 fn cardinality_in_comparisons() {
     let cases = vec![
-        "|@[Student]| > 0",
+        "|students| > 0",
         "|collection| == 10",
-        "sum x in @[X] { $V(x) } === |@[X]|",
+        "sum x in x_list { $V(x) } === |x_list|",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -81,7 +76,7 @@ fn cardinality_in_comparisons() {
 
 #[test]
 fn cardinality_with_modulo() {
-    let cases = vec!["|@[Week]| % 4", "(|@[Student]| // 2) * $Var(x)"];
+    let cases = vec!["|weeks| % 4", "(|students| / 2) * $Var(x)"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
@@ -93,7 +88,7 @@ fn cardinality_nested_expressions() {
     let cases = vec![
         "|collection| + $Var(x) + |other_collection|",
         "if x { |collection| + 1 } else { |collection| - 1 }",
-        "$Var(x) + if flag { |@[X]| } else { 0 } + $Var(y)",
+        "$Var(x) + if flag { |x_list| } else { 0 } + $Var(y)",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

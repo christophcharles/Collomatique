@@ -21,6 +21,7 @@ fn let_statement_minimal_structure() {
         "let g() -> Bool = true;",
         "let h() -> LinExpr = 5;",
         "let i() -> Constraint = $V() === 0;",
+        "let j() -> String = get_str();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -44,8 +45,8 @@ fn let_statement_with_pub_modifier() {
 #[test]
 fn let_statement_with_single_docstring() {
     let cases = vec![
-        "## This is a docstring\nlet f() -> LinExpr = 5;",
-        "## Calculate something\nlet compute() -> Int = 42;",
+        "/// This is a docstring\nlet f() -> LinExpr = 5;",
+        "/// Calculate something\nlet compute() -> Int = 42;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -56,8 +57,8 @@ fn let_statement_with_single_docstring() {
 #[test]
 fn let_statement_with_multiple_docstrings() {
     let cases = vec![
-        "## First line\n## Second line\nlet f() -> LinExpr = 5;",
-        "## Line 1\n## Line 2\n## Line 3\npub let g() -> Constraint = $V() === 1;",
+        "/// First line\n/// Second line\nlet f() -> LinExpr = 5;",
+        "/// Line 1\n/// Line 2\n/// Line 3\npub let g() -> Constraint = $V() === 1;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -71,7 +72,7 @@ fn let_statement_with_varied_whitespace() {
         "let f()->LinExpr=5;",                 // no spaces
         "let   f  (  )  ->  LinExpr  =  5  ;", // many spaces
         "let f(\n) -> LinExpr\n= 5\n;",        // newlines
-        "let f() -> LinExpr = 5; # comment",   // trailing comment
+        "let f() -> LinExpr = 5; // comment",  // trailing comment
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -159,6 +160,7 @@ fn let_statement_with_primitive_return_types() {
         "let g() -> Bool = true;",
         "let h() -> LinExpr = 5;",
         "let i() -> Constraint = $V() === 0;",
+        "let j() -> String = get_name();",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -184,10 +186,54 @@ fn let_statement_with_custom_return_types() {
 fn let_statement_with_list_return_types() {
     let cases = vec![
         "let f() -> [Int] = [1, 2, 3];",
-        "let g() -> [Student] = @[Student];",
+        "let g() -> [Student] = students;",
         "let h() -> [LinExpr] = [];",
         "let i() -> [[Int]] = [[1, 2], [3, 4]];",
         "let j() -> [[[Bool]]] = [];",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// =============================================================================
+// STRING TYPE TESTS
+// =============================================================================
+
+#[test]
+fn let_statement_with_string_return_type() {
+    let cases = vec![
+        "let f() -> String = get_name();",
+        "let g() -> String = format_output();",
+        "let h(s: Student) -> String = s.name;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_parameter() {
+    let cases = vec![
+        "let f(name: String) -> Int = 0;",
+        "let g(s: String, n: Int) -> Bool = true;",
+        "let h(prefix: String, suffix: String) -> String = prefix + suffix;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_list_types() {
+    let cases = vec![
+        "let f() -> [String] = [];",
+        "let g() -> [String] = get_names();",
+        "let h(names: [String]) -> Int = |names|;",
+        "let i() -> [[String]] = [];",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -206,6 +252,62 @@ fn let_statement_with_literal_expressions() {
         "let g() -> Int = -10;",
         "let h() -> Bool = true;",
         "let i() -> Bool = false;",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_literal_expressions() {
+    let cases = vec![
+        r#"let f() -> String = "hello";"#,
+        r#"let g() -> String = "";"#, // empty string
+        r#"let h() -> String = "Hello, World!";"#,
+        r#"let i() -> String = "with spaces and 123";"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_with_quotes() {
+    let cases = vec![
+        r#"let f() -> String = ~"He said "hello""~;"#,
+        r#"let g() -> String = ~"Contains " character"~;"#,
+        r#"let h() -> String = ~~"Has "~ sequence"~~;"#,
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_with_newlines() {
+    let cases = vec![
+        "let f() -> String = \"line1\nline2\";",
+        "let g() -> String = \"multiple\nlines\nhere\";",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should parse string with newlines: {:?}",
+            result
+        );
+    }
+}
+
+#[test]
+fn let_statement_with_string_literals_unicode() {
+    let cases = vec![
+        r#"let f() -> String = "Hello 世界";"#,
+        r#"let g() -> String = "café";"#,
+        r#"let h() -> String = "😀🎉";"#,
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -286,7 +388,7 @@ fn let_statement_with_arithmetic_expressions() {
         "let f() -> Int = 2 + 3;",
         "let g() -> Int = 10 - 5;",
         "let h() -> Int = 4 * 7;",
-        "let i() -> Int = 20 // 4;",
+        "let i() -> Int = 20 / 4;",
         "let j() -> Int = 17 % 5;",
         "let k() -> Int = 2 + 3 * 4;",
         "let l() -> Int = (2 + 3) * 4;",
@@ -412,24 +514,10 @@ fn let_statement_with_list_comprehensions() {
 }
 
 #[test]
-fn let_statement_with_global_collections() {
-    let cases = vec![
-        "let f() -> [Student] = @[Student];",
-        "let g() -> [Week] = @[Week];",
-        "let h() -> [Int] = @[Int];",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
-        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
-    }
-}
-
-#[test]
 fn let_statement_with_collection_operations() {
     let cases = vec![
-        "let f() -> [Int] = [1, 2] union [3, 4];",
-        "let g() -> [Int] = [1, 2, 3] inter [2, 3, 4];",
-        "let h() -> [Int] = [1, 2, 3] \\ [2];",
+        "let f() -> [Int] = [1, 2] + [3, 4];",
+        "let h() -> [Int] = [1, 2, 3] - [2];",
         "let i() -> Bool = 5 in [1, 2, 3, 4, 5];",
     ];
     for case in cases {
@@ -442,7 +530,7 @@ fn let_statement_with_collection_operations() {
 fn let_statement_with_cardinality() {
     let cases = vec![
         "let f() -> Int = |[1, 2, 3]|;",
-        "let g() -> Int = |@[Student]|;",
+        "let g(students: [Student]) -> Int = |students|;",
         "let h(students: [Student]) -> Int = |students|;",
     ];
     for case in cases {
@@ -459,7 +547,7 @@ fn let_statement_with_cardinality() {
 fn let_statement_with_sum_expressions() {
     let cases = vec![
         "let f() -> LinExpr = sum x in [1, 2, 3] { x };",
-        "let g() -> LinExpr = sum s in @[Student] { $V(s) };",
+        "let g(students: [Student]) -> LinExpr = sum s in students { $V(s) };",
         "let h() -> LinExpr = sum x in [1, 2, 3] where x > 1 { x * 2 };",
         "let i(students: [Student]) -> LinExpr = sum s in students { $Assigned(s) };",
     ];
@@ -473,8 +561,8 @@ fn let_statement_with_sum_expressions() {
 fn let_statement_with_forall_expressions() {
     let cases = vec![
         "let f() -> Constraint = forall x in [1, 2, 3] { $V(x) >== 0 };",
-        "let g() -> Constraint = forall s in @[Student] { $Assigned(s) === 1 };",
-        "let h() -> Constraint = forall x in @[Int] where x > 0 { $V(x) <== 10 };",
+        "let g(students: [Student]) -> Constraint = forall s in students { $Assigned(s) === 1 };",
+        "let h(numbers: [Int]) -> Constraint = forall x in numbers where x > 0 { $V(x) <== 10 };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -525,9 +613,9 @@ fn let_statement_with_explicit_type_casts() {
 fn let_statement_realistic_linexpr_examples() {
     let cases = vec![
         // Sum with cardinality multiplier
-        "let f(s: Student) -> LinExpr = |@[Week]| * $V(s);",
+        "let f(s: Student, weeks: [Week]) -> LinExpr = |weeks| * $V(s);",
         // Weighted sum
-        "let g() -> LinExpr = sum s in @[Student] { s.weight * $Assigned(s) };",
+        "let g(students: [Student]) -> LinExpr = sum s in students { s.weight * $Assigned(s) };",
         // Conditional expression
         "let h(s: Student) -> LinExpr = if s.priority > 5 { 10 * $V(s) } else { $V(s) };",
         // Complex arithmetic with function calls
@@ -543,13 +631,13 @@ fn let_statement_realistic_linexpr_examples() {
 fn let_statement_realistic_constraint_examples() {
     let cases = vec![
         // Forall with sum constraint
-        "let f() -> Constraint = forall w in @[Week] { sum s in @[Student] { $Assigned(s, w) } <== 10 };",
+        "let f(weeks: [Week], students: [Student]) -> Constraint = forall w in weeks { sum s in students { $Assigned(s, w) } <== 10 };",
         // Conjunction of constraints
         "let g(s: Student) -> Constraint = $V1(s) >== 0 and $V1(s) <== s.max_value;",
         // Nested forall
-        "let h() -> Constraint = forall s in @[Student] { forall w in @[Week] { $InWeek(s, w) <== 1 } };",
+        "let h(students: [Student], weeks: [Week]) -> Constraint = forall s in students { forall w in weeks { $InWeek(s, w) <== 1 } };",
         // Conditional constraint
-        "let i(r: Room) -> Constraint = if r.available { sum s in @[Student] { $InRoom(s, r) } <== r.capacity } else { sum s in @[Student] { $InRoom(s, r) } === 0 };",
+        "let i(r: Room, students: [Student]) -> Constraint = if r.available { sum s in students { $InRoom(s, r) } <== r.capacity } else { sum s in students { $InRoom(s, r) } === 0 };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -578,7 +666,7 @@ fn let_statement_accepts_type_mismatches() {
         "let k() -> Int = undefined_function();", // function doesn't exist
         // Type mismatches in operations
         "let l() -> Int = 5 + true;",               // Int + Bool
-        "let m() -> LinExpr = $V() union [1, 2];",  // LinExpr union List
+        "let m() -> LinExpr = $V() + [1, 2];",      // LinExpr + List
         "let n() -> Bool = if 5 { x } else { y };", // Int as condition
     ];
     for case in cases {
@@ -673,7 +761,6 @@ fn let_statement_rejects_invalid_parameter_syntax() {
         "let f(x) -> LinExpr = 5;",                  // missing type annotation
         "let f(: Student) -> LinExpr = 5;",          // missing parameter name
         "let f(x Student) -> LinExpr = 5;",          // missing colon
-        "let f(x: Student, ) -> LinExpr = 5;",       // trailing comma
         "let f(x: Student y: Week) -> LinExpr = 5;", // missing comma
     ];
     for case in cases {
@@ -683,6 +770,23 @@ fn let_statement_rejects_invalid_parameter_syntax() {
             "Should reject '{}' (invalid parameter syntax): {:?}",
             case,
             result
+        );
+    }
+}
+
+#[test]
+fn let_statement_accepts_trailing_comma_in_params() {
+    let cases = vec![
+        "let f(x: Student, ) -> LinExpr = 5;", // trailing comma is now allowed
+        "let f(x: Student, y: Week, ) -> Int = 5;", // trailing comma with multiple params
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(
+            result.is_ok(),
+            "Should accept '{}' (trailing comma): {:?}",
+            case,
+            result.err()
         );
     }
 }

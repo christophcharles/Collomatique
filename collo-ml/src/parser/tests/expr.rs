@@ -21,13 +21,18 @@ use super::*;
 // Expression test submodules
 mod aggregations;
 mod arithmetic;
+mod as_sum_types;
 mod cardinality;
 mod collections;
 mod comparisons;
 mod complex;
 mod control_flow;
+mod folds;
 mod let_expr;
 mod literals;
 mod logical;
+mod match_expr;
+mod panic;
 mod semantic_invalid;
+mod tuples;
 mod type_annotations;

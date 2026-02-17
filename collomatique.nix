@@ -12,23 +12,32 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    clippy,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
     version = "0.1.0";
 
-    src = [ ./. ];
-
-    cargoLock = {
-        lockFile = ./Cargo.lock;
+    src = lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+            let
+                baseName = baseNameOf path;
+            in
+            # Exclude .git directory and target directory
+            !(baseName == ".git" && type == "directory") &&
+            !(baseName == "target" && type == "directory");
     };
+
+    cargoHash = "sha256-AKv3TFT0J+CGUSn/Qv/YZ5nbPO72WSmj+jWJAGiL7Z0=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
         gettext
         pkg-config
         wrapGAppsHook4
-        cbc # We need it for tests
+        cbc # We need it for tests
+        clippy
         python3
     ];
 

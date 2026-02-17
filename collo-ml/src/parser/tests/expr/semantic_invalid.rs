@@ -14,14 +14,14 @@ fn semantic_invalid_type_mismatches() {
     // Parser accepts these; semantics will reject them
     let cases = vec![
         // Operations on incompatible types (no coercion)
-        "true + false",     // Bool + Bool
-        "[1, 2] * [3, 4]",  // List * List
-        "true union false", // Bool union Bool (not sets)
+        "true + false",    // Bool + Bool
+        "[1, 2] * [3, 4]", // List * List
+        "true + false",    // Bool + Bool (not sets)
         // Wrong types in aggregations
         "sum x in 5 { x }",       // 5 is not a collection
         "forall x in true { x }", // true is not a collection
         // Type mismatches with variables
-        "$V() union [1, 2]", // LinExpr union List
+        "$V() + [1, 2]",     // LinExpr + List
         "[1, 2] === [3, 4]", // List === List (not LinExpr)
     ];
     for case in cases {
@@ -81,10 +81,10 @@ fn semantic_invalid_undefined_references() {
 fn semantic_invalid_scope_violations() {
     // Parser doesn't check variable scope
     let cases = vec![
-        "x + y",                  // x and y not in scope
-        "$V(x)",                  // x not in scope
-        "sum x in list { y }",    // y not in scope (x is)
-        "forall x in @[X] { y }", // y not in scope (x is)
+        "x + y",                    // x and y not in scope
+        "$V(x)",                    // x not in scope
+        "sum x in list { y }",      // y not in scope (x is)
+        "forall x in x_list { y }", // y not in scope (x is)
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

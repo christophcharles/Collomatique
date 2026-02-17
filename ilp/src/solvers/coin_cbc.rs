@@ -9,7 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver, SolverWithTimeLimit, TimeLimitSolution};
-use crate::{linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData};
+use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// Coin-cbc solver
 ///
@@ -37,7 +37,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSol
 
 struct CbcModel<V: UsableData> {
     model: coin_cbc::Model,
-    cols: std::collections::BTreeMap<V, coin_cbc::Col>,
+    cols: std::collections::HashMap<V, coin_cbc::Col>,
 }
 
 impl Default for CbcSolver {
@@ -80,10 +80,10 @@ impl CbcSolver {
         // we block output directly
         let stdout_gag = gag::Gag::stdout();
         // We allow for errors in case this is run in multiple threads
-        if !self.disable_logging {
-            if let Ok(gag) = stdout_gag {
-                drop(gag);
-            }
+        if !self.disable_logging
+            && let Ok(gag) = stdout_gag
+        {
+            drop(gag);
         }
 
         let mut cbc_model = self.build_model(problem);
@@ -107,11 +107,11 @@ impl CbcSolver {
         problem: &Problem<V, C, P>,
     ) -> CbcModel<V> {
         use coin_cbc::Model;
-        use std::collections::BTreeMap;
+        use std::collections::HashMap;
 
         let mut model = Model::default();
 
-        let cols: BTreeMap<_, _> = problem
+        let cols: HashMap<_, _> = problem
             .get_variables()
             .iter()
             .map(|(var, desc)| {
@@ -138,15 +138,15 @@ impl CbcSolver {
         for (constraint, _desc) in problem.get_constraints() {
             let row = model.add_row();
             for (v, w) in constraint.coefficients() {
-                let col = cols[&v];
+                let col = cols[v];
                 model.set_weight(row, col, w);
             }
             match constraint.get_symbol() {
                 EqSymbol::Equals => {
-                    model.set_row_equal(row, (-constraint.get_constant()).into());
+                    model.set_row_equal(row, -constraint.get_constant());
                 }
                 EqSymbol::LessThan => {
-                    model.set_row_upper(row, (-constraint.get_constant()).into());
+                    model.set_row_upper(row, -constraint.get_constant());
                 }
             }
         }
@@ -178,10 +178,10 @@ impl CbcSolver {
         }
     }
 
-    fn reconstruct_config<'a, 'b, 'c, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
+    fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
         problem: &'a Problem<V, C, P>,
-        sol: &'b coin_cbc::Solution,
-        cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
+        sol: &coin_cbc::Solution,
+        cols: &std::collections::HashMap<V, coin_cbc::Col>,
     ) -> TimeLimitSolution<'a, V, C, P> {
         let raw_model = sol.raw();
 
@@ -197,7 +197,7 @@ impl CbcSolver {
                 return TimeLimitSolution {
                     config: None,
                     time_limit_reached,
-                }
+                };
             }
         };
 

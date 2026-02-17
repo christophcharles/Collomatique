@@ -166,8 +166,9 @@ impl Component for Display {
                 self.colloscope = colloscope;
 
                 self.update_display_issue();
-                self.rebuild_columns();
+                self.clear_columns();
                 self.update_view_wrapper(sender);
+                self.build_columns();
             }
             DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
                 sender
@@ -193,8 +194,8 @@ impl Display {
         } else if self
             .slots
             .subject_map
-            .iter()
-            .map(|(_id, subject_slots)| subject_slots.ordered_slots.len())
+            .values()
+            .map(|subject_slots| subject_slots.ordered_slots.len())
             .sum::<usize>()
             == 0
         {
@@ -204,8 +205,11 @@ impl Display {
         };
     }
 
-    fn rebuild_columns(&mut self) {
+    fn clear_columns(&mut self) {
         self.column_view.clear_columns();
+    }
+
+    fn build_columns(&mut self) {
         self.column_view.append_column(SubjectColumn {});
         self.column_view.append_column(TeacherColumn {});
         self.column_view.append_column(DateTimeColumn {});
@@ -270,8 +274,8 @@ impl Display {
                             slots: collo_slot
                                 .interrogations
                                 .iter()
-                                .map(|interrogation_opt| match interrogation_opt {
-                                    Some(interrogation) => Some(
+                                .map(|interrogation_opt| {
+                                    interrogation_opt.as_ref().map(|interrogation| {
                                         interrogation
                                             .assigned_groups
                                             .iter()
@@ -280,18 +284,17 @@ impl Display {
                                                     *num,
                                                     match group_list {
                                                         Some(list) => list
-                                                            .prefilled_groups
-                                                            .groups
+                                                            .params
+                                                            .group_names
                                                             .get(*num as usize)
-                                                            .map(|group| group.name.clone())
+                                                            .cloned()
                                                             .flatten(),
                                                         None => None,
                                                     },
                                                 )
                                             })
-                                            .collect(),
-                                    ),
-                                    None => None,
+                                            .collect()
+                                    })
                                 })
                                 .collect(),
                         },

@@ -76,7 +76,7 @@ pub struct SubjectInterrogationParameters {
     ///   groups at the same time can represent this situation.
     pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
     /// Duration of an interrogation in minutes
-    pub duration: collomatique_time::NonZeroDurationInMinutes,
+    pub duration: collomatique_time::NonZeroMinutes,
     /// This is useful when we try to limit or regulate
     /// the number of interrogations a student has in a week.
     ///
@@ -221,7 +221,7 @@ impl Default for SubjectInterrogationParameters {
         SubjectInterrogationParameters {
             students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
             groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
-            duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+            duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
             take_duration_into_account: true,
             periodicity: SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks: NonZeroU32::new(2).unwrap(),

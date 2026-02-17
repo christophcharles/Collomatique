@@ -17,7 +17,7 @@ impl PeriodId {
 
 impl From<&collomatique_state_colloscopes::PeriodId> for PeriodId {
     fn from(value: &collomatique_state_colloscopes::PeriodId) -> Self {
-        PeriodId { id: value.clone() }
+        PeriodId { id: *value }
     }
 }
 
@@ -29,7 +29,7 @@ impl From<collomatique_state_colloscopes::PeriodId> for PeriodId {
 
 impl From<&PeriodId> for collomatique_state_colloscopes::PeriodId {
     fn from(value: &PeriodId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 

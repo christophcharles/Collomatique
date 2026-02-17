@@ -10,18 +10,21 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 collomatique-ilp = { path = "../ilp" }
-collomatique-solver = { path = "../solver" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
-collomatique-solver-glue = { path = "../solver-glue" }
+collo-ml = { path = "../collo-ml" }
+collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
+collomatique-sqlite-state = { path = "../sqlite-state" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
-glib = "*"
 rustix = { version = "1.0", features = [ "pty" ] }
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "process"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 chrono.workspace = true
 anyhow.workspace = true
 non-empty-string.workspace = true
+portable-pty = "0.9"
+libc = "*"

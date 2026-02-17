@@ -10,9 +10,9 @@ nix-build
 ```
 Et `nix-run` pour exécuter.
 
-Sous Ubuntu (25.04 et compatibles) :
+Sous Ubuntu (testé sur 25.11) :
 ```
-sudo apt install libglib2.0-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libgraphene-1.0-dev libgtk-4-dev libadwaita-1-dev coinor-libcbc-dev libpython3-dev
+sudo apt install build-essential libglib2.0-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libgraphene-1.0-dev libgtk-4-dev libadwaita-1-dev coinor-libcbc-dev libpython3-dev
 cargo build
 cargo run
 ```

@@ -1,0 +1,41 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
+
+type GroupData = {
+    group_list_id: GroupListId,
+    group_num: GroupNum,
+    min_students: Int,
+    max_students: Int,
+};
+
+query all_groups(db: Db) -> [GroupData] = "
+SELECT
+    glgn.group_list_id AS group_list_id,
+    glgn.group_index AS group_num,
+    gl.students_per_group_min AS min_students,
+    gl.students_per_group_max AS max_students
+FROM group_list_group_names glgn
+JOIN group_lists gl ON gl.id = glgn.group_list_id
+";
+
+let count_students_in_group(db: Db, data: GroupData) -> LinExpr =
+    sum student_id in students_for_group_list(db, data.group_list_id) {
+        $StudentInGroup(student_id, data.group_list_id, data.group_num)
+    };
+
+/// Au moins `data.min_students` élèves dans le groupe `data.group_num` de la liste `data.group_list_id`
+let enforce_min_students_per_group(db: Db, data: GroupData) -> Constraint =
+    count_students_in_group(db, data) >==
+        data.min_students * $GroupHasStudents(db, data.group_list_id, data.group_num);
+
+/// Au plus `data.max_students` élèves dans le groupe `data.group_num` de la liste `data.group_list_id`
+let enforce_max_students_per_group(db: Db, data: GroupData) -> Constraint =
+    count_students_in_group(db, data) <== data.max_students;
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in all_groups(db) {
+        enforce_min_students_per_group(db, data) and
+        enforce_max_students_per_group(db, data)
+    };

@@ -1,0 +1,98 @@
+struct NoObjectEnv;
+
+use super::*;
+
+#[tokio::test]
+async fn constraint_list_return_type() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    enum Var {
+        V,
+        W,
+    }
+
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
+        }
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+            ])
+        }
+    }
+
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                "W" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "W".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::W)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let modules = BTreeMap::from([(
+        "list_constraints",
+        r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
+
+    pb_builder
+        .add_constraint("list_constraints", "constraints", vec![])
+        .expect("Should add constraint");
+
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(problem.get_inner_problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::V)),
+        Some(1.0),
+        "V should be 1"
+    );
+    assert_eq!(
+        sol.get(ProblemVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0"
+    );
+}

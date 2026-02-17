@@ -34,10 +34,10 @@ pub enum Op {
     Incompat(IncompatOp),
     /// Operation on group lists
     GroupList(GroupListOp),
-    /// Operation on rules
-    Rule(RuleOp),
     /// Operation on settings
     Settings(SettingsOp),
+    /// Operation on main script
+    MainScript(MainScriptOp),
     /// Operation on colloscopes
     Colloscope(ColloscopeOp),
 }
@@ -65,7 +65,7 @@ pub enum StudentOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeriodOp {
     /// Set the start of periods on a specific week
-    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    ChangeStartDate(Option<collomatique_time::WeekStart>),
     /// Add a new period at the beginning
     AddFront(Vec<periods::WeekDesc>),
     /// Add a period after an existing period
@@ -174,24 +174,10 @@ pub enum GroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list
-    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
+    /// Set filling strategy for a group list
+    SetFilling(GroupListId, group_lists::GroupListFilling),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
-}
-
-/// Rule operation enumeration
-///
-/// This is the list of all possible operations related to the
-/// rules we can do on a [Data]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuleOp {
-    /// Add a rule
-    Add(rules::Rule),
-    /// Remove an existing rule
-    Remove(RuleId),
-    /// Update a rule
-    Update(RuleId, rules::Rule),
 }
 
 /// Settings operation enumeration
@@ -202,6 +188,16 @@ pub enum RuleOp {
 pub enum SettingsOp {
     /// Update the settings
     Update(settings::Settings),
+}
+
+/// Main script operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// main script we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MainScriptOp {
+    /// Update the main script (None = use default, Some = custom script)
+    Update(Option<String>),
 }
 
 /// Colloscope operation enumeration
@@ -248,10 +244,10 @@ pub enum AnnotatedOp {
     Incompat(AnnotatedIncompatOp),
     /// Operation on group lists
     GroupList(AnnotatedGroupListOp),
-    /// Operation on rules
-    Rule(AnnotatedRuleOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
+    /// Operation on main script
+    MainScript(AnnotatedMainScriptOp),
     /// Operation on colloscopes
     Colloscope(AnnotatedColloscopeOp),
 }
@@ -310,15 +306,15 @@ impl From<AnnotatedGroupListOp> for AnnotatedOp {
     }
 }
 
-impl From<AnnotatedRuleOp> for AnnotatedOp {
-    fn from(value: AnnotatedRuleOp) -> Self {
-        AnnotatedOp::Rule(value)
-    }
-}
-
 impl From<AnnotatedSettingsOp> for AnnotatedOp {
     fn from(value: AnnotatedSettingsOp) -> Self {
         AnnotatedOp::Settings(value)
+    }
+}
+
+impl From<AnnotatedMainScriptOp> for AnnotatedOp {
+    fn from(value: AnnotatedMainScriptOp) -> Self {
+        AnnotatedOp::MainScript(value)
     }
 }
 
@@ -355,7 +351,7 @@ pub enum AnnotatedStudentOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedPeriodOp {
     /// Set the start of periods on a specific week
-    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    ChangeStartDate(Option<collomatique_time::WeekStart>),
     /// Add a new period at the beginning
     AddFront(PeriodId, Vec<periods::WeekDesc>),
     /// Add a period after an existing period
@@ -492,28 +488,10 @@ pub enum AnnotatedGroupListOp {
     Remove(GroupListId),
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
-    /// Change pre-fill for a group list
-    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
+    /// Set filling strategy for a group list
+    SetFilling(GroupListId, group_lists::GroupListFilling),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
-}
-
-/// Rule operation enumeration
-///
-/// Compared to [RuleOp], this is a annotated operation,
-/// meaning the operation has been annotated to contain
-/// all the necessary data to make it *reproducible*.
-///
-/// See [collomatique_state::history] for a complete discussion of the problem.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotatedRuleOp {
-    /// Add a rule
-    /// First parameter is the rule id for the new rule
-    Add(RuleId, rules::Rule),
-    /// Remove an existing rule
-    Remove(RuleId),
-    /// Update a rule
-    Update(RuleId, rules::Rule),
 }
 
 /// Settings operation enumeration
@@ -527,6 +505,19 @@ pub enum AnnotatedRuleOp {
 pub enum AnnotatedSettingsOp {
     /// Update the settings
     Update(settings::Settings),
+}
+
+/// Main script operation enumeration
+///
+/// Compared to [MainScriptOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedMainScriptOp {
+    /// Update the main script
+    Update(Option<String>),
 }
 
 /// Colloscope operation enumeration
@@ -599,12 +590,12 @@ impl AnnotatedOp {
                 let (op, id) = AnnotatedGroupListOp::annotate(group_list_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
-            Op::Rule(rule_op) => {
-                let (op, id) = AnnotatedRuleOp::annotate(rule_op, id_issuer);
-                (op.into(), id.map(|x| x.into()))
-            }
             Op::Settings(settings_op) => {
                 let op = AnnotatedSettingsOp::annotate(settings_op);
+                (op.into(), None)
+            }
+            Op::MainScript(main_script_op) => {
+                let op = AnnotatedMainScriptOp::annotate(main_script_op);
                 (op.into(), None)
             }
             Op::Colloscope(colloscope_op) => {
@@ -808,29 +799,14 @@ impl AnnotatedGroupListOp {
             GroupListOp::Update(group_list_id, params) => {
                 (AnnotatedGroupListOp::Update(group_list_id, params), None)
             }
-            GroupListOp::PreFill(group_list_id, map) => {
-                (AnnotatedGroupListOp::PreFill(group_list_id, map), None)
-            }
+            GroupListOp::SetFilling(group_list_id, filling) => (
+                AnnotatedGroupListOp::SetFilling(group_list_id, filling),
+                None,
+            ),
             GroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => (
                 AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id),
                 None,
             ),
-        }
-    }
-}
-
-impl AnnotatedRuleOp {
-    /// Used internally
-    ///
-    /// Annotates the subcategory of operations [RuleOp].
-    fn annotate(rule_op: RuleOp, id_issuer: &mut IdIssuer) -> (AnnotatedRuleOp, Option<RuleId>) {
-        match rule_op {
-            RuleOp::Add(rule) => {
-                let new_id = id_issuer.get_rule_id();
-                (AnnotatedRuleOp::Add(new_id, rule), Some(new_id))
-            }
-            RuleOp::Remove(rule_id) => (AnnotatedRuleOp::Remove(rule_id), None),
-            RuleOp::Update(rule_id, rule) => (AnnotatedRuleOp::Update(rule_id, rule), None),
         }
     }
 }
@@ -842,6 +818,17 @@ impl AnnotatedSettingsOp {
     fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
         match settings_op {
             SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
+        }
+    }
+}
+
+impl AnnotatedMainScriptOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [MainScriptOp].
+    fn annotate(main_script_op: MainScriptOp) -> AnnotatedMainScriptOp {
+        match main_script_op {
+            MainScriptOp::Update(script) => AnnotatedMainScriptOp::Update(script),
         }
     }
 }

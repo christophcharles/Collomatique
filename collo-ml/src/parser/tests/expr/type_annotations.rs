@@ -44,7 +44,7 @@ fn type_annotation_nested_list_types() {
 #[test]
 fn type_annotation_in_expressions() {
     let cases = vec![
-        "([] as [Int]) union [1, 2, 3]",
+        "([] as [Int]) + [1, 2, 3]",
         "[x for x in ([] as [Student])]",
         "|([] as [Int])|",
         "sum x in ([] as [Int]) { x }",

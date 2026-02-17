@@ -54,7 +54,7 @@ fn is_pascal_case(s: &str) -> bool {
         && !trimmed.contains('_')
 }
 
-fn to_snake_case(s: &str) -> String {
+pub fn to_snake_case(s: &str) -> String {
     // If the whole string is underscores
     if s.chars().all(|c| c == '_') {
         return s.to_string() + "name";
@@ -105,7 +105,7 @@ fn normalize_snake_case(s: &str) -> String {
     result
 }
 
-fn to_pascal_case(s: &str) -> String {
+pub fn to_pascal_case(s: &str) -> String {
     // If the whole string is underscores
     if s.chars().all(|c| c == '_') {
         return s.to_string() + "Name";

@@ -1,0 +1,111 @@
+struct NoObjectEnv;
+
+use super::*;
+
+#[tokio::test]
+async fn test_fix_forces_variable_values() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    enum Var {
+        V(i32), // Parameter from 0 to 9
+    }
+
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
+        }
+
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            match self {
+                Var::V(i) => {
+                    // Fix all variables to 0 except V(7)
+                    if *i != 7 { Some(0.0) } else { None }
+                }
+            }
+        }
+
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
+            // Only include variables that are not fixed
+            // In this case, only V(7) is not fixed
+            vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
+            vars
+        }
+    }
+
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 1 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 1,
+                            found: value.params.len(),
+                        });
+                    }
+                    let param = match &*value.params[0] {
+                        crate::eval::ExprValue::Int(i) => *i,
+                        _ => {
+                            return Err(VarConversionError::WrongParameterType {
+                                name: "V".into(),
+                                param: 0,
+                                expected: SimpleType::Int.into(),
+                            });
+                        }
+                    };
+                    Ok(Var::V(param))
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let modules = BTreeMap::from([(
+        "test_fix",
+        r#"
+            pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
+        "#,
+    )]);
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
+
+    assert!(
+        pb_builder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        pb_builder.get_warnings()
+    );
+
+    // Enforce exactly one V(i) must be 1
+    // Since all are fixed to 0 except V(7), only V(7) can be 1
+    pb_builder
+        .add_constraint("test_fix", "exactly_one", vec![])
+        .expect("Should add constraint");
+
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(problem.get_inner_problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    // V(7) should be 1, all others should be 0
+    for i in 0..10 {
+        let val = sol.get(ProblemVar::Base(Var::V(i))).unwrap_or(0.0);
+        if i == 7 {
+            assert_eq!(
+                val, 1.0,
+                "V(7) should be 1 (it's the only unfixed variable)"
+            );
+        } else {
+            assert_eq!(val, 0.0, "V({}) should be 0 (fixed by fix())", i);
+        }
+    }
+}

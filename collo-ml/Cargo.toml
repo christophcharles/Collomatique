@@ -5,7 +5,19 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-pest = "2.8"
+pest.workspace = true
 pest_derive = "2.8"
 thiserror.workspace = true
 collomatique-ilp = { path = "../ilp" }
+regex = "*"
+collo-ml-derive = { path = "../collo-ml-derive" }
+sha2 = "0.10"
+base64 = "0.22"
+lazy_static = "*"
+derivative = "*"
+ordered-float.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["sync", "rt-multi-thread"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

@@ -2,11 +2,11 @@ use adw::prelude::{
     ActionRowExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
 };
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 
@@ -16,7 +16,7 @@ pub struct Dialog {
     params: collomatique_state_colloscopes::SubjectParameters,
     has_interrogations: bool,
     interrogation_params: collomatique_state_colloscopes::SubjectInterrogationParameters,
-    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    global_first_week: Option<collomatique_time::WeekStart>,
     periodicity_panel: PeriodicityPanel,
     exactly_periodic_params: NonZeroU32,
     once_for_every_block_of_weeks_params: OnceForEveryBlockOfWeeksParams,
@@ -51,14 +51,14 @@ pub enum PeriodicityPanel {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        Option<collomatique_time::NaiveMondayDate>,
+        Option<collomatique_time::WeekStart>,
         collomatique_state_colloscopes::SubjectParameters,
     ),
     Cancel,
     Accept,
 
     UpdateName(String),
-    UpdateDuration(collomatique_time::NonZeroDurationInMinutes),
+    UpdateDuration(collomatique_time::NonZeroMinutes),
     UpdateDurationTakenIntoAccount(bool),
     UpdateHasInterrogations(bool),
     UpdateStudentsPerGroupMinimum(NonZeroU32),
@@ -368,7 +368,7 @@ impl SimpleComponent for Dialog {
                                 set_value: model.interrogation_params.duration.get().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let duration_u32 = widget.value() as u32;
-                                    let duration = collomatique_time::NonZeroDurationInMinutes::new(duration_u32).unwrap();
+                                    let duration = collomatique_time::NonZeroMinutes::new(duration_u32).unwrap();
                                     sender.input(DialogInput::UpdateDuration(duration));
                                 },
                             },
@@ -502,7 +502,7 @@ impl SimpleComponent for Dialog {
                                 #[track(model.should_redraw)]
                                 set_selected: Self::periodicity_enum_to_selected(model.periodicity_panel),
                                 connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected() as u32;
+                                    let selected = widget.selected();
                                     let periodicity_type = Dialog::periocity_selected_to_enum(selected);
                                     sender.input(DialogInput::UpdatePeriodicityType(periodicity_type));
                                 },
@@ -844,7 +844,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.students_per_group.start() == new_min {
                     return;
                 }
-                let old_max = self.interrogation_params.students_per_group.end().clone();
+                let old_max = *self.interrogation_params.students_per_group.end();
                 assert!(new_min <= old_max);
                 self.interrogation_params.students_per_group = new_min..=old_max;
             }
@@ -852,7 +852,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.students_per_group.end() == new_max {
                     return;
                 }
-                let old_min = self.interrogation_params.students_per_group.start().clone();
+                let old_min = *self.interrogation_params.students_per_group.start();
                 assert!(old_min <= new_max);
                 self.interrogation_params.students_per_group = old_min..=new_max;
             }
@@ -860,11 +860,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.groups_per_interrogation.start() == new_min {
                     return;
                 }
-                let old_max = self
-                    .interrogation_params
-                    .groups_per_interrogation
-                    .end()
-                    .clone();
+                let old_max = *self.interrogation_params.groups_per_interrogation.end();
                 assert!(new_min <= old_max);
                 self.interrogation_params.groups_per_interrogation = new_min..=old_max;
             }
@@ -872,11 +868,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.groups_per_interrogation.end() == new_max {
                     return;
                 }
-                let old_min = self
-                    .interrogation_params
-                    .groups_per_interrogation
-                    .start()
-                    .clone();
+                let old_min = *self.interrogation_params.groups_per_interrogation.start();
                 assert!(old_min <= new_max);
                 self.interrogation_params.groups_per_interrogation = old_min..=new_max;
             }
@@ -1011,7 +1003,7 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 pub struct BlockData {
-    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_available_week: u32,
     pub block_params: collomatique_state_colloscopes::subjects::WeekBlock,
 }
@@ -1078,7 +1070,7 @@ impl FactoryComponent for Block {
                 set_title: &self.generate_title_text(),
                 add_suffix = &gtk::Button {
                     add_css_class: "flat",
-                    set_icon_name: "edit-delete",
+                    set_icon_name: "edit-delete-symbolic",
                     connect_clicked[sender] => move |_widget| {
                         sender.input(BlockInput::DeleteBlock);
                     }

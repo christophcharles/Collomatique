@@ -1,14 +1,10 @@
-use std::collections::BTreeSet;
-
 use adw::prelude::{ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
-use gtk::prelude::{
-    AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
-};
+use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -31,8 +27,6 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
-    UsePrefillClicked,
-    EmptySealedClicked,
     UpdateStudentGroup(collomatique_state_colloscopes::StudentId, u32),
 }
 
@@ -103,30 +97,11 @@ impl SimpleComponent for Dialog {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                        gtk::Box {
-                            set_hexpand: true,
+                        #[local_ref]
+                        student_entries_widget -> adw::PreferencesGroup {
+                            set_title: "Affectation des élèves dans les groupes",
                             set_margin_all: 5,
-                            set_spacing: 10,
-                            set_orientation: gtk::Orientation::Vertical,
-                            gtk::Label {
-                                set_label: "<b>Options de préremplissage</b>",
-                                set_use_markup: true,
-                                set_halign: gtk::Align::Start,
-                            },
-                            #[name(btn_grid)]
-                            gtk::Grid {
-                                set_hexpand: true,
-                                set_column_homogeneous: true,
-                                set_row_homogeneous: true,
-                                set_column_spacing: 5,
-                                set_row_spacing: 5,
-                            },
-                            #[local_ref]
-                            student_entries_widget -> adw::PreferencesGroup {
-                                set_title: "Affectation des élèves dans les groupes",
-                                set_margin_all: 5,
-                                set_hexpand: true,
-                            },
+                            set_hexpand: true,
                         },
                     },
                     gtk::Label {
@@ -137,16 +112,6 @@ impl SimpleComponent for Dialog {
                     },
                 },
             }
-        },
-        use_prefill_btn = gtk::Button {
-            set_label: "Préremplir",
-            set_hexpand: true,
-            connect_clicked => DialogInput::UsePrefillClicked,
-        },
-        empty_sealed_btn = gtk::Button {
-            set_label: "Vider les groupes scellés",
-            set_hexpand: true,
-            connect_clicked => DialogInput::EmptySealedClicked,
         },
     }
 
@@ -178,13 +143,6 @@ impl SimpleComponent for Dialog {
         let student_entries_widget = model.student_entries.widget();
         let widgets = view_output!();
 
-        widgets
-            .btn_grid
-            .attach(&widgets.use_prefill_btn, 0, 0, 1, 1);
-        widgets
-            .btn_grid
-            .attach(&widgets.empty_sealed_btn, 1, 0, 1, 1);
-
         ComponentParts { model, widgets }
     }
 
@@ -212,14 +170,6 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(self.collo_group_list.clone()))
                     .unwrap();
             }
-            DialogInput::UsePrefillClicked => {
-                self.fill_with_prefill();
-                self.update_factory();
-            }
-            DialogInput::EmptySealedClicked => {
-                self.empty_sealed_groups();
-                self.update_factory();
-            }
             DialogInput::UpdateStudentGroup(student_id, selected) => {
                 match Self::selected_to_group_opt(selected) {
                     Some(group) => {
@@ -246,50 +196,13 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn fill_with_prefill(&mut self) {
-        for (group_num, prefilled_group) in
-            self.group_list.prefilled_groups.groups.iter().enumerate()
-        {
-            for student_id in &prefilled_group.students {
-                self.collo_group_list
-                    .groups_for_students
-                    .insert(*student_id, group_num as u32);
-            }
-        }
-    }
-
-    fn empty_sealed_groups(&mut self) {
-        let mut students_to_erase = BTreeSet::new();
-        for (student_id, group) in &self.collo_group_list.groups_for_students {
-            let Some(prefilled_group) =
-                self.group_list.prefilled_groups.groups.get(*group as usize)
-            else {
-                continue;
-            };
-            if !prefilled_group.sealed {
-                continue;
-            }
-
-            if prefilled_group.students.contains(student_id) {
-                continue;
-            }
-            students_to_erase.insert(*student_id);
-        }
-
-        for student_id in students_to_erase {
-            self.collo_group_list
-                .groups_for_students
-                .remove(&student_id);
-        }
-    }
-
     fn update_students_to_display(&mut self) {
         self.students_to_display = self
             .students
             .student_map
             .iter()
             .filter_map(|(id, student)| {
-                if self.group_list.params.excluded_students.contains(id) {
+                if self.group_list.filling.excluded_students().contains(id) {
                     return None;
                 }
                 Some((
@@ -307,28 +220,16 @@ impl Dialog {
     fn update_list_model(&mut self) {
         let group_names_list: Vec<_> = ["(Aucun groupe)".into()]
             .into_iter()
-            .chain(
-                (0..=*self.group_list.params.group_count.end())
-                    .into_iter()
-                    .map(
-                        |num| match self.group_list.prefilled_groups.groups.get(num as usize) {
-                            Some(prefilled_group) => {
-                                format!(
-                                    "Groupe {} : {}",
-                                    num + 1,
-                                    prefilled_group
-                                        .name
-                                        .as_ref()
-                                        .map(|x| x.clone().into_inner())
-                                        .unwrap_or_default()
-                                )
-                            }
-                            None => {
-                                format!("Groupe {}", num + 1)
-                            }
-                        },
-                    ),
-            )
+            .chain(self.group_list.params.group_names.iter().enumerate().map(
+                |(num, group_name)| match group_name {
+                    Some(name) => {
+                        format!("Groupe {} : {}", num + 1, name)
+                    }
+                    None => {
+                        format!("Groupe {}", num + 1)
+                    }
+                },
+            ))
             .collect();
         let group_names_list_ref: Vec<_> = group_names_list.iter().map(|x| x.as_str()).collect();
         self.list_model = gtk::StringList::new(&group_names_list_ref[..]);
@@ -349,7 +250,7 @@ impl Dialog {
                         selected_group: Self::group_opt_to_selected(group_opt),
                     }
                 }),
-            |data| StudentInput::UpdateData(data),
+            StudentInput::UpdateData,
         );
     }
 }
@@ -398,7 +299,7 @@ impl FactoryComponent for StudentEntry {
             #[track(self.should_redraw)]
             set_selected: self.data.selected_group,
             connect_selected_notify[sender] => move |widget| {
-                let selected = widget.selected() as u32;
+                let selected = widget.selected();
                 sender.input(StudentInput::StudentGroupChanged(selected));
             },
         },
