@@ -103,7 +103,7 @@ async fn to_expr_value_int_zero_to_bool() {
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(0).to_expr_value(&ast.global_env, &target);
-    assert_eq!(result, Ok(ExprValue::Bool(false)));
+    assert_eq!(result, Err(DbConversionError));
 }
 
 #[tokio::test]
@@ -112,7 +112,7 @@ async fn to_expr_value_int_one_to_bool() {
     let target = ExprType::simple(SimpleType::Bool);
     let result: Result<ExprValue<SqliteDatabaseConnection>, _> =
         DbValue::Int(1).to_expr_value(&ast.global_env, &target);
-    assert_eq!(result, Ok(ExprValue::Bool(true)));
+    assert_eq!(result, Err(DbConversionError));
 }
 
 #[tokio::test]
