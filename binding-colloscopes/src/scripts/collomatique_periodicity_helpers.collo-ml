@@ -1,6 +1,7 @@
 import "collomatique_db" as *;
 import "collomatique_vars" as *;
 import "collomatique_types" as *;
+import "collomatique_queries" as queries;
 
 type StudentSubjectSlotWeek = {
     slot_id: SlotId,
@@ -69,3 +70,19 @@ pub let enforce_min_interrogation_count(db: Db, student_id: StudentId, subject_i
 /// Au plus `target` colles en `subject_id` pour `student_id` entre les semaines `week_start` et `week_end`
 pub let enforce_max_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
     count_interrogations(db, student_id, subject_id, week_start, week_end) <== target;
+
+/// Séparation minimale de `Int(week_end) - Int(week_start)` entre 2 colles en `subject_id` pour `student_id` (semaines `week_start` à `week_end`)
+let enforce_min_separation_between(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek) -> Constraint =
+    count_interrogations(db, student_id, subject_id, week_start, week_end) <== 1;
+
+pub let enforce_min_separation(db: Db, student_id: StudentId, subject_id: SubjectId, sep: Int) -> Constraint =
+    if sep <= 0 {
+        0 === 0 // Trivial constraint
+    } else {
+        forall week_bounds in roll_weeks(GlobalWeek(0), queries::last_global_week(db), sep-1) {
+            enforce_min_separation_between(db, student_id, subject_id, week_bounds.0, week_bounds.1)
+        }
+    };
+
+pub let roll_weeks(week_start: GlobalWeek, week_end: GlobalWeek, window: Int) -> [(GlobalWeek, GlobalWeek)] =
+    [(GlobalWeek(week), GlobalWeek(week+window)) for week in [Int(week_start)..(Int(week_end) + 1)] where week+window <= Int(week_end)];
