@@ -64,7 +64,7 @@ async fn forall_variable_accessible_in_body() {
 #[tokio::test]
 async fn forall_variable_not_accessible_outside() {
     let input = r#"
-        pub let f(students: [Int]) -> Int = forall s in students { 0 <== 1 } and s;
+        pub let f(students: [Int]) -> Int = forall s in students { trivial } and s;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
 
@@ -85,7 +85,7 @@ async fn nested_forall_with_different_variables() {
         pub let f(students: [Int]) -> Constraint =
             forall s1 in students {
                 forall s2 in students {
-                    0 <== 1
+                    trivial
                 }
             };
     "#;
@@ -98,7 +98,7 @@ async fn nested_forall_with_different_variables() {
 async fn forall_variable_shadows_parameter() {
     let input = r#"
         pub let f(s: Int, students: [Int]) -> Constraint =
-            forall s in students { 0 <== 1 };
+            forall s in students { trivial };
     "#;
     let (_, errors, warnings) = analyze(input, HashMap::new()).await;
 
@@ -123,7 +123,7 @@ async fn forall_variable_shadows_parameter() {
 async fn forall_where_clause_can_access_variable() {
     let input = r#"
         pub let f(students: [{age: Int}]) -> Constraint =
-            forall s in students where s.age > 18 { 0 <== 1 };
+            forall s in students where s.age > 18 { trivial };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
 
@@ -294,7 +294,7 @@ async fn nested_forall_shadows_outer_variable() {
         pub let f(students: [Int]) -> Constraint =
             forall s in students {
                 forall s in students {
-                    0 <== 1
+                    trivial
                 }
             };
     "#;

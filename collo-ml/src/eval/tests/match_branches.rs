@@ -761,7 +761,7 @@ async fn match_returning_constraint() {
     let input = r#"
         pub let f(x: Int | Bool) -> Constraint = match x {
             i as Int { $V(LinExpr(i)) === 0 }
-            b as Bool { if b { 0 === 0 } else { 1 === 0 } }
+            b as Bool { if b { trivial } else { 1 === 0 } }
         };
     "#;
 
@@ -798,10 +798,7 @@ async fn match_returning_constraint() {
 
     match result_bool_true {
         ExprValue::Constraint(constraints) => {
-            assert_eq!(constraints.len(), 1);
-            let constraints = strip_origins(&constraints);
-            let expected = LinExpr::constant(0.).eq(&LinExpr::constant(0.));
-            assert!(constraints.contains(&expected));
+            assert_eq!(constraints.len(), 0);
         }
         _ => panic!("Expected Constraint"),
     }
@@ -814,7 +811,7 @@ async fn match_complex_type_dispatch() {
     let input = r#"
         pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
             i as Int { $V(LinExpr(i)) === 0 }
-            b as Bool { if b { 0 === 0 } else { 1 === 0 } }
+            b as Bool { if b { trivial } else { 1 === 0 } }
             lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;

@@ -77,7 +77,7 @@ let enforce_min_separation_between(db: Db, student_id: StudentId, subject_id: Su
 
 pub let enforce_min_separation(db: Db, student_id: StudentId, subject_id: SubjectId, sep: Int) -> Constraint =
     if sep <= 0 {
-        0 === 0 // Trivial constraint
+        trivial
     } else {
         forall week_bounds in roll_weeks(GlobalWeek(0), queries::last_global_week(db), sep-1) {
             enforce_min_separation_between(db, student_id, subject_id, week_bounds.0, week_bounds.1)

@@ -83,7 +83,7 @@ async fn direct_recursion_countdown() {
 async fn direct_recursion_constraint_function() {
     let input = r#"
         pub let recursive_constraint(n: Int) -> Constraint =
-            if n == 0 { 0 === 0 } else { n >== 0 and recursive_constraint(n - 1) };
+            if n == 0 { trivial } else { n >== 0 and recursive_constraint(n - 1) };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
     assert!(

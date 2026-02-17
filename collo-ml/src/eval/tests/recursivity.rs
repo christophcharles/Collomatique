@@ -206,7 +206,7 @@ async fn direct_recursion_fibonacci() {
 async fn direct_recursion_constraint_function() {
     let input = r#"
         pub let recursive_constraint(n: Int) -> Constraint =
-            if n == 0 { 0 === 0 } else { n >== 0 and recursive_constraint(n - 1) };
+            if n == 0 { trivial } else { n >== 0 and recursive_constraint(n - 1) };
     "#;
 
     let checked_ast =
@@ -214,7 +214,7 @@ async fn direct_recursion_constraint_function() {
             .await
             .expect("Should compile");
 
-    // recursive_constraint(3) should produce constraints: 3 >= 0 and 2 >= 0 and 1 >= 0 and 0 == 0
+    // recursive_constraint(3) should produce constraints: 3 >= 0 and 2 >= 0 and 1 >= 0 and trivial
     let result = checked_ast
         .eval_fn("main", "recursive_constraint", vec![ExprValue::Int(3)])
         .await
@@ -222,8 +222,8 @@ async fn direct_recursion_constraint_function() {
 
     match result {
         ExprValue::Constraint(constraints) => {
-            // Should have 4 constraints: 0===0, 1>=0, 2>=0, 3>=0
-            assert_eq!(constraints.len(), 4);
+            // Should have 3 constraints: 1>=0, 2>=0, 3>=0 (trivial adds 0)
+            assert_eq!(constraints.len(), 3);
         }
         _ => panic!("Expected Constraint"),
     }
