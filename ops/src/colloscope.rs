@@ -1,3 +1,5 @@
+use collomatique_state_colloscopes::colloscopes::{ColloscopeGroupList, ColloscopeInterrogation};
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,6 +28,8 @@ pub enum ColloscopeUpdateOp {
         usize,
         collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
     ),
+    EraseColloscope,
+    EraseGroupLists,
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -180,6 +184,57 @@ impl ColloscopeUpdateOp {
 
                 Ok(())
             }
+            Self::EraseColloscope => {
+                let current = data.get_data().get_inner_data().colloscope.clone();
+                for (period_id, period) in current.period_map.iter() {
+                    for (slot_id, slot) in period.slot_map.iter() {
+                        for (week_in_period, interrogation) in
+                            slot.interrogations.iter().enumerate()
+                        {
+                            if interrogation.is_none() {
+                                continue;
+                            }
+                            let result = data
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Colloscope(
+                                        collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
+                                            *period_id,
+                                            *slot_id,
+                                            week_in_period,
+                                            ColloscopeInterrogation::default(),
+                                        ),
+                                    ),
+                                    self.get_desc(),
+                                )
+                                .expect("No error possible for erasing");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+            Self::EraseGroupLists => {
+                let current = data.get_data().get_inner_data().colloscope.clone();
+                for (group_list_id, _group_list) in current.group_lists.iter() {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Colloscope(
+                                collomatique_state_colloscopes::ColloscopeOp::UpdateGroupList(
+                                    *group_list_id,
+                                    ColloscopeGroupList::default(),
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("No error possible for erasing");
+
+                    assert!(result.is_none());
+                }
+
+                Ok(())
+            }
         }
     }
 
@@ -192,6 +247,10 @@ impl ColloscopeUpdateOp {
                 }
                 ColloscopeUpdateOp::UpdateColloscopeInterrogation(_id, _slot, _week, _int) => {
                     "Mettre à jour une interrogation du colloscope".into()
+                }
+                ColloscopeUpdateOp::EraseColloscope => "Effacer le colloscope".into(),
+                ColloscopeUpdateOp::EraseGroupLists => {
+                    "Effacer les listes de groupes automatiques".into()
                 }
             },
         )

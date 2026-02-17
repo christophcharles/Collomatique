@@ -19,6 +19,31 @@ pub struct Colloscope {
 }
 
 impl Colloscope {
+    pub fn is_empty(&self) -> bool {
+        for (_period_id, period) in self.period_map.iter() {
+            for (_slot_id, slot) in period.slot_map.iter() {
+                for (_week_in_period, interrogation) in slot.interrogations.iter().enumerate() {
+                    let Some(int) = interrogation else {
+                        continue;
+                    };
+                    if !int.assigned_groups.is_empty() {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    pub fn are_group_lists_empty(&self) -> bool {
+        for (_group_list_id, group_list) in self.group_lists.iter() {
+            if !group_list.is_empty() {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Builds an empty colloscope compatible with the given parameters
     ///
     /// The function might panic if the parameters do not satisfy parameters invariants
