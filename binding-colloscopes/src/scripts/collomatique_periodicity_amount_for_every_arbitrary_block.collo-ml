@@ -1,0 +1,74 @@
+import "collomatique_db" as *;
+import "collomatique_types" as *;
+import "collomatique_periodicity_helpers" as helpers;
+
+type ArbitraryBlockData = {
+    subject_id: SubjectId,
+    student_id: ?StudentId,
+    first_week: ?GlobalWeek | String | Bool,
+    last_week: ?GlobalWeek | String | Bool,
+    count_min: ?Int,
+    count_max: ?Int,
+};
+
+type AfabSeparationData = {
+    subject_id: SubjectId,
+    student_id: StudentId,
+    min_sep: ?Int,
+};
+
+query subjects_students_arbitrary_blocks(db: Db) -> [ArbitraryBlockData] = "
+WITH RECURSIVE
+block_bounds(subject_id, block_index, first_week, last_week) AS (
+    SELECT pwb.subject_id, pwb.block_index,
+        pwb.delay_in_weeks,
+        pwb.delay_in_weeks + pwb.size_in_weeks - 1
+    FROM periodicity_week_blocks pwb
+    WHERE pwb.block_index = 0
+    UNION ALL
+    SELECT pwb.subject_id, pwb.block_index,
+        bb.last_week + 1 + pwb.delay_in_weeks,
+        bb.last_week + 1 + pwb.delay_in_weeks + pwb.size_in_weeks - 1
+    FROM block_bounds bb
+    JOIN periodicity_week_blocks pwb
+        ON pwb.subject_id = bb.subject_id
+        AND pwb.block_index = bb.block_index + 1
+)
+SELECT DISTINCT
+    bb.subject_id, a.student_id,
+    bb.first_week, bb.last_week,
+    pwb.interrogation_count_min AS count_min,
+    pwb.interrogation_count_max AS count_max
+FROM block_bounds bb
+JOIN periodicity_week_blocks pwb
+    ON pwb.subject_id = bb.subject_id AND pwb.block_index = bb.block_index
+JOIN assignments a ON a.subject_id = bb.subject_id
+";
+
+query subjects_students_afab_separation(db: Db) -> [AfabSeparationData] = "
+SELECT DISTINCT sip.subject_id, a.student_id,
+       sip.afab_minimum_week_separation AS min_sep
+FROM subject_interrogation_params sip
+JOIN assignments a ON a.subject_id = sip.subject_id
+WHERE sip.afab_minimum_week_separation IS NOT NULL
+";
+
+let enforce_block_count(db: Db, data: ArbitraryBlockData) -> Constraint =
+    let min = data.count_min cast! Int {
+        let max = data.count_max cast! Int {
+            if min == max {
+                helpers::enforce_exact_interrogation_count(db, data.student_id cast! StudentId, data.subject_id, data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, min)
+            } else {
+                helpers::enforce_min_interrogation_count(db, data.student_id cast! StudentId, data.subject_id, data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, min) and
+                helpers::enforce_max_interrogation_count(db, data.student_id cast! StudentId, data.subject_id, data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, max)
+            }
+        }
+    };
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in subjects_students_arbitrary_blocks(db) {
+        enforce_block_count(db, data)
+    } and
+    forall data in subjects_students_afab_separation(db) {
+        helpers::enforce_min_separation(db, data.student_id, data.subject_id, data.min_sep ?? 0)
+    };
