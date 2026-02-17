@@ -67,18 +67,17 @@ JOIN period_week_bounds lp_bounds ON lp_bounds.period_id = lp.id
 JOIN subject_interrogation_params sip ON sip.subject_id = pr.subject_id
 ";
 
-let count_weeks(first: GlobalWeek, last: GlobalWeek) -> Int =
-    Int(last) - Int(first) + 1;
-
-/// Il faut au moins autant de semaines (ici `count_weeks(data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek)`) que de longueur de périodicité (ici `data.periodicity`) pour une périodicité exacte (matière: `data.subject_id`, élève: `data.student_id`, à partir de la semaine `data.first_week`)
+/// Il faut au moins autant de semaines que de longueur de périodicité (ici `data.periodicity`) pour une périodicité exacte (matière: `data.subject_id`, élève: `data.student_id`, à partir de la semaine `data.first_week` jusqu'à `data.last_week`)
 let infeasible_periodicity(data: ExactlyPeriodicData) -> Constraint = infeasible;
 
 let enforce_exact_periodicity(db: Db, data: ExactlyPeriodicData) -> Constraint =
-    if count_weeks(data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek) <= data.periodicity cast! Int {
-        infeasible_periodicity(data)
-    } else {
-        forall week_bounds in helpers::roll_weeks(data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, data.periodicity cast! Int) {
-            helpers::enforce_exact_interrogation_count(db, data.student_id cast! StudentId, data.subject_id cast! SubjectId, week_bounds.0, week_bounds.1, 1)
+    let rolled_weeks = helpers::roll_weeks(db, data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, data.periodicity cast! Int) {
+        if |rolled_weeks| == 0 {
+            infeasible_periodicity(data)
+        } else {
+            forall week_bounds in rolled_weeks {
+                helpers::enforce_exact_interrogation_count(db, data.student_id cast! StudentId, data.subject_id cast! SubjectId, week_bounds.first_week cast! GlobalWeek, week_bounds.last_week cast! GlobalWeek, 1)
+            }
         }
     };
 
