@@ -101,6 +101,10 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique_periodicity_helpers.collo-ml"),
     ),
     (
+        "collomatique_periodicity_once_for_every_block_of_weeks",
+        include_str!("scripts/collomatique_periodicity_once_for_every_block_of_weeks.collo-ml"),
+    ),
+    (
         "collomatique_students_have_groups",
         include_str!("scripts/collomatique_students_have_groups.collo-ml"),
     ),

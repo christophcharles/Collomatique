@@ -11,6 +11,7 @@ import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicit
 import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
 import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
+import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
 import "collomatique_students_per_group" as students_per_group;
 
 pub let default_constraint(db: Db) -> Constraint =
@@ -25,6 +26,7 @@ pub let default_constraint(db: Db) -> Constraint =
     periodicity_amount_in_year::constraint(db) and
     periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and
+    periodicity_ofeb::constraint(db) and
     forbidden_groups::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
