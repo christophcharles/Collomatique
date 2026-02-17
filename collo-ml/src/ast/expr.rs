@@ -60,6 +60,8 @@ pub enum Expr {
 
     // Elements
     None,
+    Trivial,
+    Infeasible,
     Number(i32),
     Boolean(bool),
     StringLiteral(String),

@@ -1,0 +1,87 @@
+import "collomatique_db" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as queries;
+import "collomatique_periodicity_helpers" as helpers;
+
+type ExactlyPeriodicData = {
+    subject_id: ?SubjectId,
+    student_id: ?StudentId,
+    first_week: ?GlobalWeek | String | Bool,
+    last_week: ?GlobalWeek | String | Bool,
+    periodicity: ?Int,
+};
+
+query subjects_students_exactly_periodic(db: Db) -> [ExactlyPeriodicData] = "
+WITH
+ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+),
+period_week_bounds AS (
+    SELECT period_id,
+           MIN(global_week_number) AS first_global_week,
+           MAX(global_week_number) AS last_global_week
+    FROM ordered_weeks
+    GROUP BY period_id
+),
+active_enrolled AS (
+    SELECT a.subject_id, a.student_id, p.position, a.period_id
+    FROM assignments a
+    JOIN periods p ON p.id = a.period_id
+    JOIN subject_interrogation_params sip ON sip.subject_id = a.subject_id
+    WHERE sip.ep_periodicity_in_weeks IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM subject_excluded_periods sep
+          WHERE sep.subject_id = a.subject_id AND sep.period_id = a.period_id
+      )
+),
+numbered AS (
+    SELECT *,
+           position - ROW_NUMBER() OVER (PARTITION BY subject_id, student_id ORDER BY position) AS grp
+    FROM active_enrolled
+),
+period_runs AS (
+    SELECT subject_id, student_id, grp,
+           MIN(position) AS first_position,
+           MAX(position) AS last_position
+    FROM numbered
+    GROUP BY subject_id, student_id, grp
+)
+SELECT
+    pr.subject_id,
+    pr.student_id,
+    fp_bounds.first_global_week AS first_week,
+    lp_bounds.last_global_week AS last_week,
+    sip.ep_periodicity_in_weeks AS periodicity
+FROM period_runs pr
+JOIN periods fp ON fp.position = pr.first_position
+JOIN periods lp ON lp.position = pr.last_position
+JOIN period_week_bounds fp_bounds ON fp_bounds.period_id = fp.id
+JOIN period_week_bounds lp_bounds ON lp_bounds.period_id = lp.id
+JOIN subject_interrogation_params sip ON sip.subject_id = pr.subject_id
+";
+
+/// Il faut au moins autant de semaines que de longueur de périodicité (ici `data.periodicity`) pour une périodicité exacte (matière: `data.subject_id`, élève: `data.student_id`, à partir de la semaine `data.first_week` jusqu'à `data.last_week`)
+let infeasible_periodicity(data: ExactlyPeriodicData) -> Constraint = infeasible;
+
+let enforce_exact_periodicity(db: Db, data: ExactlyPeriodicData) -> Constraint =
+    let rolled_weeks = helpers::roll_weeks(db, data.first_week cast! GlobalWeek, data.last_week cast! GlobalWeek, data.periodicity cast! Int) {
+        if |rolled_weeks| == 0 {
+            infeasible_periodicity(data)
+        } else {
+            forall week_bounds in rolled_weeks {
+                helpers::enforce_exact_interrogation_count(db, data.student_id cast! StudentId, data.subject_id cast! SubjectId, week_bounds.first_week cast! GlobalWeek, week_bounds.last_week cast! GlobalWeek, 1)
+            }
+        }
+    };
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in subjects_students_exactly_periodic(db) {
+        enforce_exact_periodicity(db, data)
+    };

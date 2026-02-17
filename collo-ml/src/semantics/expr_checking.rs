@@ -162,6 +162,8 @@ impl LocalCheckEnv {
         match &expr.node {
             // ========== Literals ==========
             Expr::None => Some(SimpleType::None.into()),
+            Expr::Trivial => Some(SimpleType::Constraint.into()),
+            Expr::Infeasible => Some(SimpleType::Constraint.into()),
             Expr::Number(_) => Some(SimpleType::Int.into()),
             Expr::Boolean(_) => Some(SimpleType::Bool.into()),
             Expr::StringLiteral(_) => Some(SimpleType::String.into()),

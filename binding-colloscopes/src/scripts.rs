@@ -57,6 +57,10 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique_vars.collo-ml"),
     ),
     (
+        "collomatique_forbidden_groups",
+        include_str!("scripts/collomatique_forbidden_groups.collo-ml"),
+    ),
+    (
         "collomatique_group_count_per_interrogation",
         include_str!("scripts/collomatique_group_count_per_interrogation.collo-ml"),
     ),
@@ -79,6 +83,26 @@ pub const MODULES: &[(&str, &str)] = &[
     (
         "collomatique_one_interrogation_at_once",
         include_str!("scripts/collomatique_one_interrogation_at_once.collo-ml"),
+    ),
+    (
+        "collomatique_periodicity_amount_for_every_arbitrary_block",
+        include_str!("scripts/collomatique_periodicity_amount_for_every_arbitrary_block.collo-ml"),
+    ),
+    (
+        "collomatique_periodicity_amount_in_year",
+        include_str!("scripts/collomatique_periodicity_amount_in_year.collo-ml"),
+    ),
+    (
+        "collomatique_periodicity_exactly_periodic",
+        include_str!("scripts/collomatique_periodicity_exactly_periodic.collo-ml"),
+    ),
+    (
+        "collomatique_periodicity_helpers",
+        include_str!("scripts/collomatique_periodicity_helpers.collo-ml"),
+    ),
+    (
+        "collomatique_periodicity_once_for_every_block_of_weeks",
+        include_str!("scripts/collomatique_periodicity_once_for_every_block_of_weeks.collo-ml"),
     ),
     (
         "collomatique_students_have_groups",

@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn reify_constraint_function() {
     let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
+        pub let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $MyVar;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
@@ -20,7 +20,7 @@ async fn reify_constraint_function() {
 #[tokio::test]
 async fn reify_function_with_parameters() {
     let input = r#"
-        pub let constraint(s: Int) -> Constraint = 0 === 1;
+        pub let constraint(s: Int) -> Constraint = infeasible;
         reify constraint as $MyVar;
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
@@ -82,7 +82,7 @@ async fn reify_linexpr_coerces_to_constraint() {
 #[tokio::test]
 async fn duplicate_variable_name() {
     let input = r#"
-        pub let c1() -> Constraint = 0 === 1;
+        pub let c1() -> Constraint = infeasible;
         pub let c2() -> Constraint = 0 === 2;
         reify c1 as $MyVar;
         reify c2 as $MyVar;
@@ -103,7 +103,7 @@ async fn duplicate_variable_name() {
 #[tokio::test]
 async fn multiple_valid_reify_statements() {
     let input = r#"
-        pub let c1() -> Constraint = 0 === 1;
+        pub let c1() -> Constraint = infeasible;
         pub let c2() -> Constraint = 0 === 2;
         reify c1 as $Var1;
         reify c2 as $Var2;

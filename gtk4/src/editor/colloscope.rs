@@ -40,6 +40,8 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+    EraseColloscopeClicked,
+    EraseGroupListsClicked,
 
     ShowBlamedConstraints,
 }
@@ -217,6 +219,18 @@ impl Component for Colloscope {
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
                     gtk::Button {
+                        #[watch]
+                        set_sensitive: !model.colloscope.is_empty(),
+                        set_icon_name: "edit-delete-symbolic",
+                        add_css_class: "flat",
+                        set_tooltip_text: Some("Effacer le colloscope"),
+                        connect_clicked => ColloscopeInput::EraseColloscopeClicked,
+                    },
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                    },
+                    gtk::Button {
                         set_margin_start: 5,
                         add_css_class: "flat",
                         set_tooltip: "Afficher les erreurs du colloscope",
@@ -264,10 +278,15 @@ impl Component for Colloscope {
                             },
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
                                 #[watch]
                                 set_visible: model.has_success(),
                                 gtk::Image {
                                     set_icon_name: Some("emblem-ok-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "<i><small>Colloscope valide</small></i>",
+                                    set_use_markup: true,
                                 },
                             },
                             gtk::Box {
@@ -315,10 +334,6 @@ impl Component for Colloscope {
                             },
                         },
                     },
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                    },
                     gtk::Button {
                         add_css_class: "frame",
                         add_css_class: "accent",
@@ -347,11 +362,23 @@ impl Component for Colloscope {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_spacing: 10,
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
+                    gtk::Box {
                         set_margin_top: 10,
-                        set_label: "Groupes à répartir",
-                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_label: "Groupes à répartir",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                        },
+                        gtk::Button {
+                            #[watch]
+                            set_sensitive: !model.colloscope.are_group_lists_empty(),
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Effacer les listes de groupes"),
+                            connect_clicked => ColloscopeInput::EraseGroupListsClicked,
+                        },
                     },
                     gtk::ScrolledWindow {
                         set_hexpand: true,
@@ -597,6 +624,20 @@ impl Component for Colloscope {
                             week_in_period,
                             interrogation,
                         ),
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::EraseColloscopeClicked => {
+                sender
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::EraseColloscope,
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::EraseGroupListsClicked => {
+                sender
+                    .output(ColloscopeOutput::UpdateOp(
+                        ColloscopeUpdateOp::EraseGroupLists,
                     ))
                     .unwrap();
             }

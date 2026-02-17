@@ -45,8 +45,10 @@ ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char*
 // Note: Primitive type names (Int, Bool, LinExpr, etc.) are NOT reserved
 // and are handled as regular identifiers, then resolved in semantics.
 reserved_keyword = {
-    "import" |  // before "in"
-    "forall" |  // before "for"
+    "infeasible" |
+    "trivial" |
+    "import" |
+    "forall" |
     "query" |
     "false" |
     "reify" |
@@ -191,6 +193,8 @@ primary_expr = {
     string_literal |
     boolean |
     none |
+    trivial_constraint |
+    infeasible_constraint |
     number |
     neg |
     panic |
@@ -264,6 +268,8 @@ as_op = @{ "as" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
 none = @{ "none"  ~ !ident_char }
+trivial_constraint = @{ "trivial" ~ !ident_char }
+infeasible_constraint = @{ "infeasible" ~ !ident_char }
 number = @{ "-"? ~ ASCII_DIGIT+ }
 
 // ========== Test helpers ==========

@@ -1177,6 +1177,8 @@ impl Expr {
             Rule::string_literal => Self::from_string_literal(inner),
             Rule::boolean => Self::from_boolean(inner),
             Rule::none => Self::from_none(inner),
+            Rule::trivial_constraint => Ok(Expr::Trivial),
+            Rule::infeasible_constraint => Ok(Expr::Infeasible),
             Rule::neg => Self::from_neg(inner),
             Rule::panic => Self::from_panic(inner),
             Rule::struct_literal => Self::from_struct_literal(inner),

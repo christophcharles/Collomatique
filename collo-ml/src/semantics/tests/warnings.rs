@@ -61,7 +61,7 @@ async fn parameter_naming_convention_correct() {
 #[tokio::test]
 async fn variable_naming_convention_snake_case() {
     let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
+        pub let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $my_var;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
@@ -78,7 +78,7 @@ async fn variable_naming_convention_snake_case() {
 #[tokio::test]
 async fn variable_naming_convention_correct() {
     let input = r#"
-        pub let my_constraint() -> Constraint = 0 === 1;
+        pub let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $MyVar;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
@@ -163,7 +163,7 @@ async fn parameter_used_in_nested_expression() {
 
 #[tokio::test]
 async fn unused_forall_variable() {
-    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { 0 <== 1 };";
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { trivial };";
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
 
     assert!(
@@ -195,7 +195,7 @@ async fn no_warning_when_forall_variable_used() {
 async fn forall_variable_used_in_where_clause() {
     let input = r#"
         pub let f(students: [{age: Int}]) -> Constraint =
-            forall s in students where s.age > 18 { 0 <== 1 };
+            forall s in students where s.age > 18 { trivial };
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
 
@@ -367,7 +367,7 @@ async fn no_warning_when_private_function_called() {
 #[tokio::test]
 async fn function_used_in_reify() {
     let input = r#"
-        let my_constraint() -> Constraint = 0 === 1;
+        let my_constraint() -> Constraint = infeasible;
         reify my_constraint as $MyVar;
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
@@ -387,7 +387,7 @@ async fn function_used_in_reify() {
 async fn shadowing_parameter_with_forall() {
     let input = r#"
         pub let f(s: Int, students: [Int]) -> Constraint =
-            forall s in students { 0 <== 1 };
+            forall s in students { trivial };
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;
 
@@ -421,7 +421,7 @@ async fn shadowing_in_nested_forall() {
     let input = r#"
         pub let f(students: [Int]) -> Constraint =
             forall s in students {
-                forall s in students { 0 <== 1 }
+                forall s in students { trivial }
             };
     "#;
     let (_, _, warnings) = analyze(input, HashMap::new()).await;

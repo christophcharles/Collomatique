@@ -89,6 +89,10 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         use crate::ast::Expr;
         Ok(match &expr.node {
             Expr::None => Arc::new(ExprValue::None),
+            Expr::Trivial => Arc::new(ExprValue::Constraint(vec![])),
+            Expr::Infeasible => Arc::new(ExprValue::Constraint(vec![
+                LinExpr::constant(0.).eq(&LinExpr::constant(1.)).into(),
+            ])),
             Expr::Boolean(val) => Arc::new(ExprValue::Bool(*val)),
             Expr::Number(val) => Arc::new(ExprValue::Int(*val)),
             Expr::StringLiteral(val) => Arc::new(ExprValue::String(val.clone())),

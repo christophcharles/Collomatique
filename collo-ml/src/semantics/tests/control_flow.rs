@@ -131,7 +131,7 @@ async fn if_returning_bool() {
 
 #[tokio::test]
 async fn simple_forall() {
-    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { 0 <== 1 };";
+    let input = "pub let f(students: [Int]) -> Constraint = forall s in students { trivial };";
     let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Simple forall should work: {:?}", errors);
@@ -174,7 +174,7 @@ async fn forall_body_must_be_bool_or_constraint() {
 async fn forall_with_where_clause() {
     let input = r#"
         pub let f(students: [{age: Int}]) -> Constraint =
-            forall s in students where s.age > 18 { 0 <== 1 };
+            forall s in students where s.age > 18 { trivial };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
 
@@ -189,7 +189,7 @@ async fn forall_with_where_clause() {
 async fn forall_where_must_be_bool() {
     let input = r#"
         pub let f(students: [Int]) -> Constraint =
-            forall s in students where 5 { 0 <== 1 };
+            forall s in students where 5 { trivial };
     "#;
     let (_, errors, _) = analyze(input, HashMap::new()).await;
 
@@ -202,7 +202,7 @@ async fn nested_forall() {
         pub let f(students: [Int]) -> Constraint =
             forall s1 in students {
                 forall s2 in students {
-                    0 <== 1
+                    trivial
                 }
             };
     "#;
