@@ -76,8 +76,8 @@ pub let enforce_min_interrogation_count(db: Db, student_id: StudentId, subject_i
 pub let enforce_max_interrogation_count(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, target: Int) -> Constraint =
     count_interrogations(db, student_id, subject_id, week_start, week_end) <== target;
 
-/// Séparation minimale de `Int(week_end) - Int(week_start)` semaine(s) entre 2 colles en `subject_id` pour `student_id` (semaines `week_start` à `week_end`)
-let enforce_min_separation_between(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek) -> Constraint =
+/// Séparation minimale de `min_sep` semaine(s) entre 2 colles en `subject_id` pour `student_id` (semaines `week_start` à `week_end`)
+let enforce_min_separation_between(db: Db, student_id: StudentId, subject_id: SubjectId, week_start: GlobalWeek, week_end: GlobalWeek, min_sep: Int) -> Constraint =
     count_interrogations(db, student_id, subject_id, week_start, week_end) <== 1;
 
 pub let enforce_min_separation(db: Db, student_id: StudentId, subject_id: SubjectId, sep: Int) -> Constraint =
@@ -85,7 +85,7 @@ pub let enforce_min_separation(db: Db, student_id: StudentId, subject_id: Subjec
         trivial
     } else {
         forall week_bounds in roll_weeks(db, GlobalWeek(0), queries::last_global_week(db), sep) {
-            enforce_min_separation_between(db, student_id, subject_id, week_bounds.first_week cast! GlobalWeek, week_bounds.last_week cast! GlobalWeek)
+            enforce_min_separation_between(db, student_id, subject_id, week_bounds.first_week cast! GlobalWeek, week_bounds.last_week cast! GlobalWeek, sep)
         }
     };
 
