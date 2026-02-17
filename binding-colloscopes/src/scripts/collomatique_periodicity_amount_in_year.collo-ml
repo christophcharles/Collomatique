@@ -21,8 +21,16 @@ WHERE sip.aiy_count_min IS NOT NULL
 ";
 
 let enforce_amount_in_year(db: Db, data: AmountInYearData) -> Constraint =
-    helpers::enforce_min_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), data.count_min cast! Int) and
-    helpers::enforce_max_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), data.count_max cast! Int);
+    let min = data.count_min cast! Int {
+        let max = data.count_max cast! Int {
+            if min == max {
+                helpers::enforce_exact_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), min)
+            } else {
+                helpers::enforce_min_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), min) and
+                helpers::enforce_max_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), max)
+            }
+        }
+    };
 
 pub let constraint(db: Db) -> Constraint =
     forall data in subjects_students_amount_in_year(db) {
