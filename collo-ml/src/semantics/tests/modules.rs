@@ -2,8 +2,8 @@ use super::*;
 
 // ========== Basic Tests (no cross-module references) ==========
 
-#[test]
-fn two_simple_modules_no_crosstalk() {
+#[tokio::test]
+async fn two_simple_modules_no_crosstalk() {
     let mod_a = r#"
         pub let add(x: Int, y: Int) -> Int = x + y;
     "#;
@@ -11,11 +11,8 @@ fn two_simple_modules_no_crosstalk() {
         pub let multiply(x: Int, y: Int) -> Int = x * y;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -27,8 +24,8 @@ fn two_simple_modules_no_crosstalk() {
 
 // ========== Cross-Module Function Tests ==========
 
-#[test]
-fn module_b_uses_public_function_from_module_a() {
+#[tokio::test]
+async fn module_b_uses_public_function_from_module_a() {
     let mod_a = r#"
         pub let add(x: Int, y: Int) -> Int = x + y;
     "#;
@@ -37,11 +34,8 @@ fn module_b_uses_public_function_from_module_a() {
         pub let add_three(x: Int, y: Int, z: Int) -> Int = a::add(a::add(x, y), z);
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -51,8 +45,8 @@ fn module_b_uses_public_function_from_module_a() {
     );
 }
 
-#[test]
-fn module_b_uses_private_function_from_module_a_should_fail() {
+#[tokio::test]
+async fn module_b_uses_private_function_from_module_a_should_fail() {
     let mod_a = r#"
         let private_add(x: Int, y: Int) -> Int = x + y;
     "#;
@@ -61,11 +55,7 @@ fn module_b_uses_private_function_from_module_a_should_fail() {
         pub let use_private(x: Int, y: Int) -> Int = a::private_add(x, y);
     "#;
 
-    let (_, errors, _) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _) = analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -75,8 +65,8 @@ fn module_b_uses_private_function_from_module_a_should_fail() {
 
 // ========== Cross-Module Type Tests ==========
 
-#[test]
-fn module_b_uses_public_type_from_module_a() {
+#[tokio::test]
+async fn module_b_uses_public_type_from_module_a() {
     let mod_a = r#"
         pub type Point = { x: Int, y: Int };
     "#;
@@ -85,11 +75,8 @@ fn module_b_uses_public_type_from_module_a() {
         pub let origin() -> a::Point = a::Point { x: 0, y: 0 };
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -99,8 +86,8 @@ fn module_b_uses_public_type_from_module_a() {
     );
 }
 
-#[test]
-fn module_b_uses_private_type_from_module_a_should_fail() {
+#[tokio::test]
+async fn module_b_uses_private_type_from_module_a_should_fail() {
     let mod_a = r#"
         type PrivatePoint = { x: Int, y: Int };
     "#;
@@ -109,11 +96,7 @@ fn module_b_uses_private_type_from_module_a_should_fail() {
         pub let origin() -> a::PrivatePoint = { x: 0, y: 0 };
     "#;
 
-    let (_, errors, _) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _) = analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -123,8 +106,8 @@ fn module_b_uses_private_type_from_module_a_should_fail() {
 
 // ========== Cross-Module Variable Tests ==========
 
-#[test]
-fn module_b_uses_private_reified_variable_from_module_a_should_fail() {
+#[tokio::test]
+async fn module_b_uses_private_reified_variable_from_module_a_should_fail() {
     let mod_a = r#"
         let check_value(x: Int) -> Constraint = x === 42;
         reify check_value as $the_value;
@@ -134,11 +117,7 @@ fn module_b_uses_private_reified_variable_from_module_a_should_fail() {
         pub let use_private_var(x: Int) -> LinExpr = a::$the_value(x);
     "#;
 
-    let (_, errors, _) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _) = analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -148,8 +127,8 @@ fn module_b_uses_private_reified_variable_from_module_a_should_fail() {
 
 // ========== Type Resolution Tests ==========
 
-#[test]
-fn module_b_uses_public_type_in_function_definition() {
+#[tokio::test]
+async fn module_b_uses_public_type_in_function_definition() {
     let mod_a = r#"
         pub type MyInt = Int;
     "#;
@@ -158,11 +137,8 @@ fn module_b_uses_public_type_in_function_definition() {
         pub let identity(x: a::MyInt) -> a::MyInt = x;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -172,8 +148,8 @@ fn module_b_uses_public_type_in_function_definition() {
     );
 }
 
-#[test]
-fn module_b_uses_private_type_in_function_definition_should_fail() {
+#[tokio::test]
+async fn module_b_uses_private_type_in_function_definition_should_fail() {
     let mod_a = r#"
         type PrivateInt = Int;
     "#;
@@ -182,11 +158,7 @@ fn module_b_uses_private_type_in_function_definition_should_fail() {
         pub let identity(x: a::PrivateInt) -> a::PrivateInt = x;
     "#;
 
-    let (_, errors, _) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _) = analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -196,8 +168,8 @@ fn module_b_uses_private_type_in_function_definition_should_fail() {
 
 // ========== Import Tests ==========
 
-#[test]
-fn wildcard_import_uses_function() {
+#[tokio::test]
+async fn wildcard_import_uses_function() {
     let mod_a = r#"
         pub let add(x: Int, y: Int) -> Int = x + y;
     "#;
@@ -206,11 +178,8 @@ fn wildcard_import_uses_function() {
         pub let add_three(x: Int, y: Int, z: Int) -> Int = add(add(x, y), z);
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -220,8 +189,8 @@ fn wildcard_import_uses_function() {
     );
 }
 
-#[test]
-fn wildcard_import_conflict_should_fail() {
+#[tokio::test]
+async fn wildcard_import_conflict_should_fail() {
     let mod_a = r#"
         pub let duplicate_fn() -> Int = 1;
     "#;
@@ -230,11 +199,7 @@ fn wildcard_import_conflict_should_fail() {
         pub let duplicate_fn() -> Int = 2;
     "#;
 
-    let (_, errors, _) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _) = analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -242,8 +207,8 @@ fn wildcard_import_conflict_should_fail() {
     );
 }
 
-#[test]
-fn alias_shadowing_local_shadows_imported() {
+#[tokio::test]
+async fn alias_shadowing_local_shadows_imported() {
     // Module B imports A with alias, defines local function with same name as imported
     // Local should shadow imported
     let mod_a = r#"
@@ -256,18 +221,15 @@ fn alias_shadowing_local_shadows_imported() {
         pub let get_imported() -> Int = a::value();
     "#;
 
-    let (_, errors, _warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, _warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     // Note: there might be a warning for unused local function, which is fine
 }
 
-#[test]
-fn module_b_uses_public_reified_variable_from_module_a() {
+#[tokio::test]
+async fn module_b_uses_public_reified_variable_from_module_a() {
     let mod_a = r#"
         pub let is_valid(x: Int) -> Constraint = x >== 0;
         pub reify is_valid as $ValidityCheck;
@@ -277,11 +239,8 @@ fn module_b_uses_public_reified_variable_from_module_a() {
         pub let check_both(x: Int, y: Int) -> Constraint = a::$ValidityCheck(x) + a::$ValidityCheck(y) === 2;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -291,8 +250,8 @@ fn module_b_uses_public_reified_variable_from_module_a() {
     );
 }
 
-#[test]
-fn two_complex_modules_no_crosstalk() {
+#[tokio::test]
+async fn two_complex_modules_no_crosstalk() {
     let mod_a = r#"
         pub type Point = { x: Int, y: Int };
         pub let make_point(x: Int, y: Int) -> Point = Point { x: x, y: y };
@@ -308,11 +267,8 @@ fn two_complex_modules_no_crosstalk() {
         pub reify is_black as $BlackCheck;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -322,8 +278,8 @@ fn two_complex_modules_no_crosstalk() {
     );
 }
 
-#[test]
-fn opaque_type_chaining_with_private_intermediate_type() {
+#[tokio::test]
+async fn opaque_type_chaining_with_private_intermediate_type() {
     // Module A: private type MyType + public () -> MyType + public MyType -> Int
     // Module B: chains these functions - should pass even though type is private
     let mod_a = r#"
@@ -336,11 +292,8 @@ fn opaque_type_chaining_with_private_intermediate_type() {
         pub let get_value() -> Int = a::extract_value(a::make_my_type());
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -350,8 +303,8 @@ fn opaque_type_chaining_with_private_intermediate_type() {
     );
 }
 
-#[test]
-fn enum_variants_across_modules() {
+#[tokio::test]
+async fn enum_variants_across_modules() {
     let mod_a = r#"
         pub enum Option = Some { value: Int } | None;
     "#;
@@ -365,11 +318,8 @@ fn enum_variants_across_modules() {
         };
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -379,14 +329,14 @@ fn enum_variants_across_modules() {
     );
 }
 
-#[test]
-fn private_function_publicly_reified_no_unused_warning() {
+#[tokio::test]
+async fn private_function_publicly_reified_no_unused_warning() {
     let mod_a = r#"
         let private_constraint(x: Int) -> Constraint = x === 42;
         pub reify private_constraint as $PublicVar;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new(), HashMap::new());
+    let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -396,14 +346,14 @@ fn private_function_publicly_reified_no_unused_warning() {
     );
 }
 
-#[test]
-fn private_function_privately_reified_unused_warning() {
+#[tokio::test]
+async fn private_function_privately_reified_unused_warning() {
     let mod_a = r#"
         let private_constraint(x: Int) -> Constraint = x === 42;
         reify private_constraint as $private_var;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new(), HashMap::new());
+    let (_, errors, warnings) = analyze_multi(&[("mod_a", mod_a)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -420,8 +370,8 @@ fn private_function_privately_reified_unused_warning() {
     );
 }
 
-#[test]
-fn module_b_wraps_and_reifies_public_function_from_module_a() {
+#[tokio::test]
+async fn module_b_wraps_and_reifies_public_function_from_module_a() {
     let mod_a = r#"
         pub let check_value(x: Int) -> Constraint = x === 42;
     "#;
@@ -431,11 +381,8 @@ fn module_b_wraps_and_reifies_public_function_from_module_a() {
         pub reify local_check as $MyCheck;
     "#;
 
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    let (_, errors, warnings) =
+        analyze_multi(&[("mod_a", mod_a), ("mod_b", mod_b)], HashMap::new()).await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(
@@ -445,8 +392,8 @@ fn module_b_wraps_and_reifies_public_function_from_module_a() {
     );
 }
 
-#[test]
-fn three_module_chain_function_reify_use() {
+#[tokio::test]
+async fn three_module_chain_function_reify_use() {
     // Module A: defines constraint and reifies it
     // Module B: wraps A's constraint, reifies the wrapper
     // Module C: uses the reified variable from B
@@ -467,58 +414,8 @@ fn three_module_chain_function_reify_use() {
     let (_, errors, warnings) = analyze_multi(
         &[("mod_a", mod_a), ("mod_b", mod_b), ("mod_c", mod_c)],
         HashMap::new(),
-        HashMap::new(),
-    );
-
-    assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
-    assert!(
-        warnings.is_empty(),
-        "Should have no warnings: {:?}",
-        warnings
-    );
-}
-
-#[test]
-fn module_b_reifies_public_function_from_module_a_into_var_list() {
-    let mod_a = r#"
-        pub let all_positive(vals: [Int]) -> [Constraint] = [v >== 0 for v in vals];
-    "#;
-    let mod_b = r#"
-        import "mod_a" as a;
-        pub reify a::all_positive as $[PositivityChecks];
-        pub let check_list(xs: [Int]) -> [LinExpr] = $[PositivityChecks](xs);
-    "#;
-
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
-
-    assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
-    assert!(
-        warnings.is_empty(),
-        "Should have no warnings: {:?}",
-        warnings
-    );
-}
-
-#[test]
-fn module_b_uses_public_var_list_from_module_a() {
-    let mod_a = r#"
-        pub let bounds_check(vals: [Int]) -> [Constraint] = [v >== 0 && v <== 100 for v in vals];
-        pub reify bounds_check as $[BoundsChecks];
-    "#;
-    let mod_b = r#"
-        import "mod_a" as a;
-        pub let validate_list(xs: [Int]) -> [LinExpr] = a::$[BoundsChecks](xs);
-    "#;
-
-    let (_, errors, warnings) = analyze_multi(
-        &[("mod_a", mod_a), ("mod_b", mod_b)],
-        HashMap::new(),
-        HashMap::new(),
-    );
+    )
+    .await;
 
     assert!(errors.is_empty(), "Should have no errors: {:?}", errors);
     assert!(

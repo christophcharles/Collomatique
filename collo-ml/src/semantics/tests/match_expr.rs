@@ -2,10 +2,10 @@ use super::*;
 
 // ========== Basic Match Expressions ==========
 
-#[test]
-fn simple_match_with_one_branch() {
+#[tokio::test]
+async fn simple_match_with_one_branch() {
     let input = "pub let f(x: Int) -> Int = match x { y as Int { 10 } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -14,15 +14,15 @@ fn simple_match_with_one_branch() {
     );
 }
 
-#[test]
-fn match_with_multiple_branches() {
+#[tokio::test]
+async fn match_with_multiple_branches() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { 1 } 
             b as Bool { 2 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -31,15 +31,15 @@ fn match_with_multiple_branches() {
     );
 }
 
-#[test]
-fn match_with_catchall_branch() {
+#[tokio::test]
+async fn match_with_catchall_branch() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int { 1 } 
             other { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -48,10 +48,10 @@ fn match_with_catchall_branch() {
     );
 }
 
-#[test]
-fn match_only_catchall() {
+#[tokio::test]
+async fn match_only_catchall() {
     let input = "pub let f(x: Int) -> Int = match x { y { 42 } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -62,15 +62,15 @@ fn match_only_catchall() {
 
 // ========== Type Refinement ==========
 
-#[test]
-fn match_refines_union_type() {
+#[tokio::test]
+async fn match_refines_union_type() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i + 1 } 
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -79,15 +79,15 @@ fn match_refines_union_type() {
     );
 }
 
-#[test]
-fn match_binding_has_refined_type() {
+#[tokio::test]
+async fn match_binding_has_refined_type() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i * 2 }
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -96,15 +96,15 @@ fn match_binding_has_refined_type() {
     );
 }
 
-#[test]
-fn match_catchall_has_remaining_type() {
+#[tokio::test]
+async fn match_catchall_has_remaining_type() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Bool = match x { 
             i as Int { true }
             other { other == none } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -115,15 +115,15 @@ fn match_catchall_has_remaining_type() {
 
 // ========== Type Conversion in Body ==========
 
-#[test]
-fn match_converts_int_to_linexpr() {
+#[tokio::test]
+async fn match_converts_int_to_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
         pub let f(x: Int) -> LinExpr = match x {
             i as Int { $V(LinExpr(i)) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -132,15 +132,15 @@ fn match_converts_int_to_linexpr() {
     );
 }
 
-#[test]
-fn match_converts_emptylist_to_list() {
+#[tokio::test]
+async fn match_converts_emptylist_to_list() {
     let input = r#"
         pub let f(x: [] | Int) -> [Int] | Int = match x {
             i as Int { i }
             lst as [] { [Int]([1, 2, 3]) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -149,11 +149,11 @@ fn match_converts_emptylist_to_list() {
     );
 }
 
-#[test]
-fn match_non_exhaustive_with_only_where() {
+#[tokio::test]
+async fn match_non_exhaustive_with_only_where() {
     // Match with only a filtered branch is not exhaustive
     let input = "pub let f(x: Int) -> Int = match x { i as Int where i > 0 { i } };";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -163,15 +163,15 @@ fn match_non_exhaustive_with_only_where() {
 
 // ========== Where Filters ==========
 
-#[test]
-fn match_with_where_filter() {
+#[tokio::test]
+async fn match_with_where_filter() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i > 0 { i } 
             j as Int { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -180,26 +180,26 @@ fn match_with_where_filter() {
     );
 }
 
-#[test]
-fn match_where_must_be_bool() {
+#[tokio::test]
+async fn match_where_must_be_bool() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Match where clause must be Bool");
 }
 
-#[test]
-fn match_where_does_not_refine_type() {
+#[tokio::test]
+async fn match_where_does_not_refine_type() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i > 0 { i }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -207,8 +207,8 @@ fn match_where_does_not_refine_type() {
     );
 }
 
-#[test]
-fn match_where_with_conversion_in_body() {
+#[tokio::test]
+async fn match_where_with_conversion_in_body() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
         pub let f(x: Int) -> LinExpr | Int = match x {
@@ -216,7 +216,7 @@ fn match_where_with_conversion_in_body() {
             j as Int { j }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -227,14 +227,14 @@ fn match_where_with_conversion_in_body() {
 
 // ========== Exhaustiveness Checking ==========
 
-#[test]
-fn match_non_exhaustive_simple() {
+#[tokio::test]
+async fn match_non_exhaustive_simple() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { 1 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -242,15 +242,15 @@ fn match_non_exhaustive_simple() {
     );
 }
 
-#[test]
-fn match_exhaustive_with_catchall() {
+#[tokio::test]
+async fn match_exhaustive_with_catchall() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int { 1 } 
             other { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -259,8 +259,8 @@ fn match_exhaustive_with_catchall() {
     );
 }
 
-#[test]
-fn match_exhaustive_all_branches() {
+#[tokio::test]
+async fn match_exhaustive_all_branches() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int { 1 } 
@@ -268,7 +268,7 @@ fn match_exhaustive_all_branches() {
             n as None { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -277,14 +277,14 @@ fn match_exhaustive_all_branches() {
     );
 }
 
-#[test]
-fn match_non_exhaustive_partial_union() {
+#[tokio::test]
+async fn match_non_exhaustive_partial_union() {
     let input = r#"
         pub let f(x: Int | Bool | None) -> Int = match x { 
             i as Int | Bool { 1 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -294,8 +294,8 @@ fn match_non_exhaustive_partial_union() {
 
 // ========== Over-matching / Unreachable Branches ==========
 
-#[test]
-fn match_detects_unreachable_after_exhaustive() {
+#[tokio::test]
+async fn match_detects_unreachable_after_exhaustive() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { 1 } 
@@ -303,7 +303,7 @@ fn match_detects_unreachable_after_exhaustive() {
             other { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -311,15 +311,15 @@ fn match_detects_unreachable_after_exhaustive() {
     );
 }
 
-#[test]
-fn match_detects_overlapping_branches() {
+#[tokio::test]
+async fn match_detects_overlapping_branches() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int | Bool { 1 } 
             j as Int { 2 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -327,8 +327,8 @@ fn match_detects_overlapping_branches() {
     );
 }
 
-#[test]
-fn match_detects_duplicate_type() {
+#[tokio::test]
+async fn match_detects_duplicate_type() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { 1 } 
@@ -336,7 +336,7 @@ fn match_detects_duplicate_type() {
             b as Bool { 3 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -346,15 +346,15 @@ fn match_detects_duplicate_type() {
 
 // ========== Branch Output Unification ==========
 
-#[test]
-fn match_unifies_branch_outputs() {
+#[tokio::test]
+async fn match_unifies_branch_outputs() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int | Bool = match x { 
             i as Int { 5 } 
             b as Bool { true } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -363,8 +363,8 @@ fn match_unifies_branch_outputs() {
     );
 }
 
-#[test]
-fn match_unifies_int_and_linexpr() {
+#[tokio::test]
+async fn match_unifies_int_and_linexpr() {
     let vars = var_with_args("V", vec![SimpleType::Int]);
     let input = r#"
         pub let f(x: Int | Bool) -> Int | LinExpr = match x { 
@@ -372,7 +372,7 @@ fn match_unifies_int_and_linexpr() {
             b as Bool { $V(0) } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -381,15 +381,15 @@ fn match_unifies_int_and_linexpr() {
     );
 }
 
-#[test]
-fn match_unifies_emptylist_and_list() {
+#[tokio::test]
+async fn match_unifies_emptylist_and_list() {
     let input = r#"
         pub let f(x: Int | Bool) -> [Int] = match x { 
             i as Int { [1, 2, 3] } 
             b as Bool { [] } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -400,15 +400,15 @@ fn match_unifies_emptylist_and_list() {
 
 // ========== Lists and Subtypes ==========
 
-#[test]
-fn match_handles_emptylist() {
+#[tokio::test]
+async fn match_handles_emptylist() {
     let input = r#"
         pub let f(x: [Int]) -> Int = match x { 
             empty as [] { 0 } 
             lst as [Int] { |lst| }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -417,14 +417,14 @@ fn match_handles_emptylist() {
     );
 }
 
-#[test]
-fn match_emptylist_exhausts_list() {
+#[tokio::test]
+async fn match_emptylist_exhausts_list() {
     let input = r#"
         pub let f(x: [Int]) -> Int = match x { 
             lst as [Int] { |lst| } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -433,14 +433,14 @@ fn match_emptylist_exhausts_list() {
     );
 }
 
-#[test]
-fn match_list_conversion() {
+#[tokio::test]
+async fn match_list_conversion() {
     let input = r#"
         pub let f(x: [Int]) -> [LinExpr] = match x {
             lst as [Int] { [LinExpr](lst) }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -449,41 +449,37 @@ fn match_list_conversion() {
     );
 }
 
-// ========== Object Types ==========
+// ========== Custom/Struct Types ==========
 
-#[test]
-fn match_with_object_types() {
-    let types = {
-        let mut map = HashMap::new();
-        map.insert("Student".to_string(), HashMap::new());
-        map.insert("Teacher".to_string(), HashMap::new());
-        map
-    };
+#[tokio::test]
+async fn match_with_custom_types() {
     let input = r#"
-        pub let f(x: Student | Teacher) -> Int = match x { 
-            s as Student { 1 } 
-            t as Teacher { 2 } 
+        type Student = {name: String};
+        type Teacher = {subject: String};
+        pub let f(x: Student | Teacher) -> Int = match x {
+            s as Student { 1 }
+            t as Teacher { 2 }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Match with object types should work: {:?}",
+        "Match with custom types should work: {:?}",
         errors
     );
 }
 
-#[test]
-fn match_with_field_access_in_branch() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
+#[tokio::test]
+async fn match_with_field_access_in_branch() {
     let input = r#"
-        pub let f(x: Student | Int) -> Int = match x { 
-            s as Student { s.age } 
-            i as Int { i } 
+        type Student = {age: Int};
+        pub let f(x: Student | Int) -> Int = match x {
+            s as Student { s.age }
+            i as Int { i }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -492,15 +488,15 @@ fn match_with_field_access_in_branch() {
     );
 }
 
-#[test]
-fn match_unknown_type_in_pattern() {
+#[tokio::test]
+async fn match_unknown_type_in_pattern() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             u as UnknownType { 1 } 
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -510,8 +506,8 @@ fn match_unknown_type_in_pattern() {
 
 // ========== Nested Match ==========
 
-#[test]
-fn nested_match_expressions() {
+#[tokio::test]
+async fn nested_match_expressions() {
     let input = r#"
         pub let f(x: Int | Bool, y: Int | Bool) -> Int = match x { 
             i as Int { 
@@ -523,20 +519,20 @@ fn nested_match_expressions() {
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Nested match should work: {:?}", errors);
 }
 
-#[test]
-fn match_in_branch_body() {
+#[tokio::test]
+async fn match_in_branch_body() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { i } 
             b as Bool { match 5 { y as Int { y } } } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -547,15 +543,15 @@ fn match_in_branch_body() {
 
 // ========== Match with Other Expressions ==========
 
-#[test]
-fn match_with_if_in_branch() {
+#[tokio::test]
+async fn match_with_if_in_branch() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = match x { 
             i as Int { if i > 0 { i } else { 0 } } 
             b as Bool { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -564,15 +560,15 @@ fn match_with_if_in_branch() {
     );
 }
 
-#[test]
-fn match_with_quantifier_in_branch() {
+#[tokio::test]
+async fn match_with_quantifier_in_branch() {
     let input = r#"
         pub let f(x: [Int] | Int) -> Int = match x { 
             lst as [Int] { sum i in lst { i } } 
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -581,15 +577,15 @@ fn match_with_quantifier_in_branch() {
     );
 }
 
-#[test]
-fn match_with_list_comprehension_in_branch() {
+#[tokio::test]
+async fn match_with_list_comprehension_in_branch() {
     let input = r#"
         pub let f(x: [Int] | Int) -> [Int] = match x { 
             lst as [Int] { [i * 2 for i in lst] } 
             i as Int { [i] } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -598,8 +594,8 @@ fn match_with_list_comprehension_in_branch() {
     );
 }
 
-#[test]
-fn if_with_match_in_branches() {
+#[tokio::test]
+async fn if_with_match_in_branches() {
     let input = r#"
         pub let f(x: Int | Bool, flag: Bool) -> Int = 
             if flag { 
@@ -611,13 +607,13 @@ fn if_with_match_in_branches() {
                 5 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "If with match should work: {:?}", errors);
 }
 
-#[test]
-fn forall_with_match_in_body() {
+#[tokio::test]
+async fn forall_with_match_in_body() {
     let input = r#"
         pub let f(xs: [Int | Bool]) -> Bool = 
             forall x in xs { 
@@ -627,7 +623,7 @@ fn forall_with_match_in_body() {
                 } 
             };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -638,8 +634,8 @@ fn forall_with_match_in_body() {
 
 // ========== Complex Real-World Examples ==========
 
-#[test]
-fn match_complex_type_dispatch() {
+#[tokio::test]
+async fn match_complex_type_dispatch() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
         pub let f(value: Int | Bool | [Int]) -> Constraint = match value {
@@ -648,7 +644,7 @@ fn match_complex_type_dispatch() {
             lst as [Int] { sum x in lst { $V(LinExpr(x)) } === 10 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -657,8 +653,8 @@ fn match_complex_type_dispatch() {
     );
 }
 
-#[test]
-fn match_with_filtered_branches() {
+#[tokio::test]
+async fn match_with_filtered_branches() {
     let input = r#"
         pub let f(x: Int) -> Int = match x { 
             i as Int where i > 10 { i * 2 } 
@@ -666,7 +662,7 @@ fn match_with_filtered_branches() {
             k as Int { 0 } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -675,16 +671,16 @@ fn match_with_filtered_branches() {
     );
 }
 
-#[test]
-fn match_optional_handling() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
+#[tokio::test]
+async fn match_optional_handling() {
     let input = r#"
-        pub let f(student: Student | None) -> Int = match student { 
-            s as Student { s.age } 
-            n as None { 0 } 
+        type Student = {age: Int};
+        pub let f(student: Student | None) -> Int = match student {
+            s as Student { s.age }
+            n as None { 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -693,8 +689,8 @@ fn match_optional_handling() {
     );
 }
 
-#[test]
-fn match_list_processing_with_conversion() {
+#[tokio::test]
+async fn match_list_processing_with_conversion() {
     let vars = var_with_args("V", vec![SimpleType::LinExpr]);
     let input = r#"
         pub let f(items: [Int] | Int) -> Constraint = match items {
@@ -704,7 +700,7 @@ fn match_list_processing_with_conversion() {
             i as Int { $V(LinExpr(i)) === 0 }
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+    let (_, errors, _) = analyze(input, vars).await;
 
     assert!(
         errors.is_empty(),
@@ -713,13 +709,13 @@ fn match_list_processing_with_conversion() {
     );
 }
 
-#[test]
-fn match_in_arithmetic_expression() {
+#[tokio::test]
+async fn match_in_arithmetic_expression() {
     let input = r#"
         pub let f(x: Int | Bool) -> Int = 
             (match x { i as Int { i } b as Bool { 0 } }) + 5;
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -728,8 +724,8 @@ fn match_in_arithmetic_expression() {
     );
 }
 
-#[test]
-fn match_with_cardinality_in_filter() {
+#[tokio::test]
+async fn match_with_cardinality_in_filter() {
     let input = r#"
         pub let f(items: [Int] | Int) -> Int = match items { 
             lst as [Int] where |lst| > 0 { |lst| } 
@@ -737,7 +733,7 @@ fn match_with_cardinality_in_filter() {
             i as Int { i } 
         };
     "#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

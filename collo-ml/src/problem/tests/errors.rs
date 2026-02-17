@@ -1,35 +1,30 @@
-use crate::eval::NoObject;
+struct NoObjectEnv;
 
 use super::*;
 
-#[test]
-fn error_unknown_function() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn error_unknown_function() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([(
-                Var::V,
-                collomatique_ilp::Variable::binary(),
-            )]))
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -47,8 +42,9 @@ fn error_unknown_function() {
     }
 
     let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -68,34 +64,29 @@ fn error_unknown_function() {
     }
 }
 
-#[test]
-fn error_wrong_return_type_for_constraint() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn error_wrong_return_type_for_constraint() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([(
-                Var::V,
-                collomatique_ilp::Variable::binary(),
-            )]))
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -113,8 +104,9 @@ fn error_wrong_return_type_for_constraint() {
     }
 
     let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),

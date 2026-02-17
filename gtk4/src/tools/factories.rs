@@ -1,8 +1,8 @@
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
 
-pub fn update_vec_deque<'a, C: FactoryComponent<Index = DynamicIndex>>(
-    factory: &'a mut FactoryVecDeque<C>,
+pub fn update_vec_deque<C: FactoryComponent<Index = DynamicIndex>>(
+    factory: &mut FactoryVecDeque<C>,
     iterator: impl ExactSizeIterator<Item = C::Init>,
     update_fn: impl Fn(C::Init) -> C::Input,
 ) {

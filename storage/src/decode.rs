@@ -139,7 +139,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             continue;
         };
 
-        match valid_entry {
+        match *valid_entry {
             ValidEntry::InnerDataDump(inner_data) => {
                 inner_data_dump::decode_entry(inner_data, &mut pre_data)?;
             }

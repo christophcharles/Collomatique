@@ -427,15 +427,19 @@ fn parse_let_with_complex_nested_sum_and_option() {
                         SimpleTypeName::List(first_inner_typename) => {
                             assert_eq!(first_inner_typename.node.types.len(), 2);
                             assert_eq!(first_inner_typename.node.types[0].node.maybe_count, 0);
-                            assert!(first_inner_typename.node.types[0]
-                                .node
-                                .inner
-                                .matches_str("Int"));
+                            assert!(
+                                first_inner_typename.node.types[0]
+                                    .node
+                                    .inner
+                                    .matches_str("Int")
+                            );
                             assert_eq!(first_inner_typename.node.types[1].node.maybe_count, 0);
-                            assert!(first_inner_typename.node.types[1]
-                                .node
-                                .inner
-                                .matches_str("Bool"));
+                            assert!(
+                                first_inner_typename.node.types[1]
+                                    .node
+                                    .inner
+                                    .matches_str("Bool")
+                            );
                         }
                         _ => panic!("Expected List type for first variant"),
                     }
@@ -447,10 +451,12 @@ fn parse_let_with_complex_nested_sum_and_option() {
                         SimpleTypeName::List(second_inner_typename) => {
                             assert_eq!(second_inner_typename.node.types.len(), 1);
                             assert_eq!(second_inner_typename.node.types[0].node.maybe_count, 0);
-                            assert!(second_inner_typename.node.types[0]
-                                .node
-                                .inner
-                                .matches_str("LinExpr"));
+                            assert!(
+                                second_inner_typename.node.types[0]
+                                    .node
+                                    .inner
+                                    .matches_str("LinExpr")
+                            );
                         }
                         _ => panic!("Expected List type for second variant"),
                     }
@@ -492,10 +498,12 @@ fn parse_let_with_multiple_option_and_sum_params() {
                 SimpleTypeName::List(inner_typename) => {
                     assert_eq!(inner_typename.node.types.len(), 1);
                     assert_eq!(inner_typename.node.types[0].node.maybe_count, 0);
-                    assert!(inner_typename.node.types[0]
-                        .node
-                        .inner
-                        .matches_str("Student"));
+                    assert!(
+                        inner_typename.node.types[0]
+                            .node
+                            .inner
+                            .matches_str("Student")
+                    );
                 }
                 _ => panic!("Expected List type"),
             }

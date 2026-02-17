@@ -70,10 +70,12 @@ fn parse_let_with_multiple_params() {
             assert_eq!(params[2].name.node, "z");
             assert_eq!(params[2].typ.node.types.len(), 1);
             assert_eq!(params[2].typ.node.types[0].node.maybe_count, 0);
-            assert!(params[2].typ.node.types[0]
-                .node
-                .inner
-                .matches_str("Student"));
+            assert!(
+                params[2].typ.node.types[0]
+                    .node
+                    .inner
+                    .matches_str("Student")
+            );
         }
         _ => panic!("Expected Let statement"),
     }
@@ -188,39 +190,12 @@ fn parse_reify_statement() {
             constraint_path,
             name,
             docstring,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 1);
             assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
             assert_eq!(name.node, "MyVar");
             assert!(docstring.is_empty());
-            assert!(!*var_list);
-        }
-        _ => panic!("Expected Reify statement"),
-    }
-}
-
-#[test]
-fn parse_reify_statement_with_var_list() {
-    let input = "reify my_constraint as $[MyVarList];";
-    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
-    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
-
-    assert_eq!(file.statements.len(), 1);
-    match &file.statements[0].node {
-        Statement::Reify {
-            constraint_path,
-            name,
-            docstring,
-            var_list,
-            ..
-        } => {
-            assert_eq!(constraint_path.node.segments.len(), 1);
-            assert_eq!(constraint_path.node.segments[0].node, "my_constraint");
-            assert_eq!(name.node, "MyVarList");
-            assert!(docstring.is_empty());
-            assert!(*var_list);
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -271,14 +246,12 @@ fn parse_reify_with_qualified_path() {
         Statement::Reify {
             constraint_path,
             name,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 2);
             assert_eq!(constraint_path.node.segments[0].node, "other_module");
             assert_eq!(constraint_path.node.segments[1].node, "my_constraint");
             assert_eq!(name.node, "MyVar");
-            assert!(!*var_list);
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -286,7 +259,7 @@ fn parse_reify_with_qualified_path() {
 
 #[test]
 fn parse_reify_with_deeply_qualified_path() {
-    let input = "reify a::b::c::my_constraint as $[VarList];";
+    let input = "reify a::b::c::my_constraint as $Var;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -295,7 +268,6 @@ fn parse_reify_with_deeply_qualified_path() {
         Statement::Reify {
             constraint_path,
             name,
-            var_list,
             ..
         } => {
             assert_eq!(constraint_path.node.segments.len(), 4);
@@ -303,8 +275,7 @@ fn parse_reify_with_deeply_qualified_path() {
             assert_eq!(constraint_path.node.segments[1].node, "b");
             assert_eq!(constraint_path.node.segments[2].node, "c");
             assert_eq!(constraint_path.node.segments[3].node, "my_constraint");
-            assert_eq!(name.node, "VarList");
-            assert!(*var_list);
+            assert_eq!(name.node, "Var");
         }
         _ => panic!("Expected Reify statement"),
     }
@@ -353,4 +324,109 @@ fn parse_empty_file() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     assert_eq!(file.statements.len(), 0);
+}
+
+// ============= Query Statements =============
+
+#[test]
+fn parse_query_with_db_and_option_return() {
+    let input = r#"query get_student(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}, id: Int) -> ?{name: String} = "SELECT name FROM students WHERE id = ?";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name,
+            params,
+            query_string,
+            public,
+            ..
+        } => {
+            assert_eq!(name.node, "get_student");
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].name.node, "db");
+            assert_eq!(params[1].name.node, "id");
+            assert_eq!(query_string.node, "SELECT name FROM students WHERE id = ?");
+            assert!(!public);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_db_and_list_return() {
+    let input = r#"pub query all_students(db: #{"CREATE TABLE students(id INTEGER, name TEXT)"}) -> [{id: Int, name: String}] = "SELECT id, name FROM students";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name,
+            params,
+            public,
+            ..
+        } => {
+            assert_eq!(name.node, "all_students");
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].name.node, "db");
+            assert!(public);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_docstring() {
+    let input = r#"/// Fetches a student by ID
+query get_student(db: #{"CREATE TABLE students(id INTEGER)"}, id: Int) -> ?{id: Int} = "SELECT id FROM students WHERE id = ?";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 1);
+    match &file.statements[0].node {
+        Statement::Query {
+            name, docstring, ..
+        } => {
+            assert_eq!(name.node, "get_student");
+            assert_eq!(docstring.len(), 1);
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_custom_db_type() {
+    // Using a type alias for the database
+    let input = r#"
+type MyDb = #{"CREATE TABLE users(id INTEGER, email TEXT)"};
+query get_user(db: MyDb, id: Int) -> ?{email: String} = "SELECT email FROM users WHERE id = ?";
+"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    assert_eq!(file.statements.len(), 2);
+    match &file.statements[1].node {
+        Statement::Query { name, params, .. } => {
+            assert_eq!(name.node, "get_user");
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].name.node, "db");
+        }
+        _ => panic!("Expected Query statement"),
+    }
+}
+
+#[test]
+fn parse_query_with_multiple_columns() {
+    let input = r#"query search(db: #{"CREATE TABLE t(a INT, b TEXT, c BOOL)"}) -> [{a: Int, b: String, c: Bool}] = "SELECT a, b, c FROM t";"#;
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Query { query_string, .. } => {
+            assert_eq!(query_string.node, "SELECT a, b, c FROM t");
+        }
+        _ => panic!("Expected Query statement"),
+    }
 }

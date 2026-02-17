@@ -7,47 +7,77 @@
 //! - `ExtraDesc`: Extended description for reification problems
 //! - `ProblemError`: Errors that can occur during problem construction
 
+use crate::database::DatabaseConnection;
 use crate::eval::{ExprValue, Origin};
-use crate::traits::EvalObject;
 use crate::{EvalVar, ExprType};
+use derivative::Derivative;
+use std::sync::Arc;
 use thiserror::Error;
 
 use super::CompileError;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ReifiedVar<T: EvalObject> {
+pub type HashedProblemVar<D, V> = crate::Hashed<ProblemVar<D, V>>;
+
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Clone(bound = "")
+)]
+pub struct ReifiedVar<D: DatabaseConnection> {
     pub(crate) module: String,
     pub(crate) name: String,
-    pub(crate) from_list: Option<usize>,
-    pub(crate) params: Vec<ExprValue<T>>,
+    pub(crate) params: Vec<Arc<ExprValue<D>>>,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum ProblemVar<T: EvalObject, V: EvalVar<T>> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Clone(bound = "")
+)]
+pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
     Base(V),
-    Reified(ReifiedVar<T>),
+    Reified(ReifiedVar<D>),
     Helper(u64),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ConstraintDesc<T: EvalObject> {
-    Reified { var_name: String, origin: Origin<T> },
-    InScript { origin: Origin<T> },
-    Objectify { origin: Origin<T> },
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Debug(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum ConstraintDesc<D: DatabaseConnection> {
+    Reified { var_name: String },
+    InScript { origin: Origin<D> },
+    Objectify,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ExtraDesc<T: EvalObject, V: EvalVar<T>> {
-    Orig(ConstraintDesc<T>),
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum ExtraDesc<D: DatabaseConnection, V: EvalVar> {
+    Orig(ConstraintDesc<D>),
     InitCond(V),
 }
 
-#[derive(Clone, Debug, Error)]
-pub enum ProblemError<T: EvalObject> {
+#[derive(Derivative, Error)]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub enum ProblemError<D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
-    #[error("TypeId {0:?} from EvalVar cannot be represented with EvalObject")]
-    EvalVarIncompatibleWithEvalObject(std::any::TypeId),
     #[error("Function \"{0}\" was not found in script (maybe it is not public?)")]
     UnknownFunction(String),
     #[error("Function \"{func}\" expects {expected} arguments but got {found}")]
@@ -64,6 +94,8 @@ pub enum ProblemError<T: EvalObject> {
         returned: ExprType,
         expected: ExprType,
     },
+    #[error("Function \"{0}\" expects a database connection but none was provided")]
+    MissingDatabaseConnection(String),
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T>>),
+    Panic(Box<ExprValue<D>>),
 }

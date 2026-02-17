@@ -81,10 +81,10 @@ fn semantic_invalid_undefined_references() {
 fn semantic_invalid_scope_violations() {
     // Parser doesn't check variable scope
     let cases = vec![
-        "x + y",                  // x and y not in scope
-        "$V(x)",                  // x not in scope
-        "sum x in list { y }",    // y not in scope (x is)
-        "forall x in @[X] { y }", // y not in scope (x is)
+        "x + y",                    // x and y not in scope
+        "$V(x)",                    // x not in scope
+        "sum x in list { y }",      // y not in scope (x is)
+        "forall x in x_list { y }", // y not in scope (x is)
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

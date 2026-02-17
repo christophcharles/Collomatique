@@ -3,6 +3,7 @@ use super::global_env::{GlobalEnv, Symbol, SymbolPath};
 use super::local_env::LocalEnvCheck;
 use super::types::SimpleType;
 use crate::ast::{Span, Spanned};
+use crate::database::DatabaseDriver;
 
 /// What kind of entity a namespace path refers to
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,6 +13,9 @@ pub enum ResolvedPathKind {
 
     /// A function in scope: `foo`, `helper`
     Function { module: String, func: String },
+
+    /// A query in scope: `get_user`, `count_all`
+    Query { module: String, name: String },
 
     /// A type (built-in, custom, or enum variant)
     /// - Built-in: `Int` → Type(SimpleType::Int)
@@ -27,9 +31,6 @@ pub enum ResolvedPathKind {
 
     /// An internal variable (defined in source with $var)
     InternalVariable { module: String, name: String },
-
-    /// A variable list (defined in source with $$var_list)
-    VariableList { module: String, name: String },
 }
 
 /// Errors that can occur during path resolution
@@ -56,32 +57,29 @@ impl PathResolutionError {
 /// This is the single source of truth for what a path refers to.
 /// Resolution priority:
 /// 1. Built-in types: Int, Bool, String, LinExpr, Constraint, None, Never
-/// 2. External entities: object_types, external_variables (treated like primitives)
+/// 2. External entities: external_variables (treated like primitives)
 /// 3. Symbol table: custom types, functions, internal variables, variable lists
 /// 4. Local variables (from LocalEnv) - checked last for defensive programming
 ///
 /// Paths can be single-segment (`foo`) or multi-segment (`Result::Ok`, `mod::func`).
-pub fn resolve_path(
+pub fn resolve_path<D: DatabaseDriver>(
     path: &Spanned<crate::ast::NamespacePath>,
     current_module: &str,
-    global_env: &GlobalEnv,
+    global_env: &GlobalEnv<D>,
     local_env: Option<&dyn LocalEnvCheck>,
 ) -> Result<ResolvedPathKind, PathResolutionError> {
     let segments: Vec<&str> = path.node.segments.iter().map(|s| s.node.as_str()).collect();
 
     // 1. Check built-in types (single segment only)
-    if segments.len() == 1 {
-        if let Some(builtin) = try_resolve_builtin_type(segments[0]) {
-            return Ok(ResolvedPathKind::Type(builtin));
-        }
+    if segments.len() == 1
+        && let Some(builtin) = try_resolve_builtin_type(segments[0])
+    {
+        return Ok(ResolvedPathKind::Type(builtin));
     }
 
     // 2. Check external entities (single segment only, treated like primitives)
     if segments.len() == 1 {
         let name = segments[0];
-        if global_env.object_types.contains_key(name) {
-            return Ok(ResolvedPathKind::Type(SimpleType::Object(name.to_string())));
-        }
         if !name.is_empty() {
             let first_symbol = name.chars().next().unwrap();
             if first_symbol == '$' {
@@ -123,11 +121,11 @@ pub fn resolve_path(
                 module: m.clone(),
                 func: n.clone(),
             }),
-            Symbol::Variable(m, n) => Ok(ResolvedPathKind::InternalVariable {
+            Symbol::Query(m, n) => Ok(ResolvedPathKind::Query {
                 module: m.clone(),
                 name: n.clone(),
             }),
-            Symbol::VariableList(m, n) => Ok(ResolvedPathKind::VariableList {
+            Symbol::Variable(m, n) => Ok(ResolvedPathKind::InternalVariable {
                 module: m.clone(),
                 name: n.clone(),
             }),
@@ -135,12 +133,11 @@ pub fn resolve_path(
     }
 
     // 4. Check local variables (single segment only, last for defensive programming)
-    if segments.len() == 1 {
-        if let Some(local) = local_env {
-            if local.has_ident(segments[0]) {
-                return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
-            }
-        }
+    if segments.len() == 1
+        && let Some(local) = local_env
+        && local.has_ident(segments[0])
+    {
+        return Ok(ResolvedPathKind::LocalVariable(segments[0].to_string()));
     }
 
     Err(PathResolutionError::UnknownIdentifier {

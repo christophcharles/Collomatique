@@ -17,19 +17,25 @@ mod tests;
 // Re-export public types
 pub use builder::ProblemBuilder;
 pub use solution::{FeasableSolution, Problem, Solution};
-pub use types::{ConstraintDesc, ExtraDesc, ProblemError, ProblemVar, ReifiedVar};
+pub use types::{
+    ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemError, ProblemVar, ReifiedVar,
+};
 
 // Re-export CompileError from eval for convenience
 pub use crate::eval::CompileError;
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]
+pub(crate) use crate::EvalVar;
+#[cfg(test)]
+pub(crate) use crate::database::DatabaseConnection;
+#[cfg(test)]
 pub(crate) use crate::eval::ExternVar;
+#[cfg(test)]
+pub(crate) use crate::eval::SqliteDatabaseDriver;
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
-pub(crate) use crate::traits::{EvalObject, VarConversionError};
-#[cfg(test)]
-pub(crate) use crate::EvalVar;
+pub(crate) use crate::traits::VarConversionError;
 #[cfg(test)]
 pub(crate) use std::collections::{BTreeMap, HashMap};

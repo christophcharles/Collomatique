@@ -19,7 +19,7 @@ impl IncompatId {
 
 impl From<&collomatique_state_colloscopes::IncompatId> for IncompatId {
     fn from(value: &collomatique_state_colloscopes::IncompatId) -> Self {
-        IncompatId { id: value.clone() }
+        IncompatId { id: *value }
     }
 }
 
@@ -31,7 +31,7 @@ impl From<collomatique_state_colloscopes::IncompatId> for IncompatId {
 
 impl From<&IncompatId> for collomatique_state_colloscopes::IncompatId {
     fn from(value: &IncompatId) -> Self {
-        value.id.clone()
+        value.id
     }
 }
 

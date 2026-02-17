@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::SubjectsUpdateOp;
 
@@ -150,11 +150,11 @@ impl Component for Subjects {
                                     status: !desc.excluded_periods.contains(id),
                                 })
                                 .collect(),
-                            subject_id: id.clone(),
+                            subject_id: *id,
                             subject_count: self.subjects.ordered_subject_list.len(),
                         }
                     }),
-                    |data| subjects_display::EntryInput::UpdateData(data),
+                    subjects_display::EntryInput::UpdateData,
                 );
             }
             SubjectsInput::AddSubjectClicked => {

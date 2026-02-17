@@ -171,7 +171,9 @@ impl SubjectsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\" pour la période {}",
-                    subject.parameters.name, group_list.params.name, period_num+1
+                    subject.parameters.name,
+                    group_list.params.name,
+                    period_num + 1
                 ))
             }
             Self::LooseColloscopeSlotsForPeriod(subject_id, period_id) => {
@@ -369,7 +371,7 @@ impl SubjectsUpdateOp {
                         .subject_map
                         .get(subject_id)
                         .expect("Subject should have associated slots at this point");
-                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                    if let Some((slot_id, _slot)) = subject_slots.ordered_slots.first() {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
@@ -406,7 +408,7 @@ impl SubjectsUpdateOp {
                             .get(subject_id)
                             .expect("subject_id should be available in subject map at this point");
 
-                        for student_id in assigned_students {
+                        if let Some(student_id) = assigned_students.iter().next() {
                             return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                     *period_id,
@@ -486,23 +488,20 @@ impl SubjectsUpdateOp {
                         .group_lists
                         .subjects_associations
                         .get(period_id)
+                        && let Some(group_list_id) = subject_map.get(subject_id)
                     {
-                        if let Some(group_list_id) = subject_map.get(subject_id) {
-                            return Some(CleaningOp {
-                                warning: SubjectsUpdateWarning::LooseGroupListAssociation(
-                                    *subject_id,
-                                    *group_list_id,
-                                    *period_id,
-                                ),
-                                op: UpdateOp::GroupLists(
-                                    GroupListsUpdateOp::AssignGroupListToSubject(
-                                        *period_id,
-                                        *subject_id,
-                                        None,
-                                    ),
-                                ),
-                            });
-                        }
+                        return Some(CleaningOp {
+                            warning: SubjectsUpdateWarning::LooseGroupListAssociation(
+                                *subject_id,
+                                *group_list_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                                *period_id,
+                                *subject_id,
+                                None,
+                            )),
+                        });
                     }
                 }
 
@@ -578,13 +577,12 @@ impl SubjectsUpdateOp {
                     .slots
                     .subject_map
                     .get(subject_id)
+                    && let Some((slot_id, _slot)) = subject_slots.ordered_slots.first()
                 {
-                    for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        return Some(CleaningOp {
-                            warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
-                        });
-                    }
+                    return Some(CleaningOp {
+                        warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
+                        op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                    });
                 }
 
                 let Some(subject) = &data
@@ -612,7 +610,7 @@ impl SubjectsUpdateOp {
                     let assigned_students = period_assignments.subject_map.get(subject_id)
                         .expect("Assignment data is inconsistent and does not have a required subject entry");
 
-                    for student_id in assigned_students {
+                    if let Some(student_id) = assigned_students.iter().next() {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                 *period_id,

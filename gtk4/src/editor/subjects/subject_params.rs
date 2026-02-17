@@ -2,11 +2,11 @@ use adw::prelude::{
     ActionRowExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
 };
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 
@@ -502,7 +502,7 @@ impl SimpleComponent for Dialog {
                                 #[track(model.should_redraw)]
                                 set_selected: Self::periodicity_enum_to_selected(model.periodicity_panel),
                                 connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected() as u32;
+                                    let selected = widget.selected();
                                     let periodicity_type = Dialog::periocity_selected_to_enum(selected);
                                     sender.input(DialogInput::UpdatePeriodicityType(periodicity_type));
                                 },
@@ -844,7 +844,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.students_per_group.start() == new_min {
                     return;
                 }
-                let old_max = self.interrogation_params.students_per_group.end().clone();
+                let old_max = *self.interrogation_params.students_per_group.end();
                 assert!(new_min <= old_max);
                 self.interrogation_params.students_per_group = new_min..=old_max;
             }
@@ -852,7 +852,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.students_per_group.end() == new_max {
                     return;
                 }
-                let old_min = self.interrogation_params.students_per_group.start().clone();
+                let old_min = *self.interrogation_params.students_per_group.start();
                 assert!(old_min <= new_max);
                 self.interrogation_params.students_per_group = old_min..=new_max;
             }
@@ -860,11 +860,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.groups_per_interrogation.start() == new_min {
                     return;
                 }
-                let old_max = self
-                    .interrogation_params
-                    .groups_per_interrogation
-                    .end()
-                    .clone();
+                let old_max = *self.interrogation_params.groups_per_interrogation.end();
                 assert!(new_min <= old_max);
                 self.interrogation_params.groups_per_interrogation = new_min..=old_max;
             }
@@ -872,11 +868,7 @@ impl SimpleComponent for Dialog {
                 if *self.interrogation_params.groups_per_interrogation.end() == new_max {
                     return;
                 }
-                let old_min = self
-                    .interrogation_params
-                    .groups_per_interrogation
-                    .start()
-                    .clone();
+                let old_min = *self.interrogation_params.groups_per_interrogation.start();
                 assert!(old_min <= new_max);
                 self.interrogation_params.groups_per_interrogation = old_min..=new_max;
             }

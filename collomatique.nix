@@ -12,6 +12,7 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    clippy,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -28,7 +29,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-7yHhHwowCyyrQ3zkVWkHtromm0B2P8jmwPmArnC+rmw=";
+    cargoHash = "sha256-AKv3TFT0J+CGUSn/Qv/YZ5nbPO72WSmj+jWJAGiL7Z0=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
@@ -36,6 +37,7 @@ rustPlatform.buildRustPackage rec {
         pkg-config
         wrapGAppsHook4
         cbc # We need it for tests
+        clippy
         python3
     ];
 

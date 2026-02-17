@@ -169,7 +169,7 @@ impl Assignments {
                     .iter()
                     .filter_map(|(student_id, student)| {
                         if !student.excluded_periods.contains(id) {
-                            Some((student_id.clone(), student.clone()))
+                            Some((*student_id, student.clone()))
                         } else {
                             None
                         }
@@ -187,12 +187,11 @@ impl Assignments {
                         return firstname_cmp;
                     }
 
-                    let id_cmp = a.0.cmp(&b.0);
-                    id_cmp
+                    a.0.cmp(&b.0)
                 });
 
                 Some(assignments_display::PeriodEntryData {
-                    period_id: id.clone(),
+                    period_id: *id,
                     global_first_week: self.periods.first_week.clone(),
                     first_week_num: current_first_week,
                     week_count: desc.len(),
@@ -211,7 +210,7 @@ impl Assignments {
         crate::tools::factories::update_vec_deque(
             &mut self.period_factory,
             new_data.into_iter(),
-            |data| assignments_display::PeriodEntryInput::UpdateData(data),
+            assignments_display::PeriodEntryInput::UpdateData,
         );
     }
 }

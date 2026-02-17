@@ -2,10 +2,10 @@ use super::*;
 
 // ========== Primitive Type Tests ==========
 
-#[test]
-fn int_type() {
+#[tokio::test]
+async fn int_type() {
     let input = "pub let f() -> Int = 42;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -14,10 +14,10 @@ fn int_type() {
     );
 }
 
-#[test]
-fn bool_type() {
+#[tokio::test]
+async fn bool_type() {
     let input = "pub let f() -> Bool = true;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -26,10 +26,10 @@ fn bool_type() {
     );
 }
 
-#[test]
-fn linexpr_type_from_arithmetic() {
+#[tokio::test]
+async fn linexpr_type_from_arithmetic() {
     let input = "pub let f(x: Int, y: Int) -> LinExpr = LinExpr(x + y);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -38,21 +38,23 @@ fn linexpr_type_from_arithmetic() {
     );
 }
 
-#[test]
-fn linexpr_type_from_arithmetic_no_automatic_coercion() {
+#[tokio::test]
+async fn linexpr_type_from_arithmetic_no_automatic_coercion() {
     let input = "pub let f(x: Int, y: Int) -> LinExpr = x + y;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Int should not autoconvert",);
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
-#[test]
-fn constraint_type_from_comparison() {
+#[tokio::test]
+async fn constraint_type_from_comparison() {
     let input = "pub let f(x: Int) -> Constraint = x === 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -63,26 +65,26 @@ fn constraint_type_from_comparison() {
 
 // ========== List Type Tests ==========
 
-#[test]
-fn list_type_int() {
+#[tokio::test]
+async fn list_type_int() {
     let input = "pub let f() -> [Int] = [1, 2, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Int list should be valid: {:?}", errors);
 }
 
-#[test]
-fn list_type_bool() {
+#[tokio::test]
+async fn list_type_bool() {
     let input = "pub let f() -> [Bool] = [true, false, true];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Bool list should be valid: {:?}", errors);
 }
 
-#[test]
-fn nested_list_type() {
+#[tokio::test]
+async fn nested_list_type() {
     let input = "pub let f() -> [[Int]] = [[1, 2], [3, 4]];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -91,10 +93,10 @@ fn nested_list_type() {
     );
 }
 
-#[test]
-fn empty_list() {
+#[tokio::test]
+async fn empty_list() {
     let input = "pub let f() -> [Int] = [];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -103,111 +105,96 @@ fn empty_list() {
     );
 }
 
-#[test]
-fn list_type_mismatch_in_elements() {
+#[tokio::test]
+async fn list_type_mismatch_in_elements() {
     let input = "pub let f() -> [Int | Bool] = [1, true, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(errors.is_empty(), "Mixed type list should work");
 }
 
-#[test]
-fn list_type_mismatch_with_output() {
+#[tokio::test]
+async fn list_type_mismatch_with_output() {
     let input = "pub let f() -> [Int] = [1, true, 3];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
         "Mixed type list should not work if incompatible with output"
     );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::BodyTypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::BodyTypeMismatch { .. }))
+    );
 }
 
-// ========== Object Type Tests ==========
+// ========== Struct Type Tests ==========
 
-#[test]
-fn object_type_with_no_fields() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> Student = s;";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn struct_type_with_no_fields() {
+    let input = "pub let f(s: {}) -> {} = s;";
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object type should be valid: {:?}",
+        "Struct type should be valid: {:?}",
         errors
     );
 }
 
-#[test]
-fn object_type_with_fields() {
-    let mut types = object_with_fields(
-        "Student",
-        vec![
-            ("age", SimpleType::Int),
-            ("name", SimpleType::Object("String".to_string())),
-        ],
-    );
-    types.insert("String".to_string(), HashMap::new());
-    let input = "pub let f(s: Student) -> Int = s.age;";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn struct_type_with_fields() {
+    let input = "pub let f(s: {age: Int, name: String}) -> Int = s.age;";
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object field access should be valid: {:?}",
+        "Struct field access should be valid: {:?}",
         errors
     );
 }
 
-#[test]
-fn unknown_object_type() {
+#[tokio::test]
+async fn unknown_custom_type() {
     let input = "pub let f(s: UnknownObject) -> Int = 5;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
-    assert!(!errors.is_empty(), "Unknown object type should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
+    assert!(!errors.is_empty(), "Unknown custom type should error");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownType { .. }))
+    );
 }
 
-#[test]
-fn unknown_field_access() {
-    let types = simple_object("Student");
-    let input = "pub let f(s: Student) -> Int = s.unknown_field;";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn unknown_field_access() {
+    let input = "pub let f(s: {name: String}) -> Int = s.unknown_field;";
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
-    assert!(!errors.is_empty(), "Unknown field should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownField { .. })));
+    assert!(
+        !errors.is_empty(),
+        "Unknown field should error: {:?}",
+        errors
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::UnknownStructField { .. })),
+        "Should have UnknownStructField error: {:?}",
+        errors
+    );
 }
 
-#[test]
-fn nested_field_access() {
-    let mut types = HashMap::new();
-    types.insert("String2".to_string(), HashMap::new());
-
-    let mut address_fields = HashMap::new();
-    address_fields.insert(
-        "city".to_string(),
-        ExprType::simple(SimpleType::Object("String2".to_string()))
-            .try_into()
-            .unwrap(),
-    );
-    types.insert("Address".to_string(), address_fields);
-
-    let mut student_fields = HashMap::new();
-    student_fields.insert(
-        "address".to_string(),
-        ExprType::simple(SimpleType::Object("Address".to_string()))
-            .try_into()
-            .unwrap(),
-    );
-    types.insert("Student".to_string(), student_fields);
-
-    let input = "pub let f(s: Student) -> String2 = s.address.city;";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn nested_field_access() {
+    let input = r#"
+        type Address = {city: String};
+        type Student = {address: Address};
+        pub let f(s: Student) -> String = s.address.city;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -216,23 +203,25 @@ fn nested_field_access() {
     );
 }
 
-#[test]
-fn field_access_on_non_object() {
+#[tokio::test]
+async fn field_access_on_non_object() {
     let input = "pub let f(x: Int) -> Int = x.field;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Field access on Int should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::FieldAccessOnNonObject { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FieldAccessOnNonObject { .. }))
+    );
 }
 
 // ========== Type Annotation Tests (as keyword) ==========
 
-#[test]
-fn explicit_type_annotation_valid() {
+#[tokio::test]
+async fn explicit_type_annotation_valid() {
     let input = "pub let f() -> Int = 5 as Int;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -241,10 +230,10 @@ fn explicit_type_annotation_valid() {
     );
 }
 
-#[test]
-fn type_conversion_to_linexpr() {
+#[tokio::test]
+async fn type_conversion_to_linexpr() {
     let input = "pub let f() -> LinExpr = LinExpr(5);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -253,21 +242,23 @@ fn type_conversion_to_linexpr() {
     );
 }
 
-#[test]
-fn type_conversion_invalid_cast() {
+#[tokio::test]
+async fn type_conversion_invalid_cast() {
     let input = "pub let f() -> Int = Int(true);";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(!errors.is_empty(), "Invalid type cast should error");
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::ImpossibleConversion { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ImpossibleConversion { .. }))
+    );
 }
 
-#[test]
-fn chained_type_conversions() {
+#[tokio::test]
+async fn chained_type_conversions() {
     let input = "pub let f() -> LinExpr = LinExpr(Int(5));";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -278,10 +269,10 @@ fn chained_type_conversions() {
 
 // ========== Conversion to String Tests ==========
 
-#[test]
-fn int_to_string_conversion() {
+#[tokio::test]
+async fn int_to_string_conversion() {
     let input = r#"pub let f() -> String = String(42);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -290,10 +281,10 @@ fn int_to_string_conversion() {
     );
 }
 
-#[test]
-fn bool_to_string_conversion() {
+#[tokio::test]
+async fn bool_to_string_conversion() {
     let input = r#"pub let f() -> String = String(true);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -302,10 +293,10 @@ fn bool_to_string_conversion() {
     );
 }
 
-#[test]
-fn string_to_string_conversion() {
+#[tokio::test]
+async fn string_to_string_conversion() {
     let input = r#"pub let f() -> String = String("hello");"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -314,10 +305,10 @@ fn string_to_string_conversion() {
     );
 }
 
-#[test]
-fn linexpr_to_string_conversion() {
+#[tokio::test]
+async fn linexpr_to_string_conversion() {
     let input = r#"pub let f(x: LinExpr) -> String = String(x);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -326,10 +317,10 @@ fn linexpr_to_string_conversion() {
     );
 }
 
-#[test]
-fn none_to_string_conversion() {
+#[tokio::test]
+async fn none_to_string_conversion() {
     let input = r#"pub let f() -> String = String(none);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -338,10 +329,10 @@ fn none_to_string_conversion() {
     );
 }
 
-#[test]
-fn int_list_to_string_conversion() {
+#[tokio::test]
+async fn int_list_to_string_conversion() {
     let input = r#"pub let f() -> String = String([1, 2, 3]);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -350,10 +341,10 @@ fn int_list_to_string_conversion() {
     );
 }
 
-#[test]
-fn string_list_to_string_conversion() {
+#[tokio::test]
+async fn string_list_to_string_conversion() {
     let input = r#"pub let f() -> String = String(["a", "b", "c"]);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -362,23 +353,22 @@ fn string_list_to_string_conversion() {
     );
 }
 
-#[test]
-fn object_to_string_conversion() {
-    let types = simple_object("Student");
-    let input = r#"pub let f(s: Student) -> String = String(s);"#;
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn struct_to_string_conversion_type_system() {
+    let input = r#"pub let f(s: {name: String}) -> String = String(s);"#;
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "Object to String conversion should be valid: {:?}",
+        "Struct to String conversion should be valid: {:?}",
         errors
     );
 }
 
-#[test]
-fn conversion_to_string_in_concatenation() {
+#[tokio::test]
+async fn conversion_to_string_in_concatenation() {
     let input = r#"pub let f() -> String = "Value: " + (String(42));"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -387,10 +377,10 @@ fn conversion_to_string_in_concatenation() {
     );
 }
 
-#[test]
-fn chained_conversion_to_string() {
+#[tokio::test]
+async fn chained_conversion_to_string() {
     let input = r#"pub let f() -> String = String(LinExpr(Int(5)));"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -399,26 +389,24 @@ fn chained_conversion_to_string() {
     );
 }
 
-// ========== List of Object Types ==========
+// ========== List of Struct Types ==========
 
-#[test]
-fn list_of_objects() {
-    let types = simple_object("Student");
-    let input = "pub let f(students: [Student]) -> [Student] = students;";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn list_of_structs() {
+    let input = "pub let f(students: [{age: Int}]) -> [{age: Int}] = students;";
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
-        "List of objects should be valid: {:?}",
+        "List of structs should be valid: {:?}",
         errors
     );
 }
 
-#[test]
-fn list_of_objects_with_field_access_in_comprehension() {
-    let types = object_with_fields("Student", vec![("age", SimpleType::Int)]);
-    let input = "pub let f(students: [Student]) -> [Int] = [s.age for s in students];";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
+#[tokio::test]
+async fn list_of_structs_with_field_access_in_comprehension() {
+    let input = "pub let f(students: [{age: Int}]) -> [Int] = [s.age for s in students];";
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -427,53 +415,12 @@ fn list_of_objects_with_field_access_in_comprehension() {
     );
 }
 
-// ========== Global Collections ==========
-
-#[test]
-fn global_collection_primitive() {
-    let input = "pub let f() -> [Int] = @[Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of Int should not be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn global_collection_object() {
-    let types = simple_object("Student");
-    let input = "pub let f() -> [Student] = @[Student];";
-    let (_, errors, _) = analyze(input, types, HashMap::new());
-
-    assert!(
-        errors.is_empty(),
-        "Global collection of objects should be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn global_collection_unknown_type() {
-    let input = "pub let f() -> [UnknownType] = @[UnknownType];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
-
-    assert!(
-        !errors.is_empty(),
-        "Global collection of unknown type should error"
-    );
-    assert!(errors
-        .iter()
-        .any(|e| matches!(e, SemError::UnknownType { .. })));
-}
-
 // ========== Never Type ==========
 
-#[test]
-fn never_is_valid_input() {
+#[tokio::test]
+async fn never_is_valid_input() {
     let input = "pub let f(x: Never) -> Int = 42;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -482,10 +429,10 @@ fn never_is_valid_input() {
     );
 }
 
-#[test]
-fn never_is_valid_output() {
+#[tokio::test]
+async fn never_is_valid_output() {
     let input = "pub let f(x: Never) -> Never = x;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -494,10 +441,10 @@ fn never_is_valid_output() {
     );
 }
 
-#[test]
-fn never_converts_to_int() {
+#[tokio::test]
+async fn never_converts_to_int() {
     let input = "pub let f(x: Never) -> Int = x as Int;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -506,10 +453,10 @@ fn never_converts_to_int() {
     );
 }
 
-#[test]
-fn never_converts_to_bool() {
+#[tokio::test]
+async fn never_converts_to_bool() {
     let input = "pub let f(x: Never) -> Bool = x as Bool;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -518,10 +465,10 @@ fn never_converts_to_bool() {
     );
 }
 
-#[test]
-fn never_converts_to_list() {
+#[tokio::test]
+async fn never_converts_to_list() {
     let input = "pub let f(x: Never) -> [Int] = x as [Int];";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -530,10 +477,10 @@ fn never_converts_to_list() {
     );
 }
 
-#[test]
-fn never_converts_implicitely() {
+#[tokio::test]
+async fn never_converts_implicitely() {
     let input = "pub let f(x: Never) -> Int = x;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -542,11 +489,11 @@ fn never_converts_implicitely() {
     );
 }
 
-#[test]
-fn never_cannot_be_added() {
+#[tokio::test]
+async fn never_cannot_be_added() {
     let input = r#"let g(x: Never) -> Never = x;
 pub let f(x: Never) -> Int = 42 + g(x);"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         !errors.is_empty(),
@@ -555,14 +502,14 @@ pub let f(x: Never) -> Int = 42 + g(x);"#;
     );
 }
 
-#[test]
-fn never_can_appear_in_branch() {
+#[tokio::test]
+async fn never_can_appear_in_branch() {
     let input = r#"let f(x: Int, y: Never) -> Int = if x > 0 {
     x
 } else {
     y
 };"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -573,10 +520,10 @@ fn never_can_appear_in_branch() {
 
 // ========== Panic Expression ==========
 
-#[test]
-fn panic_returns_never_type() {
+#[tokio::test]
+async fn panic_returns_never_type() {
     let input = "pub let f() -> Never = panic! 42;";
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -585,8 +532,8 @@ fn panic_returns_never_type() {
     );
 }
 
-#[test]
-fn panic_accepts_any_inner_type() {
+#[tokio::test]
+async fn panic_accepts_any_inner_type() {
     let inputs = vec![
         "pub let f() -> Never = panic! 42;",
         "pub let f() -> Never = panic! true;",
@@ -595,7 +542,7 @@ fn panic_accepts_any_inner_type() {
         "pub let f() -> Never = panic! none;",
     ];
     for input in inputs {
-        let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+        let (_, errors, _) = analyze(input, HashMap::new()).await;
         assert!(
             errors.is_empty(),
             "panic! should accept any inner type: {:?} for '{}'",
@@ -605,8 +552,8 @@ fn panic_accepts_any_inner_type() {
     }
 }
 
-#[test]
-fn panic_coerces_to_any_return_type() {
+#[tokio::test]
+async fn panic_coerces_to_any_return_type() {
     let inputs = vec![
         "pub let f() -> Int = panic! 42;",
         "pub let f() -> Bool = panic! 42;",
@@ -614,7 +561,7 @@ fn panic_coerces_to_any_return_type() {
         "pub let f() -> String = panic! 42;",
     ];
     for input in inputs {
-        let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+        let (_, errors, _) = analyze(input, HashMap::new()).await;
         assert!(
             errors.is_empty(),
             "panic! should coerce to any return type: {:?} for '{}'",
@@ -624,14 +571,14 @@ fn panic_coerces_to_any_return_type() {
     }
 }
 
-#[test]
-fn panic_in_if_branch() {
+#[tokio::test]
+async fn panic_in_if_branch() {
     let input = r#"pub let f(x: Int) -> Int = if x > 0 {
     x
 } else {
     panic! 0
 };"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),
@@ -640,13 +587,13 @@ fn panic_in_if_branch() {
     );
 }
 
-#[test]
-fn panic_in_match_branch() {
+#[tokio::test]
+async fn panic_in_match_branch() {
     let input = r#"pub let f(x: Int | Bool) -> Int = match x {
     x as Int { x }
     x as Bool { panic! 0 }
 };"#;
-    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+    let (_, errors, _) = analyze(input, HashMap::new()).await;
 
     assert!(
         errors.is_empty(),

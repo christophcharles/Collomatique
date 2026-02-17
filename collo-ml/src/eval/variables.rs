@@ -8,142 +8,87 @@
 //! - `ConstraintWithOrigin`: A constraint paired with its origin
 
 use super::values::ExprValue;
+use crate::Hashed;
 use crate::ast::Spanned;
-use crate::traits::EvalObject;
+use crate::database::DatabaseConnection;
 use collomatique_ilp::Constraint;
 use derivative::Derivative;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Derivative)]
-#[derivative(PartialOrd, Ord, PartialEq, Eq)]
-pub struct ScriptVar<T: EvalObject> {
+pub type HashedIlpVar<D> = Hashed<IlpVar<D>>;
+
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct ScriptVar<D: DatabaseConnection> {
     pub module: String,
     pub name: String,
-    pub from_list: Option<usize>,
-    pub params: Vec<ExprValue<T>>,
-    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: Arc<str>,
+    pub params: Vec<Arc<ExprValue<D>>>,
 }
 
-impl<T: EvalObject> ScriptVar<T> {
-    pub fn new(
-        env: &T::Env,
-        cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
-        module: String,
-        name: String,
-        from_list: Option<usize>,
-        params: Vec<ExprValue<T>>,
-    ) -> Self {
-        let params_str = if let Some(cached) = var_str_cache.get(&params) {
-            cached.clone()
-        } else {
-            let args: Vec<_> = params
-                .iter()
-                .map(|x| x.convert_to_string(env, cache))
-                .collect();
-            let s: Arc<str> = args.join(", ").into();
-            var_str_cache.insert(params.clone(), s.clone());
-            s
-        };
+impl<D: DatabaseConnection> ScriptVar<D> {
+    pub fn new(module: String, name: String, params: Vec<Arc<ExprValue<D>>>) -> Self {
         ScriptVar {
             module,
             name,
-            from_list,
             params,
-            params_str,
-        }
-    }
-
-    pub fn new_no_env(
-        module: String,
-        name: String,
-        from_list: Option<usize>,
-        params: Vec<ExprValue<T>>,
-    ) -> Self {
-        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
-        ScriptVar {
-            module,
-            name,
-            from_list,
-            params,
-            params_str: args.join(", ").into(),
         }
     }
 }
 
-impl<T: EvalObject> std::fmt::Display for ScriptVar<T> {
+impl<D: DatabaseConnection> std::fmt::Display for ScriptVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.from_list {
-            Some(i) => {
-                write!(f, "${}({})[{}]", self.name, self.params_str, i)
-            }
-            None => {
-                write!(f, "${}({})", self.name, self.params_str)
-            }
-        }
+        let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
+        let params_str = params_str.join(", ");
+        write!(f, "${}({})", self.name, params_str)
     }
 }
 
-#[derive(Debug, Clone, Derivative)]
-#[derivative(PartialOrd, Ord, PartialEq, Eq)]
-pub struct ExternVar<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct ExternVar<D: DatabaseConnection> {
     pub name: String,
-    pub params: Vec<ExprValue<T>>,
-    #[derivative(PartialOrd = "ignore", PartialEq = "ignore", Ord = "ignore")]
-    params_str: Arc<str>,
+    pub params: Vec<Arc<ExprValue<D>>>,
 }
 
-impl<T: EvalObject> ExternVar<T> {
-    pub fn new(
-        env: &T::Env,
-        cache: &mut T::Cache,
-        var_str_cache: &mut BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
-        name: String,
-        params: Vec<ExprValue<T>>,
-    ) -> Self {
-        let params_str = if let Some(cached) = var_str_cache.get(&params) {
-            cached.clone()
-        } else {
-            let args: Vec<_> = params
-                .iter()
-                .map(|x| x.convert_to_string(env, cache))
-                .collect();
-            let s: Arc<str> = args.join(", ").into();
-            var_str_cache.insert(params.clone(), s.clone());
-            s
-        };
-        ExternVar {
-            name,
-            params,
-            params_str,
-        }
-    }
-
-    pub fn new_no_env(name: String, params: Vec<ExprValue<T>>) -> Self {
-        let args: Vec<_> = params.iter().map(|x| format!("{}", x)).collect();
-        ExternVar {
-            name,
-            params,
-            params_str: args.join(", ").into(),
-        }
+impl<D: DatabaseConnection> ExternVar<D> {
+    pub fn new(name: String, params: Vec<Arc<ExprValue<D>>>) -> Self {
+        ExternVar { name, params }
     }
 }
 
-impl<T: EvalObject> std::fmt::Display for ExternVar<T> {
+impl<D: DatabaseConnection> std::fmt::Display for ExternVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "${}({})", self.name, self.params_str)
+        let params_str: Vec<_> = self.params.iter().map(|x| x.convert_to_string()).collect();
+        write!(f, "${}({})", self.name, params_str.join(", "))
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum IlpVar<T: EvalObject> {
-    Base(ExternVar<T>),
-    Script(ScriptVar<T>),
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum IlpVar<D: DatabaseConnection> {
+    Base(ExternVar<D>),
+    Script(ScriptVar<D>),
 }
 
-impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
+impl<D: DatabaseConnection> std::fmt::Display for IlpVar<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IlpVar::Base(b) => write!(f, "{}", b),
@@ -152,15 +97,22 @@ impl<T: EvalObject> std::fmt::Display for IlpVar<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Origin<T: EvalObject> {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct Origin<D: DatabaseConnection> {
     pub module: String,
     pub fn_name: Spanned<String>,
-    pub args: Vec<ExprValue<T>>,
+    pub args: Vec<Arc<ExprValue<D>>>,
     pub pretty_docstring: Vec<String>,
 }
 
-impl<T: EvalObject> std::fmt::Display for Origin<T> {
+impl<D: DatabaseConnection> std::fmt::Display for Origin<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.pretty_docstring.is_empty() {
             let args_str: Vec<_> = self.args.iter().map(|x| x.to_string()).collect();
@@ -178,14 +130,21 @@ impl<T: EvalObject> std::fmt::Display for Origin<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ConstraintWithOrigin<T: EvalObject> {
-    pub constraint: Constraint<IlpVar<T>>,
-    pub origin: Option<Origin<T>>,
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct ConstraintWithOrigin<D: DatabaseConnection> {
+    pub constraint: Constraint<HashedIlpVar<D>>,
+    pub origin: Option<Origin<D>>,
 }
 
-impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
-    fn from(value: Constraint<IlpVar<T>>) -> Self {
+impl<D: DatabaseConnection> From<Constraint<HashedIlpVar<D>>> for ConstraintWithOrigin<D> {
+    fn from(value: Constraint<HashedIlpVar<D>>) -> Self {
         ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -193,8 +152,8 @@ impl<T: EvalObject> From<Constraint<IlpVar<T>>> for ConstraintWithOrigin<T> {
     }
 }
 
-pub fn strip_origins<T: EvalObject>(
-    set: &Vec<ConstraintWithOrigin<T>>,
-) -> Vec<Constraint<IlpVar<T>>> {
+pub fn strip_origins<D: DatabaseConnection>(
+    set: &Vec<ConstraintWithOrigin<D>>,
+) -> Vec<Constraint<HashedIlpVar<D>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }

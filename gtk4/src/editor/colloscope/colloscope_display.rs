@@ -194,8 +194,8 @@ impl Display {
         } else if self
             .slots
             .subject_map
-            .iter()
-            .map(|(_id, subject_slots)| subject_slots.ordered_slots.len())
+            .values()
+            .map(|subject_slots| subject_slots.ordered_slots.len())
             .sum::<usize>()
             == 0
         {
@@ -274,8 +274,8 @@ impl Display {
                             slots: collo_slot
                                 .interrogations
                                 .iter()
-                                .map(|interrogation_opt| match interrogation_opt {
-                                    Some(interrogation) => Some(
+                                .map(|interrogation_opt| {
+                                    interrogation_opt.as_ref().map(|interrogation| {
                                         interrogation
                                             .assigned_groups
                                             .iter()
@@ -293,9 +293,8 @@ impl Display {
                                                     },
                                                 )
                                             })
-                                            .collect(),
-                                    ),
-                                    None => None,
+                                            .collect()
+                                    })
                                 })
                                 .collect(),
                         },

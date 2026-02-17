@@ -1,50 +1,41 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 
 use super::*;
 
-#[test]
-fn test_fix_forces_variable_values() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn test_fix_forces_variable_values() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V(i32), // Parameter from 0 to 9
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
-            HashMap::from([(
-                "V".to_string(),
-                vec![crate::traits::SimpleFieldType::Int.into()],
-            )])
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
         }
 
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::V(i) => {
                     // Fix all variables to 0 except V(7)
-                    if *i != 7 {
-                        Some(0.0)
-                    } else {
-                        None
-                    }
+                    if *i != 7 { Some(0.0) } else { None }
                 }
             }
         }
 
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            let mut vars = BTreeMap::new();
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
             // Only include variables that are not fixed
             // In this case, only V(7) is not fixed
             vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
-            Ok(vars)
+            vars
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 1 {
@@ -54,14 +45,14 @@ fn test_fix_forces_variable_values() {
                             found: value.params.len(),
                         });
                     }
-                    let param = match &value.params[0] {
+                    let param = match &*value.params[0] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "V".into(),
                                 param: 0,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                                expected: SimpleType::Int.into(),
+                            });
                         }
                     };
                     Ok(Var::V(param))
@@ -78,8 +69,9 @@ fn test_fix_forces_variable_values() {
             pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -93,7 +85,10 @@ fn test_fix_forces_variable_values() {
         .add_constraint("test_fix", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

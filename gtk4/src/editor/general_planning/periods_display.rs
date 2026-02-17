@@ -1,8 +1,8 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
-use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
@@ -67,7 +67,7 @@ impl Entry {
         state: collomatique_state_colloscopes::periods::WeekDesc,
     ) -> WeekData {
         WeekData {
-            global_first_week: global_first_week,
+            global_first_week,
             first_week_in_period,
             week_num_in_period,
             state,
@@ -169,7 +169,7 @@ impl FactoryComponent for Entry {
                     state,
                 )
             }),
-            |x| WeekInput::UpdateData(x),
+            WeekInput::UpdateData,
         );
 
         model
@@ -204,7 +204,7 @@ impl FactoryComponent for Entry {
                             state,
                         )
                     }),
-                    |x| WeekInput::UpdateData(x),
+                    WeekInput::UpdateData,
                 );
             }
             EntryInput::EditClicked => {

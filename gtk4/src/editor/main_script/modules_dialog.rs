@@ -1,7 +1,7 @@
 use gtk::prelude::{ButtonExt, GtkWindowExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -99,7 +99,7 @@ impl SimpleComponent for Dialog {
             scrolled_window.set_child(Some(&text_view));
             widgets
                 .modules_stack
-                .add_titled(&scrolled_window, Some(*name), *name);
+                .add_titled(&scrolled_window, Some(*name), name);
         }
 
         ComponentParts { model, widgets }

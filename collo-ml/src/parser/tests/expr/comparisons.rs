@@ -82,7 +82,7 @@ fn comparison_accepts_greater_than_or_equal() {
         "x >= y",
         "10 >= 5",
         "$Var(x) >= 0",
-        "sum x in @[X] { $V(x) } >= 1",
+        "sum x in x_list { $V(x) } >= 1",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -95,7 +95,7 @@ fn comparison_with_arithmetic() {
     let cases = vec![
         "x + 5 > 10",
         "student.age * 2 == 36",
-        "|@[Student]| > 0",
+        "|students| > 0",
         "(a + b) <= (c * 2)",
         "x / 2 == 3",
         "week % 2 == 0",
@@ -118,7 +118,7 @@ fn comparison_accepts_constraint_equality() {
         "$V1(x) === $V2(y)",
         "2 * $V(x) === 5",
         "$V(x) + $V(y) === 10",
-        "sum x in @[X] { $V(x) } === |@[X]|",
+        "sum x in x_list { $V(x) } === |x_list|",
         "5 === 10", // Int coerces to LinExpr
     ];
     for case in cases {
@@ -132,8 +132,8 @@ fn comparison_accepts_constraint_less_equal() {
     let cases = vec![
         "$Var(x) <== 10",
         "$V1(x) + $V2(y) <== 5",
-        "2 * $V(x) <== |@[Student]|",
-        "sum x in @[X] { $V(x) } <== 100",
+        "2 * $V(x) <== |students|",
+        "sum x in x_list { $V(x) } <== 100",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -146,7 +146,7 @@ fn comparison_accepts_constraint_greater_equal() {
     let cases = vec![
         "$Var(x) >== 0",
         "$V1(x) - $V2(y) >== -5",
-        "sum x in @[X] { $V(x) } >== 1",
+        "sum x in x_list { $V(x) } >== 1",
         "$V(x) * 2 >== student.min_value",
     ];
     for case in cases {
@@ -179,10 +179,10 @@ fn comparison_distinguishes_constraint_from_regular() {
 #[test]
 fn comparison_in_aggregations() {
     let cases = vec![
-        "forall x in @[X] { $V(x) === 1 }",
-        "forall x in @[X] { $V(x) <== 10 }",
-        "forall x in @[X] { $V(x) >== 0 }",
-        "forall x in @[X] { $V(x) <== 10 and $V(x) >== 0 }",
+        "forall x in x_list { $V(x) === 1 }",
+        "forall x in x_list { $V(x) <== 10 }",
+        "forall x in x_list { $V(x) >== 0 }",
+        "forall x in x_list { $V(x) <== 10 and $V(x) >== 0 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);

@@ -1,10 +1,10 @@
 use adw::prelude::{EditableExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 
@@ -326,7 +326,7 @@ impl Dialog {
                     name: name.clone(),
                     group_num: num,
                 }),
-            |data| GroupNameInput::UpdateData(data),
+            GroupNameInput::UpdateData,
         );
     }
 }

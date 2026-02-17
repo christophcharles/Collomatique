@@ -1,42 +1,40 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 
 use super::*;
 
-#[test]
-fn internal_reification() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn internal_reification() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
         X,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -87,8 +85,9 @@ fn internal_reification() {
                 $R1() + $R2() + $R3() === 1 and $R2() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -101,7 +100,10 @@ fn internal_reification() {
         .add_constraint("reify_test", "exactly_one_and_force_w", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -133,35 +135,33 @@ fn internal_reification() {
     );
 }
 
-#[test]
-fn private_reification_does_not_leak() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn private_reification_does_not_leak() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -210,8 +210,9 @@ fn private_reification_does_not_leak() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -229,7 +230,10 @@ fn private_reification_does_not_leak() {
         .add_constraint("second_module", "use_r_again", vec![])
         .expect("Should add constraint from second_module");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -252,40 +256,38 @@ fn private_reification_does_not_leak() {
     );
 }
 
-#[test]
-fn three_module_chain_define_reify_use() {
+#[tokio::test]
+async fn three_module_chain_define_reify_use() {
     // Tests cross-module reification:
     // - Module 1 (definitions): defines a constraint function
     // - Module 2 (reifications): imports module 1 and reifies its function
     // - Module 3 (main): imports module 2 and uses the reified variable
 
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -344,8 +346,9 @@ fn three_module_chain_define_reify_use() {
         ),
     ]);
 
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -361,7 +364,10 @@ fn three_module_chain_define_reify_use() {
         .add_constraint("main", "force_v", vec![])
         .expect("Should add force_v constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

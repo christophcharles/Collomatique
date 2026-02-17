@@ -1,9 +1,9 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 
 use super::*;
 
-#[test]
-fn complete_interrogations_scheduling() {
+#[tokio::test]
+async fn complete_interrogations_scheduling() {
     // Colles scheduling problem:
     // - 11 students
     // - 3 subjects (each with 4 teachers, so 12 teachers total)
@@ -13,7 +13,7 @@ fn complete_interrogations_scheduling() {
     // - Each student has each subject exactly once over the 3 weeks
     // - Each teacher interrogates at most 1 student per week
 
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         StudentWithTeacher {
             student: i32, // 0..11
@@ -22,19 +22,20 @@ fn complete_interrogations_scheduling() {
         },
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([(
                 "StudentWithTeacher".to_string(),
                 vec![
-                    crate::traits::SimpleFieldType::Int.into(),
-                    crate::traits::SimpleFieldType::Int.into(),
-                    crate::traits::SimpleFieldType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
                 ],
             )])
         }
 
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::StudentWithTeacher {
                     student,
@@ -56,11 +57,8 @@ fn complete_interrogations_scheduling() {
             }
         }
 
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            let mut vars = BTreeMap::new();
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
             // Only create variables for valid combinations
             for student in 0..11 {
                 for teacher in 0..12 {
@@ -76,13 +74,13 @@ fn complete_interrogations_scheduling() {
                     }
                 }
             }
-            Ok(vars)
+            vars
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "StudentWithTeacher" => {
                     if value.params.len() != 3 {
@@ -92,34 +90,34 @@ fn complete_interrogations_scheduling() {
                             found: value.params.len(),
                         });
                     }
-                    let student = match &value.params[0] {
+                    let student = match &*value.params[0] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 0,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                                expected: SimpleType::Int.into(),
+                            });
                         }
                     };
-                    let teacher = match &value.params[1] {
+                    let teacher = match &*value.params[1] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 1,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                                expected: SimpleType::Int.into(),
+                            });
                         }
                     };
-                    let week = match &value.params[2] {
+                    let week = match &*value.params[2] {
                         crate::eval::ExprValue::Int(i) => *i,
                         _ => {
                             return Err(VarConversionError::WrongParameterType {
                                 name: "StudentWithTeacher".into(),
                                 param: 2,
-                                expected: crate::traits::SimpleFieldType::Int.into(),
-                            })
+                                expected: SimpleType::Int.into(),
+                            });
                         }
                     };
                     Ok(Var::StudentWithTeacher {
@@ -163,8 +161,9 @@ fn complete_interrogations_scheduling() {
                 };
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -182,7 +181,10 @@ fn complete_interrogations_scheduling() {
         .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

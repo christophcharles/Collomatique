@@ -1,0 +1,262 @@
+import "collomatique_db" as *;
+import "collomatique_types" as *;
+
+pub query group_list_for_interrogation(db: Db, slot: SlotId, week: GlobalWeek) -> ?GroupListId = "
+WITH ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        pw.has_interrogations,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+),
+slot_info AS (
+    SELECT s.subject_id, s.week_pattern_id
+    FROM slots s
+    WHERE s.id = ?
+),
+target_week AS (
+    SELECT period_id, week_index, has_interrogations
+    FROM ordered_weeks
+    WHERE global_week_number = ?
+),
+week_is_disabled AS (
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    JOIN target_week tw ON tw.period_id = wpd.period_id AND tw.week_index = wpd.week_index
+    JOIN slot_info si ON si.week_pattern_id = wpd.week_pattern_id
+)
+SELECT glsa.group_list_id AS id
+FROM target_week tw
+JOIN slot_info si
+JOIN group_list_subject_associations glsa
+    ON glsa.period_id = tw.period_id
+   AND glsa.subject_id = si.subject_id
+WHERE tw.has_interrogations = 1
+  AND NOT EXISTS (SELECT 1 FROM week_is_disabled);
+";
+
+pub query groups_for_group_list(db: Db, group_list: GroupListId) -> [GroupNum] =
+    "SELECT group_index FROM group_list_group_names WHERE group_list_id = ?";
+
+pub query groups_for_interrogation(db: Db, slot: SlotId, week: GlobalWeek) -> [GroupNum] = "
+WITH ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        pw.has_interrogations,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+),
+slot_info AS (
+    SELECT s.subject_id, s.week_pattern_id
+    FROM slots s
+    WHERE s.id = ?
+),
+target_week AS (
+    SELECT period_id, week_index, has_interrogations
+    FROM ordered_weeks
+    WHERE global_week_number = ?
+),
+week_is_disabled AS (
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    JOIN target_week tw ON tw.period_id = wpd.period_id AND tw.week_index = wpd.week_index
+    JOIN slot_info si ON si.week_pattern_id = wpd.week_pattern_id
+)
+SELECT glgn.group_index AS group_num
+FROM target_week tw
+JOIN slot_info si
+JOIN group_list_subject_associations glsa
+JOIN group_list_group_names glgn
+    ON glsa.period_id = tw.period_id
+   AND glsa.subject_id = si.subject_id
+   AND glsa.group_list_id = glgn.group_list_id
+WHERE tw.has_interrogations = 1
+  AND NOT EXISTS (SELECT 1 FROM week_is_disabled);
+";
+
+pub query student_prefilled_group(db: Db, student: StudentId, group_list: GroupListId) -> ?GroupNum =
+    "SELECT group_index FROM prefilled_group_students WHERE student_id = ? AND group_list_id = ?";
+
+query group_list_filling(db: Db, group_list: GroupListId) -> ?String =
+    "SELECT filling_type FROM group_lists WHERE id = ?";
+
+pub let group_list_is_prefilled(db: Db, group_list: GroupListId) -> Bool =
+    group_list_filling(db, group_list) == "prefilled";
+
+pub query group_prefilled_student_count(db: Db, group_list: GroupListId, group: GroupNum) -> ?Int =
+    "SELECT COUNT(*) AS student_count FROM prefilled_group_students WHERE group_list_id = ? AND group_index = ?";
+
+pub query students_for_automatic_group_list(db: Db, group_list: GroupListId) -> [StudentId] =
+    "SELECT id FROM students EXCEPT SELECT student_id AS id FROM automatic_group_excluded_students WHERE group_list_id = ?";
+
+pub query students_for_group_list(db: Db, group_list: GroupListId) -> [StudentId] = "
+SELECT s.id AS student_id
+FROM students s
+WHERE
+  (
+    EXISTS (SELECT 1 FROM group_lists gl WHERE gl.id = ?1 AND gl.filling_type = 'automatic')
+    AND NOT EXISTS (
+      SELECT 1 FROM automatic_group_excluded_students ages
+      WHERE ages.group_list_id = ?1 AND ages.student_id = s.id
+    )
+  )
+  OR
+  EXISTS (
+    SELECT 1 FROM prefilled_group_students pgs
+    WHERE pgs.group_list_id = ?1 AND pgs.student_id = s.id
+  )
+";
+
+pub query interrogations(db: Db) -> [(SlotId, GlobalWeek)] = "
+WITH ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        pw.has_interrogations,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+)
+SELECT s.id AS slot_id, ow.global_week_number AS global_week
+FROM slots s
+JOIN ordered_weeks ow ON ow.has_interrogations = 1
+JOIN subject_interrogation_params sip ON sip.subject_id = s.subject_id
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    WHERE wpd.week_pattern_id = s.week_pattern_id
+      AND wpd.period_id = ow.period_id
+      AND wpd.week_index = ow.week_index
+)
+";
+
+query get_slots_for_student_during_internal(db: Db, student_id: StudentId, period_id: PeriodId, week: LocalWeek, day: WeekdayNum, start_time: Time, duration: Duration) -> [SlotId] = "
+SELECT s.id AS slot_id
+FROM slots s
+WHERE
+    s.day = ?4
+    AND s.start_time < (?5 + ?6)
+    AND (s.start_time + (
+        SELECT sip.duration_minutes
+        FROM subject_interrogation_params sip
+        WHERE sip.subject_id = s.subject_id
+    )) > ?5
+    AND NOT EXISTS (
+        SELECT 1
+        FROM student_excluded_periods sep
+        WHERE sep.student_id = ?1
+          AND sep.period_id = ?2
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM subject_excluded_periods sxp
+        WHERE sxp.subject_id = s.subject_id
+          AND sxp.period_id = ?2
+    )
+    AND (
+        s.week_pattern_id IS NULL
+        OR NOT EXISTS (
+            SELECT 1
+            FROM week_pattern_disabled_weeks wpdw
+            WHERE wpdw.week_pattern_id = s.week_pattern_id
+              AND wpdw.period_id = ?2
+              AND wpdw.week_index = ?3
+        )
+    );
+";
+
+pub let get_slots_for_student_during(db: Db, student_id: StudentId, desc: TimeSlotDesc) -> [SlotId] =
+    get_slots_for_student_during_internal(db, student_id, desc.period_id, desc.week, desc.day, desc.start_time, desc.duration);
+
+query get_counted_slots_for_student_during_internal(db: Db, student_id: StudentId, period_id: PeriodId, week: LocalWeek, day: WeekdayNum, start_time: Time, duration: Duration) -> [SlotId] = "
+SELECT s.id AS slot_id
+FROM slots s
+JOIN subject_interrogation_params sip ON sip.subject_id = s.subject_id
+WHERE
+    sip.take_duration_into_account = 1
+    AND s.day = ?4
+    AND s.start_time < (?5 + ?6)
+    AND (s.start_time + sip.duration_minutes) > ?5
+    AND NOT EXISTS (
+        SELECT 1 FROM student_excluded_periods sep
+        WHERE sep.student_id = ?1 AND sep.period_id = ?2
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM subject_excluded_periods sxp
+        WHERE sxp.subject_id = s.subject_id AND sxp.period_id = ?2
+    )
+    AND (
+        s.week_pattern_id IS NULL
+        OR NOT EXISTS (
+            SELECT 1 FROM week_pattern_disabled_weeks wpdw
+            WHERE wpdw.week_pattern_id = s.week_pattern_id
+              AND wpdw.period_id = ?2
+              AND wpdw.week_index = ?3
+        )
+    );
+";
+
+pub let get_counted_slots_for_student_during(db: Db, student_id: StudentId, desc: TimeSlotDesc) -> [SlotId] =
+    get_counted_slots_for_student_during_internal(db, student_id, desc.period_id, desc.week, desc.day, desc.start_time, desc.duration);
+
+query time_resolution_internal(db: Db) -> ?Duration = "
+WITH RECURSIVE
+all_times(val) AS (
+    SELECT start_time FROM slots WHERE start_time > 0
+    UNION ALL
+    SELECT duration_minutes FROM subject_interrogation_params
+    UNION ALL
+    SELECT start_time FROM incompat_slots WHERE start_time > 0
+    UNION ALL
+    SELECT duration_minutes FROM incompat_slots
+    UNION ALL
+    SELECT 1440
+),
+numbered AS (
+    SELECT val, ROW_NUMBER() OVER () AS rn,
+           COUNT(*) OVER () AS total
+    FROM all_times
+),
+euclid(step, a, b) AS (
+    SELECT 2,
+           (SELECT val FROM numbered WHERE rn = 1),
+           (SELECT val FROM numbered WHERE rn = 2)
+    UNION ALL
+    SELECT
+        CASE WHEN b = 0 THEN step + 1 ELSE step END,
+        CASE WHEN b = 0 THEN (SELECT val FROM numbered WHERE rn = step + 1) ELSE b END,
+        CASE WHEN b = 0 THEN a ELSE a % b END
+    FROM euclid
+    WHERE NOT (b = 0 AND step >= (SELECT total FROM numbered LIMIT 1))
+)
+SELECT COALESCE(a, 60) AS time_resolution
+FROM euclid
+WHERE b = 0
+ORDER BY step DESC
+LIMIT 1;
+";
+
+pub let time_resolution(db: Db) -> Duration =
+    time_resolution_internal(db) ?? Duration(60);

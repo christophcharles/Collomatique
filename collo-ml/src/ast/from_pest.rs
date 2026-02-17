@@ -1,10 +1,11 @@
 use super::{
-    parse_docstring_line, AstError, EnumVariant, EnumVariantType, Expr, File, ImportAlias,
-    MatchBranch, MaybeTypeName, NamespacePath, Param, PathSegment, SimpleTypeName, Span, Spanned,
-    Statement, TypeName,
+    AstError, EnumVariant, EnumVariantType, Expr, File, ImportAlias, MatchBranch, MaybeTypeName,
+    NamespacePath, Param, PathSegment, SimpleTypeName, Span, Spanned, Statement, TypeName,
+    parse_docstring_line,
 };
 use crate::parser::Rule;
 use pest::iterators::Pair;
+use std::sync::Arc;
 
 impl File {
     pub fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -46,12 +47,13 @@ impl Statement {
     fn from_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
         match pair.as_rule() {
             Rule::let_statement => Self::from_let_pest(pair),
+            Rule::query_statement => Self::from_query_pest(pair),
             Rule::reify_statement => Self::from_reify_pest(pair),
             Rule::type_statement => Self::from_type_pest(pair),
             Rule::enum_statement => Self::from_enum_pest(pair),
             Rule::import_statement => Self::from_import_pest(pair),
             _ => Err(AstError::UnexpectedRule {
-                expected: "let_statement, reify_statement, type_statement, enum_statement, or import_statement",
+                expected: "let_statement, query_statement, reify_statement, type_statement, enum_statement, or import_statement",
                 found: pair.as_rule(),
                 span: Span::from_pest(&pair),
             }),
@@ -119,13 +121,74 @@ impl Statement {
         })
     }
 
+    fn from_query_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // query_statement = { docstring* ~ pub_modifier? ~ "query" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ string_literal ~ ";" }
+        let span = Span::from_pest(&pair);
+        let mut docstring = Vec::new();
+        let mut public = false;
+        let mut name = None;
+        let mut params = Vec::new();
+        let mut output_type = None;
+        let mut query_string = None;
+
+        for inner_pair in pair.into_inner() {
+            match inner_pair.as_rule() {
+                Rule::docstring => {
+                    let docstring_span = Span::from_pest(&inner_pair);
+                    let content = inner_pair
+                        .into_inner()
+                        .next()
+                        .map(|p| p.as_str().to_string())
+                        .unwrap_or_default();
+                    let parsed_line = parse_docstring_line(&content, docstring_span.start)?;
+                    docstring.push(parsed_line);
+                }
+                Rule::pub_modifier => {
+                    public = true;
+                }
+                Rule::ident => {
+                    if name.is_none() {
+                        name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
+                    }
+                }
+                Rule::params => {
+                    params = parse_params(inner_pair)?;
+                }
+                Rule::type_name => {
+                    let type_name_span = Span::from_pest(&inner_pair);
+                    output_type = Some(Spanned::new(
+                        TypeName::from_pest(inner_pair)?,
+                        type_name_span,
+                    ));
+                }
+                Rule::string_literal => {
+                    let lit_span = Span::from_pest(&inner_pair);
+                    let content = parse_string_literal(inner_pair.as_str());
+                    query_string = Some(Spanned::new(content, lit_span));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Statement::Query {
+            docstring,
+            public,
+            name: name.ok_or(AstError::MissingName(span.clone()))?,
+            params,
+            output_type: output_type.ok_or(AstError::MissingTypeName(span.clone()))?,
+            query_string: query_string.ok_or(AstError::MissingBody(span))?,
+        })
+    }
+
     fn from_reify_pest(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         let mut docstring = Vec::new();
         let mut public = false;
         let mut constraint_path = None;
         let mut name = None;
-        let mut var_list = false;
 
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
@@ -162,18 +225,6 @@ impl Statement {
                         Span::from_pest(&inner_pair),
                     ));
                 }
-                Rule::var_list_name => {
-                    // var_name is "$[" ~ ident ~ "]", so we need to strip the $[...]
-                    name = Some(Spanned::new(
-                        inner_pair
-                            .as_str()
-                            .trim_start_matches("$[")
-                            .trim_end_matches("]")
-                            .to_string(),
-                        Span::from_pest(&inner_pair),
-                    ));
-                    var_list = true;
-                }
                 _ => {}
             }
         }
@@ -183,7 +234,6 @@ impl Statement {
             public,
             constraint_path: constraint_path.ok_or(AstError::MissingName(span.clone()))?,
             name: name.ok_or(AstError::MissingName(span))?,
-            var_list,
         })
     }
 
@@ -513,8 +563,9 @@ impl SimpleTypeName {
                     }
                     Rule::tuple_type => Self::from_tuple_type(inner_pair),
                     Rule::struct_type => Self::from_struct_type(inner_pair),
+                    Rule::database_schema_type => Self::from_database_schema_type(inner_pair),
                     _ => Err(AstError::UnexpectedRule {
-                        expected: "namespace_path, type_name, tuple_type, or struct_type",
+                        expected: "namespace_path, type_name, tuple_type, struct_type, or database_schema_type",
                         found: inner_pair.as_rule(),
                         span: Span::from_pest(&inner_pair),
                     }),
@@ -559,6 +610,18 @@ impl SimpleTypeName {
         }
 
         Ok(SimpleTypeName::Struct(fields))
+    }
+
+    fn from_database_schema_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        // database_schema_type = { database_schema_start ~ string_literal+ ~ "}" }
+        // Concatenate all string literals
+        let schema_string: String = pair
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::string_literal)
+            .map(|p| parse_string_literal(p.as_str()))
+            .collect();
+
+        Ok(SimpleTypeName::DatabaseSchema(schema_string))
     }
 
     fn from_namespace_path_type(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -644,8 +707,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::NullCoalesce(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -665,8 +728,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::Or(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -688,8 +751,8 @@ impl Expr {
 
             let result_span = span.clone();
             result = Expr::And(
-                Box::new(Spanned::new(result, result_span.clone())),
-                Box::new(Spanned::new(right, result_span)),
+                Arc::new(Spanned::new(result, result_span.clone())),
+                Arc::new(Spanned::new(right, result_span)),
             );
         }
 
@@ -707,7 +770,7 @@ impl Expr {
                 let expr_pair = inner.next().unwrap();
                 let expr_span = Span::from_pest(&expr_pair);
                 let expr = Self::from_not_expr(expr_pair)?;
-                Ok(Expr::Not(Box::new(Spanned::new(expr, expr_span))))
+                Ok(Expr::Not(Arc::new(Spanned::new(expr, expr_span))))
             }
             Rule::forall_expr => Self::from_forall_expr(first),
             _ => Err(AstError::UnexpectedRule {
@@ -755,7 +818,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if has_filter && filter.is_none() {
@@ -797,7 +860,7 @@ impl Expr {
 
         let item_pair = inner.next().unwrap();
         let item_span = Span::from_pest(&item_pair);
-        let item = Box::new(Spanned::new(
+        let item = Arc::new(Spanned::new(
             Self::from_relational_expr(item_pair)?,
             item_span,
         ));
@@ -806,7 +869,7 @@ impl Expr {
 
         let coll_pair = inner.next().unwrap();
         let coll_span = Span::from_pest(&coll_pair);
-        let collection = Box::new(Spanned::new(
+        let collection = Arc::new(Spanned::new(
             Self::from_relational_expr(coll_pair)?,
             coll_span,
         ));
@@ -827,8 +890,8 @@ impl Expr {
             let right_span = Span::from_pest(&right_pair);
             let right = Self::from_add_sub_expr(right_pair)?;
 
-            let left_spanned = Box::new(Spanned::new(left, left_span));
-            let right_spanned = Box::new(Spanned::new(right, right_span));
+            let left_spanned = Arc::new(Spanned::new(left, left_span));
+            let right_spanned = Arc::new(Spanned::new(right, right_span));
 
             match op_pair.as_str() {
                 "===" => Ok(Expr::ConstraintEq(left_spanned, right_spanned)),
@@ -866,19 +929,19 @@ impl Expr {
             let result_span = span.clone();
             result = match op_pair.as_rule() {
                 Rule::add_op => Expr::Add(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::sub_op => Expr::Sub(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 _ => {
                     return Err(AstError::UnexpectedRule {
                         expected: "add_op or sub_op",
                         found: op_pair.as_rule(),
                         span: Span::from_pest(&op_pair),
-                    })
+                    });
                 }
             };
         }
@@ -900,23 +963,23 @@ impl Expr {
             let result_span = span.clone();
             result = match op_pair.as_rule() {
                 Rule::mul_op => Expr::Mul(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::div_op => Expr::Div(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 Rule::mod_op => Expr::Mod(
-                    Box::new(Spanned::new(result, result_span.clone())),
-                    Box::new(Spanned::new(right, result_span)),
+                    Arc::new(Spanned::new(result, result_span.clone())),
+                    Arc::new(Spanned::new(right, result_span)),
                 ),
                 _ => {
                     return Err(AstError::UnexpectedRule {
                         expected: "mul_op, div_op, or mod_op",
                         found: op_pair.as_rule(),
                         span: Span::from_pest(&op_pair),
-                    })
+                    });
                 }
             };
         }
@@ -950,11 +1013,11 @@ impl Expr {
 
             match cast_op {
                 "cast?" => Ok(Expr::CastFallible {
-                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    expr: Arc::new(Spanned::new(expr, expr_span)),
                     typ: Spanned::new(typ, type_span),
                 }),
                 "cast!" => Ok(Expr::CastPanic {
-                    expr: Box::new(Spanned::new(expr, expr_span)),
+                    expr: Arc::new(Spanned::new(expr, expr_span)),
                     typ: Spanned::new(typ, type_span),
                 }),
                 _ => panic!("Unknown cast operator: {}", cast_op),
@@ -989,7 +1052,7 @@ impl Expr {
             let typ = TypeName::from_pest(type_pair)?;
 
             Ok(Expr::ExplicitType {
-                expr: Box::new(Spanned::new(expr, expr_span)),
+                expr: Arc::new(Spanned::new(expr, expr_span)),
                 typ: Spanned::new(typ, type_span),
             })
         } else {
@@ -1051,7 +1114,7 @@ impl Expr {
                     let index_expr_pair = index_inner.next().unwrap();
                     let index_expr_span = Span::from_pest(&index_expr_pair);
                     let index_expr = Self::from_pest(index_expr_pair)?;
-                    let boxed_index = Box::new(Spanned::new(index_expr, index_expr_span));
+                    let boxed_index = Arc::new(Spanned::new(index_expr, index_expr_span));
 
                     // Second is index_suffix which contains "]" and index_op
                     let suffix_pair = index_inner.next().unwrap();
@@ -1074,7 +1137,7 @@ impl Expr {
             Ok(expr)
         } else {
             Ok(Expr::Path {
-                object: Box::new(Spanned::new(expr, expr_span)),
+                object: Arc::new(Spanned::new(expr, expr_span)),
                 segments,
             })
         }
@@ -1107,9 +1170,7 @@ impl Expr {
             Rule::list_comprehension => Self::from_list_comprehension(inner),
             Rule::list_range => Self::from_list_range(inner),
             Rule::list_literal => Self::from_list_literal(inner),
-            Rule::global_collection => Self::from_global_collection(inner),
             Rule::var_call => Self::from_var_call(inner),
-            Rule::var_list_call => Self::from_var_list_call(inner),
             Rule::generic_call => Self::from_generic_call(inner),
             Rule::struct_call => Self::from_struct_call(inner),
             Rule::complex_type_cast => Self::from_complex_type_cast(inner),
@@ -1136,7 +1197,7 @@ impl Expr {
                 Self::from_pest(inner)
             }
             _ => Err(AstError::UnexpectedRule {
-                expected: "if_expr match_expr sum cardinality list_comprehension list_literal global_collection var_call fn_call string_literal boolean number path expr",
+                expected: "if_expr match_expr sum cardinality list_comprehension list_literal var_call fn_call string_literal boolean number path expr",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
@@ -1148,18 +1209,18 @@ impl Expr {
 
         let condition_pair = inner.next().unwrap();
         let condition_span = Span::from_pest(&condition_pair);
-        let condition = Box::new(Spanned::new(
+        let condition = Arc::new(Spanned::new(
             Self::from_pest(condition_pair)?,
             condition_span,
         ));
 
         let then_pair = inner.next().unwrap();
         let then_span = Span::from_pest(&then_pair);
-        let then_expr = Box::new(Spanned::new(Self::from_pest(then_pair)?, then_span));
+        let then_expr = Arc::new(Spanned::new(Self::from_pest(then_pair)?, then_span));
 
         let else_pair = inner.next().unwrap();
         let else_span = Span::from_pest(&else_pair);
-        let else_expr = Box::new(Spanned::new(Self::from_pest(else_pair)?, else_span));
+        let else_expr = Arc::new(Spanned::new(Self::from_pest(else_pair)?, else_span));
 
         Ok(Expr::If {
             condition,
@@ -1176,7 +1237,7 @@ impl Expr {
         // First inner element is the expression being matched
         let expr_pair = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
         let expr_span = Span::from_pest(&expr_pair);
-        let match_expr = Box::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
+        let match_expr = Arc::new(Spanned::new(Self::from_pest(expr_pair)?, expr_span));
 
         // Remaining elements are match branches
         let mut branches = Vec::new();
@@ -1230,7 +1291,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&element);
-                    let parsed_expr = Spanned::new(Expr::from_pest(element)?, expr_span);
+                    let parsed_expr = Arc::new(Spanned::new(Expr::from_pest(element)?, expr_span));
 
                     if has_filter && filter.is_none() {
                         filter = Some(parsed_expr);
@@ -1269,7 +1330,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if has_filter && filter.is_none() {
@@ -1315,7 +1376,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if collection.is_none() {
                         collection = Some(expr);
                     } else if init_value.is_none() {
@@ -1355,7 +1416,7 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let expr = Box::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
+                    let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                     if value.is_none() {
                         value = Some(expr);
                     } else if body.is_none() {
@@ -1382,7 +1443,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let coll_span = Span::from_pest(&coll_pair);
-        let collection = Box::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
+        let collection = Arc::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
 
         Ok(Expr::Cardinality(collection))
     }
@@ -1395,7 +1456,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let neg_span = Span::from_pest(&neg_pair);
-        let term = Box::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
+        let term = Arc::new(Spanned::new(Expr::from_pest(neg_pair)?, neg_span));
 
         Ok(Expr::Neg(term))
     }
@@ -1408,7 +1469,7 @@ impl Expr {
             .ok_or(AstError::MissingBody(span))?;
 
         let inner_span = Span::from_pest(&inner_pair);
-        let inner = Box::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
+        let inner = Arc::new(Spanned::new(Expr::from_pest(inner_pair)?, inner_span));
 
         Ok(Expr::Panic(inner))
     }
@@ -1420,7 +1481,10 @@ impl Expr {
             .filter(|p| p.as_rule() == Rule::expr)
             .map(|expr_pair| {
                 let expr_span = Span::from_pest(&expr_pair);
-                Ok(Spanned::new(Expr::from_pest(expr_pair)?, expr_span))
+                Ok(Arc::new(Spanned::new(
+                    Expr::from_pest(expr_pair)?,
+                    expr_span,
+                )))
             })
             .collect();
 
@@ -1444,7 +1508,7 @@ impl Expr {
 
                 let expr_pair = inner.next().unwrap();
                 let expr_span = Span::from_pest(&expr_pair);
-                let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+                let expr = Arc::new(Spanned::new(Expr::from_pest(expr_pair)?, expr_span));
 
                 fields.push((name, expr));
             }
@@ -1477,7 +1541,7 @@ impl Expr {
         );
 
         Ok(Expr::ExplicitType {
-            expr: Box::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
+            expr: Arc::new(Spanned::new(Expr::ListLiteral { elements: vec![] }, span)),
             typ,
         })
     }
@@ -1489,7 +1553,7 @@ impl Expr {
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::expr {
                 let expr_span = Span::from_pest(&inner);
-                let expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
+                let expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
                 elements.push(expr);
             }
         }
@@ -1505,11 +1569,11 @@ impl Expr {
 
         let first = inner.next().ok_or(AstError::MissingExpr(span.clone()))?;
         let expr_span = Span::from_pest(&first);
-        let start = Box::new(Spanned::new(Expr::from_pest(first)?, expr_span));
+        let start = Arc::new(Spanned::new(Expr::from_pest(first)?, expr_span));
 
         let second = inner.next().ok_or(AstError::MissingExpr(span))?;
         let expr_span = Span::from_pest(&second);
-        let end = Box::new(Spanned::new(Expr::from_pest(second)?, expr_span));
+        let end = Arc::new(Spanned::new(Expr::from_pest(second)?, expr_span));
 
         Ok(Expr::ListRange { start, end })
     }
@@ -1534,12 +1598,12 @@ impl Expr {
                 }
                 Rule::expr => {
                     let expr_span = Span::from_pest(&inner);
-                    let parsed_expr = Spanned::new(Expr::from_pest(inner)?, expr_span);
+                    let parsed_expr = Arc::new(Spanned::new(Expr::from_pest(inner)?, expr_span));
 
                     if has_filter {
-                        filter = Some(Box::new(parsed_expr));
+                        filter = Some(parsed_expr);
                     } else if expr.is_none() {
-                        expr = Some(Box::new(parsed_expr));
+                        expr = Some(parsed_expr);
                     } else {
                         collections.push(parsed_expr);
                     }
@@ -1554,29 +1618,13 @@ impl Expr {
         if vars.len() > collections.len() {
             return Err(AstError::MissingExpr(span.clone()));
         }
-        let vars_and_collections = vars.into_iter().zip(collections.into_iter()).collect();
+        let vars_and_collections = vars.into_iter().zip(collections).collect();
 
         Ok(Expr::ListComprehension {
             body: expr.ok_or(AstError::MissingBody(span.clone()))?,
             vars_and_collections,
             filter,
         })
-    }
-
-    fn from_global_collection(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // global_collection = { "@" ~ "[" ~ primitive_type ~ "]" }
-        let span = Span::from_pest(&pair);
-
-        // Find the primitive_type inside
-        let type_pair = pair
-            .into_inner()
-            .next()
-            .ok_or(AstError::MissingTypeName(span.clone()))?;
-
-        let type_span = Span::from_pest(&type_pair);
-        let type_name = TypeName::from_pest(type_pair)?;
-
-        Ok(Expr::GlobalList(Spanned::new(type_name, type_span)))
     }
 
     fn from_var_call(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -1609,38 +1657,6 @@ impl Expr {
         };
 
         Ok(Expr::VarCall { module, name, args })
-    }
-
-    fn from_var_list_call(pair: Pair<Rule>) -> Result<Self, AstError> {
-        // var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
-        let span = Span::from_pest(&pair);
-        let mut idents = Vec::new();
-        let mut args = Vec::new();
-
-        for inner in pair.into_inner() {
-            match inner.as_rule() {
-                Rule::ident => {
-                    let name_span = Span::from_pest(&inner);
-                    idents.push(Spanned::new(inner.as_str().to_string(), name_span));
-                }
-                Rule::args => {
-                    args = parse_args(inner)?;
-                }
-                _ => {}
-            }
-        }
-
-        let (module, name) = match idents.len() {
-            1 => (None, idents.pop().unwrap()),
-            2 => {
-                let name = idents.pop().unwrap();
-                let module = idents.pop().unwrap();
-                (Some(module), name)
-            }
-            _ => return Err(AstError::MissingName(span)),
-        };
-
-        Ok(Expr::VarListCall { module, name, args })
     }
 
     fn from_namespace_path(pair: Pair<Rule>) -> Result<Self, AstError> {
@@ -1735,7 +1751,8 @@ impl Expr {
 
                             let expr_pair = field_inner.next().unwrap();
                             let expr_span = Span::from_pest(&expr_pair);
-                            let expr = Spanned::new(Expr::from_pest(expr_pair)?, expr_span);
+                            let expr =
+                                Arc::new(Spanned::new(Expr::from_pest(expr_pair)?, expr_span));
 
                             fields.push((name, expr));
                         }
@@ -1788,7 +1805,7 @@ impl Expr {
                     expected: "list_type_brackets or tuple_type",
                     found: type_pair.as_rule(),
                     span: type_span,
-                })
+                });
             }
         };
 
@@ -1861,14 +1878,17 @@ impl Expr {
     }
 }
 
-fn parse_args(pair: Pair<Rule>) -> Result<Vec<Spanned<Expr>>, AstError> {
+fn parse_args(pair: Pair<Rule>) -> Result<Vec<Arc<Spanned<Expr>>>, AstError> {
     let mut args = Vec::new();
     for arg_pair in pair.into_inner() {
         if arg_pair.as_rule() == Rule::arg {
             let arg_span = Span::from_pest(&arg_pair);
             // arg contains expr
             let comp_pair = arg_pair.into_inner().next().unwrap();
-            args.push(Spanned::new(Expr::from_pest(comp_pair)?, arg_span));
+            args.push(Arc::new(Spanned::new(
+                Expr::from_pest(comp_pair)?,
+                arg_span,
+            )));
         }
     }
     Ok(args)

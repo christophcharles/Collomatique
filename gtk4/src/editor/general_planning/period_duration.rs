@@ -1,7 +1,7 @@
 use adw::prelude::PreferencesRowExt;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, WidgetExt};
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,

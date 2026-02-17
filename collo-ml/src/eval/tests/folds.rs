@@ -1,114 +1,137 @@
+use std::sync::Arc;
+
 use super::*;
 
 // ========== FOLD with Int Tests ==========
 
-#[test]
-fn fold_simple_sum() {
+#[tokio::test]
+async fn fold_simple_sum() {
     let input = "pub let f() -> Int = fold x in [1, 2, 3] with acc = 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 0 + 1 + 2 + 3 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn fold_simple_product() {
+#[tokio::test]
+async fn fold_simple_product() {
     let input = "pub let f() -> Int = fold x in [2, 3, 4] with acc = 1 { acc * x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 1 * 2 * 3 * 4 = 24
     assert_eq!(result, ExprValue::Int(24));
 }
 
-#[test]
-fn fold_with_range() {
+#[tokio::test]
+async fn fold_with_range() {
     let input = "pub let f() -> Int = fold x in [1..5] with acc = 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 0 + 1 + 2 + 3 + 4 = 10
     assert_eq!(result, ExprValue::Int(10));
 }
 
-#[test]
-fn fold_empty_list() {
+#[tokio::test]
+async fn fold_empty_list() {
     let input = "pub let f() -> Int = fold x in [] as [Int] with acc = 42 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Empty list, should return initial value
     assert_eq!(result, ExprValue::Int(42));
 }
 
-#[test]
-fn fold_ignoring_elements() {
+#[tokio::test]
+async fn fold_ignoring_elements() {
     let input = "pub let f() -> Int = fold x in [1, 2, 3, 4, 5] with acc = 100 { acc };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Body just returns acc without using x
     assert_eq!(result, ExprValue::Int(100));
 }
 
-#[test]
-fn fold_counting_elements() {
+#[tokio::test]
+async fn fold_counting_elements() {
     let input = "pub let f() -> Int = fold x in [10, 20, 30, 40] with acc = 0 { acc + 1 };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Count elements: 4
     assert_eq!(result, ExprValue::Int(4));
 }
 
-#[test]
-fn fold_with_arithmetic_in_body() {
+#[tokio::test]
+async fn fold_with_arithmetic_in_body() {
     let input = "pub let f() -> Int = fold x in [1..4] with acc = 0 { acc + (x * 2) };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 0 + (1*2) + (2*2) + (3*2) = 0 + 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -116,66 +139,78 @@ fn fold_with_arithmetic_in_body() {
 
 // ========== FOLD with Where Clause ==========
 
-#[test]
-fn fold_with_simple_filter() {
+#[tokio::test]
+async fn fold_with_simple_filter() {
     let input = "pub let f() -> Int = fold x in [1..6] with acc = 0 where x % 2 == 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Only even numbers: 2 + 4 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn fold_with_filter_no_matches() {
+#[tokio::test]
+async fn fold_with_filter_no_matches() {
     let input = "pub let f() -> Int = fold x in [1..5] with acc = 100 where x > 10 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // No elements pass the filter, returns init value
     assert_eq!(result, ExprValue::Int(100));
 }
 
-#[test]
-fn fold_with_complex_filter() {
+#[tokio::test]
+async fn fold_with_complex_filter() {
     let input =
         "pub let f() -> Int = fold x in [1..10] with acc = 0 where x > 3 and x < 7 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Elements 4, 5, 6: 0 + 4 + 5 + 6 = 15
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn fold_filter_using_accumulator() {
+#[tokio::test]
+async fn fold_filter_using_accumulator() {
     let input = "pub let f() -> Int = fold x in [1..6] with acc = 0 where acc < 5 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // acc=0, x=1: 0<5   -> acc=1
     // acc=1, x=2: 1<5   -> acc=3
@@ -187,70 +222,82 @@ fn fold_filter_using_accumulator() {
 
 // ========== FOLD with Parameters ==========
 
-#[test]
-fn fold_with_param_list() {
+#[tokio::test]
+async fn fold_with_param_list() {
     let input = "pub let f(list: [Int]) -> Int = fold x in list with acc = 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(vec![
-        ExprValue::Int(10),
-        ExprValue::Int(20),
-        ExprValue::Int(30),
+        Arc::new(ExprValue::Int(10)),
+        Arc::new(ExprValue::Int(20)),
+        Arc::new(ExprValue::Int(30)),
     ]);
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
     assert_eq!(result, ExprValue::Int(60));
 }
 
-#[test]
-fn fold_with_param_in_body() {
+#[tokio::test]
+async fn fold_with_param_in_body() {
     let input = "pub let f(multiplier: Int) -> Int = fold x in [1..4] with acc = 0 { acc + (x * multiplier) };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     // (1*5) + (2*5) + (3*5) = 5 + 10 + 15 = 30
     assert_eq!(result, ExprValue::Int(30));
 }
 
-#[test]
-fn fold_with_param_in_filter() {
+#[tokio::test]
+async fn fold_with_param_in_filter() {
     let input = "pub let f(threshold: Int) -> Int = fold x in [1..10] with acc = 0 where x > threshold { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
     // Elements > 5: 6 + 7 + 8 + 9 = 30
     assert_eq!(result, ExprValue::Int(30));
 }
 
-#[test]
-fn fold_with_param_as_init() {
+#[tokio::test]
+async fn fold_with_param_as_init() {
     let input = "pub let f(initial: Int) -> Int = fold x in [1..4] with acc = initial { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .eval_fn("main", "f", vec![ExprValue::Int(10)])
+        .await
         .expect("Should evaluate");
     // 10 + 1 + 2 + 3 = 16
     assert_eq!(result, ExprValue::Int(16));
@@ -258,81 +305,90 @@ fn fold_with_param_as_init() {
 
 // ========== FOLD Building Lists ==========
 
-#[test]
-fn fold_building_list() {
+#[tokio::test]
+async fn fold_building_list() {
     let input = "pub let f() -> [Int] = fold x in [1, 2, 3] with acc = [] as [Int] { acc + [x] };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 3);
-            assert_eq!(elements[0], ExprValue::Int(1));
-            assert_eq!(elements[1], ExprValue::Int(2));
-            assert_eq!(elements[2], ExprValue::Int(3));
+            assert_eq!(*elements[0], ExprValue::Int(1));
+            assert_eq!(*elements[1], ExprValue::Int(2));
+            assert_eq!(*elements[2], ExprValue::Int(3));
         }
         _ => panic!("Expected List"),
     }
 }
 
-#[test]
-fn fold_reverse_list() {
+#[tokio::test]
+async fn fold_reverse_list() {
     let input =
         "pub let f() -> [Int] = fold x in [1, 2, 3, 4] with acc = [] as [Int] { [x] + acc };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
-            assert_eq!(elements[0], ExprValue::Int(4));
-            assert_eq!(elements[1], ExprValue::Int(3));
-            assert_eq!(elements[2], ExprValue::Int(2));
-            assert_eq!(elements[3], ExprValue::Int(1));
+            assert_eq!(*elements[0], ExprValue::Int(4));
+            assert_eq!(*elements[1], ExprValue::Int(3));
+            assert_eq!(*elements[2], ExprValue::Int(2));
+            assert_eq!(*elements[3], ExprValue::Int(1));
         }
         _ => panic!("Expected List"),
     }
 }
 
-#[test]
-fn fold_filter_list() {
+#[tokio::test]
+async fn fold_filter_list() {
     let input = "pub let f() -> [Int] = fold x in [1..6] with acc = [] as [Int] where x % 2 == 0 { acc + [x] };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
-            assert_eq!(elements[0], ExprValue::Int(2));
-            assert_eq!(elements[1], ExprValue::Int(4));
+            assert_eq!(*elements[0], ExprValue::Int(2));
+            assert_eq!(*elements[1], ExprValue::Int(4));
         }
         _ => panic!("Expected List"),
     }
 }
 
-#[test]
-fn fold_conditional_list_building() {
+#[tokio::test]
+async fn fold_conditional_list_building() {
     let input = r#"
         pub let f() -> [Int] = 
             fold x in [1..6] with acc = [] as [Int] { 
@@ -343,17 +399,20 @@ fn fold_conditional_list_building() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 2);
-            assert_eq!(elements[0], ExprValue::Int(2));
-            assert_eq!(elements[1], ExprValue::Int(4));
+            assert_eq!(*elements[0], ExprValue::Int(2));
+            assert_eq!(*elements[1], ExprValue::Int(4));
         }
         _ => panic!("Expected List"),
     }
@@ -361,8 +420,8 @@ fn fold_conditional_list_building() {
 
 // ========== FOLD with Nested Structures ==========
 
-#[test]
-fn fold_nested_lists() {
+#[tokio::test]
+async fn fold_nested_lists() {
     let input = r#"
         pub let f() -> Int = 
             fold row in [[1, 2], [3, 4], [5]] with acc = 0 { 
@@ -373,17 +432,20 @@ fn fold_nested_lists() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Sum of all elements: 1+2+3+4+5 = 15
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn fold_with_sum_in_body() {
+#[tokio::test]
+async fn fold_with_sum_in_body() {
     let input = r#"
         pub let f() -> Int = 
             fold row in [[1, 2], [3, 4]] with acc = 0 { 
@@ -394,17 +456,20 @@ fn fold_with_sum_in_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // acc + (1+2) + (3+4) = 0 + 3 + 7 = 10
     assert_eq!(result, ExprValue::Int(10));
 }
 
-#[test]
-fn fold_with_if_in_body() {
+#[tokio::test]
+async fn fold_with_if_in_body() {
     let input = r#"
         pub let f() -> Int = 
             fold x in [1..6] with acc = 0 { 
@@ -415,17 +480,20 @@ fn fold_with_if_in_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Only add x when x > 3: 4 + 5 = 9
     assert_eq!(result, ExprValue::Int(9));
 }
 
-#[test]
-fn fold_with_let_in_body() {
+#[tokio::test]
+async fn fold_with_let_in_body() {
     let input = r#"
         pub let f() -> Int = 
             fold x in [1..4] with acc = 0 { 
@@ -436,10 +504,13 @@ fn fold_with_let_in_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // (1*2) + (2*2) + (3*2) = 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
@@ -447,31 +518,34 @@ fn fold_with_let_in_body() {
 
 // ========== FOLD with LinExpr ==========
 
-#[test]
-fn fold_linexpr_simple() {
+#[tokio::test]
+async fn fold_linexpr_simple() {
     let input = "pub let f() -> LinExpr = fold x in [1..3] with acc = $V(0) { acc + $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(0) + $V(1) + $V(2)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(0)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(0))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(1)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -479,42 +553,47 @@ fn fold_linexpr_simple() {
     }
 }
 
-#[test]
-fn fold_linexpr_with_coefficients() {
+#[tokio::test]
+async fn fold_linexpr_with_coefficients() {
     let input =
         "pub let f() -> LinExpr = fold x in [1..3] with acc = LinExpr(0) { acc + (x * $V()) };";
 
     let vars = HashMap::from([("V".to_string(), vec![])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 1*$V() + 2*$V() = 3*$V()
-            let expected =
-                3 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env("V".into(), vec![])));
+            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
     }
 }
 
-#[test]
-fn fold_linexpr_empty_list() {
+#[tokio::test]
+async fn fold_linexpr_empty_list() {
     let input = "pub let f() -> LinExpr = fold x in [<Int>] with acc = LinExpr(5) { acc + $V(x) };";
 
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -528,56 +607,70 @@ fn fold_linexpr_empty_list() {
 
 // ========== RFOLD Tests ==========
 
-#[test]
-fn rfold_simple() {
+#[tokio::test]
+async fn rfold_simple() {
     let input = "pub let f() -> Int = rfold x in [1, 2, 3] with acc = 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Same as fold for addition: 0 + 3 + 2 + 1 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn rfold_order_matters() {
+#[tokio::test]
+async fn rfold_order_matters() {
     let input = "pub let f() -> Int = rfold x in [48, 2] with acc = 2 { x / acc };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     // rfold processes [2, 48] right-to-left: acc=2, x=2 -> 2//2=1, then acc=1, x=48 -> 48//1=48
     assert_eq!(result, ExprValue::Int(48));
 }
 
-#[test]
-fn rfold_vs_fold_division() {
+#[tokio::test]
+async fn rfold_vs_fold_division() {
     let fold_input = "pub let fold_f() -> Int = fold x in [48, 2] with acc = 2 { x / acc };";
     let rfold_input = "pub let rfold_f() -> Int = rfold x in [48, 2] with acc = 2 { x / acc };";
 
     let vars = HashMap::new();
 
-    let fold_ast = CheckedAST::new(&BTreeMap::from([("main", fold_input)]), vars.clone())
-        .expect("Should compile");
+    let fold_ast = CheckedAST::<SqliteDatabaseDriver>::new(
+        &BTreeMap::from([("main", fold_input)]),
+        vars.clone(),
+    )
+    .await
+    .expect("Should compile");
     let rfold_ast =
-        CheckedAST::new(&BTreeMap::from([("main", rfold_input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", rfold_input)]), vars)
+            .await
+            .expect("Should compile");
 
     let fold_result = fold_ast
-        .quick_eval_fn("main", "fold_f", vec![])
+        .eval_fn("main", "fold_f", vec![])
+        .await
         .expect("Should evaluate");
     let rfold_result = rfold_ast
-        .quick_eval_fn("main", "rfold_f", vec![])
+        .eval_fn("main", "rfold_f", vec![])
+        .await
         .expect("Should evaluate");
 
     // fold processes [48, 2] left-to-right: acc=2, x=48 -> 48//2=24, then acc=24, x=2 -> 2//24=0
@@ -586,51 +679,57 @@ fn rfold_vs_fold_division() {
     assert_eq!(rfold_result, ExprValue::Int(48));
 }
 
-#[test]
-fn rfold_list_building() {
+#[tokio::test]
+async fn rfold_list_building() {
     let input =
         "pub let f() -> [Int] = rfold x in [1, 2, 3, 4] with acc = [] as [Int] { acc + [x] };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 4);
             // Processes right to left, so builds [4, 3, 2, 1]
-            assert_eq!(elements[0], ExprValue::Int(4));
-            assert_eq!(elements[1], ExprValue::Int(3));
-            assert_eq!(elements[2], ExprValue::Int(2));
-            assert_eq!(elements[3], ExprValue::Int(1));
+            assert_eq!(*elements[0], ExprValue::Int(4));
+            assert_eq!(*elements[1], ExprValue::Int(3));
+            assert_eq!(*elements[2], ExprValue::Int(2));
+            assert_eq!(*elements[3], ExprValue::Int(1));
         }
         _ => panic!("Expected List"),
     }
 }
 
-#[test]
-fn rfold_with_filter() {
+#[tokio::test]
+async fn rfold_with_filter() {
     let input = "pub let f() -> Int = rfold x in [1..6] with acc = 0 where x % 2 == 0 { acc + x };";
 
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Only even numbers, right to left: 4 + 2 = 6
     assert_eq!(result, ExprValue::Int(6));
 }
 
-#[test]
-fn rfold_nested() {
+#[tokio::test]
+async fn rfold_nested() {
     let input = r#"
         pub let f() -> Int = 
             rfold row in [[1, 2], [3, 4]] with acc = 0 { 
@@ -641,10 +740,13 @@ fn rfold_nested() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Processes right to left at both levels: 1+2+3+4 = 10
     assert_eq!(result, ExprValue::Int(10));
@@ -652,8 +754,8 @@ fn rfold_nested() {
 
 // ========== Complex Fold Scenarios ==========
 
-#[test]
-fn fold_max_value() {
+#[tokio::test]
+async fn fold_max_value() {
     let input = r#"
         pub let f() -> Int = 
             fold x in [3, 7, 2, 9, 1] with acc = 0 { 
@@ -664,17 +766,20 @@ fn fold_max_value() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Maximum value is 9
     assert_eq!(result, ExprValue::Int(9));
 }
 
-#[test]
-fn fold_count_condition() {
+#[tokio::test]
+async fn fold_count_condition() {
     let input = r#"
         pub let f() -> Int = 
             fold x in [1..10] with acc = 0 { 
@@ -685,17 +790,20 @@ fn fold_count_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Count elements > 5: 6, 7, 8, 9 = 4
     assert_eq!(result, ExprValue::Int(4));
 }
 
-#[test]
-fn fold_alternating_operation() {
+#[tokio::test]
+async fn fold_alternating_operation() {
     let input = r#"
         pub let f() -> Int = 
             fold x in [1..6] with acc = 0 { 
@@ -706,17 +814,20 @@ fn fold_alternating_operation() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 0 - 1 + 2 - 3 + 4 - 5 = -3
     assert_eq!(result, ExprValue::Int(-3));
 }
 
-#[test]
-fn fold_with_function_call() {
+#[tokio::test]
+async fn fold_with_function_call() {
     let input = r#"
         pub let double(x: Int) -> Int = x * 2;
         pub let f() -> Int = fold x in [1..4] with acc = 0 { acc + double(x) };
@@ -725,17 +836,20 @@ fn fold_with_function_call() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // 0 + 2 + 4 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));
 }
 
-#[test]
-fn fold_flatten_nested_list() {
+#[tokio::test]
+async fn fold_flatten_nested_list() {
     let input = r#"
         pub let f() -> [Int] = 
             fold row in [[1, 2], [3], [4, 5, 6]] with acc = [] as [Int] { 
@@ -746,17 +860,20 @@ fn fold_flatten_nested_list() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(elements) => {
             assert_eq!(elements.len(), 6);
-            assert_eq!(elements[0], ExprValue::Int(1));
-            assert_eq!(elements[5], ExprValue::Int(6));
+            assert_eq!(*elements[0], ExprValue::Int(1));
+            assert_eq!(*elements[5], ExprValue::Int(6));
         }
         _ => panic!("Expected List"),
     }
@@ -764,8 +881,8 @@ fn fold_flatten_nested_list() {
 
 // ========== Fold with Bool ==========
 
-#[test]
-fn fold_all_condition() {
+#[tokio::test]
+async fn fold_all_condition() {
     let input = r#"
         pub let f() -> Bool = 
             fold x in [2, 4, 6, 8] with acc = true { 
@@ -776,17 +893,20 @@ fn fold_all_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // All are even
     assert_eq!(result, ExprValue::Bool(true));
 }
 
-#[test]
-fn fold_any_condition() {
+#[tokio::test]
+async fn fold_any_condition() {
     let input = r#"
         pub let f() -> Bool = 
             fold x in [1, 3, 5, 6] with acc = false { 
@@ -797,10 +917,13 @@ fn fold_any_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // At least one is even (6)
     assert_eq!(result, ExprValue::Bool(true));
@@ -808,8 +931,8 @@ fn fold_any_condition() {
 
 // ========== Combined with Other Constructs ==========
 
-#[test]
-fn fold_inside_if() {
+#[tokio::test]
+async fn fold_inside_if() {
     let input = r#"
         pub let f(flag: Bool) -> Int = 
             if flag { 
@@ -822,21 +945,25 @@ fn fold_inside_if() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_true = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(true)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_true, ExprValue::Int(6));
 
     let result_false = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Bool(false)])
+        .eval_fn("main", "f", vec![ExprValue::Bool(false)])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_false, ExprValue::Int(0));
 }
 
-#[test]
-fn sum_with_fold_in_body() {
+#[tokio::test]
+async fn sum_with_fold_in_body() {
     let input = r#"
         pub let f() -> Int = 
             sum row in [[1, 2], [3, 4], [5]] { 
@@ -847,17 +974,20 @@ fn sum_with_fold_in_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // sum of (1+2), (3+4), (5) = 3 + 7 + 5 = 15
     assert_eq!(result, ExprValue::Int(15));
 }
 
-#[test]
-fn fold_with_forall_in_filter() {
+#[tokio::test]
+async fn fold_with_forall_in_filter() {
     let input = r#"
         pub let f() -> Int = 
             fold xs in [[2, 4], [1, 3], [6, 8]] with acc = 0 
@@ -868,17 +998,20 @@ fn fold_with_forall_in_filter() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Only [2,4] and [6,8] have all even elements, so count = 2 + 2 = 4
     assert_eq!(result, ExprValue::Int(4));
 }
 
-#[test]
-fn mixing_fold_and_rfold() {
+#[tokio::test]
+async fn mixing_fold_and_rfold() {
     let input = r#"
         pub let f() -> Int = 
             (fold x in [1, 2, 3] with a = 0 { a + x }) + 
@@ -888,10 +1021,13 @@ fn mixing_fold_and_rfold() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
     // Both sum to 6, so 6 + 6 = 12
     assert_eq!(result, ExprValue::Int(12));

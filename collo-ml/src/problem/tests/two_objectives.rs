@@ -1,11 +1,11 @@
-use crate::eval::{NoObject, NoObjectEnv};
+struct NoObjectEnv;
 use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
-#[test]
-fn two_objectives_same_script() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn two_objectives_same_script() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -13,8 +13,9 @@ fn two_objectives_same_script() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -22,25 +23,22 @@ fn two_objectives_same_script() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -97,8 +95,9 @@ fn two_objectives_same_script() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -126,7 +125,10 @@ fn two_objectives_same_script() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -159,9 +161,9 @@ fn two_objectives_same_script() {
     );
 }
 
-#[test]
-fn two_objectives_different_scripts() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn two_objectives_different_scripts() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -169,8 +171,9 @@ fn two_objectives_different_scripts() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -178,25 +181,22 @@ fn two_objectives_different_scripts() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -266,8 +266,9 @@ fn two_objectives_different_scripts() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -295,7 +296,10 @@ fn two_objectives_different_scripts() {
         .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add second objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
@@ -328,9 +332,9 @@ fn two_objectives_different_scripts() {
     );
 }
 
-#[test]
-fn objectives_with_different_senses() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[tokio::test]
+async fn objectives_with_different_senses() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
@@ -338,8 +342,9 @@ fn objectives_with_different_senses() {
         Y,
     }
 
-    impl<T: EvalObject> EvalVar<T> for Var {
-        fn field_schema() -> HashMap<String, Vec<crate::traits::FieldType>> {
+    impl EvalVar for Var {
+        type Env = NoObjectEnv;
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
@@ -347,25 +352,22 @@ fn objectives_with_different_senses() {
                 ("Y".to_string(), vec![]),
             ])
         }
-        fn fix(&self, _env: &T::Env) -> Option<f64> {
+        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(
-            _env: &T::Env,
-        ) -> Result<std::collections::BTreeMap<Self, collomatique_ilp::Variable>, std::any::TypeId>
-        {
-            Ok(BTreeMap::from([
+        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
                 (Var::Y, collomatique_ilp::Variable::binary()),
-            ]))
+            ])
         }
     }
 
-    impl<T: EvalObject> TryFrom<&ExternVar<T>> for Var {
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
         type Error = VarConversionError;
-        fn try_from(value: &ExternVar<T>) -> Result<Self, Self::Error> {
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
             match value.name.as_str() {
                 "V" => {
                     if value.params.len() != 0 {
@@ -422,8 +424,9 @@ fn objectives_with_different_senses() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<NoObject, Var>::new(&modules)
-        .expect("NoObject and Var should be compatible");
+    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+        .await
+        .expect("Var should be compatible");
 
     assert!(
         pb_builder.get_warnings().is_empty(),
@@ -458,7 +461,10 @@ fn objectives_with_different_senses() {
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder.build(&env).expect("Build should succeed");
+    let problem = pb_builder
+        .build(&env, None)
+        .await
+        .expect("Build should succeed");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;

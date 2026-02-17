@@ -94,17 +94,16 @@ impl Component for FileLoader {
 impl FileLoader {
     fn generate_error_message(error: LoadError) -> String {
         match error {
-            LoadError::IO(io_error) => format!(
-                "Erreur lors de l'accès au fichier ({}).",
-                io_error.to_string()
-            ),
+            LoadError::IO(io_error) => format!("Erreur lors de l'accès au fichier ({}).", io_error),
             LoadError::Deserialization(deserialization_error) => match deserialization_error {
                 DeserializationError::InvalidJson(json_error) => format!(
                     "Le format de fichier semble incorrect ({}).\nVérifier s'il s'agit du bon fichier.",
-                    json_error.to_string()
+                    json_error
                 ),
-                DeserializationError::Decode(decode_error) => Self::generate_decode_error_message(decode_error),
-            }
+                DeserializationError::Decode(decode_error) => {
+                    Self::generate_decode_error_message(decode_error)
+                }
+            },
         }
     }
 

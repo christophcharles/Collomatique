@@ -125,7 +125,7 @@ impl Parameters {
 
     /// Promotes an u64 to a [SlotId] if it is valid
     pub fn validate_slot_id(&self, id: u64) -> Option<SlotId> {
-        for (_subject_id, subject_slots) in &self.slots.subject_map {
+        for subject_slots in self.slots.subject_map.values() {
             for (slot_id, _slot) in &subject_slots.ordered_slots {
                 if slot_id.inner() == id {
                     return Some(*slot_id);
@@ -196,16 +196,14 @@ impl Parameters {
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
 
-        let existing_ids = student_ids
+        student_ids
             .chain(period_ids)
             .chain(subject_ids)
             .chain(teacher_ids)
             .chain(week_patterns_ids)
             .chain(slot_ids)
             .chain(incompat_ids)
-            .chain(group_list_ids);
-
-        existing_ids
+            .chain(group_list_ids)
     }
 
     /// USED INTERNALLY
@@ -312,7 +310,7 @@ impl Parameters {
     ///
     /// checks all the invariants in subject data
     fn check_teachers_data_consistency(&self) -> Result<(), InvariantError> {
-        for (_teacher_id, teacher) in &self.teachers.teacher_map {
+        for teacher in self.teachers.teacher_map.values() {
             if Self::validate_teacher_internal(teacher, &self.subjects).is_err() {
                 return Err(InvariantError::InvalidTeacher);
             }
@@ -352,7 +350,7 @@ impl Parameters {
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
-        for (_student_id, student) in &self.students.student_map {
+        for student in self.students.student_map.values() {
             if Self::validate_student_internal(student, period_ids).is_err() {
                 return Err(InvariantError::InvalidStudent);
             }
@@ -424,10 +422,10 @@ impl Parameters {
                 subject_id,
             ));
         }
-        if let Some(week_pattern_id) = &slot.week_pattern {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
-            }
+        if let Some(week_pattern_id) = &slot.week_pattern
+            && !week_pattern_ids.contains(week_pattern_id)
+        {
+            return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
         }
         let Some(subject) = subjects.find_subject(subject_id) else {
             return Err(SlotError::InvalidSubjectId(subject_id));
@@ -435,11 +433,8 @@ impl Parameters {
         let Some(params) = &subject.parameters.interrogation_parameters else {
             return Err(SlotError::SubjectHasNoInterrogation(subject_id));
         };
-        if collomatique_time::SlotWithDuration::new(
-            slot.start_time.clone(),
-            params.duration.clone(),
-        )
-        .is_none()
+        if collomatique_time::SlotWithDuration::new(slot.start_time.clone(), params.duration)
+            .is_none()
         {
             return Err(SlotError::SlotOverlapsWithNextDay);
         }
@@ -512,10 +507,10 @@ impl Parameters {
         if !subject_ids.contains(&incompat.subject_id) {
             return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
         }
-        if let Some(week_pattern_id) = &incompat.week_pattern_id {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
-            }
+        if let Some(week_pattern_id) = &incompat.week_pattern_id
+            && !week_pattern_ids.contains(week_pattern_id)
+        {
+            return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
         }
         Ok(())
     }
@@ -541,7 +536,7 @@ impl Parameters {
         week_pattern_ids: &BTreeSet<WeekPatternId>,
         subject_ids: &BTreeSet<SubjectId>,
     ) -> Result<(), InvariantError> {
-        for (_incompat_id, incompat) in &self.incompats.incompat_map {
+        for incompat in self.incompats.incompat_map.values() {
             if Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).is_err() {
                 return Err(InvariantError::InvalidIncompat);
             }
@@ -651,7 +646,7 @@ impl Parameters {
                 }
             }
         }
-        for (_group_list_id, group_list) in &self.group_lists.group_list_map {
+        for group_list in self.group_lists.group_list_map.values() {
             if Self::validate_group_list_internal(group_list, &self.students).is_err() {
                 return Err(InvariantError::InvalidGroupList);
             }
@@ -667,7 +662,7 @@ impl Parameters {
         &self,
         settings: &settings::Settings,
     ) -> Result<(), SettingsError> {
-        for (student_id, _limits) in &settings.students {
+        for student_id in settings.students.keys() {
             if !self.students.student_map.contains_key(student_id) {
                 return Err(SettingsError::InvalidStudentId(*student_id));
             }
@@ -725,7 +720,7 @@ impl Parameters {
         &self,
         total_week_count: usize,
     ) -> Result<(), InvariantError> {
-        for (_week_pattern_id, week_pattern) in &self.week_patterns.week_pattern_map {
+        for week_pattern in self.week_patterns.week_pattern_map.values() {
             if Self::validate_week_pattern_internal(week_pattern, total_week_count).is_err() {
                 return Err(InvariantError::InvalidWeekPattern);
             }

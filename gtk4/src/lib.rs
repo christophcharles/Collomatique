@@ -2,8 +2,8 @@ use adw::prelude::AdwDialogExt;
 use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
-use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use relm4::{adw, gtk};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -463,9 +463,8 @@ impl Component for AppModel {
             }
             AppInput::OkDirty => {
                 let msg_opt = self.next_warn_msg.take();
-                match msg_opt {
-                    Some(msg) => sender.input(msg),
-                    None => {}
+                if let Some(msg) = msg_opt {
+                    sender.input(msg)
                 }
             }
             AppInput::RequestQuit => {
@@ -592,7 +591,7 @@ impl Component for AppModel {
 
 impl AppModel {
     fn update_about_dialog(&mut self, widgets: &mut <Self as Component>::Widgets) {
-        if let Some(_) = self.update_about.take() {
+        if self.update_about.take().is_some() {
             widgets.about_dialog.present(Some(&widgets.root_window));
         }
     }

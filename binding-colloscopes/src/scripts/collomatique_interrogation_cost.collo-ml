@@ -1,6 +1,53 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
-pub let objective() -> LinExpr =
-    sum interrogation in @[Interrogation] where interrogation.cost != 0 {
-        interrogation.cost * $InterrogationHasGroups(interrogation)
+pub let objective(db: Db) -> LinExpr =
+    sum interrogation_data in interrogations_with_nonzero_cost(db) {
+        interrogation_data.cost * $InterrogationHasGroups(db, interrogation_data.slot_id, interrogation_data.global_week)
     };
+
+type CostInterrogationData = {
+    slot_id: SlotId,
+    global_week: GlobalWeek,
+    cost: Int,
+};
+
+query interrogations_with_nonzero_cost(db: Db) -> [CostInterrogationData] = "
+WITH ordered_weeks AS (
+    SELECT
+        pw.period_id,
+        pw.week_index,
+        (
+            SELECT COUNT(*)
+            FROM period_weeks pw2
+            JOIN periods p2 ON p2.id = pw2.period_id
+            JOIN periods p ON p.id = pw.period_id
+            WHERE (p2.position < p.position)
+               OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT
+    s.id AS slot_id,
+    ow.global_week_number AS global_week,
+    s.cost AS cost
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.cost != 0
+AND NOT EXISTS (
+    SELECT 1
+    FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM week_pattern_disabled_weeks wpd
+    WHERE wpd.week_pattern_id = s.week_pattern_id
+      AND wpd.period_id = ow.period_id
+      AND wpd.week_index = ow.week_index
+);
+";

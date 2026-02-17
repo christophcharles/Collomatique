@@ -7,80 +7,71 @@
 use super::checked_ast::{CheckedAST, EvalError};
 use super::local_env::LocalEvalEnv;
 use super::values::ExprValue;
-use super::variables::{IlpVar, Origin};
+use super::variables::{HashedIlpVar, Origin};
+use crate::Hashed;
 use crate::ast::Spanned;
+use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
-use crate::traits::EvalObject;
 use collomatique_ilp::Constraint;
-use std::collections::BTreeMap;
+use derivative::Derivative;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+type CallKey<D> = (String, String, Vec<Arc<ExprValue<D>>>);
+
 #[derive(Debug)]
-pub struct EvalHistory<'a, T: EvalObject> {
-    pub(crate) ast: &'a CheckedAST<T>,
-    pub(crate) env: &'a T::Env,
-    pub(crate) cache: T::Cache,
-    pub(crate) funcs: BTreeMap<(String, String, Vec<ExprValue<T>>), (ExprValue<T>, Origin<T>)>,
-    pub(crate) vars: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
-    pub(crate) var_lists: BTreeMap<(String, String, Vec<ExprValue<T>>), (String, String)>,
-    pub(crate) var_str_cache: BTreeMap<Vec<ExprValue<T>>, Arc<str>>,
+pub struct EvalHistory<'a, D: DatabaseDriver> {
+    pub(crate) ast: &'a CheckedAST<D>,
+    pub(crate) funcs: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>>,
+    pub(crate) vars: HashSet<Hashed<CallKey<D::Connection>>>,
+    pub(crate) queries: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>>,
 }
 
-impl<'a, T: EvalObject> EvalHistory<'a, T> {
-    pub(crate) fn new(
-        ast: &'a CheckedAST<T>,
-        env: &'a T::Env,
-        cache: T::Cache,
-    ) -> Result<Self, EvalError<T>> {
-        ast.check_env(env)?;
-
-        Ok(EvalHistory {
-            ast,
-            env,
-            cache,
-            funcs: BTreeMap::new(),
-            vars: BTreeMap::new(),
-            var_lists: BTreeMap::new(),
-            var_str_cache: BTreeMap::new(),
-        })
-    }
-
-    fn prettify_docstring(
+impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
+    async fn prettify_docstring(
         &mut self,
         fn_desc: &FunctionDesc,
-        local_env: &mut LocalEvalEnv<T>,
-    ) -> Result<Vec<String>, EvalError<T>> {
-        fn_desc
-            .docstring
-            .iter()
-            .map(|line| {
-                let mut result = String::new();
-                for part in line {
-                    result.push_str(&part.prefix);
-                    if let Some(expr) = &part.expr {
-                        match local_env.eval_expr(self, expr)? {
-                            ExprValue::String(s) => result.push_str(&s),
-                            // Expression is wrapped in String(...) at parse time,
-                            // so this should never happen - logic bug if it does
-                            other => panic!(
-                                "Docstring expression should evaluate to String, got {:?}",
-                                other
-                            ),
-                        }
+        local_env: &Arc<LocalEvalEnv<D>>,
+    ) -> Result<Vec<String>, EvalError<D::Connection>> {
+        let mut lines = Vec::new();
+        for line in &fn_desc.docstring {
+            let mut result = String::new();
+            for part in line {
+                result.push_str(&part.prefix);
+                if let Some(expr) = &part.expr {
+                    let eval_result =
+                        Box::pin(Arc::clone(local_env).eval_expr(self, Arc::clone(expr), false))
+                            .await?;
+                    match &*eval_result {
+                        ExprValue::String(s) => result.push_str(s),
+                        // Expression is wrapped in String(...) at parse time,
+                        // so this should never happen - logic bug if it does
+                        other => panic!(
+                            "Docstring expression should evaluate to String, got {:?}",
+                            other
+                        ),
                     }
                 }
-                Ok(result.trim_start().to_string())
-            })
-            .collect()
+            }
+            lines.push(result.trim_start().to_string());
+        }
+        Ok(lines)
     }
 
-    pub(crate) fn add_fn_to_call_history(
+    pub(crate) async fn add_fn_to_call_history(
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-        allow_private: bool,
-    ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
+        args: Vec<Arc<ExprValue<D::Connection>>>,
+        allow_private_and_dont_check_types: bool,
+        keep_track_of_origin: bool,
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
+        let key = Hashed::new((module.to_string(), fn_name.to_string(), args));
+
+        if let Some(r) = self.funcs.get(&key) {
+            return Ok(Arc::clone(r));
+        }
+
         let fn_desc = self
             .ast
             .global_env
@@ -88,12 +79,11 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             .get(&(module.to_string(), fn_name.to_string()))
             .ok_or(EvalError::UnknownFunction(fn_name.to_string()))?;
 
-        if !allow_private {
-            if !fn_desc.public {
-                return Err(EvalError::UnknownFunction(fn_name.to_string()));
-            }
+        if !allow_private_and_dont_check_types && !fn_desc.public {
+            return Err(EvalError::UnknownFunction(fn_name.to_string()));
         }
 
+        let args = &key.inner().2;
         if fn_desc.typ.args.len() != args.len() {
             return Err(EvalError::ArgumentCountMismatch {
                 identifier: fn_name.to_string(),
@@ -102,56 +92,111 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             });
         }
 
-        let mut local_env = LocalEvalEnv::new(module);
+        let root_env = LocalEvalEnv::new(module);
+        let mut builder = LocalEvalEnv::start_subscope(root_env);
         for (param, ((arg, arg_typ), arg_name)) in args
             .iter()
             .zip(fn_desc.typ.args.iter())
             .zip(fn_desc.arg_names.iter())
             .enumerate()
         {
-            if !arg.fits_in_typ(&self.env, arg_typ) {
-                return Err(EvalError::TypeMismatch {
-                    param: param,
-                    expected: arg_typ.clone(),
-                    found: arg.clone(),
-                });
+            if !allow_private_and_dont_check_types {
+                if !arg.fits_in_typ(arg_typ) {
+                    return Err(EvalError::TypeMismatch {
+                        param,
+                        expected: arg_typ.clone(),
+                        found: ExprValue::clone(arg),
+                    });
+                }
             }
-            local_env.register_identifier(arg_name, arg.clone());
+            builder.register_identifier(arg_name, Arc::clone(arg));
         }
 
-        if let Some(r) = self
-            .funcs
-            .get(&(module.to_string(), fn_name.to_string(), args.clone()))
-        {
-            return Ok(r.clone());
-        }
+        let local_env = builder.build_subscope();
+        let naked_result = Box::pin(Arc::clone(&local_env).eval_expr(
+            self,
+            Arc::clone(&fn_desc.body),
+            keep_track_of_origin,
+        ))
+        .await;
 
-        local_env.push_scope();
-        let naked_result = local_env.eval_expr(self, &fn_desc.body);
-        // Evaluate docstring expressions BEFORE popping scope (parameters still available)
-        let pretty_docstring = self.prettify_docstring(fn_desc, &mut local_env)?;
-        local_env.pop_scope();
-        let naked_result = naked_result?;
-
-        let origin = Origin {
-            module: module.to_string(),
-            fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
-            args: args.clone(),
-            pretty_docstring,
+        let result = if keep_track_of_origin {
+            let pretty_docstring = Box::pin(self.prettify_docstring(fn_desc, &local_env)).await?;
+            let naked_result = naked_result?;
+            let origin = Origin {
+                module: module.to_string(),
+                fn_name: Spanned::new(fn_name.to_string(), fn_desc.body.span.clone()),
+                args: args.clone(),
+                pretty_docstring,
+            };
+            Arc::new(naked_result.with_origin(&origin))
+        } else {
+            naked_result?
         };
 
-        let result = naked_result.with_origin(&origin);
-        self.funcs.insert(
-            (module.to_string(), fn_name.to_string(), args),
-            (result.clone(), origin.clone()),
-        );
+        self.funcs.insert(key, Arc::clone(&result));
 
-        Ok((result, origin))
+        Ok(result)
+    }
+
+    pub(crate) async fn add_query_to_call_history(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: Vec<Arc<ExprValue<D::Connection>>>,
+    ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
+        let key = Hashed::new((module.to_string(), name.to_string(), args.clone()));
+
+        if let Some(cached) = self.queries.get(&key) {
+            return Ok(Arc::clone(cached));
+        }
+
+        let query_desc = self
+            .ast
+            .global_env
+            .get_queries()
+            .get(&(module.to_string(), name.to_string()))
+            .expect("Semantic analysis should have validated this query exists");
+        let sql = query_desc.query_string.node.clone();
+        let out_type = query_desc.typ.output.clone();
+
+        let db_handle = {
+            let mut val: &ExprValue<D::Connection> = &args[0];
+            loop {
+                match val {
+                    ExprValue::Database(h) => break h.clone(),
+                    ExprValue::Custom(c) => val = &c.content,
+                    _ => panic!(
+                        "First query argument must be a Database (semantic phase should have caught this)"
+                    ),
+                }
+            }
+        };
+
+        let global_env = &self.ast.global_env;
+
+        let result = db_handle
+            .query(&sql, &args[1..], out_type, global_env)
+            .await;
+
+        match result {
+            Ok(value) => {
+                let value = Arc::new(value);
+                self.queries.insert(key, Arc::clone(&value));
+                Ok(value)
+            }
+            Err(SqlQueryError::QueryFailed(msg)) => {
+                Err(EvalError::Panic(Box::new(ExprValue::String(msg))))
+            }
+            Err(other) => panic!(
+                "Unexpected query error (should have been caught in semantic phase): {other}"
+            ),
+        }
     }
 }
 
-impl<'a, T: EvalObject> EvalHistory<'a, T> {
-    pub fn validate_value(&self, val: &ExprValue<T>) -> bool {
+impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
+    pub fn validate_value(&self, val: &ExprValue<D::Connection>) -> bool {
         match val {
             ExprValue::None => true,
             ExprValue::Int(_) => true,
@@ -159,10 +204,6 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
             ExprValue::LinExpr(_) => true,
             ExprValue::Constraint(_) => true,
             ExprValue::String(_) => true,
-            ExprValue::Object(obj) => self
-                .ast
-                .global_env
-                .validate_object_type(&obj.typ_name(&self.env)),
             ExprValue::List(list) => {
                 for elem in list {
                     if !self.validate_value(elem) {
@@ -185,95 +226,111 @@ impl<'a, T: EvalObject> EvalHistory<'a, T> {
                     .contains_key(&(custom.module.clone(), key))
                     && self.validate_value(&custom.content)
             }
+            ExprValue::Database(_) => true,
         }
     }
 
-    pub fn eval_fn(
+    pub async fn eval_fn(
         &mut self,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<(ExprValue<T>, Origin<T>), EvalError<T>> {
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
         let mut checked_args = vec![];
         for (param, arg) in args.into_iter().enumerate() {
             if !self.validate_value(&arg) {
                 return Err(EvalError::InvalidExprValue { param });
             }
-            checked_args.push(arg.into());
+            checked_args.push(Arc::new(arg));
         }
 
-        self.add_fn_to_call_history(module, fn_name, checked_args.clone(), false)
+        let result =
+            Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false, true))
+                .await?;
+        Ok(Arc::unwrap_or_clone(result))
     }
 
-    pub fn into_var_def_and_cache(self) -> (VariableDefinitions<T>, T::Cache) {
-        let mut var_def = VariableDefinitions {
-            vars: BTreeMap::new(),
-            var_lists: BTreeMap::new(),
-        };
-
-        for ((v_module, v_name, v_args), (fn_module, fn_name)) in self.vars {
-            let (fn_call_result, new_origin) = self
-                .funcs
-                .get(&(fn_module.clone(), fn_name.clone(), v_args.clone()))
-                .expect("Fn call should be valid");
-            let constraint = match fn_call_result {
-                ExprValue::Constraint(c) => c
-                    .iter()
-                    .map(|c_with_o| c_with_o.constraint.clone())
-                    .collect::<Vec<_>>(),
-                _ => panic!(
-                    "Fn call should have returned a constraint: {:?}",
-                    fn_call_result
-                ),
-            };
-            var_def
-                .vars
-                .insert((v_module, v_name, v_args), (constraint, new_origin.clone()));
+    pub async fn eval_fn_no_origin(
+        &mut self,
+        module: &str,
+        fn_name: &str,
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
+        let mut checked_args = vec![];
+        for (param, arg) in args.into_iter().enumerate() {
+            if !self.validate_value(&arg) {
+                return Err(EvalError::InvalidExprValue { param });
+            }
+            checked_args.push(Arc::new(arg));
         }
 
-        for ((vl_module, vl_name, vl_args), (fn_module, fn_name)) in self.var_lists {
-            let (fn_call_result, new_origin) = self
-                .funcs
-                .get(&(fn_module.clone(), fn_name.clone(), vl_args.clone()))
-                .expect("Fn call should be valid");
-            let constraints: Vec<_> = match fn_call_result {
-                ExprValue::List(cs) if cs.iter().all(|x| matches!(x, ExprValue::Constraint(_))) => {
-                    cs.iter()
-                        .map(|c| match c {
-                            ExprValue::Constraint(c) => c
-                                .iter()
-                                .map(|c_with_o| c_with_o.constraint.clone())
-                                .collect::<Vec<_>>(),
-                            _ => panic!(
-                                "Elements of the returned list should be constraints: {:?}",
-                                c
-                            ),
-                        })
-                        .collect()
+        let result =
+            Box::pin(self.add_fn_to_call_history(module, fn_name, checked_args, false, false))
+                .await?;
+        Ok(Arc::unwrap_or_clone(result))
+    }
+
+    pub async fn into_var_def(
+        mut self,
+    ) -> Result<VariableDefinitions<D::Connection>, EvalError<D::Connection>> {
+        let mut computed: HashMap<Hashed<CallKey<D::Connection>>, Arc<ExprValue<D::Connection>>> =
+            HashMap::new();
+
+        let mut pending = std::mem::take(&mut self.vars);
+        loop {
+            for hashed_key in pending {
+                if computed.contains_key(&hashed_key) {
+                    continue;
                 }
-                _ => panic!(
-                    "Fn call should have returned a constraint list: {:?}",
-                    fn_call_result
-                ),
-            };
-            var_def.var_lists.insert(
-                (vl_module, vl_name, vl_args),
-                (constraints, new_origin.clone()),
-            );
+                let (v_module, v_name, v_args) = &*hashed_key;
+                let var_desc = self
+                    .ast
+                    .global_env
+                    .get_vars()
+                    .get(&(v_module.clone(), v_name.clone()))
+                    .expect("Internal variable should exist");
+                let (fn_module, fn_name) = var_desc.referenced_fn.clone();
+
+                let fn_call_result = Box::pin(self.add_fn_to_call_history(
+                    &fn_module,
+                    &fn_name,
+                    v_args.clone(),
+                    true,
+                    false,
+                ))
+                .await?;
+
+                computed.insert(hashed_key, fn_call_result);
+            }
+            if self.vars.is_empty() {
+                break;
+            }
+            pending = std::mem::take(&mut self.vars);
         }
 
-        (var_def, self.cache)
-    }
+        // Drop the history so each Arc's refcount decreases,
+        // enabling try_unwrap to take ownership without cloning.
+        std::mem::drop(self);
 
-    pub fn into_var_def(self) -> VariableDefinitions<T> {
-        self.into_var_def_and_cache().0
+        let vars = computed
+            .into_iter()
+            .map(|(hashed_key, arc_result)| {
+                let constraints = match Arc::unwrap_or_clone(arc_result) {
+                    ExprValue::Constraint(c) => {
+                        c.into_iter().map(|c_with_o| c_with_o.constraint).collect()
+                    }
+                    other => panic!("Fn call should have returned a constraint: {:?}", other),
+                };
+                (hashed_key, constraints)
+            })
+            .collect();
+
+        Ok(VariableDefinitions { vars })
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct VariableDefinitions<T: EvalObject> {
-    pub vars:
-        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Constraint<IlpVar<T>>>, Origin<T>)>,
-    pub var_lists:
-        BTreeMap<(String, String, Vec<ExprValue<T>>), (Vec<Vec<Constraint<IlpVar<T>>>>, Origin<T>)>,
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub struct VariableDefinitions<D: DatabaseConnection> {
+    pub vars: HashMap<Hashed<CallKey<D>>, Vec<Constraint<HashedIlpVar<D>>>>,
 }

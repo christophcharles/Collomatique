@@ -1,11 +1,32 @@
+import "collomatique_db" as *;
 import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
 
-let group_is_not_empty_if_next_group_is_not_empty(group: Group) -> Constraint =
-    /* this works for last group too - because last+1 is never attributed, the
-       corresponding reified variable will always be zero */
-    $GroupHasStudents(group) >== $GroupHasStudents(group.next);
-
-pub let constraint() -> Constraint =
-    forall group in @[Group] where !group.group_list.prefilled {
-        group_is_not_empty_if_next_group_is_not_empty(group)
+pub let constraint(db: Db) -> Constraint =
+    forall group_data in groups_for_automatic_group_lists_except_last(db) {
+        group_is_not_empty_if_next_group_is_not_empty(db, group_data)
     };
+
+type GroupData = {
+    group_list: GroupListId,
+    group_num: GroupNum,
+};
+
+query groups_for_automatic_group_lists_except_last(db: Db) -> [GroupData] = ~"
+SELECT group_lists.id AS group_list, group_index AS group_num
+FROM group_lists JOIN group_list_group_names
+ON group_lists.id = group_list_group_names.group_list_id
+WHERE filling_type = "automatic"
+AND group_index < (
+    SELECT MAX(glgn.group_index)
+    FROM group_list_group_names AS glgn
+    WHERE glgn.group_list_id = group_lists.id
+)
+"~;
+
+/// Groupe `group_data.group_num` de la liste `group_data.group_list` doit être rempli avant le groupe `next(group_data.group_num)`
+let group_is_not_empty_if_next_group_is_not_empty(db: Db, group_data: GroupData) -> Constraint =
+    $GroupHasStudents(db, group_data.group_list, group_data.group_num) >== $GroupHasStudents(db, group_data.group_list, next(group_data.group_num));
+
+let next(group_num: GroupNum) -> GroupNum = GroupNum(Int(group_num) + 1);

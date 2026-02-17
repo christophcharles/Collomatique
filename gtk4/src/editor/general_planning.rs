@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
+use relm4::{adw, gtk};
 
 use collomatique_ops::GeneralPlanningUpdateOp;
 
@@ -248,7 +248,7 @@ impl Component for GeneralPlanning {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
                             desc: desc.clone(),
-                            period_id: id.clone(),
+                            period_id: *id,
                         })
                     })
                     .collect::<Vec<_>>();
@@ -256,7 +256,7 @@ impl Component for GeneralPlanning {
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods_list,
                     new_data.into_iter(),
-                    |data| periods_display::EntryInput::UpdateData(data),
+                    periods_display::EntryInput::UpdateData,
                 );
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {

@@ -6,7 +6,7 @@ use pest::Parser;
 
 #[test]
 fn parse_simple_forall() {
-    let input = "let f() -> Constraint = forall x in @[Student] { $V(x) >== 0 };";
+    let input = "let f() -> Constraint = forall x in students { $V(x) >== 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -19,7 +19,7 @@ fn parse_simple_forall() {
                 body,
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
                 assert!(filter.is_none());
                 assert!(matches!(body.node, Expr::ConstraintGe(_, _)));
             }
@@ -31,7 +31,7 @@ fn parse_simple_forall() {
 
 #[test]
 fn parse_forall_with_filter() {
-    let input = "let f() -> Constraint = forall x in @[Student] where x.age > 18 { $V(x) >== 0 };";
+    let input = "let f() -> Constraint = forall x in students where x.age > 18 { $V(x) >== 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -49,7 +49,7 @@ fn parse_forall_with_filter() {
 
 #[test]
 fn parse_forall_with_complex_filter() {
-    let input = "let f() -> Constraint = forall s in @[Student] where s.age > 18 and s.grade >= 10 { $V(s) === 1 };";
+    let input = "let f() -> Constraint = forall s in students where s.age > 18 and s.grade >= 10 { $V(s) === 1 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -68,7 +68,7 @@ fn parse_forall_with_complex_filter() {
 
 #[test]
 fn parse_forall_with_constraint_body() {
-    let input = "let f() -> Constraint = forall x in @[Student] { $V(x) === 1 };";
+    let input = "let f() -> Constraint = forall x in students { $V(x) === 1 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -104,7 +104,7 @@ fn parse_forall_with_list_literal() {
 fn parse_forall_with_list_comprehension() {
     // The constraint is invalid but this should still parse
     let input =
-        "let f() -> Constraint = forall x in [s for s in @[Student] where s.active] { x > 0 };";
+        "let f() -> Constraint = forall x in [s for s in students where s.active] { x > 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -138,7 +138,8 @@ fn parse_forall_with_path_collection() {
 
 #[test]
 fn parse_nested_forall() {
-    let input = "let f() -> Constraint = forall x in @[Student] { forall y in @[Course] { $V(x, y) >== 0 } };";
+    let input =
+        "let f() -> Constraint = forall x in students { forall y in courses { $V(x, y) >== 0 } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -155,7 +156,7 @@ fn parse_nested_forall() {
 
 #[test]
 fn parse_forall_with_complex_body() {
-    let input = "let f() -> Constraint = forall s in @[Student] { $V(s) + $V(s.teacher) === 10 };";
+    let input = "let f() -> Constraint = forall s in students { $V(s) + $V(s.teacher) === 10 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -172,7 +173,7 @@ fn parse_forall_with_complex_body() {
 
 #[test]
 fn parse_forall_with_set_operation_collection() {
-    let input = "let f() -> Constraint = forall x in @[Student] + @[Teacher] { x.active };";
+    let input = "let f() -> Constraint = forall x in students + teachers { x.active };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -191,7 +192,7 @@ fn parse_forall_with_set_operation_collection() {
 
 #[test]
 fn parse_simple_sum() {
-    let input = "let f() -> LinExpr = sum x in @[Student] { $V(x) };";
+    let input = "let f() -> LinExpr = sum x in students { $V(x) };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -204,7 +205,7 @@ fn parse_simple_sum() {
                 body,
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::GlobalList(_)));
+                assert!(matches!(collection.node, Expr::IdentPath(_)));
                 assert!(filter.is_none());
                 assert!(matches!(body.node, Expr::VarCall { .. }));
             }
@@ -216,7 +217,7 @@ fn parse_simple_sum() {
 
 #[test]
 fn parse_sum_with_filter() {
-    let input = "let f() -> LinExpr = sum x in @[Student] where x.age > 18 { $V(x) };";
+    let input = "let f() -> LinExpr = sum x in students where x.age > 18 { $V(x) };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -234,7 +235,7 @@ fn parse_sum_with_filter() {
 
 #[test]
 fn parse_sum_with_complex_body() {
-    let input = "let f() -> LinExpr = sum x in @[Student] { $V(x) * 2 + 5 };";
+    let input = "let f() -> LinExpr = sum x in students { $V(x) * 2 + 5 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -252,7 +253,7 @@ fn parse_sum_with_complex_body() {
 
 #[test]
 fn parse_sum_with_constant_body() {
-    let input = "let f() -> LinExpr = sum x in @[Student] { 1 };";
+    let input = "let f() -> LinExpr = sum x in students { 1 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -269,7 +270,7 @@ fn parse_sum_with_constant_body() {
 
 #[test]
 fn parse_sum_with_field_access_in_body() {
-    let input = "let f() -> LinExpr = sum s in @[Student] { s.grade };";
+    let input = "let f() -> LinExpr = sum s in students { s.grade };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -310,7 +311,7 @@ fn parse_sum_with_list_literal() {
 
 #[test]
 fn parse_nested_sum() {
-    let input = "let f() -> LinExpr = sum x in @[Student] { sum y in @[Course] { $V(x, y) } };";
+    let input = "let f() -> LinExpr = sum x in students { sum y in courses { $V(x, y) } };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -327,7 +328,7 @@ fn parse_nested_sum() {
 
 #[test]
 fn parse_sum_in_arithmetic_expression() {
-    let input = "let f() -> LinExpr = sum x in @[Student] { $V(x) } + 10;";
+    let input = "let f() -> LinExpr = sum x in students { $V(x) } + 10;";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -345,7 +346,7 @@ fn parse_sum_in_arithmetic_expression() {
 
 #[test]
 fn parse_sum_with_list_comprehension() {
-    let input = "let f() -> LinExpr = sum x in [s for s in @[Student] where s.active] { $V(x) };";
+    let input = "let f() -> LinExpr = sum x in [s for s in students where s.active] { $V(x) };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -365,7 +366,7 @@ fn parse_sum_with_list_comprehension() {
 #[test]
 fn parse_sum_and_forall_combined() {
     let input =
-        "let f() -> Constraint = forall s in @[Student] { sum c in @[Course] { $V(s, c) } === 5 };";
+        "let f() -> Constraint = forall s in students { sum c in courses { $V(s, c) } === 5 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -385,8 +386,7 @@ fn parse_sum_and_forall_combined() {
 
 #[test]
 fn parse_multiple_independent_foralls_with_and() {
-    let input =
-        "let f() -> Constraint = forall x in @[A] { x >== 0 } and forall y in @[B] { y >== 0 };";
+    let input = "let f() -> Constraint = forall x in a_list { x >== 0 } and forall y in b_list { y >== 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -404,7 +404,7 @@ fn parse_multiple_independent_foralls_with_and() {
 
 #[test]
 fn parse_forall_with_sum_in_filter() {
-    let input = "let f() -> Constraint = forall s in @[Student] where sum c in @[Course] { c.count } > 3 { $V(s,c) <== 2 };";
+    let input = "let f() -> Constraint = forall s in students where sum c in courses { c.count } > 3 { $V(s,c) <== 2 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 

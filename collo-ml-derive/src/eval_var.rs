@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta,
-    PathArguments, Type, Variant,
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta, PathArguments, Type,
+    Variant, parse_macro_input,
 };
 
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -17,8 +17,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
         _ => panic!("EvalVar can only be derived for enums"),
     };
 
-    // Extract optional env type from #[env(EnvType)]
-    let env_type = extract_env_attribute(&input.attrs);
+    // Extract env type from #[env(EnvType)] - now required
+    let env_type = extract_env_attribute(&input.attrs)
+        .expect("EvalVar derive requires #[env(EnvType)] attribute");
 
     // Extract value for fix_with if present
     let fix_with_expr = extract_fix_with_attribute(&input.attrs)
@@ -33,7 +34,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 
     // Generate the implementations
-    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info, env_type.as_ref());
+    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info, &env_type);
     let try_from_impl = generate_try_from_impl(enum_name, &variant_info);
 
     // Combine everything
@@ -70,12 +71,11 @@ struct FieldInfo {
 fn unwrap_option_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         let segment = type_path.path.segments.last()?;
-        if segment.ident == "Option" {
-            if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                    return Some(inner_ty);
-                }
-            }
+        if segment.ident == "Option"
+            && let PathArguments::AngleBracketed(args) = &segment.arguments
+            && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+        {
+            return Some(inner_ty);
         }
     }
     None
@@ -98,12 +98,11 @@ fn get_core_type(ty: &Type) -> &Type {
 // Helper function to extract #[env(Type)]
 fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
     for attr in attrs {
-        if attr.path().is_ident("env") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone()) {
-                    return Some(ty);
-                }
-            }
+        if attr.path().is_ident("env")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(ty) = syn::parse2::<syn::Type>(meta_list.tokens.clone())
+        {
+            return Some(ty);
         }
     }
     None
@@ -112,12 +111,11 @@ fn extract_env_attribute(attrs: &[Attribute]) -> Option<syn::Type> {
 // Helper function to extract #[fix_with(expr)]
 fn extract_fix_with_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("fix_with") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("fix_with")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -126,12 +124,11 @@ fn extract_fix_with_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[defer_fix(expr)]
 fn extract_defer_fix_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("defer_fix") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("defer_fix")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -140,14 +137,12 @@ fn extract_defer_fix_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[name("...")]
 fn extract_name_attribute(attrs: &[Attribute]) -> Option<String> {
     for attr in attrs {
-        if attr.path().is_ident("name") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone()) {
-                    if let Lit::Str(lit_str) = lit {
-                        return Some(lit_str.value());
-                    }
-                }
-            }
+        if attr.path().is_ident("name")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(lit) = syn::parse2::<Lit>(meta_list.tokens.clone())
+            && let Lit::Str(lit_str) = lit
+        {
+            return Some(lit_str.value());
         }
     }
     None
@@ -156,12 +151,11 @@ fn extract_name_attribute(attrs: &[Attribute]) -> Option<String> {
 // Helper function to extract #[var(...)]
 fn extract_var_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("var") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("var")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -170,12 +164,11 @@ fn extract_var_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
 // Helper function to extract #[range(...)]
 fn extract_range_attribute(attrs: &[Attribute]) -> Option<syn::Expr> {
     for attr in attrs {
-        if attr.path().is_ident("range") {
-            if let Meta::List(meta_list) = &attr.meta {
-                if let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone()) {
-                    return Some(expr);
-                }
-            }
+        if attr.path().is_ident("range")
+            && let Meta::List(meta_list) = &attr.meta
+            && let Ok(expr) = syn::parse2::<Expr>(meta_list.tokens.clone())
+        {
+            return Some(expr);
         }
     }
     None
@@ -263,7 +256,7 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
 fn generate_eval_var_impl(
     enum_name: &syn::Ident,
     variants: &[VariantInfo],
-    env_type: Option<&syn::Type>,
+    env_type: &syn::Type,
 ) -> proc_macro2::TokenStream {
     // Generate field_schema implementation
     let field_schema_entries = variants.iter().map(|info| {
@@ -281,7 +274,7 @@ fn generate_eval_var_impl(
         }
     });
 
-    // Generate vars implementation - now generic!
+    // Generate vars implementation
     let vars_generation = generate_vars_impl(enum_name, variants);
 
     // Generate fix implementation
@@ -298,106 +291,27 @@ fn generate_eval_var_impl(
         }
     });
 
-    // Collect all unique object types (same logic as in generate_try_from_impl)
-    let mut object_types = std::collections::HashSet::new();
-    for variant in variants {
-        for field in &variant.fields {
-            let core_ty = get_core_type(&field.ty); // unwrap Option if present
-            if let Type::Path(type_path) = core_ty {
-                // check core_ty
-                let segment = type_path.path.segments.last().unwrap();
-                let type_name = segment.ident.to_string();
-                if type_name != "i32" && type_name != "bool" {
-                    object_types.insert(core_ty.clone()); // insert core type
-                }
+    let env_ty = env_type;
+
+    quote! {
+        impl ::collo_ml::EvalVar for #enum_name {
+            type Env = #env_ty;
+
+            fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::ExprType>> {
+                let mut schema = ::std::collections::HashMap::new();
+                #(#field_schema_entries)*
+                schema
             }
-        }
-    }
 
-    // Generate where clause for all object types
-    let where_clauses = object_types.iter().map(|ty| {
-        quote! {
-            #ty: TryFrom<__T, Error = ::collo_ml::traits::TypeConversionError>
-        }
-    });
-
-    // Generate impl based on whether env_type is specified
-    if let Some(env_ty) = env_type {
-        // Env-specific implementation with concrete env type
-        let where_clauses_vec: Vec<_> = where_clauses.collect();
-        let where_text = if where_clauses_vec.is_empty() {
-            quote! {
-                where
-                    __T: ::collo_ml::EvalObject<Env = #env_ty>
+            fn vars(
+                env: &#env_ty
+            ) -> ::std::collections::HashMap<Self, ::collomatique_ilp::Variable> {
+                #vars_generation
             }
-        } else {
-            quote! {
-                where
-                    __T: ::collo_ml::EvalObject<Env = #env_ty>,
-                    #(#where_clauses_vec),*
-            }
-        };
 
-        quote! {
-            impl<__T> ::collo_ml::EvalVar<__T> for #enum_name
-                #where_text
-            {
-                fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
-                    let mut schema = ::std::collections::HashMap::new();
-                    #(#field_schema_entries)*
-                    schema
-                }
-
-                fn vars(
-                    env: &#env_ty
-                ) -> ::std::result::Result<
-                    ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
-                    ::std::any::TypeId
-                > {
-                    #vars_generation
-                }
-
-                fn fix(&self, env: &#env_ty) -> Option<f64> {
-                    match self {
-                        #(#fix_arms,)*
-                    }
-                }
-            }
-        }
-    } else {
-        // Generic implementation
-        let where_text = if where_clauses.len() == 0 {
-            quote! {}
-        } else {
-            quote! {
-                where
-                    #(#where_clauses),*
-            }
-        };
-
-        quote! {
-            impl<__T: ::collo_ml::EvalObject> ::collo_ml::EvalVar<__T> for #enum_name
-                #where_text
-            {
-                fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::traits::FieldType>> {
-                    let mut schema = ::std::collections::HashMap::new();
-                    #(#field_schema_entries)*
-                    schema
-                }
-
-                fn vars(
-                    env: &__T::Env
-                ) -> ::std::result::Result<
-                    ::std::collections::BTreeMap<Self, ::collomatique_ilp::Variable>,
-                    ::std::any::TypeId
-                > {
-                    #vars_generation
-                }
-
-                fn fix(&self, env: &__T::Env) -> Option<f64> {
-                    match self {
-                        #(#fix_arms,)*
-                    }
+            fn fix(&self, env: &#env_ty) -> Option<f64> {
+                match self {
+                    #(#fix_arms,)*
                 }
             }
         }
@@ -407,12 +321,12 @@ fn generate_eval_var_impl(
 fn generate_field_type_expr(ty: &Type) -> proc_macro2::TokenStream {
     // Check if it's Option<T>
     if let Some(inner_ty) = unwrap_option_type(ty) {
-        // For Option<T>, we need to generate: FieldType::sum(vec![SimpleFieldType::None, <inner type>])
+        // For Option<T>, we need to generate: ExprType::sum(vec![SimpleType::None, <inner type>])
         let inner_type_expr = generate_field_type_expr_core(inner_ty);
 
         return quote! {
-            ::collo_ml::traits::FieldType::sum(vec![
-                ::collo_ml::traits::SimpleFieldType::None,
+            ::collo_ml::ExprType::sum(vec![
+                ::collo_ml::SimpleType::None,
                 #inner_type_expr
             ]).expect("Should have at least one variant")
         };
@@ -429,13 +343,15 @@ fn generate_field_type_expr_core(ty: &Type) -> proc_macro2::TokenStream {
             let type_name = segment.ident.to_string();
 
             match type_name.as_str() {
-                "i32" => quote! { ::collo_ml::traits::SimpleFieldType::Int.into() },
-                "bool" => quote! { ::collo_ml::traits::SimpleFieldType::Bool.into() },
+                "i32" => quote! { ::collo_ml::SimpleType::Int.into() },
+                "bool" => quote! { ::collo_ml::SimpleType::Bool.into() },
                 "Vec" => panic!("List are not supported as variable parameters: {:?}", ty),
                 "Option" => panic!("Should not reach here - Option should be handled by caller"),
                 _ => {
-                    // It's an object type - use TypeId
-                    quote! { ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#ty>()).into() }
+                    panic!(
+                        "Unsupported field type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }
@@ -469,9 +385,9 @@ fn generate_vars_impl(
 
     quote! {
         use ::collomatique_ilp::Variable;
-        let mut vars = ::std::collections::BTreeMap::new();
+        let mut vars = ::std::collections::HashMap::new();
         #(#variant_iterations)*
-        Ok(vars)
+        vars
     }
 }
 
@@ -607,20 +523,10 @@ fn generate_field_iterator(ty: &Type, range: &Option<syn::Expr>) -> proc_macro2:
                     panic!("Should not reach here - Option should be handled by caller")
                 }
                 _ => {
-                    if range.is_some() {
-                        panic!("#[range(...)] attribute is not supported for object types");
-                    }
-                    // It's an object type
-                    quote! {
-                        {
-                            let type_id = ::std::any::TypeId::of::<#core_ty>();
-                            let type_name = __T::type_id_to_name(type_id.clone())
-                                .map_err(|_| type_id)?;
-                            __T::objects_with_typ(env, &type_name)
-                                .into_iter()
-                                .map(|obj| <#core_ty>::try_from(obj).expect("Consistent TryFrom implementation with type_id_to_name"))
-                        }
-                    }
+                    panic!(
+                        "Unsupported field type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }
@@ -692,27 +598,27 @@ fn generate_fix_pattern_and_checks_and_output(
                     let segment = type_path.path.segments.last().unwrap();
                     let type_name = segment.ident.to_string();
 
-                    if type_name == "i32" {
-                        if let Some(range_expr) = &field.range {
-                            let check = if is_option {
-                                // For Option<i32>, check if Some and in range
-                                quote! {
-                                    if let Some(val) = #var_name {
-                                        if !(#range_expr).contains(val) {
-                                            return Some(#fix_with);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // For i32, check if in range
-                                quote! {
-                                    if !(#range_expr).contains(#var_name) {
+                    if type_name == "i32"
+                        && let Some(range_expr) = &field.range
+                    {
+                        let check = if is_option {
+                            // For Option<i32>, check if Some and in range
+                            quote! {
+                                if let Some(val) = #var_name {
+                                    if !(#range_expr).contains(val) {
                                         return Some(#fix_with);
                                     }
                                 }
-                            };
-                            checks.push(check);
-                        }
+                            }
+                        } else {
+                            // For i32, check if in range
+                            quote! {
+                                if !(#range_expr).contains(#var_name) {
+                                    return Some(#fix_with);
+                                }
+                            }
+                        };
+                        checks.push(check);
                     }
                 }
             }
@@ -754,44 +660,11 @@ fn generate_try_from_impl(
         }
     });
 
-    // Collect all unique object types used across all variants
-    let mut object_types = std::collections::HashSet::new();
-    for variant in variants {
-        for field in &variant.fields {
-            let core_ty = get_core_type(&field.ty); // Unwrap Option if present
-            if let Type::Path(type_path) = core_ty {
-                let segment = type_path.path.segments.last().unwrap();
-                let type_name = segment.ident.to_string();
-                if type_name != "i32" && type_name != "bool" {
-                    object_types.insert(core_ty.clone()); // Insert core type
-                }
-            }
-        }
-    }
-
-    // Generate where clause for all object types
-    let where_clauses = object_types.iter().map(|ty| {
-        quote! {
-            #ty: TryFrom<__T>
-        }
-    });
-
-    let where_text = if where_clauses.len() == 0 {
-        quote! {}
-    } else {
-        quote! {
-            where
-                #(#where_clauses),*
-        }
-    };
-
     quote! {
-        impl<__T: ::collo_ml::EvalObject> TryFrom<&::collo_ml::eval::ExternVar<__T>> for #enum_name
-            #where_text
-        {
+        impl<__D: ::collo_ml::DatabaseConnection> TryFrom<&::collo_ml::eval::ExternVar<__D>> for #enum_name {
             type Error = ::collo_ml::traits::VarConversionError;
 
-            fn try_from(value: &::collo_ml::eval::ExternVar<__T>) -> Result<Self, Self::Error> {
+            fn try_from(value: &::collo_ml::eval::ExternVar<__D>) -> Result<Self, Self::Error> {
                 match value.name.as_str() {
                     #(#match_arms,)*
                     _ => Err(::collo_ml::traits::VarConversionError::Unknown(value.name.clone())),
@@ -862,14 +735,14 @@ fn generate_param_extraction(
                         quote! { *i }
                     };
                     quote! {
-                        let #param_name = match &value.params[#idx] {
+                        let #param_name = match &*value.params[#idx] {
                             #none_arm
                             ::collo_ml::ExprValue::Int(i) => #opt_output,
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Int.into(),
+                                    expected: ::collo_ml::SimpleType::Int.into(),
                                 })
                             }
                         };
@@ -882,14 +755,14 @@ fn generate_param_extraction(
                         quote! { *b }
                     };
                     quote! {
-                        let #param_name = match &value.params[#idx] {
+                        let #param_name = match &*value.params[#idx] {
                             #none_arm
                             ::collo_ml::ExprValue::Bool(b) => #opt_output,
                             _ => {
                                 return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
                                     name: #dsl_name.into(),
                                     param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Bool.into(),
+                                    expected: ::collo_ml::SimpleType::Bool.into(),
                                 })
                             }
                         };
@@ -899,35 +772,10 @@ fn generate_param_extraction(
                     panic!("Should not reach here - Option should be handled by caller")
                 }
                 _ => {
-                    // It's an object type
-                    let output = quote! {
-                        <#core_ty>::try_from(obj.clone())
-                            .map_err(|_| ::collo_ml::traits::VarConversionError::WrongParameterType {
-                                name: #dsl_name.into(),
-                                param: #idx,
-                                expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
-                            })?
-                    };
-                    let opt_output = if is_option {
-                        quote! { Some(#output) }
-                    } else {
-                        quote! { #output }
-                    };
-                    quote! {
-                        let #param_name = match &value.params[#idx] {
-                            #none_arm
-                            ::collo_ml::ExprValue::Object(obj) => {
-                                #opt_output
-                            }
-                            _ => {
-                                return Err(::collo_ml::traits::VarConversionError::WrongParameterType {
-                                    name: #dsl_name.into(),
-                                    param: #idx,
-                                    expected: ::collo_ml::traits::SimpleFieldType::Object(::std::any::TypeId::of::<#core_ty>()).into(),
-                                })
-                            }
-                        };
-                    }
+                    panic!(
+                        "Unsupported parameter type '{}' in EvalVar derive. Supported types: i32, bool, Option<T>",
+                        type_name
+                    )
                 }
             }
         }

@@ -9,4 +9,3 @@ mod reification;
 mod simple_constraints;
 mod simple_objective;
 mod two_objectives;
-mod var_lists;

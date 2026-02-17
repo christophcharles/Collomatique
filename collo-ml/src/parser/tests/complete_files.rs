@@ -139,7 +139,7 @@ fn file_accepts_realistic_small_program() {
     let program = r#"
 /// Define a linear expression counting assignments
 let count_assignments(student: Student) -> LinExpr =
-    sum week in @[Week] { $Assigned(student, week) };
+    sum week in weeks { $Assigned(student, week) };
 
 /// Ensure each student has at least one assignment
 let min_assignments(student: Student) -> Constraint =
@@ -150,7 +150,7 @@ reify min_assignments as $MinAssignments;
 
 /// Public final constraint combining reified variables
 pub let enforce_all_rules() -> Constraint =
-    forall s in @[Student] { $MinAssignments(s) === 1 };
+    forall s in students { $MinAssignments(s) === 1 };
 "#;
     let result = ColloMLParser::parse(Rule::file, program);
     assert!(
@@ -165,12 +165,12 @@ fn file_accepts_realistic_medium_program() {
     let program = r#"
 /// Define a linear expression for total assignments
 let compute_total(x: Student) -> LinExpr =
-    sum w in @[Week] { $Assigned(x, w) };
+    sum w in weeks { $Assigned(x, w) };
 
 /// Define a capacity constraint for rooms
 let enforce_capacity() -> Constraint =
-    forall r in @[Room] {
-        sum s in @[Student] { $InRoom(s, r) } <== r.capacity
+    forall r in rooms {
+        sum s in students { $InRoom(s, r) } <== r.capacity
     };
 
 /// Reify the capacity constraint
@@ -178,7 +178,7 @@ reify enforce_capacity as $CapacityOK;
 
 /// Public constraint combining multiple rules
 pub let final_rule() -> Constraint =
-    $CapacityOK() === 1 and forall x in @[Student] {
+    $CapacityOK() === 1 and forall x in students {
         compute_total(x) >== 1
     };
 "#;
@@ -195,7 +195,7 @@ fn file_accepts_complex_realistic_program() {
     let program = r#"
 /// Calculate the number of slots a student is assigned to in a week
 let student_slots_per_week(student: Student, week: Week) -> LinExpr =
-    sum slot in @[Slot] { $StudentInSlot(student, slot, week) };
+    sum slot in slots_list { $StudentInSlot(student, slot, week) };
 
 /// Check if a student has a subject in a given week
 let has_subject_in_week(subject: Subject, student: Student, week: Week) -> Constraint =
@@ -203,7 +203,7 @@ let has_subject_in_week(subject: Subject, student: Student, week: Week) -> Const
 
 /// Ensure students don't exceed maximum slots per week
 let max_slots_per_week(student: Student) -> Constraint =
-    forall week in @[Week] {
+    forall week in weeks {
         student_slots_per_week(student, week) <== student.max_slots
     };
 
@@ -212,8 +212,8 @@ reify max_slots_per_week as $MaxSlots;
 
 /// Ensure each student is assigned to exactly one slot per subject per week
 let one_slot_per_subject_per_week(student: Student) -> Constraint =
-    forall subject in @[Subject] {
-        forall week in @[Week] {
+    forall subject in subjects {
+        forall week in weeks {
             sum slot in subject.slots {
                 $StudentInSlot(student, slot, week)
             } === 1
@@ -225,9 +225,9 @@ reify one_slot_per_subject_per_week as $OneSlotPerSubject;
 
 /// Room capacity constraint
 let room_capacity_check(room: Room) -> Constraint =
-    forall week in @[Week] {
+    forall week in weeks {
         forall slot in room.slots {
-            sum student in @[Student] {
+            sum student in students {
                 $StudentInSlot(student, slot, week)
             } <== room.capacity
         }
@@ -238,9 +238,9 @@ reify room_capacity_check as $RoomCapacity;
 
 /// Public final constraint enforcing all rules
 pub let enforce_schedule_rules() -> Constraint =
-    forall student in @[Student] {
+    forall student in students {
         $MaxSlots(student) === 1 and $OneSlotPerSubject(student) === 1
-    } and forall room in @[Room] {
+    } and forall room in rooms {
         $RoomCapacity(room) === 1
     };
 "#;
@@ -302,7 +302,7 @@ fn file_accepts_deeply_nested_expressions_in_program() {
     let program = r#"
 let helper(x: Int) -> LinExpr = 
     if x > 0 { 
-        sum y in @[Int] where y < x { 
+        sum y in numbers where y < x {
             $V(y) 
         } 
     } else { 
@@ -310,9 +310,9 @@ let helper(x: Int) -> LinExpr =
     };
 
 let main() -> Constraint = 
-    forall x in @[Int] {
-        forall y in @[Int] where y != x {
-            helper(x) + helper(y) <== |@[Int]|
+    forall x in numbers {
+        forall y in numbers where y != x {
+            helper(x) + helper(y) <== |numbers|
         }
     };
 

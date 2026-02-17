@@ -4,7 +4,7 @@ use super::*;
 fn nd_problem_correctly_builds_matrices() {
     use crate::LinExpr;
 
-    let variables = BTreeMap::from([
+    let variables = HashMap::from([
         (String::from("a"), Variable::binary()),
         (String::from("b"), Variable::integer()),
         (String::from("c"), Variable::binary()),
@@ -23,38 +23,54 @@ fn nd_problem_correctly_builds_matrices() {
 
     let pb = NdProblem::new(&variables, constraints.iter());
 
-    use ndarray::array;
-
-    assert_eq!(
-        pb.mat,
-        array![
-            [0., -3., 4., 5., 0.],
-            [-3., 1., 3., 5., 0.],
-            [0., 0., 1., -3., 5.]
-        ]
-    );
-    assert_eq!(pb.constants, array![-3., 3., 2.]);
+    // Check dimensions
+    assert_eq!(pb.mat.shape(), [3, 5]);
     assert_eq!(
         pb.constraint_symbols,
         vec![EqSymbol::LessThan, EqSymbol::LessThan, EqSymbol::Equals]
     );
-    assert_eq!(
-        pb.variable_map,
-        BTreeMap::from([
-            (String::from("a"), 0),
-            (String::from("b"), 1),
-            (String::from("c"), 2),
-            (String::from("d"), 3),
-            (String::from("e"), 4),
-        ])
-    );
+
+    // Check variable_map has correct keys
+    assert_eq!(pb.variable_map.len(), 5);
+    for name in ["a", "b", "c", "d", "e"] {
+        assert!(pb.variable_map.contains_key(&String::from(name)));
+    }
+
+    // Check matrix coefficients using variable_map indices (order-independent)
+    let idx = |name: &str| pb.variable_map[&String::from(name)];
+
+    // Row 0: 0a - 3b + 4c + 5d + 0e, constant -3
+    assert!(f64_is_zero(pb.mat[(0, idx("a"))]));
+    assert!(f64_is_zero(pb.mat[(0, idx("b"))] + 3.0));
+    assert!(f64_is_zero(pb.mat[(0, idx("c"))] - 4.0));
+    assert!(f64_is_zero(pb.mat[(0, idx("d"))] - 5.0));
+    assert!(f64_is_zero(pb.mat[(0, idx("e"))]));
+
+    // Row 1: -3a + 1b + 3c + 5d + 0e, constant 3
+    assert!(f64_is_zero(pb.mat[(1, idx("a"))] + 3.0));
+    assert!(f64_is_zero(pb.mat[(1, idx("b"))] - 1.0));
+    assert!(f64_is_zero(pb.mat[(1, idx("c"))] - 3.0));
+    assert!(f64_is_zero(pb.mat[(1, idx("d"))] - 5.0));
+    assert!(f64_is_zero(pb.mat[(1, idx("e"))]));
+
+    // Row 2: 0a + 0b + 1c - 3d + 5e, constant 2
+    assert!(f64_is_zero(pb.mat[(2, idx("a"))]));
+    assert!(f64_is_zero(pb.mat[(2, idx("b"))]));
+    assert!(f64_is_zero(pb.mat[(2, idx("c"))] - 1.0));
+    assert!(f64_is_zero(pb.mat[(2, idx("d"))] + 3.0));
+    assert!(f64_is_zero(pb.mat[(2, idx("e"))] - 5.0));
+
+    // Check constants
+    assert!(f64_is_zero(pb.constants[0] + 3.0));
+    assert!(f64_is_zero(pb.constants[1] - 3.0));
+    assert!(f64_is_zero(pb.constants[2] - 2.0));
 }
 
 #[test]
 fn nd_repr_checks_is_feasable_on_simple_example() {
     use crate::LinExpr;
 
-    let variables = BTreeMap::from([
+    let variables = HashMap::from([
         (String::from("a"), Variable::binary()),
         (String::from("b"), Variable::binary()),
         (String::from("c"), Variable::binary()),
@@ -72,97 +88,97 @@ fn nd_repr_checks_is_feasable_on_simple_example() {
 
     let pb = NdProblem::new(&variables, constraints.iter());
 
-    let config_0_vars = BTreeMap::from([
+    let config_0_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_1_vars = BTreeMap::from([
+    let config_1_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_2_vars = BTreeMap::from([
+    let config_2_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_3_vars = BTreeMap::from([
+    let config_3_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_4_vars = BTreeMap::from([
+    let config_4_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_5_vars = BTreeMap::from([
+    let config_5_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_6_vars = BTreeMap::from([
+    let config_6_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_7_vars = BTreeMap::from([
+    let config_7_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_8_vars = BTreeMap::from([
+    let config_8_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_9_vars = BTreeMap::from([
+    let config_9_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_a_vars = BTreeMap::from([
+    let config_a_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_b_vars = BTreeMap::from([
+    let config_b_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(0.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_c_vars = BTreeMap::from([
+    let config_c_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_d_vars = BTreeMap::from([
+    let config_d_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_e_vars = BTreeMap::from([
+    let config_e_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_f_vars = BTreeMap::from([
+    let config_f_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
@@ -206,7 +222,7 @@ fn nd_repr_checks_is_feasable_on_simple_example() {
 
 #[test]
 fn nd_repr_checks_is_feasable_with_no_constraints() {
-    let variables = BTreeMap::from([
+    let variables = HashMap::from([
         (String::from("a"), Variable::binary()),
         (String::from("b"), Variable::binary()),
     ]);
@@ -215,19 +231,19 @@ fn nd_repr_checks_is_feasable_with_no_constraints() {
 
     let pb = NdProblem::new(&variables, constraints.iter());
 
-    let config_0_vars = BTreeMap::from([
+    let config_0_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_1_vars = BTreeMap::from([
+    let config_1_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
     ]);
-    let config_2_vars = BTreeMap::from([
+    let config_2_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(0.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
     ]);
-    let config_3_vars = BTreeMap::from([
+    let config_3_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(1.0)),
     ]);
@@ -247,7 +263,7 @@ fn nd_repr_checks_is_feasable_with_no_constraints() {
 fn nd_repr_checks_unsatisfied_constraints_on_simple_example() {
     use crate::LinExpr;
 
-    let variables = BTreeMap::from([
+    let variables = HashMap::from([
         (String::from("a"), Variable::binary()),
         (String::from("b"), Variable::binary()),
         (String::from("c"), Variable::binary()),
@@ -265,7 +281,7 @@ fn nd_repr_checks_unsatisfied_constraints_on_simple_example() {
 
     let pb = NdProblem::new(&variables, constraints.iter());
 
-    let config_vars = BTreeMap::from([
+    let config_vars = HashMap::from([
         (String::from("a"), ordered_float::OrderedFloat(1.0)),
         (String::from("b"), ordered_float::OrderedFloat(0.0)),
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
@@ -274,8 +290,5 @@ fn nd_repr_checks_unsatisfied_constraints_on_simple_example() {
 
     let config = pb.config_from(&config_vars);
 
-    assert_eq!(
-        config.unsatisfied_constraints(),
-        BTreeSet::from([1usize, 2usize])
-    );
+    assert_eq!(config.unsatisfied_constraints(), vec![1usize, 2usize]);
 }

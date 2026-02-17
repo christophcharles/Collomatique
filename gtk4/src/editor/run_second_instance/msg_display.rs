@@ -1,7 +1,7 @@
 use gtk::prelude::{OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, RelmWidgetExt};
-use relm4::FactorySender;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryData {
@@ -63,9 +63,7 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn update(&mut self, _msg: Self::Input, _sender: FactorySender<Self>) {}

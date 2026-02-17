@@ -20,12 +20,6 @@ pub type ArgsType = Vec<ExprType>;
 
 #[derive(Debug, Error, Clone)]
 pub enum GlobalEnvError {
-    #[error("Field {field} of object type {object_type} has unknown type {unknown_type}")]
-    UnknownTypeInField {
-        object_type: String,
-        field: String,
-        unknown_type: String,
-    },
     #[error("Parameter number {param} for ILP variable {var} has unknown type {unknown_type}")]
     UnknownTypeForVariableArg {
         var: String,
@@ -48,7 +42,9 @@ pub enum SemError {
         var: String,
         span: Span,
     },
-    #[error("Function type mismatch in module \"{module}\": \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
+    #[error(
+        "Function type mismatch in module \"{module}\": \"{identifier}\" at {span:?} has type {found} but type {expected} expected."
+    )]
     FunctionTypeMismatch {
         module: String,
         identifier: String,
@@ -56,15 +52,28 @@ pub enum SemError {
         expected: FunctionType,
         found: FunctionType,
     },
-    #[error("Variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})")]
+    #[error(
+        "Variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})"
+    )]
     VariableAlreadyDefined {
         module: String,
         identifier: String,
         span: Span,
         here: Option<Span>,
     },
-    #[error("Function \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})")]
+    #[error(
+        "Function \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})"
+    )]
     FunctionAlreadyDefined {
+        module: String,
+        identifier: String,
+        span: Span,
+        here: Span,
+    },
+    #[error(
+        "Query \"{identifier}\" in module \"{module}\" at {span:?} is already defined ({here:?})"
+    )]
+    QueryAlreadyDefined {
         module: String,
         identifier: String,
         span: Span,
@@ -76,9 +85,13 @@ pub enum SemError {
         typ: String,
         span: Span,
     },
-    #[error("Multiple option markers '?' on {typ} (at {span:?}) - only one option marker '?' is allowed")]
+    #[error(
+        "Multiple option markers '?' on {typ} (at {span:?}) - only one option marker '?' is allowed"
+    )]
     MultipleOptionMarkers { typ: SimpleType, span: Span },
-    #[error("Type {typ} appears multiple time in the sum (at {span1:?} and {span2:?} in sum at {sum_span:?})")]
+    #[error(
+        "Type {typ} appears multiple time in the sum (at {span1:?} and {span2:?} in sum at {sum_span:?})"
+    )]
     MultipleTypeInSum {
         typ: SimpleType,
         span1: Span,
@@ -97,8 +110,6 @@ pub enum SemError {
     },
     #[error("Option marker '?' is forbidden on None (at {0:?})")]
     OptionMarkerOnNone(Span),
-    #[error("Type {typ} at {span:?} is not a sum type of objects. This is disallowed in global collections")]
-    GlobalCollectionsMustBeAListOfObjects { typ: String, span: Span },
     #[error("Parameter \"{identifier}\" in module \"{module}\" is already defined ({here:?}).")]
     ParameterAlreadyDefined {
         module: String,
@@ -106,7 +117,9 @@ pub enum SemError {
         span: Span,
         here: Span,
     },
-    #[error("Body type mismatch: body for function {func} at {span:?} has type {found} but type {expected} expected.")]
+    #[error(
+        "Body type mismatch: body for function {func} at {span:?} has type {found} but type {expected} expected."
+    )]
     BodyTypeMismatch {
         func: String,
         span: Span,
@@ -120,7 +133,9 @@ pub enum SemError {
         found: ExprType,
         context: String,
     },
-    #[error("Argument count mismatch for \"{identifier}\" at {span:?}: expected {expected} arguments but found {found}")]
+    #[error(
+        "Argument count mismatch for \"{identifier}\" at {span:?}: expected {expected} arguments but found {found}"
+    )]
     ArgumentCountMismatch {
         identifier: String,
         span: Span,
@@ -178,31 +193,41 @@ pub enum SemError {
         found: ExprType,
         target: ConcreteType,
     },
-    #[error("Local variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined in the same scope ({here:?})")]
+    #[error(
+        "Local variable \"{identifier}\" in module \"{module}\" at {span:?} is already defined in the same scope ({here:?})"
+    )]
     LocalIdentAlreadyDeclared {
         module: String,
         identifier: String,
         span: Span,
         here: Span,
     },
-    #[error("Local variable \"{identifier}\" in module \"{module}\" at {span:?} shadows a function with the same name")]
+    #[error(
+        "Local variable \"{identifier}\" in module \"{module}\" at {span:?} shadows a function with the same name"
+    )]
     LocalIdentShadowsFunction {
         module: String,
         identifier: String,
         span: Span,
     },
-    #[error("Branch for match at {span:?} has a too large type ({found:?}). Maximum type is {expected:?}")]
+    #[error(
+        "Branch for match at {span:?} has a too large type ({found:?}). Maximum type is {expected:?}"
+    )]
     OverMatching {
         span: Span,
         expected: Option<ExprType>,
         found: Option<ExprType>,
     },
-    #[error("Match at {span:?} does not have exhaustive checking. The case {remaining_types} is not covered")]
+    #[error(
+        "Match at {span:?} does not have exhaustive checking. The case {remaining_types} is not covered"
+    )]
     NonExhaustiveMatching {
         span: Span,
         remaining_types: ExprType,
     },
-    #[error("Null coalescing operator '??' at {span:?} requires a maybe type (containing None), but found {found}")]
+    #[error(
+        "Null coalescing operator '??' at {span:?} requires a maybe type (containing None), but found {found}"
+    )]
     NullCoalesceOnNonMaybe { span: Span, found: ExprType },
     #[error("List index at {span:?} requires Int type, but found {found}")]
     ListIndexNotInt { span: Span, found: ExprType },
@@ -214,13 +239,9 @@ pub enum SemError {
         type_name: String,
         span: Span,
     },
-    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows an object type")]
-    TypeShadowsObject {
-        module: String,
-        type_name: String,
-        span: Span,
-    },
-    #[error("Type \"{type_name}\" in module \"{module}\" at {span:?} shadows a previously defined custom type")]
+    #[error(
+        "Type \"{type_name}\" in module \"{module}\" at {span:?} shadows a previously defined custom type"
+    )]
     TypeShadowsCustomType {
         module: String,
         type_name: String,
@@ -238,7 +259,9 @@ pub enum SemError {
     UnknownModule { module: String, span: Span },
     #[error("Cannot import own module at {span:?}")]
     SelfImport { span: Span },
-    #[error("Symbol \"{path}\" at {span:?} conflicts with existing symbol from module \"{existing_module}\"")]
+    #[error(
+        "Symbol \"{path}\" at {span:?} conflicts with existing symbol from module \"{existing_module}\""
+    )]
     SymbolConflict {
         path: String,
         span: Span,
@@ -246,7 +269,9 @@ pub enum SemError {
     },
     #[error("Qualified module access at {span:?} is not yet implemented")]
     QualifiedAccessNotYetSupported { span: Span },
-    #[error("Primitive type \"{type_name}\" in module \"{module}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))")]
+    #[error(
+        "Primitive type \"{type_name}\" in module \"{module}\" at {span:?} cannot be used as a value (use a conversion like {type_name}(x))"
+    )]
     PrimitiveTypeAsValue {
         module: String,
         type_name: String,
@@ -260,11 +285,126 @@ pub enum SemError {
     },
     #[error("Unsupported feature: {feature} at {span:?}")]
     UnsupportedFeature { feature: String, span: Span },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: first parameter must be a database schema type, found {found}"
+    )]
+    QueryFirstParamNotDatabase {
+        module: String,
+        query_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: must have at least one parameter (a database schema)"
+    )]
+    QueryMissingDatabaseParam {
+        module: String,
+        query_name: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: output type must be [T] or ?T where T is a struct, tuple, or primitive (Int, Bool, String), found {found}"
+    )]
+    QueryInvalidOutputType {
+        module: String,
+        query_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: parameter \"{param_name}\" must be a SQL-compatible type (Int, Bool, String, or optional variant), found {found}"
+    )]
+    QueryParamNotSqlCompatible {
+        module: String,
+        query_name: String,
+        param_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: output struct field \"{field_name}\" must be a SQL-compatible type (Int, Bool, String, or optional variant), found {found}"
+    )]
+    QueryOutputFieldNotSqlCompatible {
+        module: String,
+        query_name: String,
+        field_name: String,
+        found: String,
+        span: Span,
+    },
+
+    #[error(
+        "Failed to create database model for query '{query_name}' in module '{module}': {error}"
+    )]
+    DatabaseModelCreationFailed {
+        module: String,
+        query_name: String,
+        error: String,
+        span: Span,
+    },
+
+    #[error("Invalid SQL in query '{query_name}' in module '{module}': {error}")]
+    InvalidQuerySql {
+        module: String,
+        query_name: String,
+        error: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: SQL returns {sql_count} column(s) but declared type has {declared_count}"
+    )]
+    QueryColumnCountMismatch {
+        module: String,
+        query_name: String,
+        sql_count: usize,
+        declared_count: usize,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: SQL column \"{sql_column}\" not found in struct fields {struct_fields:?}"
+    )]
+    QueryColumnNameMismatch {
+        module: String,
+        query_name: String,
+        sql_column: String,
+        struct_fields: Vec<String>,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: column \"{column_name}\" has SQL type {sql_type} but declared type {declared_type}"
+    )]
+    QueryColumnTypeMismatch {
+        module: String,
+        query_name: String,
+        column_name: String,
+        sql_type: String,
+        declared_type: String,
+        span: Span,
+    },
+
+    #[error(
+        "Query \"{query_name}\" in module \"{module}\" at {span:?}: duplicate column name \"{column_name}\" in SQL result"
+    )]
+    QueryDuplicateColumnName {
+        module: String,
+        query_name: String,
+        column_name: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SemWarning {
-    #[error("Identifier \"{identifier}\" in module \"{module}\" at {span:?} shadows previous definition at {previous:?}")]
+    #[error(
+        "Identifier \"{identifier}\" in module \"{module}\" at {span:?} shadows previous definition at {previous:?}"
+    )]
     IdentifierShadowed {
         module: String,
         identifier: String,
@@ -301,6 +441,26 @@ pub enum SemWarning {
         span: Span,
         suggestion: String,
     },
+
+    #[error(
+        "Type \"{identifier}\" in module \"{module}\" at {span:?} should use PascalCase (consider \"{suggestion}\")"
+    )]
+    TypeNamingConvention {
+        module: String,
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
+
+    #[error(
+        "Field \"{identifier}\" in module \"{module}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+    )]
+    FieldNamingConvention {
+        module: String,
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
     #[error("Unused identifier \"{identifier}\" in module \"{module}\" at {span:?}")]
     UnusedIdentifier {
         module: String,
@@ -309,6 +469,12 @@ pub enum SemWarning {
     },
     #[error("Unused function \"{identifier}\" in module \"{module}\" at {span:?}")]
     UnusedFunction {
+        module: String,
+        identifier: String,
+        span: Span,
+    },
+    #[error("Unused query \"{identifier}\" in module \"{module}\" at {span:?}")]
+    UnusedQuery {
         module: String,
         identifier: String,
         span: Span,

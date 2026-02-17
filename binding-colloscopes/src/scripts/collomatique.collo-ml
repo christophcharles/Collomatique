@@ -1,3 +1,4 @@
+import "collomatique_db" as *;
 import "collomatique_group_count_per_interrogation" as group_count_per_interrogation;
 import "collomatique_groups_filled_by_ascending_order" as groups_filled_by_ascending_order;
 import "collomatique_incompats" as incompats;
@@ -8,17 +9,17 @@ import "collomatique_students_have_groups" as students_have_groups;
 import "collomatique_students_per_group_for_subject" as students_per_group_for_subject;
 import "collomatique_students_per_group" as students_per_group;
 
-pub let default_constraint() -> Constraint =
-    one_interrogation_at_once::constraint() and
-    group_count_per_interrogation::constraint() and
-    students_per_group::constraint() and
-    limits::constraint() and
-    students_have_groups::constraint() and
-    students_per_group_for_subject::constraint() and
-    incompats::constraint() and
-    groups_filled_by_ascending_order::constraint();
+pub let default_constraint(db: Db) -> Constraint =
+    one_interrogation_at_once::constraint(db) and
+    group_count_per_interrogation::constraint(db) and
+    students_per_group::constraint(db) and
+    limits::constraint(db) and
+    students_have_groups::constraint(db) and
+    students_per_group_for_subject::constraint(db) and
+    incompats::constraint(db) and
+    groups_filled_by_ascending_order::constraint(db);
 
-pub let default_objective() -> [Constraint | LinExpr] =
-    limits::objective() + [interrogation_cost::objective()];
+pub let default_objective(db: Db) -> [Constraint | LinExpr] =
+    limits::objective(db) + [interrogation_cost::objective(db)];
 
 

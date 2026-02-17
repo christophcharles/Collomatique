@@ -4,7 +4,7 @@ use collomatique_state_colloscopes::ColloscopeOp;
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
     let encoded_msg = EncodedMsg::receive()?;
-    Ok(encoded_msg.try_into()?)
+    encoded_msg.try_into()
 }
 
 pub fn send_exit() {
@@ -13,7 +13,7 @@ pub fn send_exit() {
     encoded_msg.send();
 }
 
-fn try_solve() -> Result<(), anyhow::Error> {
+async fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
 
     let data_msg =
@@ -25,22 +25,39 @@ fn try_solve() -> Result<(), anyhow::Error> {
     eprintln!("Building ILP problem...");
 
     use collomatique_binding_colloscopes::scripts::{
-        default_problem_builder, get_default_main_module,
+        SqliteDatabaseDriver, default_problem_builder, get_default_main_module,
     };
-    let env = collomatique_binding_colloscopes::views::Env::from(inner_data.params);
+
+    let pool = sqlx::SqlitePool::connect(":memory:")
+        .await
+        .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
+    collomatique_sqlite_state::create_schema(&pool)
+        .await
+        .map_err(|e| anyhow!("Error creating schema: {}", e))?;
+    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+        .await
+        .map_err(|e| anyhow!("Error populating DB: {}", e))?;
+    let db_conn = SqliteDatabaseDriver::new_connection("collomatique", &pool)
+        .await
+        .map_err(|e| anyhow!("Error creating DB connection: {}", e))?;
+
+    let colloscope = inner_data.colloscope;
+    let env = inner_data.params;
     let main_script = env
-        .get_params()
         .main_script
-        .as_ref()
-        .map(|x| x.as_str())
+        .as_deref()
         .unwrap_or(get_default_main_module());
-    let problem = match default_problem_builder(&main_script)
-        .map_err(|e| format!("{}", e))
-        .and_then(|b| b.build(&env).map_err(|e| format!("{}", e)))
-    {
+    let b = match default_problem_builder::<SqliteDatabaseDriver>(main_script).await {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Script panic: {}", e);
+            return Ok(());
+        }
+    };
+    let problem = match b.build(&env, Some(db_conn)).await {
         Ok(p) => p,
-        Err(msg) => {
-            eprintln!("Script panic: {}", msg);
+        Err(e) => {
+            eprintln!("Script panic: {}", e);
             return Ok(());
         }
     };
@@ -59,8 +76,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
             .expect("Config data should be compatible with colloscope parameters");
 
     println!("Sending update ops...");
-    let update_ops = inner_data
-        .colloscope
+    let update_ops = colloscope
         .update_ops(new_colloscope)
         .expect("New and old colloscopes should be compatible");
 
@@ -109,7 +125,8 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             collomatique_python::run_python_script(script)?;
         }
         InitMsg::SolveColloscope => {
-            try_solve()?;
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(try_solve())?;
         }
     }
 

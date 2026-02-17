@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
-use relm4::factory::FactoryView;
-use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
 use relm4::RelmWidgetExt;
+use relm4::factory::FactoryView;
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{adw, gtk};
 
 #[derive(Debug, Clone)]
@@ -50,16 +50,12 @@ impl Entry {
         incompat_id: collomatique_state_colloscopes::IncompatId,
         incompat: &collomatique_state_colloscopes::incompats::Incompatibility,
     ) -> IncompatData {
-        let week_pattern = if let Some(id) = incompat.week_pattern_id {
-            Some(
-                self.week_patterns
-                    .week_pattern_map
-                    .get(&id)
-                    .expect("Week pattern ID should be valid"),
-            )
-        } else {
-            None
-        };
+        let week_pattern = incompat.week_pattern_id.map(|id| {
+            self.week_patterns
+                .week_pattern_map
+                .get(&id)
+                .expect("Week pattern ID should be valid")
+        });
         let week_pattern_name = match week_pattern {
             Some(pattern) => pattern.name.clone(),
             None => "Toutes les semaines".into(),
@@ -144,7 +140,7 @@ impl FactoryComponent for Entry {
         crate::tools::factories::update_vec_deque(
             &mut model.incompats,
             incompats_vec.into_iter(),
-            |x| IncompatInput::UpdateData(x),
+            IncompatInput::UpdateData,
         );
 
         model
@@ -181,7 +177,7 @@ impl FactoryComponent for Entry {
                 crate::tools::factories::update_vec_deque(
                     &mut self.incompats,
                     incompats_vec.into_iter(),
-                    |x| IncompatInput::UpdateData(x),
+                    IncompatInput::UpdateData,
                 );
             }
             EntryInput::AddIncompatClicked => {

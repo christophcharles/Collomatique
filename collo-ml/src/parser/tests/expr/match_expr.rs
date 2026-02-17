@@ -138,7 +138,7 @@ fn match_with_complex_bodies() {
         "match x { y as Int { x + 5 } }",
         "match value { v as Student { value.age * 2 } }",
         "match item { i as Int { if item > 0 { item } else { 0 } } }",
-        "match x { y as Bool { sum y in @[Y] { $V(y) } } }",
+        "match x { y as Bool { sum y in y_list { $V(y) } } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -194,7 +194,7 @@ fn match_with_constraints() {
         "match x { i as Int { $V(x) === 1 } }",
         "match value { v as Student { $V(value.age) >== 18 } }",
         "match item { i as Int { $V(item) === 0 } other { $V(item) === 1 } }",
-        "match x { b as Bool { forall y in @[Y] { $V(y) === x } } }",
+        "match x { b as Bool { forall y in y_list { $V(y) === x } } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -222,7 +222,7 @@ fn match_with_collections() {
         "match x { lst as [Int] { |x| } }",
         "match value { v as [Student] { sum s in value { s.age } } }",
         "match item { i as [Int] { [y for y in item] } }",
-        "match x { i as Int { x } other { |@[Int]| } }",
+        "match x { i as Int { x } other { |numbers| } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -275,7 +275,7 @@ fn match_with_quantifiers() {
         "match x { lst as [Int] { sum i in x { i } } }",
         "match students { s as [Student] { forall s in students { s.age > 0 } } }",
         "match items { i as [Int] { fold i in items with acc = 0 { acc + i } } }",
-        "match x { i as Int { sum y in @[Y] where y > x { $V(y) } } }",
+        "match x { i as Int { sum y in y_list where y > x { $V(y) } } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -364,16 +364,12 @@ fn match_complex_real_world_examples() {
     let cases = vec![
         // Type-based dispatch
         "match value { i as Int { $IntVar(value) } b as Bool { if value { 1 } else { 0 } } other { 0 } }",
-
         // Optional handling with filtering
         "match student { s as ?Student where student.age > 18 { student.age } other { 0 } }",
-
         // List processing
         "match items { lst as [Int] { sum i in items where i > 0 { i } } other { 0 } }",
-
         // Type-based dispatch with conversion in body
         "match data { i as Int { LinExpr($V(data)) } lst as [Int] { (sum x in data { $V(x) }) === 10 } }",
-
         // Complex filtering
         "match students { s as [Student] where |students| > 0 { forall s in students { s.age >== 18 } } other { true } }",
     ];

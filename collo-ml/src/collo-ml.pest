@@ -23,7 +23,7 @@ raw_string_3 = @{ "~~~\"" ~ (!"\"~~~" ~ ANY)* ~ "\"~~~" }
 raw_string_4 = @{ "~~~~\"" ~ (!"\"~~~~" ~ ANY)* ~ "\"~~~~" }
 raw_string_5 = @{ "~~~~~\"" ~ (!"\"~~~~~" ~ ANY)* ~ "\"~~~~~" }
 
-statement = { import_statement | let_statement | reify_statement | type_statement | enum_statement }
+statement = { import_statement | let_statement | query_statement | reify_statement | type_statement | enum_statement }
 
 // ========== Import statements ==========
 // import "module_name" as mod;    - Named import
@@ -47,6 +47,7 @@ ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char*
 reserved_keyword = {
     "import" |  // before "in"
     "forall" |  // before "for"
+    "query" |
     "false" |
     "reify" |
     "where" |
@@ -74,13 +75,15 @@ reserved_keyword = {
 }
 
 // ========== Reify statements ==========
-reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ namespace_path ~ "as" ~ (var_name | var_list_name) ~ ";" }
+reify_statement = { docstring* ~ pub_modifier? ~ "reify" ~ namespace_path ~ "as" ~ var_name ~ ";" }
 var_name = ${ "$" ~ ident }
-var_list_name = ${ "$[" ~ ident ~ "]" }
 
 // ========== Let statements ==========
 let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ expr ~ ";" }
 pub_modifier = { "pub" }
+
+// ========== Query statements ==========
+query_statement = { docstring* ~ pub_modifier? ~ "query" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ type_name ~ "=" ~ string_literal ~ ";" }
 // Supports trailing comma: (a: Int, b: Bool,)
 params = { param ~ ("," ~ param)* ~ ","? }
 param = { ident ~ ":" ~ type_name }
@@ -113,6 +116,7 @@ list_type = {
     "[" ~ type_name? ~ "]" |
     tuple_type |
     struct_type |
+    database_schema_type |
     namespace_path
 }
 
@@ -125,6 +129,11 @@ tuple_type = { "(" ~ type_name ~ "," ~ type_name ~ ("," ~ type_name)* ~ ","? ~ "
 // Supports empty struct {} and trailing comma
 struct_type = { "{" ~ (struct_field_type ~ ("," ~ struct_field_type)* ~ ","?)? ~ "}" }
 struct_field_type = { ident ~ ":" ~ type_name }
+
+// Database schema type: #{ "schema string" "more schema" ... }
+// Allows multiple string literals (concatenated) for readability and comments
+database_schema_start = @{ "#{" }  // Atomic: no space between # and {
+database_schema_type = { database_schema_start ~ string_literal+ ~ "}" }
 
 // ========== Unified Expressions ==========
 expr = { null_coalesce_expr }
@@ -176,9 +185,7 @@ primary_expr = {
     list_comprehension |  // Must come before list_literal to parse correctly
     list_range | // Must come before list_literal to parse correctly
     list_literal |
-    global_collection |
     var_call |
-    var_list_call |
     generic_call |   // path(args) - unifies fn_call + qualified_type_cast
     struct_call |    // path{fields} - unifies struct_type_cast + qualified_struct_cast
     string_literal |
@@ -229,9 +236,7 @@ empty_typed_list = { "[" ~ "<" ~ type_name ~ ">" ~ "]" }
 list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
 list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ ("for" ~ ident ~ in_op ~ expr)*  ~ (where_op ~ expr)? ~ "]" }
 list_range = { "[" ~ expr ~ ".." ~ expr ~ "]" }
-global_collection = { "@" ~ "[" ~ type_name ~ "]" }
 var_call = { (ident ~ "::")? ~ "$" ~ ident ~ "(" ~ args? ~ ")" }
-var_list_call = { (ident ~ "::")? ~ "$[" ~ ident ~ "]" ~ "(" ~ args? ~ ")" }
 // Note: fn_call, qualified_type_cast, struct_type_cast, qualified_struct_cast, qualified_unit_value
 // are all unified into generic_call, struct_call, and namespace_path rules.
 // Supports trailing comma: f(1, 2,)
@@ -266,6 +271,7 @@ expr_complete = { SOI ~ expr ~ EOI }
 path_complete = { SOI ~ path ~ EOI }
 type_name_complete = { SOI ~ type_name ~ EOI }
 let_statement_complete = { SOI ~ let_statement ~ EOI }
+query_statement_complete = { SOI ~ query_statement ~ EOI }
 reify_statement_complete = { SOI ~ reify_statement ~ EOI }
 enum_statement_complete = { SOI ~ enum_statement ~ EOI }
 ident_complete = { SOI ~ ident ~ EOI }

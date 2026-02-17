@@ -2,8 +2,8 @@ use chrono::Datelike;
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, WidgetExt};
 use libadwaita::glib::TimeZone;
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -163,7 +163,7 @@ impl SimpleComponent for Dialog {
             DialogInput::Show(date) => {
                 self.hidden = false;
                 self.start_date = date;
-                self.current_selected_date = self.start_date.monday().clone();
+                self.current_selected_date = *self.start_date.monday();
                 self.update_date = true;
             }
             DialogInput::Cancel => {
@@ -176,7 +176,7 @@ impl SimpleComponent for Dialog {
                     .unwrap();
             }
             DialogInput::Select(date) => {
-                self.start_date = collomatique_time::WeekStart::round_from(date.clone());
+                self.start_date = collomatique_time::WeekStart::round_from(date);
                 self.current_selected_date = date;
             }
         }

@@ -1,7 +1,7 @@
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 pub struct Dialog {

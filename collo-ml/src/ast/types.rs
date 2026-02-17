@@ -1,8 +1,15 @@
 use super::{Expr, Span, Spanned};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File {
     pub statements: Vec<Spanned<Statement>>,
+}
+
+impl Default for File {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl File {
@@ -21,11 +28,18 @@ pub enum Statement {
         output_type: Spanned<TypeName>, // Declared type
         body: Spanned<Expr>,            // Body
     },
+    Query {
+        docstring: Vec<DocstringLine>,
+        public: bool,
+        name: Spanned<String>,
+        params: Vec<Param>,
+        output_type: Spanned<TypeName>,
+        query_string: Spanned<String>, // The SQL query string literal
+    },
     Reify {
         docstring: Vec<DocstringLine>,
         public: bool,
         constraint_path: Spanned<NamespacePath>,
-        var_list: bool,
         name: Spanned<String>,
     },
     TypeDecl {
@@ -102,14 +116,15 @@ pub enum SimpleTypeName {
     List(Spanned<TypeName>),       // [Student], [[Int]], etc.
     Tuple(Vec<Spanned<TypeName>>), // (Int, Bool), (Int, Bool, String), etc.
     Struct(Vec<(Spanned<String>, Spanned<TypeName>)>), // {field1: Type1, field2: Type2}
+    DatabaseSchema(String),        // #{ "CREATE TABLE..." } - stores the schema SQL string
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathSegment {
     Field(String),
     TupleIndex(usize),
-    ListIndexFallible(Box<Spanned<Expr>>), // [expr]?
-    ListIndexPanic(Box<Spanned<Expr>>),    // [expr]!
+    ListIndexFallible(Arc<Spanned<Expr>>), // [expr]?
+    ListIndexPanic(Arc<Spanned<Expr>>),    // [expr]!
 }
 
 /// A namespace path with one or more segments: ident or ident::ident::...
@@ -123,8 +138,8 @@ pub struct NamespacePath {
 pub struct MatchBranch {
     pub ident: Spanned<String>,
     pub as_typ: Option<Spanned<TypeName>>,
-    pub filter: Option<Spanned<Expr>>,
-    pub body: Spanned<Expr>,
+    pub filter: Option<Arc<Spanned<Expr>>>,
+    pub body: Arc<Spanned<Expr>>,
 }
 
 /// A part of a docstring line, either plain text or an expression to evaluate
@@ -133,7 +148,7 @@ pub struct DocstringPart {
     /// Text before the expression (or the entire text if no expression)
     pub prefix: String,
     /// Optional expression to evaluate, wrapped in String(...)
-    pub expr: Option<Spanned<Expr>>,
+    pub expr: Option<Arc<Spanned<Expr>>>,
 }
 
 /// A complete docstring line with all its parts

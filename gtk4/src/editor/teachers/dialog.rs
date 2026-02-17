@@ -1,10 +1,10 @@
 use adw::prelude::{EditableExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -215,7 +215,7 @@ impl SimpleComponent for Dialog {
                         name: sub.parameters.name.clone(),
                         enable: self.teacher_data.subjects.contains(id),
                     }),
-                    |data| SubjectInput::UpdateData(data),
+                    SubjectInput::UpdateData,
                 );
             }
             DialogInput::Cancel => {

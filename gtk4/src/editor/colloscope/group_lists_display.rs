@@ -1,9 +1,9 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
+use relm4::RelmWidgetExt;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
-use relm4::FactorySender;
-use relm4::RelmWidgetExt;
 
 #[derive(Debug)]
 pub struct EntryData {
@@ -124,7 +124,7 @@ impl FactoryComponent for Entry {
             }
             EntryInput::EditClicked => {
                 sender
-                    .output(EntryOutput::EditGroupList(self.data.id.clone()))
+                    .output(EntryOutput::EditGroupList(self.data.id))
                     .unwrap();
             }
         }

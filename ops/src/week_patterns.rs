@@ -56,7 +56,11 @@ impl WeekPatternsUpdateWarning {
                 };
                 Some(format!(
                     "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
-                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                    teacher.desc.firstname,
+                    teacher.desc.surname,
+                    subject.parameters.name,
+                    slot.start_time.weekday,
+                    slot.start_time.start_time.into_inner(),
                 ))
             }
             Self::LooseScheduleIncompat(incompat_id) => {
@@ -139,7 +143,11 @@ impl WeekPatternsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de remplissage du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {} dans le colloscope",
-                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                    teacher.desc.firstname,
+                    teacher.desc.surname,
+                    subject.parameters.name,
+                    slot.start_time.weekday,
+                    slot.start_time.start_time.into_inner(),
                 ))
             }
         }
@@ -210,8 +218,13 @@ impl WeekPatternsUpdateOp {
                     return None;
                 }
 
-                for (_subject_id, subject_slots) in
-                    &data.get_data().get_inner_data().params.slots.subject_map
+                for subject_slots in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .values()
                 {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern != Some(*week_pattern_id) {
@@ -272,8 +285,13 @@ impl WeekPatternsUpdateOp {
                 None
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
-                for (_subject_id, subject_slots) in
-                    &data.get_data().get_inner_data().params.slots.subject_map
+                for subject_slots in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .values()
                 {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern == Some(*week_pattern_id) {

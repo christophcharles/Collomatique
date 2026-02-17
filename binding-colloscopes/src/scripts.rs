@@ -1,7 +1,8 @@
-use super::{vars::Var, views::ObjectId};
+use super::vars::Var;
+pub use collo_ml::SqliteDatabaseDriver;
 use collo_ml::eval::CompileError;
 use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::{SemError, SemWarning};
+use collo_ml::{DatabaseDriver, SemError, SemWarning};
 use collomatique_ilp::ObjectiveSense;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -31,10 +32,25 @@ impl fmt::Display for SimpleProblemError {
     }
 }
 
+const DB_MODULE_SOURCE: &str = const_format::concatcp!(
+    "pub type Db = #{~\"",
+    collomatique_sqlite_state::SCHEMA_SQL,
+    "\"~};"
+);
+
 pub const MODULES: &[(&str, &str)] = &[
     (
         "collomatique",
         include_str!("scripts/collomatique.collo-ml"),
+    ),
+    ("collomatique_db", DB_MODULE_SOURCE),
+    (
+        "collomatique_types",
+        include_str!("scripts/collomatique_types.collo-ml"),
+    ),
+    (
+        "collomatique_queries",
+        include_str!("scripts/collomatique_queries.collo-ml"),
     ),
     (
         "collomatique_vars",
@@ -91,13 +107,13 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 #[cfg(test)]
 mod tests;
 
-pub fn default_problem_builder(
+pub async fn default_problem_builder<T: DatabaseDriver>(
     main_module: &str,
-) -> Result<ProblemBuilder<ObjectId, Var>, SimpleProblemError> {
+) -> Result<ProblemBuilder<T, Var>, SimpleProblemError> {
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::<ObjectId, Var>::new(&modules).map_err(|e| {
+    let mut builder = ProblemBuilder::<T, Var>::new(&modules).await.map_err(|e| {
         // Filter ProblemError into SimpleProblemError
         match e {
             ProblemError::CompileError(compile_error) => match compile_error {
@@ -113,13 +129,19 @@ pub fn default_problem_builder(
         }
     })?;
 
-    builder
-        .add_constraint("main", "constraint", vec![])
-        .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+    let functions = builder.get_fn_from_module("main");
 
-    builder
-        .add_objective("main", "objective", vec![], 1.0, ObjectiveSense::Minimize)
-        .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+    for (fn_name, _) in &functions {
+        if fn_name == "constraint" || fn_name.starts_with("constraint_") {
+            builder
+                .add_constraint("main", fn_name, vec![])
+                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+        } else if fn_name == "objective" || fn_name.starts_with("objective_") {
+            builder
+                .add_objective("main", fn_name, vec![], 1.0, ObjectiveSense::Minimize)
+                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
+        }
+    }
 
     Ok(builder)
 }

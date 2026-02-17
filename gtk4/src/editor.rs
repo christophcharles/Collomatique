@@ -3,8 +3,8 @@ use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::prelude::Cast;
 use relm4::prelude::{ComponentController, RelmWidgetExt};
-use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use relm4::{adw, gtk};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collomatique_binding_colloscopes::views::ObjectId,
+    collo_ml::SqliteDatabaseDriver,
     collomatique_binding_colloscopes::vars::Var,
 >;
 
@@ -172,10 +172,20 @@ impl PanelNumbers {
     }
 }
 
+#[derive(Clone)]
+enum MainScriptAst {
+    /// No compilation has been attempted yet
+    Uninitialized,
+    /// Compilation is in progress (async task running)
+    Compiling,
+    /// Compilation completed with a result
+    Ready(Result<ProblemBuilder, SimpleProblemError>),
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data, Desc>,
-    main_script_ast: Option<Result<ProblemBuilder, SimpleProblemError>>,
+    main_script_ast: MainScriptAst,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
@@ -416,6 +426,10 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        let ast_option = match &self.main_script_ast {
+            MainScriptAst::Ready(result) => Some(result.clone()),
+            _ => None,
+        };
         self.main_script
             .sender()
             .send(main_script::MainScriptInput::Update(
@@ -425,7 +439,7 @@ impl EditorPanel {
                     .params
                     .main_script
                     .clone(),
-                self.main_script_ast.clone(),
+                ast_option.clone(),
             ))
             .unwrap();
         self.colloscope
@@ -433,7 +447,7 @@ impl EditorPanel {
             .send(colloscope::ColloscopeInput::Update(
                 self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
-                self.main_script_ast.clone(),
+                ast_option,
             ))
             .unwrap();
     }
@@ -745,7 +759,7 @@ impl Component for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
-            main_script_ast: None,
+            main_script_ast: MainScriptAst::Uninitialized,
             dirty: false,
             toast_info: None,
             pages_names,
@@ -856,7 +870,7 @@ impl Component for EditorPanel {
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
-                    self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                     self.update_data_and_recompile_main_script(DataUpdate::Undo, sender.clone());
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
@@ -1032,7 +1046,7 @@ impl Component for EditorPanel {
                 }
 
                 // Update the AST field
-                self.main_script_ast = Some(result);
+                self.main_script_ast = MainScriptAst::Ready(result);
 
                 // Trigger interface update
                 self.send_msg_for_interface_update(sender);
@@ -1107,13 +1121,13 @@ impl EditorPanel {
         }
 
         if (self.data.get_data().get_inner_data().params.main_script == previous_script)
-            && self.main_script_ast.is_some()
+            && !matches!(self.main_script_ast, MainScriptAst::Uninitialized)
         {
             return;
         }
 
-        // Set to None to indicate compilation in progress
-        self.main_script_ast = None;
+        // Set to Compiling to indicate compilation in progress
+        self.main_script_ast = MainScriptAst::Compiling;
 
         // Get the current main script source
         let source = self
@@ -1124,7 +1138,7 @@ impl EditorPanel {
             .main_script
             .clone();
 
-        sender.spawn_oneshot_command(move || {
+        sender.oneshot_command(async move {
             use collomatique_binding_colloscopes::scripts::{
                 default_problem_builder, get_default_main_module,
             };
@@ -1133,7 +1147,8 @@ impl EditorPanel {
                 .as_deref()
                 .unwrap_or_else(|| get_default_main_module());
 
-            let result = default_problem_builder(main_module);
+            let result =
+                default_problem_builder::<collo_ml::SqliteDatabaseDriver>(main_module).await;
 
             EditorCommandOutput::MainScriptCompiled { source, result }
         });
@@ -1175,8 +1190,8 @@ fn generate_week_title(
             format!(
                 "Semaine {} du {} au {}",
                 week_number + 1,
-                start_date.format("%d/%m/%Y").to_string(),
-                end_date.format("%d/%m/%Y").to_string(),
+                start_date.format("%d/%m/%Y"),
+                end_date.format("%d/%m/%Y"),
             )
         }
         None => {
@@ -1228,8 +1243,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaines {} à {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                     end_week,
                 )
@@ -1238,8 +1253,8 @@ fn generate_week_succession_title(
                     "{} {} du {} au {} (semaine {})",
                     name,
                     index + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
+                    start_date.format("%d/%m/%Y"),
+                    end_date.format("%d/%m/%Y"),
                     start_week,
                 )
             }

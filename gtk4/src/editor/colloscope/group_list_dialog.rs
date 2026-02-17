@@ -1,10 +1,10 @@
 use adw::prelude::{ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -250,7 +250,7 @@ impl Dialog {
                         selected_group: Self::group_opt_to_selected(group_opt),
                     }
                 }),
-            |data| StudentInput::UpdateData(data),
+            StudentInput::UpdateData,
         );
     }
 }
@@ -299,7 +299,7 @@ impl FactoryComponent for StudentEntry {
             #[track(self.should_redraw)]
             set_selected: self.data.selected_group,
             connect_selected_notify[sender] => move |widget| {
-                let selected = widget.selected() as u32;
+                let selected = widget.selected();
                 sender.input(StudentInput::StudentGroupChanged(selected));
             },
         },

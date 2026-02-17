@@ -3,11 +3,11 @@ use chrono::Datelike;
 use gtk::prelude::{
     AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
 };
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -357,13 +357,12 @@ impl Dialog {
                     first_week_num: current_first_week,
                     period_desc: desc.iter().map(|x| x.interrogations).collect(),
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
-                        .into_iter()
                         .map(|index| {
-                            self.week_pattern
+                            *self
+                                .week_pattern
                                 .weeks
                                 .get(index)
                                 .expect("Week pattern should be large enough at this point")
-                                .clone()
                         })
                         .collect(),
                 })
@@ -373,7 +372,7 @@ impl Dialog {
         crate::tools::factories::update_vec_deque(
             &mut self.period_entries,
             new_data.into_iter(),
-            |data| PeriodInput::UpdateData(data),
+            PeriodInput::UpdateData,
         );
     }
 }
@@ -516,7 +515,7 @@ impl PeriodEntry {
                     status_in_period: self.data.period_desc[index],
                     status_in_pattern: *status_in_pattern,
                 }),
-            |data| WeekInput::UpdateData(data),
+            WeekInput::UpdateData,
         );
     }
 }

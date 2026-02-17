@@ -67,7 +67,7 @@ fn arithmetic_accepts_modulo() {
         "17 % 5",
         "x % 2",
         "week_number % 2",
-        "|@[Week]| % 4",
+        "|weeks| % 4",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -176,7 +176,7 @@ fn arithmetic_with_complex_coefficients() {
         "(10 - 5) * $V(y)",
         "(a * 2) * $V(x)",
         "((a + b) * 2) * $Var(x)",
-        "(|@[Student]| / 2) * $Var(x)",
+        "(|students| / 2) * $Var(x)",
         "(week % 4 + 1) * $V(week)",
     ];
     for case in cases {
@@ -202,9 +202,9 @@ fn arithmetic_with_if_expressions() {
 #[test]
 fn arithmetic_with_cardinality() {
     let cases = vec![
-        "|@[Student]| + 1",
-        "|@[Student]| * $Var(x)",
-        "(|@[Student]|) * $Var(x)",
+        "|students| + 1",
+        "|students| * $Var(x)",
+        "(|students|) * $Var(x)",
         "|collection| + $Var(x) + |other_collection|",
         "if x { |collection| + 1 } else { |collection| - 1 }",
     ];

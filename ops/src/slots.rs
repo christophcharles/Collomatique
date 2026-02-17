@@ -54,7 +54,11 @@ impl SlotsUpdateWarning {
                 };
                 Some(format!(
                     "Perte du remplissage du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {} dans le colloscope",
-                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                    teacher.desc.firstname,
+                    teacher.desc.surname,
+                    subject.parameters.name,
+                    slot.start_time.weekday,
+                    slot.start_time.start_time.into_inner(),
                 ))
             }
         }
@@ -330,7 +334,7 @@ impl SlotsUpdateOp {
                     return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
                 };
 
-                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| id.clone());
+                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| *id);
 
                 let result = data
                     .apply(

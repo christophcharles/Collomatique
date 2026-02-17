@@ -3,7 +3,7 @@ use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{adw, gtk, Component, ComponentController};
+use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use collomatique_ops::Desc;
@@ -401,18 +401,14 @@ impl Component for Dialog {
                             );
                             self.rpc_logger
                                 .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(
-                                    new_id.map(|x| x.into()),
-                                )))
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(new_id)))
                                 .unwrap();
                         }
                         Err(e) => {
                             self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
                             self.rpc_logger
                                 .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(
-                                    e.into(),
-                                )))
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(e)))
                                 .unwrap();
                         }
                     }
@@ -510,7 +506,7 @@ impl Dialog {
                     let file_name = crate::tools::open_save::generic_open_dialog(
                         &params.title,
                         &ext_vec[..],
-                        path.as_ref().map(|x| x.as_path()),
+                        path.as_deref(),
                     )
                     .await;
 

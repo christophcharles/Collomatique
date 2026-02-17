@@ -1,0 +1,22 @@
+pub type SlotId = Int;
+pub type StudentId = Int;
+pub type GroupListId = Int;
+pub type IncompatId = Int;
+pub type PeriodId = Int;
+pub type GlobalWeek = Int;
+pub type LocalWeek = Int;
+pub type SubjectId = Int;
+pub type GroupNum = Int;
+pub type WeekdayNum = Int;
+pub type Time = Int;
+pub type Duration = Int;
+
+pub type TimeSlotDesc = {
+    period_id: PeriodId,
+    week: LocalWeek,
+    day: WeekdayNum,
+    start_time: Time,
+    duration: Duration,
+};
+
+pub let days() -> [WeekdayNum] = [WeekdayNum(day) for day in [0..7]];

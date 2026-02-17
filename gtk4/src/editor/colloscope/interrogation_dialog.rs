@@ -1,10 +1,10 @@
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
@@ -132,20 +132,18 @@ impl SimpleComponent for Dialog {
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.group_entries,
-                    (0..self.group_list.params.group_names.len() as u32)
-                        .into_iter()
-                        .map(|num| GroupData {
-                            num,
-                            name: self
-                                .group_list
-                                .params
-                                .group_names
-                                .get(num as usize)
-                                .cloned()
-                                .flatten(),
-                            status: self.interrogation.assigned_groups.contains(&num),
-                        }),
-                    |x| GroupInput::UpdateData(x),
+                    (0..self.group_list.params.group_names.len() as u32).map(|num| GroupData {
+                        num,
+                        name: self
+                            .group_list
+                            .params
+                            .group_names
+                            .get(num as usize)
+                            .cloned()
+                            .flatten(),
+                        status: self.interrogation.assigned_groups.contains(&num),
+                    }),
+                    GroupInput::UpdateData,
                 );
             }
             DialogInput::Cancel => {

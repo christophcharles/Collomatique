@@ -16,3 +16,8 @@ base64 = "0.22"
 lazy_static = "*"
 derivative = "*"
 ordered-float.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["sync", "rt-multi-thread"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

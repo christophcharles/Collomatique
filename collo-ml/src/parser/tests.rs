@@ -3,6 +3,7 @@ use pest::Parser;
 
 // Test submodules
 mod complete_files;
+mod database_schema;
 mod elementary_bits;
 mod enums;
 mod expr;

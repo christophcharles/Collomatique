@@ -1,5 +1,5 @@
-use super::global_env::ObjectFields;
 use super::*;
+use crate::database::SqliteDatabaseDriver;
 use crate::parser::{ColloMLParser, Rule};
 use pest::Parser;
 use std::collections::{BTreeMap, HashMap};
@@ -10,6 +10,8 @@ mod coercion;
 mod collections;
 mod control_flow;
 mod custom_types;
+mod database;
+mod database_schema;
 mod enums;
 mod folds;
 mod let_expr;
@@ -25,10 +27,28 @@ mod tuples;
 mod type_system;
 mod warnings;
 
-/// Helper function to analyze a CoLLo-ML program and return type information, errors, and warnings
-pub(crate) fn analyze(
+/// Helper function to analyze a CoLLo-ML program and return the GlobalEnv, errors, and warnings
+pub(crate) async fn analyze_with_env(
     input: &str,
-    types: HashMap<String, ObjectFields>,
+) -> (
+    GlobalEnv<SqliteDatabaseDriver>,
+    Vec<SemError>,
+    Vec<SemWarning>,
+) {
+    let pairs = ColloMLParser::parse(Rule::file, input).expect("Parse failed");
+    let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
+        .expect("AST conversion failed");
+    let modules = BTreeMap::from([("main", file)]);
+    let (global_env, _type_info, _expr_types, _resolved_types, errors, warnings) =
+        GlobalEnv::<SqliteDatabaseDriver>::new(HashMap::new(), &modules)
+            .await
+            .expect("GlobalEnv creation failed");
+    (global_env, errors, warnings)
+}
+
+/// Helper function to analyze a CoLLo-ML program and return type information, errors, and warnings
+pub(crate) async fn analyze(
+    input: &str,
     vars: HashMap<String, ArgsType>,
 ) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
     let pairs = ColloMLParser::parse(Rule::file, input).expect("Parse failed");
@@ -37,30 +57,11 @@ pub(crate) fn analyze(
 
     let modules = BTreeMap::from([("main", file)]);
     let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
-        GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
+        GlobalEnv::<SqliteDatabaseDriver>::new(vars, &modules)
+            .await
+            .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
-}
-
-/// Helper to create a simple object type with no fields
-pub(crate) fn simple_object(name: &str) -> HashMap<String, ObjectFields> {
-    let mut types = HashMap::new();
-    types.insert(name.to_string(), HashMap::new());
-    types
-}
-
-/// Helper to create an object type with fields
-pub(crate) fn object_with_fields(
-    name: &str,
-    fields: Vec<(&str, SimpleType)>,
-) -> HashMap<String, ObjectFields> {
-    let mut types = HashMap::new();
-    let mut field_map = HashMap::new();
-    for (field_name, field_type) in fields {
-        field_map.insert(field_name.to_string(), ExprType::simple(field_type));
-    }
-    types.insert(name.to_string(), field_map);
-    types
 }
 
 /// Helper to create a variable with specific argument types
@@ -76,9 +77,8 @@ pub(crate) fn var_with_args(name: &str, args: Vec<SimpleType>) -> HashMap<String
 }
 
 /// Helper function to analyze a multi-module CoLLo-ML program
-pub(crate) fn analyze_multi(
+pub(crate) async fn analyze_multi(
     module_sources: &[(&str, &str)], // (module_name, source_code)
-    types: HashMap<String, ObjectFields>,
     vars: HashMap<String, ArgsType>,
 ) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
     let modules: BTreeMap<&str, crate::ast::File> = module_sources
@@ -92,7 +92,9 @@ pub(crate) fn analyze_multi(
         .collect();
 
     let (_global_env, type_info, _expr_types, _resolved_types, errors, warnings) =
-        GlobalEnv::new(types, vars, &modules).expect("GlobalEnv creation failed");
+        GlobalEnv::<SqliteDatabaseDriver>::new(vars, &modules)
+            .await
+            .expect("GlobalEnv creation failed");
 
     (type_info, errors, warnings)
 }

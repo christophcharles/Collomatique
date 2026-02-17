@@ -8,7 +8,7 @@ use colloscopes::ColloscopePeriod;
 use ops::AnnotatedColloscopeOp;
 use serde::{Deserialize, Serialize};
 
-use collomatique_state::{tools, InMemoryData, Operation};
+use collomatique_state::{InMemoryData, Operation, tools};
 use ops::{AnnotatedMainScriptOp, AnnotatedSettingsOp};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -542,7 +542,9 @@ pub enum GroupListError {
     NotCompatibleGroupListInColloscope(GroupListId),
 
     /// The subject has non-empty slots associated to the old group list with invalid numbers
-    #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number")]
+    #[error(
+        "subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number"
+    )]
     InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 
     /// Prefilled groups count does not match group_names count
@@ -550,7 +552,9 @@ pub enum GroupListError {
     PrefillGroupCountMismatch { expected: usize, actual: usize },
 
     /// Cannot reduce group count when last groups have students
-    #[error("cannot reduce group count: groups to be removed still have students (ops layer should clean first)")]
+    #[error(
+        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
+    )]
     NonEmptyGroupsWhenReducing,
 
     /// Cannot set prefilling: colloscope group list has students assigned
@@ -806,7 +810,7 @@ impl InMemoryData for Data {
 
     fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         let mut guard = self.id_issuer.lock().unwrap();
-        AnnotatedOp::annotate(op, &mut *guard)
+        AnnotatedOp::annotate(op, &mut guard)
     }
 
     fn build_rev_with_current_state(
@@ -895,6 +899,12 @@ impl Data {
     }
 }
 
+impl Default for Data {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Data {
     /// Create a new [Data]
     ///
@@ -945,8 +955,7 @@ impl Data {
                     .params
                     .students
                     .student_map
-                    .get(new_id)
-                    .is_some()
+                    .contains_key(new_id)
                 {
                     return Err(StudentError::StudentIdAlreadyExists(*new_id));
                 }
@@ -1092,8 +1101,12 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .insert(*period_id, BTreeMap::new());
-                for (_week_pattern_id, week_pattern) in
-                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
                 {
                     week_pattern.add_weeks(0, desc.len());
                 }
@@ -1146,8 +1159,12 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .insert(*period_id, BTreeMap::new());
-                for (_week_pattern_id, week_pattern) in
-                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
                 {
                     week_pattern.add_weeks(new_first_week, desc.len());
                 }
@@ -1255,8 +1272,12 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .remove(period_id);
-                for (_week_pattern_id, week_pattern) in
-                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
                 {
                     week_pattern.remove_weeks(first_week, week_count);
                 }
@@ -1317,20 +1338,28 @@ impl Data {
                 self.inner_data.params.periods.ordered_period_list[position].1 = desc.clone();
                 if desc.len() > old_length {
                     let first_week_to_add = first_week + old_length;
-                    for (_week_pattern_id, week_pattern) in
-                        &mut self.inner_data.params.week_patterns.week_pattern_map
+                    for week_pattern in self
+                        .inner_data
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .values_mut()
                     {
                         week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
                     }
                 } else if desc.len() < old_length {
                     let first_week_to_remove = first_week + desc.len();
-                    for (_week_pattern_id, week_pattern) in
-                        &mut self.inner_data.params.week_patterns.week_pattern_map
+                    for week_pattern in self
+                        .inner_data
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .values_mut()
                     {
                         week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
                     }
                 }
-                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, _slot) in &subject_slots.ordered_slots {
                         self.inner_data
                             .colloscope
@@ -1451,10 +1480,10 @@ impl Data {
                     }
                 }
 
-                if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id) {
-                    if !subject_slots.ordered_slots.is_empty() {
-                        return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
-                    }
+                if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id)
+                    && !subject_slots.ordered_slots.is_empty()
+                {
+                    return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
                 }
 
                 for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
@@ -1754,8 +1783,7 @@ impl Data {
                     .params
                     .teachers
                     .teacher_map
-                    .get(new_id)
-                    .is_some()
+                    .contains_key(new_id)
                 {
                     return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
                 }
@@ -1774,7 +1802,7 @@ impl Data {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 }
 
-                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if *id == slot.teacher_id {
                             return Err(TeacherError::TeacherStillHasAssociatedSlots(
@@ -1891,8 +1919,7 @@ impl Data {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .get(new_id)
-                    .is_some()
+                    .contains_key(new_id)
                 {
                     return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
                 }
@@ -1918,26 +1945,26 @@ impl Data {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 }
 
-                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if let Some(week_pattern_id) = &slot.week_pattern {
-                            if *id == *week_pattern_id {
-                                return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
-                                    *id, *slot_id,
-                                ));
-                            }
+                        if let Some(week_pattern_id) = &slot.week_pattern
+                            && *id == *week_pattern_id
+                        {
+                            return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
+                                *id, *slot_id,
+                            ));
                         }
                     }
                 }
 
                 for (incompat_id, incompat) in &self.inner_data.params.incompats.incompat_map {
-                    if let Some(week_pattern_id) = &incompat.week_pattern_id {
-                        if *id == *week_pattern_id {
-                            return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
-                                *id,
-                                *incompat_id,
-                            ));
-                        }
+                    if let Some(week_pattern_id) = &incompat.week_pattern_id
+                        && *id == *week_pattern_id
+                    {
+                        return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
+                            *id,
+                            *incompat_id,
+                        ));
                     }
                 }
 
@@ -1968,7 +1995,7 @@ impl Data {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 };
 
-                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern != Some(*id) {
                             continue;
@@ -1985,7 +2012,7 @@ impl Data {
                 }
 
                 *current_week_pattern = new_week_pattern.clone();
-                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern != Some(*id) {
                             continue;
@@ -2134,7 +2161,7 @@ impl Data {
                     .get_mut(&subject_id)
                     .expect("Subject id should be valid at this point");
                 subject_slots.ordered_slots.remove(old_pos);
-                for (_period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
+                for collo_period in self.inner_data.colloscope.period_map.values_mut() {
                     // The slot might not be in period but this won't raise an error
                     collo_period.slot_map.remove(id);
                 }
@@ -2321,10 +2348,14 @@ impl Data {
                     }
                 }
 
-                for (_period_id, subject_map) in
-                    &self.inner_data.params.group_lists.subjects_associations
+                for subject_map in self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .values()
                 {
-                    for (_subject_id, group_list_id) in subject_map {
+                    for group_list_id in subject_map.values() {
                         if *group_list_id == *id {
                             return Err(GroupListError::RemainingAssociatedSubjects);
                         }
@@ -2713,10 +2744,10 @@ impl Data {
                     .student_map
                     .contains_key(student_id)
                 {
-                    return Err(StudentError::StudentIdAlreadyExists(student_id.clone()));
+                    return Err(StudentError::StudentIdAlreadyExists(*student_id));
                 }
 
-                Ok(AnnotatedStudentOp::Remove(student_id.clone()))
+                Ok(AnnotatedStudentOp::Remove(*student_id))
             }
             AnnotatedStudentOp::Remove(student_id) => {
                 let Some(old_student) = self
@@ -2724,13 +2755,13 @@ impl Data {
                     .params
                     .students
                     .student_map
-                    .get(&student_id)
+                    .get(student_id)
                     .cloned()
                 else {
-                    return Err(StudentError::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(*student_id));
                 };
 
-                Ok(AnnotatedStudentOp::Add(student_id.clone(), old_student))
+                Ok(AnnotatedStudentOp::Add(*student_id, old_student))
             }
             AnnotatedStudentOp::Update(student_id, _student) => {
                 let Some(old_student) = self
@@ -2738,13 +2769,13 @@ impl Data {
                     .params
                     .students
                     .student_map
-                    .get(&student_id)
+                    .get(student_id)
                     .cloned()
                 else {
-                    return Err(StudentError::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(*student_id));
                 };
 
-                Ok(AnnotatedStudentOp::Update(student_id.clone(), old_student))
+                Ok(AnnotatedStudentOp::Update(*student_id, old_student))
             }
         }
     }
@@ -2770,10 +2801,10 @@ impl Data {
                     .find_period_position(*new_id)
                     .is_some()
                 {
-                    return Err(PeriodError::PeriodIdAlreadyExists(new_id.clone()));
+                    return Err(PeriodError::PeriodIdAlreadyExists(*new_id));
                 }
 
-                Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
+                Ok(AnnotatedPeriodOp::Remove(*new_id))
             }
             AnnotatedPeriodOp::AddAfter(new_id, after_id, _desc) => {
                 if self
@@ -2783,7 +2814,7 @@ impl Data {
                     .find_period_position(*new_id)
                     .is_some()
                 {
-                    return Err(PeriodError::PeriodIdAlreadyExists(new_id.clone()));
+                    return Err(PeriodError::PeriodIdAlreadyExists(*new_id));
                 }
 
                 let Some(_after_position) = self
@@ -2792,10 +2823,10 @@ impl Data {
                     .periods
                     .find_period_position(*after_id)
                 else {
-                    return Err(PeriodError::InvalidPeriodId(after_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(*after_id));
                 };
 
-                Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
+                Ok(AnnotatedPeriodOp::Remove(*new_id))
             }
             AnnotatedPeriodOp::Remove(period_id) => {
                 let Some(position) = self
@@ -2804,7 +2835,7 @@ impl Data {
                     .periods
                     .find_period_position(*period_id)
                 else {
-                    return Err(PeriodError::InvalidPeriodId(period_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
                 let old_desc = self.inner_data.params.periods.ordered_period_list[position]
@@ -2812,11 +2843,11 @@ impl Data {
                     .clone();
 
                 Ok(if position == 0 {
-                    AnnotatedPeriodOp::AddFront(period_id.clone(), old_desc)
+                    AnnotatedPeriodOp::AddFront(*period_id, old_desc)
                 } else {
                     let previous_id =
                         self.inner_data.params.periods.ordered_period_list[position - 1].0;
-                    AnnotatedPeriodOp::AddAfter(period_id.clone(), previous_id.clone(), old_desc)
+                    AnnotatedPeriodOp::AddAfter(*period_id, previous_id, old_desc)
                 })
             }
             AnnotatedPeriodOp::Update(period_id, _desc) => {
@@ -2826,14 +2857,14 @@ impl Data {
                     .periods
                     .find_period_position(*period_id)
                 else {
-                    return Err(PeriodError::InvalidPeriodId(period_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
                 let old_desc = self.inner_data.params.periods.ordered_period_list[position]
                     .1
                     .clone();
 
-                Ok(AnnotatedPeriodOp::Update(period_id.clone(), old_desc))
+                Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))
             }
         }
     }
@@ -2854,22 +2885,21 @@ impl Data {
                     .find_subject_position(*new_id)
                     .is_some()
                 {
-                    return Err(SubjectError::SubjectIdAlreadyExists(new_id.clone()));
+                    return Err(SubjectError::SubjectIdAlreadyExists(*new_id));
                 }
 
-                if let Some(id) = after_id {
-                    if self
+                if let Some(id) = after_id
+                    && self
                         .inner_data
                         .params
                         .subjects
                         .find_subject_position(*id)
                         .is_none()
-                    {
-                        return Err(SubjectError::InvalidSubjectId(id.clone()));
-                    }
+                {
+                    return Err(SubjectError::InvalidSubjectId(*id));
                 }
 
-                Ok(AnnotatedSubjectOp::Remove(new_id.clone()))
+                Ok(AnnotatedSubjectOp::Remove(*new_id))
             }
             AnnotatedSubjectOp::Remove(subject_id) => {
                 let Some(position) = self
@@ -2878,7 +2908,7 @@ impl Data {
                     .subjects
                     .find_subject_position(*subject_id)
                 else {
-                    return Err(SubjectError::InvalidSubjectId(subject_id.clone()));
+                    return Err(SubjectError::InvalidSubjectId(*subject_id));
                 };
 
                 let old_params = self.inner_data.params.subjects.ordered_subject_list[position]
@@ -2892,7 +2922,7 @@ impl Data {
                     } else {
                         Some(self.inner_data.params.subjects.ordered_subject_list[position - 1].0)
                     },
-                    old_params.into(),
+                    old_params,
                 ))
             }
             AnnotatedSubjectOp::Update(subject_id, _new_params) => {
@@ -2909,7 +2939,7 @@ impl Data {
                     .1
                     .clone();
 
-                Ok(AnnotatedSubjectOp::Update(*subject_id, old_params.into()))
+                Ok(AnnotatedSubjectOp::Update(*subject_id, old_params))
             }
             AnnotatedSubjectOp::ChangePosition(subject_id, _new_pos) => {
                 let Some(old_pos) = self
@@ -2940,18 +2970,17 @@ impl Data {
                     .params
                     .teachers
                     .teacher_map
-                    .get(new_id)
-                    .is_some()
+                    .contains_key(new_id)
                 {
-                    return Err(TeacherError::TeacherIdAlreadyExists(new_id.clone()));
+                    return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
                 }
 
-                Ok(AnnotatedTeacherOp::Remove(new_id.clone()))
+                Ok(AnnotatedTeacherOp::Remove(*new_id))
             }
             AnnotatedTeacherOp::Remove(teacher_id) => {
                 let Some(old_teacher) = self.inner_data.params.teachers.teacher_map.get(teacher_id)
                 else {
-                    return Err(TeacherError::InvalidTeacherId(teacher_id.clone()));
+                    return Err(TeacherError::InvalidTeacherId(*teacher_id));
                 };
 
                 Ok(AnnotatedTeacherOp::Add(*teacher_id, old_teacher.clone()))
@@ -2959,7 +2988,7 @@ impl Data {
             AnnotatedTeacherOp::Update(teacher_id, _new_teacher) => {
                 let Some(old_teacher) = self.inner_data.params.teachers.teacher_map.get(teacher_id)
                 else {
-                    return Err(TeacherError::InvalidTeacherId(teacher_id.clone()));
+                    return Err(TeacherError::InvalidTeacherId(*teacher_id));
                 };
 
                 Ok(AnnotatedTeacherOp::Update(*teacher_id, old_teacher.clone()))
@@ -3038,13 +3067,12 @@ impl Data {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .get(new_id)
-                    .is_some()
+                    .contains_key(new_id)
                 {
-                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(new_id.clone()));
+                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
                 }
 
-                Ok(AnnotatedWeekPatternOp::Remove(new_id.clone()))
+                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
             }
             AnnotatedWeekPatternOp::Remove(week_pattern_id) => {
                 let Some(old_week_pattern) = self
@@ -3054,9 +3082,7 @@ impl Data {
                     .week_pattern_map
                     .get(week_pattern_id)
                 else {
-                    return Err(WeekPatternError::InvalidWeekPatternId(
-                        week_pattern_id.clone(),
-                    ));
+                    return Err(WeekPatternError::InvalidWeekPatternId(*week_pattern_id));
                 };
 
                 Ok(AnnotatedWeekPatternOp::Add(
@@ -3072,9 +3098,7 @@ impl Data {
                     .week_pattern_map
                     .get(week_pattern_id)
                 else {
-                    return Err(WeekPatternError::InvalidWeekPatternId(
-                        week_pattern_id.clone(),
-                    ));
+                    return Err(WeekPatternError::InvalidWeekPatternId(*week_pattern_id));
                 };
 
                 Ok(AnnotatedWeekPatternOp::Update(
@@ -3101,22 +3125,21 @@ impl Data {
                     .find_slot_subject_and_position(*new_id)
                     .is_some()
                 {
-                    return Err(SlotError::SlotIdAlreadyExists(new_id.clone()));
+                    return Err(SlotError::SlotIdAlreadyExists(*new_id));
                 }
 
-                if let Some(id) = after_id {
-                    if self
+                if let Some(id) = after_id
+                    && self
                         .inner_data
                         .params
                         .slots
                         .find_slot_subject_and_position(*id)
                         .is_none()
-                    {
-                        return Err(SlotError::InvalidSlotId(id.clone()));
-                    }
+                {
+                    return Err(SlotError::InvalidSlotId(*id));
                 }
 
-                Ok(AnnotatedSlotOp::Remove(new_id.clone()))
+                Ok(AnnotatedSlotOp::Remove(*new_id))
             }
             AnnotatedSlotOp::Remove(slot_id) => {
                 let Some((subject_id, position)) = self
@@ -3125,7 +3148,7 @@ impl Data {
                     .slots
                     .find_slot_subject_and_position(*slot_id)
                 else {
-                    return Err(SlotError::InvalidSlotId(slot_id.clone()));
+                    return Err(SlotError::InvalidSlotId(*slot_id));
                 };
 
                 let subject_slots = self
@@ -3196,9 +3219,7 @@ impl Data {
         incompat_op: &AnnotatedIncompatOp,
     ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
         match incompat_op {
-            AnnotatedIncompatOp::Add(new_id, _incompat) => {
-                Ok(AnnotatedIncompatOp::Remove(new_id.clone()))
-            }
+            AnnotatedIncompatOp::Add(new_id, _incompat) => Ok(AnnotatedIncompatOp::Remove(*new_id)),
             AnnotatedIncompatOp::Remove(incompat_id) => {
                 let Some(old_incompat) = self
                     .inner_data
@@ -3239,9 +3260,7 @@ impl Data {
         group_list_op: &AnnotatedGroupListOp,
     ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
         match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, _params) => {
-                Ok(AnnotatedGroupListOp::Remove(new_id.clone()))
-            }
+            AnnotatedGroupListOp::Add(new_id, _params) => Ok(AnnotatedGroupListOp::Remove(*new_id)),
             AnnotatedGroupListOp::Remove(group_list_id) => {
                 let Some(old_group_list) = self
                     .inner_data

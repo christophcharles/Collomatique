@@ -6,24 +6,31 @@
 //! - `EnvError`: Errors related to the evaluation environment
 //! - `EvalError`: Errors that can occur during evaluation
 
+use derivative::Derivative;
+
 use super::history::{EvalHistory, VariableDefinitions};
-use super::values::{ExprValue, NoObject, NoObjectEnv};
+use super::values::ExprValue;
+use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::parser::Rule;
 use crate::semantics::{
     ArgsType, ExprType, GlobalEnv, GlobalEnvError, SemError, SemWarning, TypeInfo,
 };
-use crate::traits::EvalObject;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CheckedAST<T: EvalObject = NoObject> {
-    pub(crate) global_env: GlobalEnv,
+#[derive(Derivative)]
+#[derivative(
+    Clone(bound = ""),
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct CheckedAST<D: DatabaseDriver> {
+    pub(crate) global_env: GlobalEnv<D>,
     pub(crate) type_info: TypeInfo,
     pub(crate) expr_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) resolved_types: HashMap<crate::ast::Span, ExprType>,
     pub(crate) warnings: Vec<SemWarning>,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -41,31 +48,20 @@ pub enum CompileError {
     },
 }
 
-#[derive(Clone, Debug, Error)]
-pub enum EnvError<T: EvalObject> {
-    #[error("Typename {typ_name} used for object {obj:?} has bad format")]
-    BadTypeName { typ_name: String, obj: T },
-}
-
-#[derive(Clone, Debug, Error)]
-pub enum EvalError<T: EvalObject> {
-    #[error("Object of type {0} returns its type as being {1}")]
-    ObjectWithBadTypeName(String, String),
-    #[error("Object {object} of type {typ} does not have field {field}")]
-    MissingObjectField {
-        object: String,
-        typ: String,
-        field: String,
-    },
+#[derive(Derivative, Error)]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
+pub enum EvalError<D: DatabaseConnection> {
     #[error("Unknown function \"{0}\"")]
     UnknownFunction(String),
     #[error("Type mismatch for parameter {param}: expected {expected} but found {found:?}")]
     TypeMismatch {
         param: usize,
         expected: ExprType,
-        found: ExprValue<T>,
+        found: ExprValue<D>,
     },
-    #[error("Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}")]
+    #[error(
+        "Argument count mismatch for \"{identifier}\": expected {expected} arguments but found {found}"
+    )]
     ArgumentCountMismatch {
         identifier: String,
         expected: usize,
@@ -74,27 +70,15 @@ pub enum EvalError<T: EvalObject> {
     #[error("Param {param} is an inconsistent ExprValue")]
     InvalidExprValue { param: usize },
     #[error("Panic: {0}")]
-    Panic(Box<ExprValue<T>>),
+    Panic(Box<ExprValue<D>>),
 }
 
-impl CheckedAST<NoObject> {
-    pub fn quick_eval_fn(
-        &self,
-        module: &str,
-        fn_name: &str,
-        args: Vec<ExprValue<NoObject>>,
-    ) -> Result<ExprValue<NoObject>, EvalError<NoObject>> {
-        let env = NoObjectEnv {};
-        self.eval_fn(&env, module, fn_name, args)
-    }
-}
-
-impl<T: EvalObject> CheckedAST<T> {
+impl<D: DatabaseDriver> CheckedAST<D> {
     /// Create a CheckedAST from source modules
-    pub fn new(
+    pub async fn new(
         inputs: &BTreeMap<&str, &str>,
         vars: HashMap<String, ArgsType>,
-    ) -> Result<CheckedAST<T>, CompileError> {
+    ) -> Result<CheckedAST<D>, CompileError> {
         use crate::parser::ColloMLParser;
         use pest::Parser;
 
@@ -111,7 +95,7 @@ impl<T: EvalObject> CheckedAST<T> {
         }
 
         let (global_env, type_info, expr_types, resolved_types, errors, warnings) =
-            GlobalEnv::new(T::type_schemas(), vars, &modules)?;
+            GlobalEnv::new(vars, &modules).await?;
 
         if !errors.is_empty() {
             return Err(CompileError::SemanticsError { errors, warnings });
@@ -123,26 +107,7 @@ impl<T: EvalObject> CheckedAST<T> {
             expr_types,
             resolved_types,
             warnings,
-            _phantom: std::marker::PhantomData,
         })
-    }
-
-    pub(crate) fn check_env(&self, env: &T::Env) -> Result<(), EvalError<T>> {
-        for (typ, _fields) in self.global_env.get_types() {
-            let objects = T::objects_with_typ(env, typ.as_str());
-
-            for object in &objects {
-                let returned_typ = object.typ_name(&env);
-                if returned_typ != *typ {
-                    return Err(EvalError::ObjectWithBadTypeName(typ.clone(), returned_typ));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn get_type_info(&self) -> &TypeInfo {
-        &self.type_info
     }
 
     pub fn get_warnings(&self) -> &Vec<SemWarning> {
@@ -194,55 +159,37 @@ impl<T: EvalObject> CheckedAST<T> {
             .collect()
     }
 
-    pub fn get_var_lists(&self) -> HashMap<(String, String), (String, String)> {
-        self.global_env
-            .get_var_lists()
-            .iter()
-            .map(|((module, var_name), var_desc)| {
-                (
-                    (module.clone(), var_name.clone()),
-                    var_desc.referenced_fn.clone(),
-                )
-            })
-            .collect()
+    pub fn start_eval_history(&self) -> EvalHistory<'_, D> {
+        EvalHistory {
+            ast: self,
+            funcs: HashMap::new(),
+            vars: HashSet::new(),
+            queries: HashMap::new(),
+        }
     }
 
-    pub fn start_eval_history<'a>(
-        &'a self,
-        env: &'a T::Env,
-    ) -> Result<EvalHistory<'a, T>, EvalError<T>> {
-        let cache = T::Cache::default();
-        EvalHistory::new(self, env, cache)
-    }
-
-    pub fn start_eval_history_with_cache<'a>(
-        &'a self,
-        env: &'a T::Env,
-        cache: T::Cache,
-    ) -> Result<EvalHistory<'a, T>, EvalError<T>> {
-        EvalHistory::new(self, env, cache)
-    }
-
-    pub fn eval_fn(
+    pub async fn eval_fn(
         &self,
-        env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<ExprValue<T>, EvalError<T>> {
-        let mut eval_history = self.start_eval_history(env)?;
-        Ok(eval_history.eval_fn(module, fn_name, args)?.0)
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<ExprValue<D::Connection>, EvalError<D::Connection>> {
+        let mut eval_history = self.start_eval_history();
+        eval_history.eval_fn(module, fn_name, args).await
     }
 
-    pub fn eval_fn_with_variables(
+    pub async fn eval_fn_with_variables(
         &self,
-        env: &T::Env,
         module: &str,
         fn_name: &str,
-        args: Vec<ExprValue<T>>,
-    ) -> Result<(ExprValue<T>, VariableDefinitions<T>), EvalError<T>> {
-        let mut eval_history = self.start_eval_history(env)?;
-        let (r, _o) = eval_history.eval_fn(module, fn_name, args)?;
-        Ok((r, eval_history.into_var_def()))
+        args: Vec<ExprValue<D::Connection>>,
+    ) -> Result<
+        (ExprValue<D::Connection>, VariableDefinitions<D::Connection>),
+        EvalError<D::Connection>,
+    > {
+        let mut eval_history = self.start_eval_history();
+        let r = eval_history.eval_fn(module, fn_name, args).await?;
+        let var_def = eval_history.into_var_def().await?;
+        Ok((r, var_def))
     }
 }

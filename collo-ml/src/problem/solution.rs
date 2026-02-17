@@ -5,29 +5,37 @@
 //! - `Solution`: A (possibly infeasible) solution
 //! - `FeasableSolution`: A verified feasible solution
 
-use super::types::{ConstraintDesc, ExtraDesc, ProblemVar};
-use crate::traits::EvalObject;
+use super::types::{ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemVar};
 use crate::EvalVar;
+use crate::Hashed;
+use crate::database::DatabaseConnection;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, Constraint, DefaultRepr, LinExpr, Variable};
-use std::collections::BTreeMap;
+use derivative::Derivative;
+use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Problem<T: EvalObject, V: EvalVar<T>> {
-    problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub struct Problem<D: DatabaseConnection, V: EvalVar> {
+    problem: collomatique_ilp::Problem<HashedProblemVar<D, V>, ConstraintDesc<D>>,
     pub(crate) reification_problem_builder:
-        collomatique_ilp::ProblemBuilder<ProblemVar<T, V>, ExtraDesc<T, V>>,
-    pub(crate) original_var_list: BTreeMap<V, Variable>,
+        collomatique_ilp::ProblemBuilder<HashedProblemVar<D, V>, ExtraDesc<D, V>>,
+    pub(crate) original_var_list: HashMap<V, Variable>,
 }
 
-impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
+impl<D: DatabaseConnection, V: EvalVar> Problem<D, V> {
     pub(crate) fn new(
-        problem: collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>>,
+        problem: collomatique_ilp::Problem<HashedProblemVar<D, V>, ConstraintDesc<D>>,
         reification_problem_builder: collomatique_ilp::ProblemBuilder<
-            ProblemVar<T, V>,
-            ExtraDesc<T, V>,
+            HashedProblemVar<D, V>,
+            ExtraDesc<D, V>,
         >,
-        original_var_list: BTreeMap<V, Variable>,
+        original_var_list: HashMap<V, Variable>,
     ) -> Self {
         Problem {
             problem,
@@ -38,17 +46,17 @@ impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
 
     pub fn get_inner_problem(
         &self,
-    ) -> &collomatique_ilp::Problem<ProblemVar<T, V>, ConstraintDesc<T>> {
+    ) -> &collomatique_ilp::Problem<HashedProblemVar<D, V>, ConstraintDesc<D>> {
         &self.problem
     }
 
     pub fn solve<
         'a,
-        S: Solver<ProblemVar<T, V>, ConstraintDesc<T>, DefaultRepr<ProblemVar<T, V>>>,
+        S: Solver<HashedProblemVar<D, V>, ConstraintDesc<D>, DefaultRepr<HashedProblemVar<D, V>>>,
     >(
         &'a self,
         solver: &S,
-    ) -> Option<FeasableSolution<'a, T, V>> {
+    ) -> Option<FeasableSolution<'a, D, V>> {
         solver
             .solve(&self.problem)
             .map(|x| FeasableSolution { feasable_config: x })
@@ -56,12 +64,12 @@ impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
 
     pub fn solution_from_data<
         'a,
-        S: Solver<ProblemVar<T, V>, ExtraDesc<T, V>, DefaultRepr<ProblemVar<T, V>>>,
+        S: Solver<HashedProblemVar<D, V>, ExtraDesc<D, V>, DefaultRepr<HashedProblemVar<D, V>>>,
     >(
         &'a self,
         config_data: &ConfigData<V>,
         solver: &S,
-    ) -> Option<Solution<'a, T, V>> {
+    ) -> Option<Solution<'a, D, V>> {
         if !self.check_no_missing_variables(config_data) {
             return None;
         }
@@ -88,8 +96,8 @@ impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
 
     pub fn solution_from_complete_data<'a>(
         &'a self,
-        config_data: ConfigData<ProblemVar<T, V>>,
-    ) -> Option<Solution<'a, T, V>> {
+        config_data: ConfigData<HashedProblemVar<D, V>>,
+    ) -> Option<Solution<'a, D, V>> {
         Some(Solution {
             config: self.problem.build_config(config_data).ok()?,
         })
@@ -97,9 +105,9 @@ impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
 
     fn build_equality_constraints_from_config_data(
         config_data: &ConfigData<V>,
-    ) -> impl Iterator<Item = (Constraint<ProblemVar<T, V>>, ExtraDesc<T, V>)> {
+    ) -> impl Iterator<Item = (Constraint<HashedProblemVar<D, V>>, ExtraDesc<D, V>)> {
         config_data.get_values().into_iter().map(|(var, value)| {
-            let var_expr = LinExpr::var(ProblemVar::Base(var.clone()));
+            let var_expr = LinExpr::var(Hashed::new(ProblemVar::Base(var.clone())));
             let value_expr = LinExpr::constant(value);
             let constraint = var_expr.eq(&value_expr);
             let desc = ExtraDesc::InitCond(var);
@@ -128,27 +136,31 @@ impl<T: EvalObject, V: EvalVar<T>> Problem<T, V> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Solution<'a, T: EvalObject, V: EvalVar<T>> {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct Solution<'a, D: DatabaseConnection, V: EvalVar> {
     config: collomatique_ilp::Config<
         'a,
-        ProblemVar<T, V>,
-        ConstraintDesc<T>,
-        DefaultRepr<ProblemVar<T, V>>,
+        HashedProblemVar<D, V>,
+        ConstraintDesc<D>,
+        DefaultRepr<HashedProblemVar<D, V>>,
     >,
 }
 
-impl<'a, T: EvalObject, V: EvalVar<T>> Solution<'a, T, V> {
+impl<'a, D: DatabaseConnection, V: EvalVar> Solution<'a, D, V> {
     pub fn get_data(&self) -> ConfigData<V> {
-        ConfigData::from(self.config.get_values().into_iter().filter_map(
-            |(var, value)| match var {
-                ProblemVar::Base(v) => Some((v, value)),
-                _ => None,
-            },
-        ))
+        ConfigData::from(
+            self.config
+                .get_values()
+                .into_iter()
+                .filter_map(|(var, value)| match var.into_inner() {
+                    ProblemVar::Base(v) => Some((v, value)),
+                    _ => None,
+                }),
+        )
     }
 
-    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<T, V>> {
+    pub fn get_complete_data(&self) -> ConfigData<HashedProblemVar<D, V>> {
         ConfigData::from(self.config.get_values())
     }
 
@@ -156,29 +168,33 @@ impl<'a, T: EvalObject, V: EvalVar<T>> Solution<'a, T, V> {
         self.config.is_feasable()
     }
 
-    pub fn into_feasable(self) -> Option<FeasableSolution<'a, T, V>> {
+    pub fn into_feasable(self) -> Option<FeasableSolution<'a, D, V>> {
         Some(FeasableSolution {
             feasable_config: self.config.into_feasable()?,
         })
     }
 
-    pub fn blame(&self) -> Vec<(Constraint<ProblemVar<T, V>>, ConstraintDesc<T>)> {
-        self.config.blame().cloned().collect()
+    pub fn blame<'b>(
+        &'b self,
+    ) -> impl ExactSizeIterator<Item = &'b (Constraint<HashedProblemVar<D, V>>, ConstraintDesc<D>)>
+    + use<'a, 'b, D, V> {
+        self.config.blame()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FeasableSolution<'a, T: EvalObject, V: EvalVar<T>> {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
+pub struct FeasableSolution<'a, D: DatabaseConnection, V: EvalVar> {
     feasable_config: collomatique_ilp::FeasableConfig<
         'a,
-        ProblemVar<T, V>,
-        ConstraintDesc<T>,
-        DefaultRepr<ProblemVar<T, V>>,
+        HashedProblemVar<D, V>,
+        ConstraintDesc<D>,
+        DefaultRepr<HashedProblemVar<D, V>>,
     >,
 }
 
-impl<'a, T: EvalObject, V: EvalVar<T>> FeasableSolution<'a, T, V> {
-    pub fn into_solution(self) -> Solution<'a, T, V> {
+impl<'a, D: DatabaseConnection, V: EvalVar> FeasableSolution<'a, D, V> {
+    pub fn into_solution(self) -> Solution<'a, D, V> {
         Solution {
             config: self.feasable_config.into_inner(),
         }
@@ -186,14 +202,14 @@ impl<'a, T: EvalObject, V: EvalVar<T>> FeasableSolution<'a, T, V> {
 
     pub fn get_data(&self) -> ConfigData<V> {
         ConfigData::from(self.feasable_config.get_values().into_iter().filter_map(
-            |(var, value)| match var {
+            |(var, value)| match var.into_inner() {
                 ProblemVar::Base(v) => Some((v, value)),
                 _ => None,
             },
         ))
     }
 
-    pub fn get_complete_data(&self) -> ConfigData<ProblemVar<T, V>> {
+    pub fn get_complete_data(&self) -> ConfigData<HashedProblemVar<D, V>> {
         ConfigData::from(self.feasable_config.get_values())
     }
 }

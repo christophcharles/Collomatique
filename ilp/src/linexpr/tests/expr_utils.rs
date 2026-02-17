@@ -21,7 +21,7 @@ fn expr_clean_keeps_non_zeros() {
 
     assert_eq!(
         expr.variables(),
-        BTreeSet::from([String::from("A"), String::from("B")])
+        HashSet::from([String::from("A"), String::from("B")])
     );
 }
 

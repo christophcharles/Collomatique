@@ -12,6 +12,7 @@
 //! - `module_processing`: Multi-pass module compilation
 //! - `string_case`: Naming convention utilities
 
+pub mod database;
 mod errors;
 mod expr_checking;
 mod global_env;
@@ -28,5 +29,5 @@ mod tests;
 pub use errors::{ArgsType, GlobalEnvError, SemError, SemWarning};
 pub use global_env::{FunctionDesc, GlobalEnv, TypeInfo};
 pub use local_env::LocalEnvCheck;
-pub use path_resolution::{resolve_path, ResolvedPathKind};
+pub use path_resolution::{ResolvedPathKind, resolve_path};
 pub use types::{ConcreteType, ExprType, SimpleType};

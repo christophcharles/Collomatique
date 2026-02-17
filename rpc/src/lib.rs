@@ -63,13 +63,13 @@ pub enum CompleteCmdMsg {
 
 impl InitMsg {
     fn from_text_msg(data: &str) -> Result<Self, String> {
-        match serde_json::from_str::<Self>(&data) {
+        match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
             Err(_) => Err(data.to_string()),
         }
     }
 
-    fn into_text_msg(&self) -> String {
+    fn to_text_msg(&self) -> String {
         serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
     }
 }
@@ -82,7 +82,7 @@ impl ResultMsg {
         }
     }
 
-    fn into_text_msg(&self) -> String {
+    fn to_text_msg(&self) -> String {
         serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
     }
 }
@@ -95,7 +95,7 @@ impl CompleteCmdMsg {
         }
     }
 
-    fn into_text_msg(&self) -> String {
+    fn to_text_msg(&self) -> String {
         serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
@@ -105,10 +105,10 @@ pub struct EncodedMsg {
     msg: String,
 }
 
-const RPC_MSG_MARKER: &'static str = "%%COLLOMATIQUE-RPC-MSG%%";
-const RPC_CONTINUE_MARKER: &'static str = "%%COLLOMATIQUE-RPC-CON%%";
-const RPC_END_MARKER: &'static str = "%%COLLOMATIQUE-RPC-END%%";
-const NEW_LINE: &'static str = "\n";
+const RPC_MSG_MARKER: &str = "%%COLLOMATIQUE-RPC-MSG%%";
+const RPC_CONTINUE_MARKER: &str = "%%COLLOMATIQUE-RPC-CON%%";
+const RPC_END_MARKER: &str = "%%COLLOMATIQUE-RPC-END%%";
+const NEW_LINE: &str = "\n";
 const MAX_LINE_LEN: usize = 80;
 
 impl EncodedMsg {
@@ -155,7 +155,7 @@ impl EncodedMsg {
 impl From<InitMsg> for EncodedMsg {
     fn from(value: InitMsg) -> Self {
         EncodedMsg {
-            msg: value.into_text_msg(),
+            msg: value.to_text_msg(),
         }
     }
 }
@@ -176,7 +176,7 @@ impl From<CmdMsg> for EncodedMsg {
 impl From<CompleteCmdMsg> for EncodedMsg {
     fn from(value: CompleteCmdMsg) -> Self {
         EncodedMsg {
-            msg: value.into_text_msg(),
+            msg: value.to_text_msg(),
         }
     }
 }
@@ -191,7 +191,7 @@ impl TryFrom<EncodedMsg> for CompleteCmdMsg {
 impl From<ResultMsg> for EncodedMsg {
     fn from(value: ResultMsg) -> Self {
         EncodedMsg {
-            msg: value.into_text_msg(),
+            msg: value.to_text_msg(),
         }
     }
 }

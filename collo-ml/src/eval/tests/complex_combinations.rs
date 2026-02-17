@@ -1,9 +1,10 @@
 use super::*;
+use std::sync::Arc;
 
 // ========== Quantifiers with Variables and Collection Operations ==========
 
-#[test]
-fn forall_with_reified_var_and_filter() {
+#[tokio::test]
+async fn forall_with_reified_var_and_filter() {
     let input = r#"
     let constraint_gen(x: Int) -> Constraint = $V(x) <== 1;
     reify constraint_gen as $MyVar;
@@ -13,16 +14,19 @@ fn forall_with_reified_var_and_filter() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(1),
-        ExprValue::Int(2),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -32,19 +36,17 @@ fn forall_with_reified_var_and_filter() {
             let constraints = strip_origins(&constraints);
 
             // Expected: $MyVar(1) === 1 and $MyVar(2) === 1
-            let expected1 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected1 = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1)],
+                vec![Arc::new(ExprValue::Int(1))],
             )))
             .eq(&LinExpr::constant(1.));
 
-            let expected2 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected2 = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2))],
             )))
             .eq(&LinExpr::constant(1.));
 
@@ -55,78 +57,8 @@ fn forall_with_reified_var_and_filter() {
     }
 }
 
-#[test]
-fn sum_with_var_list_and_comprehension() {
-    let input = r#"
-    let h(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
-    reify h as $[MyVars];
-    pub let f(xs: [Int], ys: [Int]) -> LinExpr = sum v in $[MyVars](xs + ys) { v };
-    "#;
-
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
-
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
-
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
-
-    let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
-        .expect("Should evaluate");
-
-    match result {
-        ExprValue::LinExpr(lin_expr) => {
-            // Concat gives [1, 2, 2, 3], so 4 variables summed
-            let expected = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                "main".to_string(),
-                "MyVars".into(),
-                Some(0),
-                vec![ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
-                ]))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                "main".to_string(),
-                "MyVars".into(),
-                Some(1),
-                vec![ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
-                ]))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                "main".to_string(),
-                "MyVars".into(),
-                Some(2),
-                vec![ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
-                ]))],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                "main".to_string(),
-                "MyVars".into(),
-                Some(3),
-                vec![ExprValue::List(Vec::from([
-                    ExprValue::Int(1),
-                    ExprValue::Int(2),
-                    ExprValue::Int(2),
-                    ExprValue::Int(3),
-                ]))],
-            )));
-            assert_eq!(lin_expr, expected);
-        }
-        _ => panic!("Expected LinExpr"),
-    }
-}
-
-#[test]
-fn nested_quantifiers_with_filters() {
+#[tokio::test]
+async fn nested_quantifiers_with_filters() {
     let input = r#"
     pub let f(xs: [Int], ys: [Int]) -> Int = 
         sum x in xs where x > 0 { 
@@ -139,17 +71,23 @@ fn nested_quantifiers_with_filters() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(15)]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
+        .eval_fn("main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     // xs filtered: [2, 3], ys filtered: [5]
@@ -159,8 +97,8 @@ fn nested_quantifiers_with_filters() {
 
 // ========== List Comprehensions with Complex Expressions ==========
 
-#[test]
-fn list_comp_with_function_calls_and_filters() {
+#[tokio::test]
+async fn list_comp_with_function_calls_and_filters() {
     let input = r#"
     let is_valid(x: Int) -> Bool = x > 0 and x < 10;
     let transform(x: Int) -> Int = x * x;
@@ -170,28 +108,34 @@ fn list_comp_with_function_calls_and_filters() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-1),
-        ExprValue::Int(2),
-        ExprValue::Int(5),
-        ExprValue::Int(15),
+        Arc::new(ExprValue::Int(-1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
 
     // Valid: 2, 5 → squared: 4, 25
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(4), ExprValue::Int(25)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(4)),
+            Arc::new(ExprValue::Int(25))
+        ]))
     );
 }
 
-#[test]
-fn nested_list_comp_with_reified_vars() {
+#[tokio::test]
+async fn nested_list_comp_with_reified_vars() {
     let input = r#"
     let constraint_gen(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify constraint_gen as $MyVar;
@@ -208,39 +152,51 @@ fn nested_list_comp_with_reified_vars() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
+        .eval_fn("main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::List(list) => {
             // (1,2), (1,3), (2,3) - 3 pairs where x != y
             assert_eq!(list.len(), 3);
-            assert!(list.iter().all(|x| matches!(x, ExprValue::LinExpr(_))));
+            assert!(list.iter().all(|x| matches!(&**x, ExprValue::LinExpr(_))));
 
             let expected_vars = Vec::from([
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![ExprValue::Int(1), ExprValue::Int(2)],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
+                    ),
                 )))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![ExprValue::Int(1), ExprValue::Int(3)],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
+                    ),
                 )))),
-                ExprValue::LinExpr(LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
-                    "main".to_string(),
-                    "MyVar".into(),
-                    None,
-                    vec![ExprValue::Int(2), ExprValue::Int(3)],
+                Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
+                    ScriptVar::new(
+                        "main".to_string(),
+                        "MyVar".into(),
+                        vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
+                    ),
                 )))),
             ]);
             assert_eq!(list, expected_vars);
@@ -249,8 +205,8 @@ fn nested_list_comp_with_reified_vars() {
     }
 }
 
-#[test]
-fn list_comp_with_collection_ops_in_body() {
+#[tokio::test]
+async fn list_comp_with_collection_ops_in_body() {
     let input = r#"
     let diff_with_range(xs: [Int], n: Int) -> [Int] = xs - [1..n];
     pub let f(lists: [[Int]]) -> [Int] = 
@@ -260,32 +216,41 @@ fn list_comp_with_collection_ops_in_body() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list1 = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(5),
-        ExprValue::Int(15),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(15)),
     ]));
-    let list2 = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(8)]));
-    let lists = ExprValue::List(Vec::from([list1, list2]));
+    let list2 = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(8)),
+    ]));
+    let lists = ExprValue::List(Vec::from([Arc::new(list1), Arc::new(list2)]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![lists])
+        .eval_fn("main", "f", vec![lists])
+        .await
         .expect("Should evaluate");
 
     // list1 - [1..10]: [15] → |1|
     // list2 - [1..10]: [] → |0|
     assert_eq!(
         result,
-        ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(0)]))
+        ExprValue::List(Vec::from([
+            Arc::new(ExprValue::Int(1)),
+            Arc::new(ExprValue::Int(0))
+        ]))
     );
 }
 
 // ========== If Expressions with Complex Conditions ==========
 
-#[test]
-fn if_with_quantifier_in_condition() {
+#[tokio::test]
+async fn if_with_quantifier_in_condition() {
     let input = r#"
     pub let f(xs: [Int]) -> Int = 
         if forall x in xs { x > 0 } { 
@@ -298,27 +263,34 @@ fn if_with_quantifier_in_condition() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let all_positive = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
     let result_positive = checked_ast
-        .quick_eval_fn("main", "f", vec![all_positive])
+        .eval_fn("main", "f", vec![all_positive])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_positive, ExprValue::Int(6));
 
-    let has_negative = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(-2)]));
+    let has_negative = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(-2)),
+    ]));
     let result_negative = checked_ast
-        .quick_eval_fn("main", "f", vec![has_negative])
+        .eval_fn("main", "f", vec![has_negative])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_negative, ExprValue::Int(0));
 }
 
-#[test]
-fn if_with_collection_check() {
+#[tokio::test]
+async fn if_with_collection_check() {
     let input = r#"
     pub let f(x: Int, valid_set: [Int]) -> Bool = 
         if x in valid_set { 
@@ -331,23 +303,30 @@ fn if_with_collection_check() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let valid_set = ExprValue::List(Vec::from([ExprValue::Int(5), ExprValue::Int(10)]));
+    let valid_set = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
+    ]));
 
     let result_in_and_positive = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(5), valid_set.clone()])
+        .eval_fn("main", "f", vec![ExprValue::Int(5), valid_set.clone()])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_in_and_positive, ExprValue::Bool(true));
 
     let result_not_in = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(3), valid_set])
+        .eval_fn("main", "f", vec![ExprValue::Int(3), valid_set])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_not_in, ExprValue::Bool(false));
 }
 
-#[test]
-fn nested_if_with_variables() {
+#[tokio::test]
+async fn nested_if_with_variables() {
     let input = r#"
     let constraint_gen(x: Int) -> Constraint = $V(x) === 1;
     reify constraint_gen as $MyVar;
@@ -366,10 +345,12 @@ fn nested_if_with_variables() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result_scaled = checked_ast
-        .quick_eval_fn(
+        .eval_fn(
             "main",
             "f",
             vec![
@@ -378,15 +359,15 @@ fn nested_if_with_variables() {
                 ExprValue::Bool(true),
             ],
         )
+        .await
         .expect("Should evaluate");
 
     match result_scaled {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = 2 * LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(5))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -396,8 +377,8 @@ fn nested_if_with_variables() {
 
 // ========== Functions with Quantifiers and Variables ==========
 
-#[test]
-fn function_returning_constraint_system() {
+#[tokio::test]
+async fn function_returning_constraint_system() {
     let input = r#"
     let var_sum_constraint(xs: [Int], total: Int) -> Constraint = 
         sum x in xs { $V(x) } === total;
@@ -410,16 +391,19 @@ fn function_returning_constraint_system() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(2),
-        ExprValue::Int(3),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(3)),
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list, ExprValue::Int(2)])
+        .eval_fn("main", "f", vec![list, ExprValue::Int(2)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -429,30 +413,30 @@ fn function_returning_constraint_system() {
             let constraints = strip_origins(&constraints);
 
             // Check sum constraint: V(1) + V(2) + V(3) === 2
-            let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let sum_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(1)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(2)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(2))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(3)],
+                vec![Arc::new(ExprValue::Int(3))],
             ))))
             .eq(&LinExpr::constant(2.));
             assert!(constraints.contains(&sum_constraint));
 
             // Check bound constraints for each variable
             for x in [1, 2, 3] {
-                let ge_constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                let ge_constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
                     "V".into(),
-                    vec![ExprValue::Int(x)],
+                    vec![Arc::new(ExprValue::Int(x))],
                 )))
                 .geq(&LinExpr::constant(0.));
 
-                let le_constraint = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                let le_constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
                     "V".into(),
-                    vec![ExprValue::Int(x)],
+                    vec![Arc::new(ExprValue::Int(x))],
                 )))
                 .leq(&LinExpr::constant(1.));
 
@@ -464,8 +448,8 @@ fn function_returning_constraint_system() {
     }
 }
 
-#[test]
-fn function_composition_with_reified_vars() {
+#[tokio::test]
+async fn function_composition_with_reified_vars() {
     let input = r#"
     let make_constraint(x: Int, y: Int) -> Constraint = $V(x, y) === 1;
     reify make_constraint as $MyVar;
@@ -483,12 +467,18 @@ fn function_composition_with_reified_vars() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list, ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![list, ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -497,16 +487,14 @@ fn function_composition_with_reified_vars() {
             let constraints = strip_origins(&constraints);
 
             // Expected: MyVar(1,5) + MyVar(2,5) <= 10
-            let expected = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let expected = (LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(5)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(5))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(5))],
             ))))
             .leq(&LinExpr::constant(10.));
 
@@ -518,8 +506,8 @@ fn function_composition_with_reified_vars() {
 
 // ========== Realistic Scheduling-Like Scenarios ==========
 
-#[test]
-fn assignment_constraint_pattern() {
+#[tokio::test]
+async fn assignment_constraint_pattern() {
     let input = r#"
     // Each student must be assigned to exactly one time slot
     let exactly_one_slot(student: Int, slots: [Int]) -> Constraint =
@@ -543,13 +531,22 @@ fn assignment_constraint_pattern() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let students = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let slots = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let students = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let slots = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![students, slots, ExprValue::Int(1)])
+        .eval_fn("main", "f", vec![students, slots, ExprValue::Int(1)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -559,45 +556,45 @@ fn assignment_constraint_pattern() {
             let constraints = strip_origins(&constraints);
 
             // Student 1 exactly one: Assigned(1,1) + Assigned(1,2) === 1
-            let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let student1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(1), ExprValue::Int(1)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(1))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(1), ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
             ))))
             .eq(&LinExpr::constant(1.));
             assert!(constraints.contains(&student1_constraint));
 
             // Student 2 exactly one: Assigned(2,1) + Assigned(2,2) === 1
-            let student2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let student2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(2), ExprValue::Int(1)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(1))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(2), ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(2))],
             ))))
             .eq(&LinExpr::constant(1.));
             assert!(constraints.contains(&student2_constraint));
 
             // Slot 1 capacity: Assigned(1,1) + Assigned(2,1) <= 1
-            let slot1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let slot1_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(1), ExprValue::Int(1)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(1))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(2), ExprValue::Int(1)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(1))],
             ))))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&slot1_constraint));
 
             // Slot 2 capacity: Assigned(1,2) + Assigned(2,2) <= 1
-            let slot2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let slot2_constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(1), ExprValue::Int(2)],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(2))],
+            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(2), ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(2))],
             ))))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&slot2_constraint));
@@ -606,8 +603,8 @@ fn assignment_constraint_pattern() {
     }
 }
 
-#[test]
-fn conditional_constraint_with_reification() {
+#[tokio::test]
+async fn conditional_constraint_with_reification() {
     let input = r#"
     // Create an indicator variable for a constraint
     let student_available(student: Int, time: Int) -> Constraint =
@@ -637,10 +634,13 @@ fn conditional_constraint_with_reification() {
     ]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![ExprValue::Int(1), ExprValue::Int(5)])
+        .eval_fn("main", "f", vec![ExprValue::Int(1), ExprValue::Int(5)])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -649,15 +649,14 @@ fn conditional_constraint_with_reification() {
             let constraints = strip_origins(&constraints);
 
             // Expected: Assigned(1,5) <= IsAvailable(1,5)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
                 "Assigned".into(),
-                vec![ExprValue::Int(1), ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(5))],
             )))
-            .leq(&LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            .leq(&LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "IsAvailable".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(5)],
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(5))],
             ))));
 
             assert!(constraints.contains(&expected));
@@ -666,106 +665,10 @@ fn conditional_constraint_with_reification() {
     }
 }
 
-#[test]
-fn aggregation_with_filtering() {
-    let input = r#"
-    let count_valid_assignments(students: [Student], time: Int, min_score: Int) -> LinExpr = 
-        sum student in students where student.score > min_score { 
-            $Assigned(student, time) 
-        };
-    
-    pub let f(students: [Student], times: [Int], min_score: Int, min_per_time: Int) -> Constraint = 
-        forall time in times { 
-            count_valid_assignments(students, time, min_score) >== min_per_time 
-        };
-    "#;
-    let vars = HashMap::from([
-        ("Score".to_string(), vec![ExprType::simple(SimpleType::Int)]),
-        (
-            "Assigned".to_string(),
-            vec![
-                ExprType::simple(SimpleType::Object("Student".into())),
-                ExprType::simple(SimpleType::Int),
-            ],
-        ),
-    ]);
-
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-    enum Student {
-        Student1,
-        Student2,
-    }
-
-    struct Env {}
-
-    impl EvalObject for Student {
-        type Env = Env;
-        type Cache = ();
-
-        fn objects_with_typ(_env: &Self::Env, name: &str) -> BTreeSet<Self> {
-            match name {
-                "Student" => BTreeSet::from([Student::Student1, Student::Student2]),
-                _ => BTreeSet::new(),
-            }
-        }
-        fn type_id_to_name(_type_id: std::any::TypeId) -> Result<String, FieldConversionError> {
-            panic!("Not implemented for the test")
-        }
-        fn typ_name(&self, _env: &Self::Env) -> String {
-            "Student".into()
-        }
-        fn field_access(
-            &self,
-            _env: &Self::Env,
-            _cache: &mut Self::Cache,
-            field: &str,
-        ) -> Option<ExprValue<Self>> {
-            assert_eq!(field, "score");
-            Some(match self {
-                Student::Student1 => ExprValue::Int(45),
-                Student::Student2 => ExprValue::Int(100),
-            })
-        }
-        fn type_schemas() -> HashMap<String, HashMap<String, ExprType>> {
-            HashMap::from([(
-                "Student".to_string(),
-                HashMap::from([("score".to_string(), ExprType::simple(SimpleType::Int))]),
-            )])
-        }
-    }
-
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
-
-    let students = ExprValue::List(Vec::from([
-        ExprValue::Object(Student::Student1),
-        ExprValue::Object(Student::Student2),
-    ]));
-    let times = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-
-    let env = Env {};
-    let result = checked_ast
-        .eval_fn(
-            &env,
-            "main",
-            "f",
-            vec![students, times, ExprValue::Int(50), ExprValue::Int(1)],
-        )
-        .expect("Should evaluate");
-
-    match result {
-        ExprValue::Constraint(constraints) => {
-            // One constraint per time slot
-            assert_eq!(constraints.len(), 2);
-        }
-        _ => panic!("Expected Constraint"),
-    }
-}
-
 // ========== Collection Operations with Complex Expressions ==========
 
-#[test]
-fn dynamic_set_construction() {
+#[tokio::test]
+async fn dynamic_set_construction() {
     let input = r#"
     let valid_pairs(xs: [Int], ys: [Int]) -> [Int] = 
         [x + y for x in xs for y in ys where x + y < 10];
@@ -780,17 +683,23 @@ fn dynamic_set_construction() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let xs = ExprValue::List(Vec::from([
-        ExprValue::Int(1),
-        ExprValue::Int(3),
-        ExprValue::Int(5),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(5)),
     ]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(4)]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(2)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
+        .eval_fn("main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     // valid_pairs: (1,2)→3, (1,4)→5, (3,2)→5, (3,4)→7, (5,2)→7, (5,4)→9
@@ -799,8 +708,8 @@ fn dynamic_set_construction() {
     assert_eq!(result, ExprValue::List(Vec::new()));
 }
 
-#[test]
-fn set_operations_with_comprehensions() {
+#[tokio::test]
+async fn set_operations_with_comprehensions() {
     let input = r#"
     let positive_squares(xs: [Int]) -> [Int] = 
         [x * x for x in xs where x > 0];
@@ -815,18 +724,21 @@ fn set_operations_with_comprehensions() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let list = ExprValue::List(Vec::from([
-        ExprValue::Int(-2),
-        ExprValue::Int(1),
-        ExprValue::Int(3),
-        ExprValue::Int(5),
-        ExprValue::Int(10),
+        Arc::new(ExprValue::Int(-2)),
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(5)),
+        Arc::new(ExprValue::Int(10)),
     ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
 
     // positive_squares: [1, 9, 25, 100]
@@ -835,49 +747,17 @@ fn set_operations_with_comprehensions() {
     assert_eq!(
         result,
         ExprValue::List(Vec::from([
-            ExprValue::Int(9),
-            ExprValue::Int(25),
-            ExprValue::Int(100),
+            Arc::new(ExprValue::Int(9)),
+            Arc::new(ExprValue::Int(25)),
+            Arc::new(ExprValue::Int(100)),
         ]))
     );
 }
 
-#[test]
-fn union_of_var_lists() {
-    let input = r#"
-    let vars_for_set(xs: [Int]) -> [Constraint] = [$V(x) === 1 for x in xs];
-    reify vars_for_set as $[Vars];
-    
-    pub let f(xs: [Int], ys: [Int]) -> LinExpr = 
-        sum v in ($[Vars](xs) + $[Vars](ys)) { v };
-    "#;
-
-    let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
-
-    let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
-
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(2), ExprValue::Int(3)]));
-
-    let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
-        .expect("Should evaluate");
-
-    match result {
-        ExprValue::LinExpr(_) => {
-            // Union removes duplicates at the LinExpr level
-            // The exact structure depends on how var lists merge
-            assert!(true);
-        }
-        _ => panic!("Expected LinExpr"),
-    }
-}
-
 // ========== Edge Cases and Corner Cases ==========
 
-#[test]
-fn empty_list_propagation() {
+#[tokio::test]
+async fn empty_list_propagation() {
     let input = r#"
     pub let f(xs: [Int]) -> Int = 
         if |xs| == 0 { 
@@ -890,23 +770,30 @@ fn empty_list_propagation() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let empty = ExprValue::List(Vec::new());
     let result_empty = checked_ast
-        .quick_eval_fn("main", "f", vec![empty])
+        .eval_fn("main", "f", vec![empty])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_empty, ExprValue::Int(0));
 
-    let non_empty = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let non_empty = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
     let result_non_empty = checked_ast
-        .quick_eval_fn("main", "f", vec![non_empty])
+        .eval_fn("main", "f", vec![non_empty])
+        .await
         .expect("Should evaluate");
     assert_eq!(result_non_empty, ExprValue::Int(3));
 }
 
-#[test]
-fn deeply_nested_structure() {
+#[tokio::test]
+async fn deeply_nested_structure() {
     let input = r#"
     let inner(x: Int) -> Int = x * 2;
     let middle(xs: [Int]) -> [Int] = [inner(x) for x in xs];
@@ -917,10 +804,13 @@ fn deeply_nested_structure() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     // [[1,2], [3]]
@@ -930,8 +820,8 @@ fn deeply_nested_structure() {
     assert_eq!(result, ExprValue::Int(12));
 }
 
-#[test]
-fn mixed_coercion_in_complex_expression() {
+#[tokio::test]
+async fn mixed_coercion_in_complex_expression() {
     let input = r#"
     let get_coefficient(x: Int) -> Int = x * 2;
     pub let f(xs: [Int]) -> LinExpr = 
@@ -941,23 +831,29 @@ fn mixed_coercion_in_complex_expression() {
     let vars = HashMap::from([("V".to_string(), vec![ExprType::simple(SimpleType::Int)])]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let list = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
+    let list = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![list])
+        .eval_fn("main", "f", vec![list])
+        .await
         .expect("Should evaluate");
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // 2*$V(1) + 4*$V(2)
-            let expected = 2 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+            let expected = 2 * LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(1)],
-            ))) + 4 * LinExpr::var(IlpVar::Base(ExternVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1))],
+            ))) + 4 * LinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![ExprValue::Int(2)],
+                vec![Arc::new(ExprValue::Int(2))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -965,8 +861,8 @@ fn mixed_coercion_in_complex_expression() {
     }
 }
 
-#[test]
-fn let_expr_in_deeply_nested_structure() {
+#[tokio::test]
+async fn let_expr_in_deeply_nested_structure() {
     let input = r#"
     let process(x: Int) -> Int = let doubled = x * 2 { doubled + 1 };
     let transform(xs: [Int]) -> [Int] = [process(x) for x in xs];
@@ -985,10 +881,13 @@ fn let_expr_in_deeply_nested_structure() {
     let vars = HashMap::new();
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![])
+        .eval_fn("main", "f", vec![])
+        .await
         .expect("Should evaluate");
 
     // [[1,2], [3,4]]
@@ -1001,8 +900,8 @@ fn let_expr_in_deeply_nested_structure() {
     assert_eq!(result, ExprValue::Int(24));
 }
 
-#[test]
-fn all_features_combined() {
+#[tokio::test]
+async fn all_features_combined() {
     let input = r#"
     // Helper to check if value is in valid range
     let in_range(x: Int, min: Int, max: Int) -> Bool = x >= min and x <= max;
@@ -1037,13 +936,22 @@ fn all_features_combined() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
+        .eval_fn("main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -1055,36 +963,31 @@ fn all_features_combined() {
             let constraints = strip_origins(&constraints);
 
             // Verify some constraints exist
-            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(3)],
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
             )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_1_3));
 
             // Verify sum constraint exists
-            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(3)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(4)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(4))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(3)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(4)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(4))],
             ))))
             .leq(&LinExpr::constant(5.));
             assert!(constraints.contains(&sum_constraint));
@@ -1093,8 +996,8 @@ fn all_features_combined() {
     }
 }
 
-#[test]
-fn all_features_combined_with_let() {
+#[tokio::test]
+async fn all_features_combined_with_let() {
     let input = r#"
     // Helper to check if value is in valid range
     let in_range(x: Int, min: Int, max: Int) -> Bool =
@@ -1154,13 +1057,22 @@ fn all_features_combined_with_let() {
     )]);
 
     let checked_ast =
-        CheckedAST::new(&BTreeMap::from([("main", input)]), vars).expect("Should compile");
+        CheckedAST::<SqliteDatabaseDriver>::new(&BTreeMap::from([("main", input)]), vars)
+            .await
+            .expect("Should compile");
 
-    let xs = ExprValue::List(Vec::from([ExprValue::Int(1), ExprValue::Int(2)]));
-    let ys = ExprValue::List(Vec::from([ExprValue::Int(3), ExprValue::Int(4)]));
+    let xs = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(1)),
+        Arc::new(ExprValue::Int(2)),
+    ]));
+    let ys = ExprValue::List(Vec::from([
+        Arc::new(ExprValue::Int(3)),
+        Arc::new(ExprValue::Int(4)),
+    ]));
 
     let result = checked_ast
-        .quick_eval_fn("main", "f", vec![xs, ys])
+        .eval_fn("main", "f", vec![xs, ys])
+        .await
         .expect("Should evaluate");
 
     match result {
@@ -1172,45 +1084,39 @@ fn all_features_combined_with_let() {
             let constraints = strip_origins(&constraints);
 
             // Verify some constraints exist
-            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let constraint_1_3 = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(3)],
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
             )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_1_3));
 
-            let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let constraint_2_4 = LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(4)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(4))],
             )))
             .leq(&LinExpr::constant(1.));
             assert!(constraints.contains(&constraint_2_4));
 
             // Verify sum constraint exists
-            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+            let sum_constraint = (LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(3)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(3))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(1), ExprValue::Int(4)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(1)), Arc::new(ExprValue::Int(4))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(3)],
-            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new_no_env(
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(3))],
+            ))) + LinExpr::var(IlpVar::Script(ScriptVar::new(
                 "main".to_string(),
                 "MyVar".into(),
-                None,
-                vec![ExprValue::Int(2), ExprValue::Int(4)],
+                vec![Arc::new(ExprValue::Int(2)), Arc::new(ExprValue::Int(4))],
             ))))
             .leq(&LinExpr::constant(5.));
             assert!(constraints.contains(&sum_constraint));

@@ -5,18 +5,36 @@
 //! reify statements, and function body validation.
 
 use super::errors::{ArgsType, FunctionType, GlobalEnvError, SemError, SemWarning};
-use super::global_env::{GlobalEnv, ObjectFields, Symbol, SymbolPath, TypeDesc, TypeInfo};
+use super::global_env::{GlobalEnv, Symbol, SymbolPath, TypeDesc, TypeInfo};
 use super::local_env::LocalCheckEnv;
-use super::path_resolution::{resolve_path, ResolvedPathKind};
+use super::path_resolution::{ResolvedPathKind, resolve_path};
 use super::string_case;
 use super::types::{ExprType, SimpleType};
 use crate::ast::{DocstringLine, Expr, Param, Span, Spanned};
+use crate::database::{DatabaseConnection, DatabaseDriver, DbType, SqlQueryError};
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
-impl GlobalEnv {
+/// Get or create a database model for the given schema.
+/// Uses the cache to avoid recreating databases for the same schema.
+async fn get_or_create_model<'a, D: DatabaseDriver>(
+    db_models: &'a mut HashMap<String, D::Connection>,
+    name: &str,
+    schema: &str,
+) -> Result<&'a D::Connection, SqlQueryError> {
+    match db_models.entry(schema.to_string()) {
+        Entry::Occupied(entry) => Ok(entry.into_mut()),
+        Entry::Vacant(entry) => {
+            let connection = D::build_with_schema(name, schema).await?;
+            Ok(entry.insert(connection))
+        }
+    }
+}
+
+impl<D: DatabaseDriver> GlobalEnv<D> {
     /// Create a GlobalEnv from modules
-    pub fn new(
-        object_types: HashMap<String, ObjectFields>,
+    pub async fn new(
         variables: HashMap<String, ArgsType>,
         modules: &BTreeMap<&str, crate::ast::File>,
     ) -> Result<
@@ -32,29 +50,14 @@ impl GlobalEnv {
     > {
         let mut temp_env = GlobalEnv {
             module_names: modules.keys().map(|name| name.to_string()).collect(),
-            object_types,
             custom_types: HashMap::new(),
             functions: HashMap::new(),
-            external_variables: variables
-                .into_iter()
-                .map(|(var_name, args_type)| (var_name, args_type))
-                .collect(),
+            queries: HashMap::new(),
+            external_variables: variables.into_iter().collect(),
             internal_variables: HashMap::new(),
-            variable_lists: HashMap::new(),
             symbols: HashMap::new(),
+            _phantom: std::marker::PhantomData,
         };
-
-        for (object_type, field_desc) in &temp_env.object_types {
-            for (field, typ) in field_desc {
-                if !temp_env.validate_type(typ) {
-                    return Err(GlobalEnvError::UnknownTypeInField {
-                        object_type: object_type.clone(),
-                        field: field.clone(),
-                        unknown_type: typ.to_string(),
-                    });
-                }
-            }
-        }
 
         for (var, args) in &temp_env.external_variables {
             for (param, typ) in args.iter().enumerate() {
@@ -88,6 +91,7 @@ impl GlobalEnv {
                             *public,
                             name,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     crate::ast::Statement::EnumDecl {
@@ -101,6 +105,7 @@ impl GlobalEnv {
                             name,
                             variants,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     _ => {}
@@ -167,6 +172,7 @@ impl GlobalEnv {
                             name,
                             underlying,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     crate::ast::Statement::EnumDecl { name, variants, .. } => {
@@ -175,6 +181,7 @@ impl GlobalEnv {
                             name,
                             variants,
                             &mut errors,
+                            &mut warnings,
                         );
                     }
                     _ => {}
@@ -186,30 +193,59 @@ impl GlobalEnv {
         // PASS 2a: Register all function signatures
         // Now all types are resolved, we can build function signatures
         // ====================================================================
+        // Create the db_models cache for query validation
+        let mut db_models: HashMap<String, D::Connection> = HashMap::new();
+
         for (module_name, module_file) in modules {
             let current_module = *module_name;
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Let {
-                    public,
-                    name,
-                    params,
-                    output_type,
-                    body,
-                    docstring,
-                } = &statement.node
-                {
-                    temp_env.expand_with_let_statement_pass1(
-                        current_module,
-                        *public,
+                match &statement.node {
+                    crate::ast::Statement::Let {
+                        public,
                         name,
                         params,
                         output_type,
                         body,
                         docstring,
-                        &mut type_info,
-                        &mut errors,
-                        &mut warnings,
-                    );
+                    } => {
+                        temp_env.expand_with_let_statement_pass1(
+                            current_module,
+                            *public,
+                            name,
+                            params,
+                            output_type,
+                            body,
+                            docstring,
+                            &mut type_info,
+                            &mut errors,
+                            &mut warnings,
+                        );
+                    }
+                    crate::ast::Statement::Query {
+                        public,
+                        name,
+                        params,
+                        output_type,
+                        query_string,
+                        docstring,
+                    } => {
+                        temp_env
+                            .expand_with_query_statement_pass1(
+                                current_module,
+                                *public,
+                                name,
+                                params,
+                                output_type,
+                                query_string,
+                                docstring,
+                                &mut type_info,
+                                &mut errors,
+                                &mut warnings,
+                                &mut db_models,
+                            )
+                            .await;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -229,26 +265,25 @@ impl GlobalEnv {
 
             // Import function symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
-                    if temp_env.module_exists(&module_path.node)
-                        && module_path.node != current_module
-                    {
-                        let prefix = match alias {
-                            crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
-                            crate::ast::ImportAlias::Wildcard(_) => None,
-                        };
-                        let import_span = match alias {
-                            crate::ast::ImportAlias::Named(name) => &name.span,
-                            crate::ast::ImportAlias::Wildcard(span) => span,
-                        };
-                        temp_env.import_function_symbols(
-                            current_module,
-                            &module_path.node,
-                            prefix,
-                            Some(import_span),
-                            &mut errors,
-                        );
-                    }
+                if let crate::ast::Statement::Import { module_path, alias } = &statement.node
+                    && temp_env.module_exists(&module_path.node)
+                    && module_path.node != current_module
+                {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_function_symbols(
+                        current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
                 }
             }
         }
@@ -264,7 +299,6 @@ impl GlobalEnv {
                 if let crate::ast::Statement::Reify {
                     constraint_path,
                     name,
-                    var_list,
                     public,
                     ..
                 } = &statement.node
@@ -273,7 +307,6 @@ impl GlobalEnv {
                         current_module,
                         constraint_path,
                         name,
-                        *var_list,
                         *public,
                         &mut type_info,
                         &mut errors,
@@ -298,26 +331,25 @@ impl GlobalEnv {
 
             // Import variable symbols from foreign modules (skip validation, done in PASS 1b)
             for statement in &module_file.statements {
-                if let crate::ast::Statement::Import { module_path, alias } = &statement.node {
-                    if temp_env.module_exists(&module_path.node)
-                        && module_path.node != current_module
-                    {
-                        let prefix = match alias {
-                            crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
-                            crate::ast::ImportAlias::Wildcard(_) => None,
-                        };
-                        let import_span = match alias {
-                            crate::ast::ImportAlias::Named(name) => &name.span,
-                            crate::ast::ImportAlias::Wildcard(span) => span,
-                        };
-                        temp_env.import_variable_symbols(
-                            current_module,
-                            &module_path.node,
-                            prefix,
-                            Some(import_span),
-                            &mut errors,
-                        );
-                    }
+                if let crate::ast::Statement::Import { module_path, alias } = &statement.node
+                    && temp_env.module_exists(&module_path.node)
+                    && module_path.node != current_module
+                {
+                    let prefix = match alias {
+                        crate::ast::ImportAlias::Named(name) => Some(name.node.as_str()),
+                        crate::ast::ImportAlias::Wildcard(_) => None,
+                    };
+                    let import_span = match alias {
+                        crate::ast::ImportAlias::Named(name) => &name.span,
+                        crate::ast::ImportAlias::Wildcard(span) => span,
+                    };
+                    temp_env.import_variable_symbols(
+                        current_module,
+                        &module_path.node,
+                        prefix,
+                        Some(import_span),
+                        &mut errors,
+                    );
                 }
             }
         }
@@ -345,6 +377,7 @@ impl GlobalEnv {
         }
 
         temp_env.check_unused_fn(&mut warnings);
+        temp_env.check_unused_query(&mut warnings);
         temp_env.check_unused_var(&mut warnings);
 
         Ok((
@@ -369,18 +402,20 @@ impl GlobalEnv {
         }
     }
 
-    fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
-        for ((module, var_name), var_desc) in &self.internal_variables {
-            if !var_desc.public && !var_desc.used {
-                warnings.push(SemWarning::UnusedVariable {
+    fn check_unused_query(&self, warnings: &mut Vec<SemWarning>) {
+        for ((module, query_name), query_desc) in &self.queries {
+            if !query_desc.public && !query_desc.used {
+                warnings.push(SemWarning::UnusedQuery {
                     module: module.clone(),
-                    identifier: format!("{}::{}", module, var_name),
-                    span: var_desc.span.clone(),
+                    identifier: format!("{}::{}", module, query_name),
+                    span: query_desc.query_string.span.clone(),
                 });
             }
         }
+    }
 
-        for ((module, var_name), var_desc) in &self.variable_lists {
+    fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
+        for ((module, var_name), var_desc) in &self.internal_variables {
             if !var_desc.public && !var_desc.used {
                 warnings.push(SemWarning::UnusedVariable {
                     module: module.clone(),
@@ -405,6 +440,16 @@ impl GlobalEnv {
             segments.push(name.to_string());
         }
         SymbolPath(segments)
+    }
+
+    /// Check if a name would conflict with an existing symbol in the symbol table.
+    /// Returns Some(existing_module_name) if there's a conflict, None otherwise.
+    fn check_symbol_conflict(&self, current_module: &str, name: &str) -> Option<String> {
+        let path = Self::make_symbol_path(None, name);
+        self.symbols
+            .get(current_module)
+            .and_then(|symbol_map| symbol_map.get(&path))
+            .map(|existing| existing.module_name().to_string())
     }
 
     /// Import type symbols from source_module into target_module's symbol table
@@ -498,6 +543,26 @@ impl GlobalEnv {
             }
         }
 
+        // Collect queries to add (queries are callable like functions)
+        // Skip private queries when importing from another module
+        let queries_to_add: Vec<_> = self
+            .queries
+            .iter()
+            .filter(|((mod_name, _), query_desc)| {
+                mod_name == source_module && (import_span.is_none() || query_desc.public)
+            })
+            .map(|((mod_name, query_name), _)| (mod_name.clone(), query_name.clone()))
+            .collect();
+
+        for (mod_name, query_name) in queries_to_add {
+            let path = Self::make_symbol_path(prefix, &query_name);
+            if let Some(existing) = symbol_map.get(&path) {
+                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
+            } else {
+                symbol_map.insert(path, Symbol::Query(mod_name, query_name));
+            }
+        }
+
         // Report conflicts
         if let Some(span) = import_span {
             for (path_str, existing_module) in conflicts {
@@ -543,28 +608,6 @@ impl GlobalEnv {
             }
         }
 
-        // Collect variable lists to add
-        // Skip private variable lists when importing from another module
-        let var_lists_to_add: Vec<_> = self
-            .variable_lists
-            .iter()
-            .filter(|((mod_name, _), var_desc)| {
-                mod_name == source_module && (import_span.is_none() || var_desc.public)
-            })
-            .map(|((mod_name, var_name), _)| (mod_name.clone(), var_name.clone()))
-            .collect();
-
-        let symbol_map = self.symbols.entry(target_module.to_string()).or_default();
-        for (mod_name, var_name) in var_lists_to_add {
-            let dollar_var_name = format!("$[{}]", var_name);
-            let path = Self::make_symbol_path(prefix, &dollar_var_name);
-            if let Some(existing) = symbol_map.get(&path) {
-                conflicts.push((path.0.join("::"), existing.module_name().to_string()));
-            } else {
-                symbol_map.insert(path, Symbol::VariableList(mod_name, var_name));
-            }
-        }
-
         // Report conflicts
         if let Some(span) = import_span {
             for (path_str, existing_module) in conflicts {
@@ -603,6 +646,26 @@ impl GlobalEnv {
             return;
         }
 
+        // Check for conflict with queries (registered in same pass, before symbol table populated)
+        if let Some((_query_type, _span)) = self.lookup_query(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module: current_module.to_string(),
+            });
+            return;
+        }
+
+        // Check for conflict with existing symbols (types, modules)
+        if let Some(existing_module) = self.check_symbol_conflict(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module,
+            });
+            return;
+        }
+
         // Naming convention warning for function
         if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
             &name.node,
@@ -622,7 +685,7 @@ impl GlobalEnv {
         let mut seen_param_names: HashMap<String, Span> = HashMap::new();
 
         for param in params {
-            match self.resolve_type(&param.typ, current_module) {
+            match self.resolve_type_with_warnings(&param.typ, current_module, warnings) {
                 Err(e) => {
                     errors.push(e);
                     error_in_typs = true;
@@ -667,7 +730,7 @@ impl GlobalEnv {
         }
 
         // Resolve and validate output type
-        let out_typ = match self.resolve_type(output_type, current_module) {
+        let out_typ = match self.resolve_type_with_warnings(output_type, current_module, warnings) {
             Err(e) => {
                 errors.push(e);
                 return;
@@ -705,31 +768,512 @@ impl GlobalEnv {
         }
     }
 
+    /// Register query signature (queries have no body to validate, just static SQL string)
+    async fn expand_with_query_statement_pass1(
+        &mut self,
+        current_module: &str,
+        public: bool,
+        name: &Spanned<String>,
+        params: &Vec<Param>,
+        output_type: &Spanned<crate::ast::TypeName>,
+        query_string: &Spanned<String>,
+        docstring: &Vec<DocstringLine>,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+        db_models: &mut HashMap<String, D::Connection>,
+    ) {
+        // Check for duplicate query name
+        if let Some((_query_type, span)) = self.lookup_query(current_module, &name.node) {
+            errors.push(SemError::QueryAlreadyDefined {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                here: span.clone(),
+            });
+            return;
+        }
+
+        // Check for conflict with functions (registered in same pass, before symbol table populated)
+        if let Some((_fn_type, _span)) = self.lookup_fn(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module: current_module.to_string(),
+            });
+            return;
+        }
+
+        // Check for conflict with existing symbols (types, modules)
+        if let Some(existing_module) = self.check_symbol_conflict(current_module, &name.node) {
+            errors.push(SemError::SymbolConflict {
+                path: name.node.clone(),
+                span: name.span.clone(),
+                existing_module,
+            });
+            return;
+        }
+
+        // Naming convention warning for query
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::SnakeCase,
+        ) {
+            warnings.push(SemWarning::FunctionNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
+        }
+
+        // Resolve and validate parameter types
+        let mut error_in_typs = false;
+        let mut params_typ = vec![];
+        let mut seen_param_names: HashMap<String, Span> = HashMap::new();
+
+        for param in params {
+            match self.resolve_type_with_warnings(&param.typ, current_module, warnings) {
+                Err(e) => {
+                    errors.push(e);
+                    error_in_typs = true;
+                }
+                Ok(param_typ) => {
+                    params_typ.push(param_typ.clone());
+                    if !self.validate_type(&param_typ) {
+                        errors.push(SemError::UnknownType {
+                            module: current_module.to_string(),
+                            typ: param_typ.to_string(),
+                            span: param.typ.span.clone(),
+                        });
+                        error_in_typs = true;
+                    }
+                }
+            }
+
+            // Check for duplicate parameter names
+            if let Some(prev_span) = seen_param_names.get(&param.name.node) {
+                errors.push(SemError::ParameterAlreadyDefined {
+                    module: current_module.to_string(),
+                    identifier: param.name.node.clone(),
+                    span: param.name.span.clone(),
+                    here: prev_span.clone(),
+                });
+            } else {
+                seen_param_names.insert(param.name.node.clone(), param.name.span.clone());
+
+                // Naming convention warning for parameter
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &param.name.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        module: current_module.to_string(),
+                        identifier: param.name.node.clone(),
+                        span: param.name.span.clone(),
+                        suggestion,
+                    });
+                }
+            }
+        }
+
+        // Resolve and validate output type
+        let out_typ = match self.resolve_type_with_warnings(output_type, current_module, warnings) {
+            Err(e) => {
+                errors.push(e);
+                return;
+            }
+            Ok(typ) => {
+                if !self.validate_type(&typ) {
+                    errors.push(SemError::UnknownType {
+                        module: current_module.to_string(),
+                        typ: typ.to_string(),
+                        span: output_type.span.clone(),
+                    });
+                    return;
+                }
+                typ
+            }
+        };
+
+        // --- Query-specific validation ---
+
+        // Will be populated by describe_query if a database connection is available
+        let mut sql_columns: Option<Vec<(String, DbType)>> = None;
+
+        // Check: query must have at least one parameter, and the first must be a database schema
+        if params_typ.is_empty() {
+            errors.push(SemError::QueryMissingDatabaseParam {
+                module: current_module.to_string(),
+                query_name: name.node.clone(),
+                span: name.span.clone(),
+            });
+            return;
+        } else if let Some(resolved_first) =
+            self.resolve_type_until_several_or_not_custom(&params_typ[0])
+        {
+            let is_db = resolved_first.len() == 1 && resolved_first[0].is_database_schema();
+            if !is_db {
+                errors.push(SemError::QueryFirstParamNotDatabase {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: params_typ[0].to_string(),
+                    span: params[0].typ.span.clone(),
+                });
+                error_in_typs = true;
+            } else {
+                // .expect() is safe here because is_db being true guarantees this is a DatabaseSchema
+                let schema = resolved_first[0]
+                    .get_database_schema()
+                    .expect("is_db was true, so this must be a DatabaseSchema");
+                let model_name = format!("{}::{}", current_module, name.node);
+
+                match get_or_create_model::<D>(db_models, &model_name, schema).await {
+                    Ok(connection) => {
+                        // Validate the SQL query and get column metadata
+                        match connection.describe_query(&query_string.node).await {
+                            Ok(columns) => {
+                                sql_columns = Some(columns);
+                            }
+                            Err(e) => {
+                                errors.push(SemError::InvalidQuerySql {
+                                    module: current_module.to_string(),
+                                    query_name: name.node.clone(),
+                                    error: e.to_string(),
+                                    span: query_string.span.clone(),
+                                });
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(SemError::DatabaseModelCreationFailed {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            error: e.to_string(),
+                            span: params[0].typ.span.clone(),
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Check: output type must be [T] or ?T where T is a SQL-compatible inner type
+        // (Struct, Tuple, Int, Bool, String)
+        if let Some(resolved_output) = self.resolve_type_until_several_or_not_custom(&out_typ) {
+            let valid = match resolved_output.len() {
+                1 => {
+                    // Must be List(inner)
+                    matches!(&resolved_output[0], SimpleType::List(_))
+                }
+                2 => {
+                    // Resolve each: one must resolve to exactly [None]
+                    let mut found_none = false;
+                    let mut found_other = false;
+                    for st in &resolved_output {
+                        let inner = self
+                            .resolve_type_until_several_or_not_custom(&ExprType::from(st.clone()));
+                        match inner.as_deref() {
+                            Some([SimpleType::None]) => found_none = true,
+                            Some(_) => found_other = true,
+                            None => {} // cycle
+                        }
+                    }
+                    found_none && found_other
+                }
+                _ => false,
+            };
+            if !valid {
+                errors.push(SemError::QueryInvalidOutputType {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: out_typ.to_string(),
+                    span: output_type.span.clone(),
+                });
+                return;
+            }
+        }
+
+        // Check: non-DB parameters must be SQL-compatible
+        for (param_typ, param) in params_typ.iter().skip(1).zip(params.iter().skip(1)) {
+            if DbType::try_from(self, param_typ).is_err() {
+                errors.push(SemError::QueryParamNotSqlCompatible {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    param_name: param.name.node.clone(),
+                    found: param_typ.to_string(),
+                    span: param.typ.span.clone(),
+                });
+                error_in_typs = true;
+            }
+        }
+
+        // Check: output struct fields or tuple elements must be SQL-compatible
+        // For primitives (Int, Bool, String), no check is needed as they're inherently SQL-compatible
+        enum OutputInnerShape {
+            Struct(BTreeMap<String, ExprType>),
+            Tuple(Vec<ExprType>),
+            Primitive(ExprType),
+        }
+
+        // Helper: resolve an inner type to its output shape
+        let resolve_inner_to_shape = |inner_typ: &ExprType| -> Option<OutputInnerShape> {
+            let resolved = self.resolve_type_until_several_or_not_custom(inner_typ)?;
+            match resolved.len() {
+                1 => match &resolved[0] {
+                    SimpleType::Struct(fields) => Some(OutputInnerShape::Struct(fields.clone())),
+                    SimpleType::Tuple(elems) => Some(OutputInnerShape::Tuple(elems.clone())),
+                    SimpleType::Int | SimpleType::Bool | SimpleType::String => {
+                        Some(OutputInnerShape::Primitive(inner_typ.clone()))
+                    }
+                    _ => None,
+                },
+                _ => {
+                    // Could be ?Int etc. — validate via DbType::try_from
+                    if DbType::try_from(self, inner_typ).is_ok() {
+                        Some(OutputInnerShape::Primitive(inner_typ.clone()))
+                    } else {
+                        None
+                    }
+                }
+            }
+        };
+
+        let output_inner_shape: Option<OutputInnerShape> = {
+            let resolved_output = self.resolve_type_until_several_or_not_custom(&out_typ);
+            resolved_output.and_then(|ro| {
+                if ro.len() == 1 {
+                    // List case: extract inner type
+                    if let SimpleType::List(inner) = &ro[0] {
+                        resolve_inner_to_shape(inner)
+                    } else {
+                        None
+                    }
+                } else {
+                    // Optional case: find the non-None type
+                    let non_none = ro.iter().find(|st| {
+                        let resolved = self.resolve_type_until_several_or_not_custom(
+                            &ExprType::from((*st).clone()),
+                        );
+                        !matches!(resolved.as_deref(), Some([SimpleType::None]))
+                    })?;
+                    resolve_inner_to_shape(&ExprType::from(non_none.clone()))
+                }
+            })
+        };
+
+        match &output_inner_shape {
+            None => {
+                // Inner type is not SQL-compatible (e.g. [LinExpr], ?LinExpr)
+                errors.push(SemError::QueryInvalidOutputType {
+                    module: current_module.to_string(),
+                    query_name: name.node.clone(),
+                    found: out_typ.to_string(),
+                    span: output_type.span.clone(),
+                });
+                return;
+            }
+            Some(OutputInnerShape::Struct(fields)) => {
+                for (field_name, field_typ) in fields {
+                    if DbType::try_from(self, field_typ).is_err() {
+                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            field_name: field_name.clone(),
+                            found: field_typ.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                }
+            }
+            Some(OutputInnerShape::Tuple(elements)) => {
+                for (idx, elem_typ) in elements.iter().enumerate() {
+                    if DbType::try_from(self, elem_typ).is_err() {
+                        errors.push(SemError::QueryOutputFieldNotSqlCompatible {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            field_name: format!("element {}", idx),
+                            found: elem_typ.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                }
+            }
+            Some(OutputInnerShape::Primitive(_)) => {
+                // Primitives (Int, Bool, String) are inherently SQL-compatible
+            }
+        }
+
+        // --- Check for duplicate column names in SQL result ---
+        if let Some(columns) = &sql_columns {
+            let mut seen = std::collections::HashSet::new();
+            for (col_name, _) in columns {
+                if !seen.insert(col_name) {
+                    errors.push(SemError::QueryDuplicateColumnName {
+                        module: current_module.to_string(),
+                        query_name: name.node.clone(),
+                        column_name: col_name.clone(),
+                        span: query_string.span.clone(),
+                    });
+                    return;
+                }
+            }
+        }
+
+        // --- Column validation: check SQL columns match declared output type ---
+        if let Some(columns) = &sql_columns {
+            match &output_inner_shape {
+                Some(OutputInnerShape::Struct(fields)) => {
+                    // Check column count
+                    if columns.len() != fields.len() {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: fields.len(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    // Check each column name exists in the struct fields
+                    let field_names: Vec<String> = fields.keys().cloned().collect();
+                    for (col_name, col_db_type) in columns {
+                        if let Some(field_typ) = fields.get(col_name) {
+                            // Check type compatibility
+                            if let Ok(declared_db_type) = DbType::try_from(self, field_typ)
+                                && !col_db_type.is_assignable_to(&declared_db_type)
+                            {
+                                errors.push(SemError::QueryColumnTypeMismatch {
+                                    module: current_module.to_string(),
+                                    query_name: name.node.clone(),
+                                    column_name: col_name.clone(),
+                                    sql_type: col_db_type.to_string(),
+                                    declared_type: declared_db_type.to_string(),
+                                    span: output_type.span.clone(),
+                                });
+                                return;
+                            }
+                            // If DbType::try_from fails, we already reported that
+                            // in the output field validation above
+                        } else {
+                            errors.push(SemError::QueryColumnNameMismatch {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                sql_column: col_name.clone(),
+                                struct_fields: field_names.clone(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                Some(OutputInnerShape::Tuple(elements)) => {
+                    // Check column count
+                    if columns.len() != elements.len() {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: elements.len(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    // Check each positional pair
+                    for ((col_name, col_db_type), elem_typ) in columns.iter().zip(elements.iter()) {
+                        if let Ok(declared_db_type) = DbType::try_from(self, elem_typ)
+                            && !col_db_type.is_assignable_to(&declared_db_type)
+                        {
+                            errors.push(SemError::QueryColumnTypeMismatch {
+                                module: current_module.to_string(),
+                                query_name: name.node.clone(),
+                                column_name: col_name.clone(),
+                                sql_type: col_db_type.to_string(),
+                                declared_type: declared_db_type.to_string(),
+                                span: output_type.span.clone(),
+                            });
+                            return;
+                        }
+                    }
+                }
+                Some(OutputInnerShape::Primitive(expr_type)) => {
+                    // Exactly 1 column expected
+                    if columns.len() != 1 {
+                        errors.push(SemError::QueryColumnCountMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            sql_count: columns.len(),
+                            declared_count: 1,
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                    let (col_name, col_db_type) = &columns[0];
+                    if let Ok(declared_db_type) = DbType::try_from(self, expr_type)
+                        && !col_db_type.is_assignable_to(&declared_db_type)
+                    {
+                        errors.push(SemError::QueryColumnTypeMismatch {
+                            module: current_module.to_string(),
+                            query_name: name.node.clone(),
+                            column_name: col_name.clone(),
+                            sql_type: col_db_type.to_string(),
+                            declared_type: declared_db_type.to_string(),
+                            span: output_type.span.clone(),
+                        });
+                        return;
+                    }
+                }
+                None => {
+                    // Already handled above with QueryInvalidOutputType error
+                }
+            }
+        }
+
+        // Register the query (no body validation needed - it's just a string)
+        if !error_in_typs {
+            let query_typ = FunctionType {
+                args: params_typ,
+                output: out_typ,
+            };
+            self.register_query(
+                current_module,
+                &name.node,
+                name.span.clone(),
+                query_typ,
+                public,
+                params.iter().map(|x| x.name.node.clone()).collect(),
+                query_string.clone(),
+                docstring.clone(),
+                type_info,
+            );
+        }
+    }
+
     /// Check docstring expressions for semantic validity
     fn check_docstring_expressions(
         &mut self,
         docstring: &Vec<DocstringLine>,
-        local_env: &mut LocalCheckEnv,
+        local_env: &Arc<LocalCheckEnv>,
         type_info: &mut TypeInfo,
         expr_types: &mut HashMap<Span, ExprType>,
         resolved_types: &mut HashMap<Span, ExprType>,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
     ) {
         for line in docstring {
             for part in line {
                 if let Some(expr) = &part.expr {
                     // Check the expression - it's already wrapped in String(...)
                     // so it should type-check if the inner expression can convert to String
-                    local_env.check_expr(
+                    Arc::clone(local_env).check_expr(
                         self,
-                        &expr.node,
-                        &expr.span,
+                        Arc::clone(expr),
                         type_info,
                         expr_types,
                         resolved_types,
                         errors,
-                        warnings,
                     );
                 }
             }
@@ -756,39 +1300,35 @@ impl GlobalEnv {
         };
 
         // Build LocalCheckEnv with parameters
-        let mut local_env = LocalCheckEnv::new(current_module);
+        let root_env = LocalCheckEnv::new(current_module);
+        let mut builder = LocalCheckEnv::start_subscope(root_env);
         for (param_name, param_typ) in fn_desc.arg_names.iter().zip(fn_desc.typ.args.iter()) {
             // We don't need to check for duplicate params here - already done in pass 1
             // Just register them in the local environment
-            local_env.register_identifier_no_check(param_name, param_typ.clone());
+            builder.register_identifier_no_check(param_name, param_typ.clone());
         }
-
-        // Validate body and docstring expressions (parameters available in same scope)
-        local_env.push_scope();
+        let local_env = builder.build_subscope();
 
         // Check docstring expressions first
         self.check_docstring_expressions(
             &fn_desc.docstring,
-            &mut local_env,
+            &local_env,
             type_info,
             expr_types,
             resolved_types,
             errors,
-            warnings,
         );
 
         // Then validate body
-        let body_type_opt = local_env.check_expr(
+        let body_type_opt = Arc::clone(&local_env).check_expr(
             self,
-            &body.node,
-            &body.span,
+            Arc::new(body.clone()),
             type_info,
             expr_types,
             resolved_types,
             errors,
-            warnings,
         );
-        local_env.pop_scope(warnings);
+        warnings.extend(local_env.to_warnings());
 
         // Check body type matches declared return type
         if let Some(body_type) = body_type_opt {
@@ -809,7 +1349,6 @@ impl GlobalEnv {
         current_module: &str,
         constraint_path: &Spanned<crate::ast::NamespacePath>,
         name: &Spanned<String>,
-        var_list: bool,
         public: bool,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -862,11 +1401,7 @@ impl GlobalEnv {
                 // Mark function as used
                 self.mark_fn_used(&fn_module, &fn_name);
 
-                let needed_output_type = ExprType::simple(if var_list {
-                    SimpleType::List(SimpleType::Constraint.into())
-                } else {
-                    SimpleType::Constraint
-                });
+                let needed_output_type = ExprType::simple(SimpleType::Constraint);
                 let correct_type = fn_type.0.output == needed_output_type;
                 if !correct_type {
                     let expected_type = FunctionType {
@@ -890,71 +1425,36 @@ impl GlobalEnv {
                     return;
                 }
 
-                if var_list {
-                    match self.lookup_var_list(current_module, &name.node) {
-                        Some((_args, span)) => errors.push(SemError::VariableAlreadyDefined {
-                            module: current_module.to_string(),
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            here: Some(span),
-                        }),
-                        None => {
-                            if let Some(suggestion) =
-                                string_case::generate_suggestion_for_naming_convention(
-                                    &name.node,
-                                    string_case::NamingConvention::PascalCase,
-                                )
-                            {
-                                warnings.push(SemWarning::VariableNamingConvention {
-                                    module: current_module.to_string(),
-                                    identifier: name.node.clone(),
-                                    span: name.span.clone(),
-                                    suggestion,
-                                });
-                            }
-                            self.register_var_list(
-                                current_module,
+                match self.lookup_var(current_module, &name.node) {
+                    Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                        module: current_module.to_string(),
+                        identifier: name.node.clone(),
+                        span: name.span.clone(),
+                        here: span_opt,
+                    }),
+                    None => {
+                        if let Some(suggestion) =
+                            string_case::generate_suggestion_for_naming_convention(
                                 &name.node,
-                                fn_type.0.args.clone(),
-                                name.span.clone(),
-                                public,
-                                (fn_module.clone(), fn_name.clone()),
-                                type_info,
-                            );
+                                string_case::NamingConvention::PascalCase,
+                            )
+                        {
+                            warnings.push(SemWarning::VariableNamingConvention {
+                                module: current_module.to_string(),
+                                identifier: name.node.clone(),
+                                span: name.span.clone(),
+                                suggestion,
+                            });
                         }
-                    }
-                } else {
-                    match self.lookup_var(current_module, &name.node) {
-                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
-                            module: current_module.to_string(),
-                            identifier: name.node.clone(),
-                            span: name.span.clone(),
-                            here: span_opt,
-                        }),
-                        None => {
-                            if let Some(suggestion) =
-                                string_case::generate_suggestion_for_naming_convention(
-                                    &name.node,
-                                    string_case::NamingConvention::PascalCase,
-                                )
-                            {
-                                warnings.push(SemWarning::VariableNamingConvention {
-                                    module: current_module.to_string(),
-                                    identifier: name.node.clone(),
-                                    span: name.span.clone(),
-                                    suggestion,
-                                });
-                            }
-                            self.register_var(
-                                current_module,
-                                &name.node,
-                                fn_type.0.args.clone(),
-                                name.span.clone(),
-                                public,
-                                (fn_module.clone(), fn_name.clone()),
-                                type_info,
-                            );
-                        }
+                        self.register_var(
+                            current_module,
+                            &name.node,
+                            fn_type.0.args.clone(),
+                            name.span.clone(),
+                            public,
+                            (fn_module.clone(), fn_name.clone()),
+                            type_info,
+                        );
                     }
                 }
             }
@@ -968,20 +1468,11 @@ impl GlobalEnv {
         public: bool,
         name: &Spanned<String>,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Check if type name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
-                module: current_module.to_string(),
-                type_name: name.node.clone(),
-                span: name.span.clone(),
-            });
-            return;
-        }
-
-        // Check if type name shadows an object type
-        if self.object_types.contains_key(&name.node) {
-            errors.push(SemError::TypeShadowsObject {
                 module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -998,6 +1489,19 @@ impl GlobalEnv {
                 span: name.span.clone(),
             });
             return;
+        }
+
+        // Naming convention warning for type
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::PascalCase,
+        ) {
+            warnings.push(SemWarning::TypeNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
         }
 
         // Register with placeholder - will be resolved in pass 2
@@ -1017,6 +1521,7 @@ impl GlobalEnv {
         name: &Spanned<String>,
         underlying: &Spanned<crate::ast::TypeName>,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Skip if pass 1 failed (type wasn't registered)
         let type_key = (current_module.to_string(), name.node.clone());
@@ -1026,13 +1531,14 @@ impl GlobalEnv {
         };
 
         // Resolve the underlying type using the symbol table
-        let underlying_type = match ExprType::from_ast(underlying.clone(), current_module, self) {
-            Ok(typ) => typ,
-            Err(e) => {
-                errors.push(e);
-                return;
-            }
-        };
+        let underlying_type =
+            match ExprType::from_ast(underlying.clone(), current_module, self, Some(warnings)) {
+                Ok(typ) => typ,
+                Err(e) => {
+                    errors.push(e);
+                    return;
+                }
+            };
 
         // Check for unguarded recursive type (type references itself without being inside a container)
         if self.has_unguarded_reference(&underlying_type, &name.node) {
@@ -1062,20 +1568,11 @@ impl GlobalEnv {
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         // Check if enum name shadows a primitive type
         if Self::is_primitive_type_name(&name.node) {
             errors.push(SemError::TypeShadowsPrimitive {
-                module: current_module.to_string(),
-                type_name: name.node.clone(),
-                span: name.span.clone(),
-            });
-            return;
-        }
-
-        // Check for shadowing existing object or custom types
-        if self.object_types.contains_key(&name.node) {
-            errors.push(SemError::TypeShadowsObject {
                 module: current_module.to_string(),
                 type_name: name.node.clone(),
                 span: name.span.clone(),
@@ -1091,6 +1588,19 @@ impl GlobalEnv {
                 span: name.span.clone(),
             });
             return;
+        }
+
+        // Naming convention warning for enum root name
+        if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+            &name.node,
+            string_case::NamingConvention::PascalCase,
+        ) {
+            warnings.push(SemWarning::TypeNamingConvention {
+                module: current_module.to_string(),
+                identifier: name.node.clone(),
+                span: name.span.clone(),
+                suggestion,
+            });
         }
 
         let mut variant_failure = false;
@@ -1111,6 +1621,19 @@ impl GlobalEnv {
                 });
                 variant_failure = true;
                 continue;
+            }
+
+            // Naming convention warning for variant name
+            if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                &variant.node.name.node,
+                string_case::NamingConvention::PascalCase,
+            ) {
+                warnings.push(SemWarning::TypeNamingConvention {
+                    module: current_module.to_string(),
+                    identifier: variant.node.name.node.clone(),
+                    span: variant.node.name.span.clone(),
+                    suggestion,
+                });
             }
         }
 
@@ -1151,6 +1674,7 @@ impl GlobalEnv {
         name: &Spanned<String>,
         variants: &[Spanned<crate::ast::EnumVariant>],
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         use crate::ast::EnumVariantType;
 
@@ -1186,7 +1710,12 @@ impl GlobalEnv {
                     }
                     EnumVariantType::Tuple(types) if types.len() == 1 => {
                         // Single type like Ok(Int) - underlying is just that type
-                        match ExprType::from_ast(types[0].clone(), current_module, self) {
+                        match ExprType::from_ast(
+                            types[0].clone(),
+                            current_module,
+                            self,
+                            Some(warnings),
+                        ) {
                             Ok(typ) => typ,
                             Err(e) => {
                                 errors.push(e);
@@ -1196,35 +1725,67 @@ impl GlobalEnv {
                     }
                     EnumVariantType::Tuple(types) => {
                         // Multiple types like TupleCase(Int, Bool) - underlying is a tuple
-                        let tuple_types: Result<Vec<ExprType>, _> = types
-                            .iter()
-                            .map(|t| ExprType::from_ast(t.clone(), current_module, self))
-                            .collect();
-                        match tuple_types {
-                            Ok(ts) => ExprType::simple(SimpleType::Tuple(ts)),
-                            Err(e) => {
-                                errors.push(e);
-                                continue;
+                        let mut tuple_types = Vec::with_capacity(types.len());
+                        let mut tuple_err = false;
+                        for t in types {
+                            match ExprType::from_ast(
+                                t.clone(),
+                                current_module,
+                                self,
+                                Some(warnings),
+                            ) {
+                                Ok(typ) => tuple_types.push(typ),
+                                Err(e) => {
+                                    errors.push(e);
+                                    tuple_err = true;
+                                    break;
+                                }
                             }
                         }
+                        if tuple_err {
+                            continue;
+                        }
+                        ExprType::simple(SimpleType::Tuple(tuple_types))
                     }
                     EnumVariantType::Struct(fields) => {
                         // Struct variant like StructCase { field: Type }
-                        let struct_fields: Result<std::collections::BTreeMap<String, ExprType>, _> =
-                            fields
-                                .iter()
-                                .map(|(fname, ftype)| {
-                                    ExprType::from_ast(ftype.clone(), current_module, self)
-                                        .map(|t| (fname.node.clone(), t))
-                                })
-                                .collect();
-                        match struct_fields {
-                            Ok(fs) => ExprType::simple(SimpleType::Struct(fs)),
-                            Err(e) => {
-                                errors.push(e);
-                                continue;
+                        let mut converted = BTreeMap::new();
+                        let mut struct_err = false;
+                        for (fname, ftype) in fields {
+                            // Check field naming convention
+                            if let Some(suggestion) =
+                                string_case::generate_suggestion_for_naming_convention(
+                                    &fname.node,
+                                    string_case::NamingConvention::SnakeCase,
+                                )
+                            {
+                                warnings.push(SemWarning::FieldNamingConvention {
+                                    module: current_module.to_string(),
+                                    identifier: fname.node.clone(),
+                                    span: fname.span.clone(),
+                                    suggestion,
+                                });
+                            }
+                            match ExprType::from_ast(
+                                ftype.clone(),
+                                current_module,
+                                self,
+                                Some(warnings),
+                            ) {
+                                Ok(t) => {
+                                    converted.insert(fname.node.clone(), t);
+                                }
+                                Err(e) => {
+                                    errors.push(e);
+                                    struct_err = true;
+                                    break;
+                                }
                             }
                         }
+                        if struct_err {
+                            continue;
+                        }
+                        ExprType::simple(SimpleType::Struct(converted))
                     }
                 },
             };

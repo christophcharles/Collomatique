@@ -1,15 +1,17 @@
+use super::errors::SemWarning;
 use super::{GlobalEnv, ResolvedPathKind, SemError};
 
+use crate::database::DatabaseDriver;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
 };
 
 /// Helper to resolve a type path using the symbol table
-fn resolve_type_path(
+fn resolve_type_path<D: DatabaseDriver>(
     segments: Vec<String>,
     current_module: &str,
-    global_env: &GlobalEnv,
+    global_env: &GlobalEnv<D>,
 ) -> Option<SimpleType> {
     // Construct a fake Spanned<NamespacePath> for resolve_path
     let dummy_span = crate::ast::Span { start: 0, end: 0 };
@@ -33,7 +35,7 @@ mod tests;
 /// Represents a type that appears in a sum type
 ///
 /// These can be primitive types (Int, Bool, LinExpr, etc)
-/// or objects, custom types, or even lists
+/// or custom types, lists, tuples, structs, etc.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleType {
     Never,
@@ -45,13 +47,13 @@ pub enum SimpleType {
     String,
     EmptyList,
     List(ExprType),
-    Object(String),
     /// Custom type with optional variant: Custom(module, root, variant)
     /// - Custom("main", "MyType", None) for simple custom types
     /// - Custom("main", "Result", Some("Ok")) for enum variants like Result::Ok
     Custom(String, String, Option<String>),
     Tuple(Vec<ExprType>),               // (Int, Bool), (Int, Bool, String), etc.
     Struct(BTreeMap<String, ExprType>), // {field1: Type1, field2: Type2}
+    DatabaseSchema(String),             // #{ "CREATE TABLE..." } - stores the schema SQL string
 }
 
 /// Represents a sum type (or a simple type if there is only one type in it)
@@ -130,26 +132,8 @@ impl SimpleType {
         }
     }
 
-    pub fn is_object(&self) -> bool {
-        matches!(self, SimpleType::Object(_))
-    }
-
     pub fn is_custom(&self) -> bool {
         matches!(self, SimpleType::Custom(_, _, _))
-    }
-
-    pub fn get_inner_object_type(&self) -> Option<&String> {
-        match self {
-            SimpleType::Object(typ) => Some(typ),
-            _ => None,
-        }
-    }
-
-    pub fn to_inner_object_type(self) -> Option<String> {
-        match self {
-            SimpleType::Object(typ) => Some(typ),
-            _ => None,
-        }
     }
 
     pub fn get_inner_custom_type(&self) -> Option<(&String, &String, &Option<String>)> {
@@ -216,6 +200,24 @@ impl SimpleType {
         }
     }
 
+    pub fn is_database_schema(&self) -> bool {
+        matches!(self, SimpleType::DatabaseSchema(_))
+    }
+
+    pub fn get_database_schema(&self) -> Option<&String> {
+        match self {
+            SimpleType::DatabaseSchema(schema) => Some(schema),
+            _ => None,
+        }
+    }
+
+    /// Check if two database schemas are compatible (one is subtype of the other).
+    /// For now, this is simple string equality. This function exists to allow
+    /// for future improvements (e.g., semantic schema comparison).
+    pub fn database_schema_is_subtype(schema1: &str, schema2: &str) -> bool {
+        schema1 == schema2
+    }
+
     pub fn is_concrete(&self) -> bool {
         match self {
             SimpleType::List(inner) => inner.is_concrete(),
@@ -269,6 +271,14 @@ impl SimpleType {
             (SimpleType::Custom(mod1, root1, Some(_)), SimpleType::Custom(mod2, root2, None)) => {
                 mod1 == mod2 && root1 == root2
             }
+            // Database schema types - use helper function for comparison
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            // For all other combinations with DatabaseSchema, it's not a subtype
+            // (Never is already handled at the top)
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
             // For all other combination, it's not
             _ => false,
         }
@@ -328,6 +338,12 @@ impl SimpleType {
                             .unwrap_or(false)
                     })
             }
+            // Database schema - use helper function (conversion allowed if subtype)
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2)
+            }
+            (SimpleType::DatabaseSchema(_), _) => false,
+            (_, SimpleType::DatabaseSchema(_)) => false,
             // Anything can convert to String
             (_, SimpleType::String) => true,
             // Anything else: no conversion
@@ -344,9 +360,6 @@ impl SimpleType {
             | (SimpleType::LinExpr, SimpleType::LinExpr)
             | (SimpleType::Constraint, SimpleType::Constraint)
             | (SimpleType::String, SimpleType::String) => true,
-
-            // Same object type overlaps
-            (SimpleType::Object(s_name), SimpleType::Object(o_name)) => s_name == o_name,
 
             // Custom types overlap if:
             // - Same module, root, and variant (exact match)
@@ -400,6 +413,15 @@ impl SimpleType {
             // Structs don't overlap with non-structs
             (SimpleType::Struct(_), _) | (_, SimpleType::Struct(_)) => false,
 
+            // Database schema types overlap if one is subtype of the other
+            (SimpleType::DatabaseSchema(s1), SimpleType::DatabaseSchema(s2)) => {
+                Self::database_schema_is_subtype(s1, s2) || Self::database_schema_is_subtype(s2, s1)
+            }
+
+            // Database schema doesn't overlap with non-database-schema types
+            // (except Never, which is already handled)
+            (SimpleType::DatabaseSchema(_), _) | (_, SimpleType::DatabaseSchema(_)) => false,
+
             // Different primitive types don't overlap
             (SimpleType::Int, _)
             | (_, SimpleType::Int)
@@ -411,8 +433,6 @@ impl SimpleType {
             | (_, SimpleType::LinExpr)
             | (SimpleType::Constraint, _)
             | (_, SimpleType::Constraint)
-            | (SimpleType::Object(_), _)
-            | (_, SimpleType::Object(_))
             | (SimpleType::Custom(_, _, _), _)
             | (_, SimpleType::Custom(_, _, _))
             | (SimpleType::String, _)
@@ -458,7 +478,6 @@ impl std::fmt::Display for SimpleType {
             SimpleType::String => write!(f, "String"),
             SimpleType::EmptyList => write!(f, "[]"),
             SimpleType::List(sub_type) => write!(f, "[{}]", sub_type),
-            SimpleType::Object(typ) => write!(f, "{}", typ),
             SimpleType::Custom(_, root, None) => write!(f, "{}", root),
             SimpleType::Custom(_, root, Some(variant)) => write!(f, "{}::{}", root, variant),
             SimpleType::Tuple(elements) => {
@@ -471,6 +490,25 @@ impl std::fmt::Display for SimpleType {
                     .map(|(k, v)| format!("{}: {}", k, v))
                     .collect();
                 write!(f, "{{{}}}", field_strs.join(", "))
+            }
+            SimpleType::DatabaseSchema(schema) => {
+                // Truncate for display if too long
+                let str_literal = if schema.len() > 50 {
+                    format!("{}...", &schema[..47])
+                } else {
+                    schema.clone()
+                };
+                let mut closing_delim = String::from("\"");
+                while str_literal.contains(&closing_delim) {
+                    closing_delim.push('~');
+                }
+                write!(
+                    f,
+                    "#{{{}{}{}}}",
+                    closing_delim.chars().rev().collect::<String>(),
+                    str_literal,
+                    closing_delim
+                )
             }
         }
     }
@@ -489,10 +527,11 @@ impl From<SimpleType> for ExprType {
 impl SimpleType {
     /// Convert an AST SimpleTypeName to a SimpleType, resolving named types
     /// using resolve_path for consistent symbol table lookup.
-    pub fn from_ast(
+    pub fn from_ast<D: DatabaseDriver>(
         value: crate::ast::SimpleTypeName,
         current_module: &str,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
+        mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, TypeResolutionError> {
         use crate::ast::SimpleTypeName;
         match value {
@@ -512,26 +551,45 @@ impl SimpleType {
                 inner,
                 current_module,
                 global_env,
+                warnings.as_deref_mut(),
             )?)),
             SimpleTypeName::Tuple(elements) => {
-                let converted: Vec<ExprType> = elements
-                    .into_iter()
-                    .map(|e| ExprType::from_ast(e, current_module, global_env))
-                    .collect::<Result<_, _>>()?;
+                let mut converted = Vec::with_capacity(elements.len());
+                for e in elements {
+                    let resolved =
+                        ExprType::from_ast(e, current_module, global_env, warnings.as_deref_mut())?;
+                    converted.push(resolved);
+                }
                 Ok(SimpleType::Tuple(converted))
             }
             SimpleTypeName::Struct(fields) => {
-                let converted: BTreeMap<String, ExprType> = fields
-                    .into_iter()
-                    .map(|(name, typ)| {
-                        Ok((
-                            name.node,
-                            ExprType::from_ast(typ, current_module, global_env)?,
-                        ))
-                    })
-                    .collect::<Result<_, SemError>>()?;
+                let mut converted = BTreeMap::new();
+                for (name, typ) in fields {
+                    if let Some(ref mut w) = warnings
+                        && let Some(suggestion) =
+                            super::string_case::generate_suggestion_for_naming_convention(
+                                &name.node,
+                                super::string_case::NamingConvention::SnakeCase,
+                            )
+                    {
+                        w.push(SemWarning::FieldNamingConvention {
+                            module: current_module.to_string(),
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                            suggestion,
+                        });
+                    }
+                    let resolved = ExprType::from_ast(
+                        typ,
+                        current_module,
+                        global_env,
+                        warnings.as_deref_mut(),
+                    )?;
+                    converted.insert(name.node, resolved);
+                }
                 Ok(SimpleType::Struct(converted))
             }
+            SimpleTypeName::DatabaseSchema(schema) => Ok(SimpleType::DatabaseSchema(schema)),
         }
     }
 }
@@ -539,19 +597,24 @@ impl SimpleType {
 impl ExprType {
     /// Convert an AST TypeName to an ExprType, resolving named types
     /// using resolve_path for consistent symbol table lookup.
-    pub fn from_ast(
+    pub fn from_ast<D: DatabaseDriver>(
         value: crate::ast::Spanned<crate::ast::TypeName>,
         current_module: &str,
-        global_env: &GlobalEnv,
+        global_env: &GlobalEnv<D>,
+        mut warnings: Option<&mut Vec<SemWarning>>,
     ) -> Result<Self, SemError> {
         if value.node.types.is_empty() {
             panic!("It should not be possible to form 0-length typenames");
         }
         let mut flattened = Vec::with_capacity(value.node.types.len());
         for typ in value.node.types {
-            let inner_typ =
-                SimpleType::from_ast(typ.node.inner.clone(), current_module, global_env)
-                    .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
+            let inner_typ = SimpleType::from_ast(
+                typ.node.inner.clone(),
+                current_module,
+                global_env,
+                warnings.as_deref_mut(),
+            )
+            .map_err(|e| e.into_sem_error(current_module, typ.span.clone()))?;
             let spanned_inner = crate::ast::Spanned::new(inner_typ, typ.span);
             match typ.node.maybe_count {
                 0 => flattened.push(spanned_inner),
@@ -661,7 +724,7 @@ impl ExprType {
 
     fn assert_invariant(&self) {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always have at least one variant"
         );
         if let Some((variant1, variant2)) = Self::check_subtypes(&self.variants) {
@@ -725,7 +788,7 @@ impl ExprType {
 
     pub fn is_simple(&self) -> bool {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always carry at least one type"
         );
         self.variants.len() == 1
@@ -763,7 +826,7 @@ impl ExprType {
 
     pub fn is_concrete(&self) -> bool {
         assert!(
-            self.variants.len() >= 1,
+            !self.variants.is_empty(),
             "ExprType should always carry at least one type"
         );
         if self.variants.len() != 1 {
@@ -803,26 +866,6 @@ impl ExprType {
         self.as_simple().map(|x| x.is_none()).unwrap_or(false)
     }
 
-    pub fn is_sum_of_objects(&self) -> bool {
-        self.variants
-            .iter()
-            .all(|x| matches!(x, SimpleType::Object(_)))
-    }
-
-    pub fn get_inner_object_type(&self) -> Option<&String> {
-        self.as_simple()
-            .map(|x| x.get_inner_object_type())
-            .flatten()
-    }
-
-    pub fn to_inner_object_type(self) -> Option<String> {
-        self.to_simple().map(|x| x.to_inner_object_type()).flatten()
-    }
-
-    pub fn is_object(&self) -> bool {
-        self.as_simple().map(|x| x.is_object()).unwrap_or(false)
-    }
-
     pub fn contains(&self, typ: &SimpleType) -> bool {
         self.variants.iter().any(|x| x == typ)
     }
@@ -845,6 +888,12 @@ impl ExprType {
 
     pub fn is_constraint(&self) -> bool {
         self.as_simple().map(|x| x.is_constraint()).unwrap_or(false)
+    }
+
+    pub fn is_database_schema(&self) -> bool {
+        self.as_simple()
+            .map(|x| x.is_database_schema())
+            .unwrap_or(false)
     }
 
     pub fn is_list_of_constraints(&self) -> bool {

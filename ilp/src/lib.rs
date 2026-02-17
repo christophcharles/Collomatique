@@ -163,7 +163,7 @@ pub mod solvers;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 pub use linexpr::{Constraint, LinExpr};
@@ -219,21 +219,18 @@ pub fn f64_equals(v1: f64, v2: f64) -> bool {
 /// See [mat_repr] for more information.
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
-/// Trait for displayable, ordonnable, comparable, clonable, sendable data
+/// Trait for displayable, comparable, clonable, sendable data
 ///
 /// The code is using generics to allow for specialized types. So it is for instance
 /// possible to use enums for variable names or constraint descriptions.
 ///
 /// We use this trait to check that indeed some basic properties are garanteed.
 pub trait UsableData:
-    std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync
+    std::fmt::Debug + std::hash::Hash + PartialEq + Eq + Clone + Send + Sync
 {
 }
 
-impl<T: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync> UsableData
-    for T
-{
-}
+impl<T: std::fmt::Debug + std::hash::Hash + PartialEq + Eq + Clone + Send + Sync> UsableData for T {}
 
 /// Complete description of the possible range of values for a variable.
 ///
@@ -244,7 +241,7 @@ impl<T: std::fmt::Debug + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Syn
 /// always bigger than 0 and less than 1).
 ///
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Variable {
     integer_var: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,
@@ -516,22 +513,20 @@ impl Variable {
             return false;
         }
 
-        if self.is_integer() {
-            if !f64_equals(value, value.round()) {
-                return false;
-            }
+        if self.is_integer() && !f64_equals(value, value.round()) {
+            return false;
         }
 
-        if let Some(m) = self.max {
-            if value > m.0 {
-                return false;
-            }
+        if let Some(m) = self.max
+            && value > m.0
+        {
+            return false;
         }
 
-        if let Some(m) = self.min {
-            if value < m.0 {
-                return false;
-            }
+        if let Some(m) = self.min
+            && value < m.0
+        {
+            return false;
         }
 
         true
@@ -574,7 +569,7 @@ impl Variable {
 /// We represent this with 8 boolean variables.
 /// The variable `xij` is 1 if X is written in the cell on the line i and column j, 0 otherwise.
 /// The same pattern is used for `yij`.
-
+///
 /// We have three broad conditions :
 /// - We should not put an X and a Y in the same cell. But a cell can possibly be empty.
 ///   This means that for all i and j, we have `xij + yij <= 1`.
@@ -643,7 +638,7 @@ impl Variable {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
-    variables: BTreeMap<V, Variable>,
+    variables: HashMap<V, Variable>,
     objective: Objective<V>,
     _phantom_data: std::marker::PhantomData<P>,
 }
@@ -652,7 +647,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Default for ProblemBuilder
     fn default() -> Self {
         ProblemBuilder {
             constraints: Vec::default(),
-            variables: BTreeMap::default(),
+            variables: HashMap::default(),
             objective: Objective::default(),
             _phantom_data: std::marker::PhantomData,
         }
@@ -985,12 +980,9 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// Returns None if no problem is detected, otherwise returns the undeclared variable.
     fn check_variables_in_expr(&self, expr: &LinExpr<V>) -> Option<V> {
-        for var in expr.variables() {
-            if !self.variables.contains_key(&var) {
-                return Some(var);
-            }
-        }
-        None
+        expr.variable_refs()
+            .find(|var| !self.variables.contains_key(*var))
+            .cloned()
     }
 }
 
@@ -999,10 +991,10 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
 /// This data structure represents an ILP problem.
 /// You cannot build it directly. It is built through the builder
 /// pattern, using [ProblemBuilder].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
-    variables: BTreeMap<V, Variable>,
+    variables: HashMap<V, Variable>,
     objective: Objective<V>,
     repr: P,
 }
@@ -1011,14 +1003,14 @@ impl<V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: Pr
     std::fmt::Display for Problem<V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "variables:\n")?;
+        writeln!(f, "variables:")?;
         for (i, (v, desc)) in self.variables.iter().enumerate() {
             write!(f, "{}) {}: {}", i, v, desc)?;
         }
 
-        write!(f, "constraints:\n")?;
+        writeln!(f, "constraints:")?;
         for (i, (c, desc)) in self.constraints.iter().enumerate() {
-            write!(f, "{}) {} ({})\n", i, c, desc)?;
+            writeln!(f, "{}) {} ({})", i, c, desc)?;
         }
 
         write!(f, "objective: {}", self.objective)?;
@@ -1071,7 +1063,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     ///
     /// The result is a map associating to each variable name
     /// a description of type [Variable].
-    pub fn get_variables(&self) -> &BTreeMap<V, Variable> {
+    pub fn get_variables(&self) -> &HashMap<V, Variable> {
         &self.variables
     }
 
@@ -1152,18 +1144,19 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 /// - some variables (for the problem) might not have an associated value in the configuration
 /// - some variables in the configuration are not part of the problem
 /// - some variables, though part of the problem, do not conform to their type.
+///
 /// This report stores these problematic variables either as a result from a call
 /// to [Problem::check_config_data_variables] or as an error when calling
 /// [Problem::build_config].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigDataVarCheck<V: UsableData> {
     /// Set of missing variables in the configuration data (with respect to the given problem)
-    pub missing_variables: BTreeSet<V>,
+    pub missing_variables: HashSet<V>,
     /// Set of excess variables in the configuration data (variables not present in the given problem)
-    pub excess_variables: BTreeSet<V>,
+    pub excess_variables: HashSet<V>,
     /// Set of non-conforming variables in the configuration data
     /// (variables with values not conforming to their type with respect to the given problem)
-    pub non_conforming_variables: BTreeSet<V>,
+    pub non_conforming_variables: HashSet<V>,
 }
 
 impl<V: UsableData> ConfigDataVarCheck<V> {
@@ -1184,14 +1177,15 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// But it might not correspond to a given [Problem] for 2 major reasons:
     /// - some variables (for the problem) might not have an associated value in the configuration
     /// - some variables in the configuration are not part of the problem
+    ///
     /// This functions checks for this and returns a report (possibly empty - see [ConfigDataVarCheck::is_empty])
     /// in a structure of type [ConfigDataVarCheck].
     pub fn check_config_data_variables(
         &self,
         config_data: &ConfigData<V>,
     ) -> ConfigDataVarCheck<V> {
-        let config_vars: BTreeSet<V> = config_data.values.keys().cloned().collect();
-        let problem_vars: BTreeSet<V> = self.variables.keys().cloned().collect();
+        let config_vars: HashSet<V> = config_data.values.keys().cloned().collect();
+        let problem_vars: HashSet<V> = self.variables.keys().cloned().collect();
 
         let vars_in_common = config_vars.intersection(&problem_vars);
 
@@ -1237,6 +1231,8 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 
     /// Builds a [Config] for the problem from a [ConfigData] without checking first
     /// if the variables match.
+    ///
+    /// # Safety
     ///
     /// This is obviously unsafe. Unless you are sure that the [ConfigData] does indeed
     /// have the right variables, you should first check with [Problem::check_config_data_variables]
@@ -1288,19 +1284,20 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 ///   A configuration is feasable if it satisfies all the hard
 ///   constraints of a problem. This of course depends on the problem
 ///   and assumes *some* compatibility between the problem and the configuration.
+///
 /// These two points imply that [ConfigData] can act as a builder type for [Config].
 /// You build a configuration from scratch and once all the variables are correctly set,
 /// you can convert it to a [Config] for a specific [Problem] using [Problem::build_config].
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigData<V: UsableData> {
-    values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    values: HashMap<V, ordered_float::OrderedFloat<f64>>,
 }
 
 impl<V: UsableData> Default for ConfigData<V> {
     fn default() -> Self {
         ConfigData {
-            values: BTreeMap::default(),
+            values: HashMap::default(),
         }
     }
 }
@@ -1310,7 +1307,7 @@ impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>> Fr
 {
     fn from(value: T) -> Self {
         ConfigData {
-            values: BTreeMap::from_iter(
+            values: HashMap::from_iter(
                 value
                     .into_iter()
                     .map(|(x, y)| (x.into(), ordered_float::OrderedFloat(y.into()))),
@@ -1424,7 +1421,7 @@ impl<V: UsableData> ConfigData<V> {
     /// This returns a map associating each name to a value.
     ///
     /// If you only want the variable names, you should use [ConfigData::get_variables].
-    pub fn get_values(&self) -> BTreeMap<V, f64> {
+    pub fn get_values(&self) -> HashMap<V, f64> {
         self.values
             .iter()
             .map(|(x, y)| (x.clone(), y.into_inner()))
@@ -1452,7 +1449,7 @@ impl<V: UsableData> ConfigData<V> {
     /// ```
     /// # use collomatique_ilp::ConfigData;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1465,7 +1462,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::C, 0.5);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1501,7 +1498,7 @@ impl<V: UsableData> ConfigData<V> {
     /// ```
     /// # use collomatique_ilp::ConfigData;
     /// // We write some expression using variables from type V1
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1514,7 +1511,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::C, 0.5);
     ///
     /// // We do something more complex that has more variables
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1538,7 +1535,7 @@ impl<V: UsableData> ConfigData<V> {
     /// assert_eq!(config_data_transmute, expected_result);
     /// ```
     pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> ConfigData<U> {
-        let mut new_values = BTreeMap::new();
+        let mut new_values = HashMap::new();
 
         for (var, value) in self.values {
             new_values.insert(f(var), value);
@@ -1557,7 +1554,7 @@ impl<V: UsableData> ConfigData<V> {
     /// For instance, this works without failure:
     /// ```
     /// # use collomatique_ilp::ConfigData;
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1569,7 +1566,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::B, 0.0)
     ///     .set(V1::C, 0.5);
     ///
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V2 {
     ///     A,
     ///     B,
@@ -1594,7 +1591,7 @@ impl<V: UsableData> ConfigData<V> {
     /// But this fails because of the C variable:
     /// ```
     /// # use collomatique_ilp::ConfigData;
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V1 {
     ///     A,
     ///     B,
@@ -1606,7 +1603,7 @@ impl<V: UsableData> ConfigData<V> {
     ///     .set(V1::B, 0.0)
     ///     .set(V1::C, 0.5);
     ///
-    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     /// enum V3 {
     ///     A,
     ///     B,
@@ -1627,7 +1624,7 @@ impl<V: UsableData> ConfigData<V> {
         &self,
         mut f: F,
     ) -> Option<ConfigData<U>> {
-        let mut new_values = BTreeMap::new();
+        let mut new_values = HashMap::new();
 
         for (var, value) in &self.values {
             new_values.insert(f(var)?, *value);
@@ -1658,10 +1655,10 @@ impl<V: UsableData> ConfigData<V> {
 ///
 /// A [Config], because it is linked to a problem, keeps a reference to its
 /// problem which explains the needed lifetime `'a`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     problem: &'a Problem<V, C, P>,
-    values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    values: HashMap<V, ordered_float::OrderedFloat<f64>>,
     repr: P::Config<'a>,
 }
 
@@ -1686,7 +1683,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     /// This returns a map associating each name to a value.
     ///
     /// If you only want the variable names, you should use [Config::get_variables].
-    pub fn get_values(&self) -> BTreeMap<V, f64> {
+    pub fn get_values(&self) -> HashMap<V, f64> {
         self.values
             .iter()
             .map(|(x, y)| (x.clone(), y.into_inner()))
@@ -1706,7 +1703,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     /// Though it has less of a purpose in this case, this is also
     /// defined for non-feasable configuration.
     pub fn eval(&self) -> f64 {
-        let value_map = self
+        let value_map: HashMap<V, f64> = self
             .values
             .iter()
             .map(|(x, y)| (x.clone(), y.into_inner()))
@@ -1724,15 +1721,15 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             let desc = &self.problem.variables[var];
             let v = value.into_inner();
 
-            if let Some(m) = desc.get_min() {
-                if v < m {
-                    return false;
-                }
+            if let Some(m) = desc.get_min()
+                && v < m
+            {
+                return false;
             }
-            if let Some(m) = desc.get_max() {
-                if v > m {
-                    return false;
-                }
+            if let Some(m) = desc.get_max()
+                && v > m
+            {
+                return false;
             }
         }
 
@@ -1769,18 +1766,16 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
 
     /// Turns a configuration into a feasable configuration
     ///
+    /// # Safety
+    ///
     /// This is the unchecked (and therefore unsafe) version of [Config::into_feasable].
     pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, C, P> {
         FeasableConfig(self)
     }
 }
 
-impl<
-        'a,
-        V: UsableData + std::fmt::Display,
-        C: UsableData + std::fmt::Display,
-        P: ProblemRepr<V>,
-    > std::fmt::Display for Config<'a, V, C, P>
+impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: ProblemRepr<V>>
+    std::fmt::Display for Config<'a, V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, (v, desc)) in self.values.iter().enumerate() {
@@ -1798,7 +1793,7 @@ impl<
 ///
 /// This type represents a configuration that is known to be feasable.
 /// It is constructed by [Config::into_feasable].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeasableConfig<'a, V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>>(
     Config<'a, V, C, P>,
 );
@@ -1828,12 +1823,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref
     }
 }
 
-impl<
-        'a,
-        V: UsableData + std::fmt::Display,
-        C: UsableData + std::fmt::Display,
-        P: ProblemRepr<V>,
-    > std::fmt::Display for FeasableConfig<'a, V, C, P>
+impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: ProblemRepr<V>>
+    std::fmt::Display for FeasableConfig<'a, V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner().fmt(f)

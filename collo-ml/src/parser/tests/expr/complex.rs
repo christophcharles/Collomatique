@@ -13,10 +13,10 @@ fn complex_realistic_linexpr() {
         "$V1(x) + 2 * $V2(y) - $V3(z)",
         "10 + 2 * $V1(x) - 3 * $V2(y) + 5",
         // With cardinality
-        "|@[Week]| * $V(s)",
-        "(|@[Student]|) * $Var(x)",
+        "|weeks| * $V(s)",
+        "(|students|) * $Var(x)",
         // With aggregations
-        "sum s in @[Student] { s.weight * $Assigned(s) }",
+        "sum s in students { s.weight * $Assigned(s) }",
         // With conditionals
         "if s.priority > 5 { 10 * $V(s) } else { $V(s) }",
         // With function calls
@@ -32,19 +32,15 @@ fn complex_realistic_linexpr() {
 fn complex_realistic_constraints() {
     let cases = vec![
         // Forall with sum constraint
-        "forall w in @[Week] { sum s in @[Student] { $Assigned(s, w) } <== 10 }",
-
+        "forall w in weeks { sum s in students { $Assigned(s, w) } <== 10 }",
         // Conjunction of constraints
         "$V1(s) >== 0 and $V1(s) <== s.max_value",
-
         // Nested forall
-        "forall s in @[Student] { forall w in @[Week] { $InWeek(s, w) <== 1 } }",
-
+        "forall s in students { forall w in weeks { $InWeek(s, w) <== 1 } }",
         // Conditional constraint
-        "if r.available { sum s in @[Student] { $InRoom(s, r) } <== r.capacity } else { sum s in @[Student] { $InRoom(s, r) } === 0 }",
-
+        "if r.available { sum s in students { $InRoom(s, r) } <== r.capacity } else { sum s in students { $InRoom(s, r) } === 0 }",
         // Complex nested structure
-        "forall student in @[Student] { forall week in @[Week] { (sum slot in subject.slots { $StudentInSlot(student, slot, week) }) <== 1 and $HasSubject(subject, student, week) === 1 } }",
+        "forall student in students { forall week in weeks { (sum slot in subject.slots { $StudentInSlot(student, slot, week) }) <== 1 and $HasSubject(subject, student, week) === 1 } }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -58,20 +54,16 @@ fn complex_deeply_nested_expressions() {
         // Nested parentheses
         "((($Var(x))))",
         "(($V1(x) <== 10) and ($V2(y) >== 0))",
-
         // Nested aggregations
-        "sum x in @[X] { sum y in @[Y] { $Var(x, y) } }",
-        "forall x in @[X] { forall y in @[Y] { $V(x, y) <== 1 } }",
-
+        "sum x in x_list { sum y in y_list { $Var(x, y) } }",
+        "forall x in x_list { forall y in y_list { $V(x, y) <== 1 } }",
         // Nested collections
         "((a + b) - c) + d",
-        "@[Student] - (excluded - suspended)",
-
+        "students - (excluded - suspended)",
         // Nested if expressions
         "if x { if y { 1 } else { 2 } } else { 3 }",
-
         // Complex combination
-        "forall s in (@[Student] - excluded) where s.active { sum w in @[Week] where w.number > 10 { if s.priority > 5 { 2 * $V(s, w) } else { $V(s, w) } } <== s.max_load }",
+        "forall s in (students - excluded) where s.active { sum w in weeks where w.number > 10 { if s.priority > 5 { 2 * $V(s, w) } else { $V(s, w) } } <== s.max_load }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -88,7 +80,7 @@ fn complex_mixed_operators() {
         "not (x > 0 and y > 0)",
         // Collection, membership, logical
         "a in set1 and not (b in set2)",
-        "student in @[Student] and student.age > 18",
+        "student in students and student.age > 18",
         // Constraint and logical
         "$V1(x) === 0 and $V2(y) >== 1",
         "($V(x) === 1) and ($V(y) === 1)",
@@ -105,18 +97,18 @@ fn complex_function_and_variable_calls() {
         // Function calls with complex arguments
         "compute($V1(x) + $V2(y))",
         "check($V(x) <== 10)",
-        "process(@[Student] + @[Teacher])",
-        "func([x for x in @[S]])",
+        "process(students + teachers)",
+        "func([x for x in s_list])",
         "nested(outer(inner(x)))",
         // Variable calls with complex arguments
         "$StudentInSlot(student, slot, week.number)",
-        "$Assigned(student, |@[Week]|)",
+        "$Assigned(student, |weeks|)",
         "$Value(if x { 1 } else { 0 }, y)",
         "$V(x + 5, y * 2)",
         // Mixed
         "enforce_rule1(x) and enforce_rule2(y)",
         "$V(x) <== 10 and apply_constraint(x, y)",
-        "forall x in @[X] { check_rule(x) and $V(x) >== 0 }",
+        "forall x in x_list { check_rule(x) and $V(x) >== 0 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -128,10 +120,9 @@ fn complex_function_and_variable_calls() {
 fn complex_with_all_features() {
     let cases = vec![
         // Kitchen sink expression
-        "if flag { forall x in (@[X] - excluded) where x > 0 { sum y in @[Y] { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |@[Y]| } } else { sum x in @[X] { $V2(x) } >= 1 }",
-
+        "if flag { forall x in (x_list - excluded) where x > 0 { sum y in y_list { (2 * $V1(x, y) + compute(x)) as LinExpr } <== |y_list| } } else { sum x in x_list { $V2(x) } >= 1 }",
         // Another complex one
-        "forall s in @[Student] + @[Teacher] where s.active { (if s.kind == 1 { 2 } else { 1 }) * (sum w in @[Week] { $Assigned(s, w) }) === |@[Week]| and s.age >= 18 }",
+        "forall s in students + teachers where s.active { (if s.kind == 1 { 2 } else { 1 }) * (sum w in weeks { $Assigned(s, w) }) === |weeks| and s.age >= 18 }",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::expr_complete, case);
@@ -171,10 +162,10 @@ fn complex_with_parentheses() {
         // Nested parentheses
         "(((a + b) * c))",
         // With aggregations
-        "(sum x in @[X] { $V(x) })",
-        "(forall x in @[X] { $V(x) >= 0 })",
+        "(sum x in x_list { $V(x) })",
+        "(forall x in x_list { $V(x) >= 0 })",
         // With collections
-        "(@[Subject] - pairing)",
+        "(subjects - pairing)",
         "(group1 + group2)",
     ];
     for case in cases {

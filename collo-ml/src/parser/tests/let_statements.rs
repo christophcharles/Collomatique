@@ -186,7 +186,7 @@ fn let_statement_with_custom_return_types() {
 fn let_statement_with_list_return_types() {
     let cases = vec![
         "let f() -> [Int] = [1, 2, 3];",
-        "let g() -> [Student] = @[Student];",
+        "let g() -> [Student] = students;",
         "let h() -> [LinExpr] = [];",
         "let i() -> [[Int]] = [[1, 2], [3, 4]];",
         "let j() -> [[[Bool]]] = [];",
@@ -514,19 +514,6 @@ fn let_statement_with_list_comprehensions() {
 }
 
 #[test]
-fn let_statement_with_global_collections() {
-    let cases = vec![
-        "let f() -> [Student] = @[Student];",
-        "let g() -> [Week] = @[Week];",
-        "let h() -> [Int] = @[Int];",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
-        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
-    }
-}
-
-#[test]
 fn let_statement_with_collection_operations() {
     let cases = vec![
         "let f() -> [Int] = [1, 2] + [3, 4];",
@@ -543,7 +530,7 @@ fn let_statement_with_collection_operations() {
 fn let_statement_with_cardinality() {
     let cases = vec![
         "let f() -> Int = |[1, 2, 3]|;",
-        "let g() -> Int = |@[Student]|;",
+        "let g(students: [Student]) -> Int = |students|;",
         "let h(students: [Student]) -> Int = |students|;",
     ];
     for case in cases {
@@ -560,7 +547,7 @@ fn let_statement_with_cardinality() {
 fn let_statement_with_sum_expressions() {
     let cases = vec![
         "let f() -> LinExpr = sum x in [1, 2, 3] { x };",
-        "let g() -> LinExpr = sum s in @[Student] { $V(s) };",
+        "let g(students: [Student]) -> LinExpr = sum s in students { $V(s) };",
         "let h() -> LinExpr = sum x in [1, 2, 3] where x > 1 { x * 2 };",
         "let i(students: [Student]) -> LinExpr = sum s in students { $Assigned(s) };",
     ];
@@ -574,8 +561,8 @@ fn let_statement_with_sum_expressions() {
 fn let_statement_with_forall_expressions() {
     let cases = vec![
         "let f() -> Constraint = forall x in [1, 2, 3] { $V(x) >== 0 };",
-        "let g() -> Constraint = forall s in @[Student] { $Assigned(s) === 1 };",
-        "let h() -> Constraint = forall x in @[Int] where x > 0 { $V(x) <== 10 };",
+        "let g(students: [Student]) -> Constraint = forall s in students { $Assigned(s) === 1 };",
+        "let h(numbers: [Int]) -> Constraint = forall x in numbers where x > 0 { $V(x) <== 10 };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -626,9 +613,9 @@ fn let_statement_with_explicit_type_casts() {
 fn let_statement_realistic_linexpr_examples() {
     let cases = vec![
         // Sum with cardinality multiplier
-        "let f(s: Student) -> LinExpr = |@[Week]| * $V(s);",
+        "let f(s: Student, weeks: [Week]) -> LinExpr = |weeks| * $V(s);",
         // Weighted sum
-        "let g() -> LinExpr = sum s in @[Student] { s.weight * $Assigned(s) };",
+        "let g(students: [Student]) -> LinExpr = sum s in students { s.weight * $Assigned(s) };",
         // Conditional expression
         "let h(s: Student) -> LinExpr = if s.priority > 5 { 10 * $V(s) } else { $V(s) };",
         // Complex arithmetic with function calls
@@ -644,13 +631,13 @@ fn let_statement_realistic_linexpr_examples() {
 fn let_statement_realistic_constraint_examples() {
     let cases = vec![
         // Forall with sum constraint
-        "let f() -> Constraint = forall w in @[Week] { sum s in @[Student] { $Assigned(s, w) } <== 10 };",
+        "let f(weeks: [Week], students: [Student]) -> Constraint = forall w in weeks { sum s in students { $Assigned(s, w) } <== 10 };",
         // Conjunction of constraints
         "let g(s: Student) -> Constraint = $V1(s) >== 0 and $V1(s) <== s.max_value;",
         // Nested forall
-        "let h() -> Constraint = forall s in @[Student] { forall w in @[Week] { $InWeek(s, w) <== 1 } };",
+        "let h(students: [Student], weeks: [Week]) -> Constraint = forall s in students { forall w in weeks { $InWeek(s, w) <== 1 } };",
         // Conditional constraint
-        "let i(r: Room) -> Constraint = if r.available { sum s in @[Student] { $InRoom(s, r) } <== r.capacity } else { sum s in @[Student] { $InRoom(s, r) } === 0 };",
+        "let i(r: Room, students: [Student]) -> Constraint = if r.available { sum s in students { $InRoom(s, r) } <== r.capacity } else { sum s in students { $InRoom(s, r) } === 0 };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);

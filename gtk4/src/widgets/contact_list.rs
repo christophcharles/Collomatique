@@ -1,8 +1,8 @@
 use gtk::prelude::{ButtonExt, OrientableExt, WidgetExt};
+use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
-use relm4::FactorySender;
-use relm4::{gtk, Component};
+use relm4::{Component, gtk};
 use relm4::{ComponentParts, ComponentSender};
 
 pub trait Identifier:
@@ -259,9 +259,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let model = Self { data };
-
-        model
+        Self { data }
     }
 
     fn init_widgets(
