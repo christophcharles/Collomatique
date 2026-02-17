@@ -260,3 +260,8 @@ LIMIT 1;
 
 pub let time_resolution(db: Db) -> Duration =
     time_resolution_internal(db) ?? Duration(60);
+
+query week_count_internal(db: Db) -> ?Int =
+    "SELECT COUNT(*) AS week_count FROM period_weeks";
+
+pub let last_global_week(db: Db) -> GlobalWeek = GlobalWeek((week_count_internal(db) cast! Int) - 1);

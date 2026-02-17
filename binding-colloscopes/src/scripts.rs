@@ -81,6 +81,10 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique_one_interrogation_at_once.collo-ml"),
     ),
     (
+        "collomatique_periodicity_amount_in_year",
+        include_str!("scripts/collomatique_periodicity_amount_in_year.collo-ml"),
+    ),
+    (
         "collomatique_periodicity_helpers",
         include_str!("scripts/collomatique_periodicity_helpers.collo-ml"),
     ),

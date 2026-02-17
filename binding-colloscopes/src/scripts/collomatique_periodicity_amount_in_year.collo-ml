@@ -1,0 +1,28 @@
+import "collomatique_db" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as queries;
+import "collomatique_periodicity_helpers" as helpers;
+
+type AmountInYearData = {
+    subject_id: SubjectId,
+    student_id: StudentId,
+    count_min: ?Int,
+    count_max: ?Int,
+};
+
+query subjects_students_amount_in_year(db: Db) -> [AmountInYearData] = "
+SELECT DISTINCT sip.subject_id, a.student_id,
+       sip.aiy_count_min AS count_min, sip.aiy_count_max AS count_max
+FROM subject_interrogation_params sip
+JOIN assignments a ON a.subject_id = sip.subject_id
+WHERE sip.aiy_count_min IS NOT NULL
+";
+
+let enforce_amount_in_year(db: Db, data: AmountInYearData) -> Constraint =
+    helpers::enforce_min_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), data.count_min cast! Int) and
+    helpers::enforce_max_interrogation_count(db, data.student_id, data.subject_id, GlobalWeek(0), queries::last_global_week(db), data.count_max cast! Int);
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in subjects_students_amount_in_year(db) {
+        enforce_amount_in_year(db, data)
+    };
