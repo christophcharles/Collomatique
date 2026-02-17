@@ -103,12 +103,8 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 .await?
             }
             Expr::Cardinality(list_expr) => {
-                Box::pin(Arc::clone(&self).eval_cardinality(
-                    eval_history,
-                    Arc::clone(list_expr),
-                    keep_track_of_origin,
-                ))
-                .await?
+                Box::pin(Arc::clone(&self).eval_cardinality(eval_history, Arc::clone(list_expr)))
+                    .await?
             }
             Expr::ExplicitType {
                 expr: inner,
@@ -170,7 +166,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(start),
                     Arc::clone(end),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -184,21 +179,14 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 .await?
             }
             Expr::VarCall { module, name, args } => {
-                Box::pin(Arc::clone(&self).eval_var_call(
-                    eval_history,
-                    module.as_ref(),
-                    name,
-                    args,
-                    keep_track_of_origin,
-                ))
-                .await?
+                Box::pin(Arc::clone(&self).eval_var_call(eval_history, module.as_ref(), name, args))
+                    .await?
             }
             Expr::In { item, collection } => {
                 Box::pin(Arc::clone(&self).eval_in(
                     eval_history,
                     Arc::clone(item),
                     Arc::clone(collection),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -216,17 +204,11 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
             Expr::Not(not_expr) => {
-                Box::pin(Arc::clone(&self).eval_not(
-                    eval_history,
-                    Arc::clone(not_expr),
-                    keep_track_of_origin,
-                ))
-                .await?
+                Box::pin(Arc::clone(&self).eval_not(eval_history, Arc::clone(not_expr))).await?
             }
             Expr::NullCoalesce(lhs, rhs) => {
                 Box::pin(Arc::clone(&self).eval_null_coalesce(
@@ -242,7 +224,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -251,7 +232,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -260,7 +240,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -269,7 +248,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -278,7 +256,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -287,7 +264,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -296,7 +272,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -305,7 +280,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -314,7 +288,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(expr1),
                     Arc::clone(expr2),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -337,27 +310,16 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                 .await?
             }
             Expr::Neg(term) => {
-                Box::pin(Arc::clone(&self).eval_neg(
-                    eval_history,
-                    Arc::clone(term),
-                    keep_track_of_origin,
-                ))
-                .await?
+                Box::pin(Arc::clone(&self).eval_neg(eval_history, Arc::clone(term))).await?
             }
             Expr::Panic(inner_expr) => {
-                Box::pin(Arc::clone(&self).eval_panic(
-                    eval_history,
-                    Arc::clone(inner_expr),
-                    keep_track_of_origin,
-                ))
-                .await?
+                Box::pin(Arc::clone(&self).eval_panic(eval_history, Arc::clone(inner_expr))).await?
             }
             Expr::Mul(left, right) => {
                 Box::pin(Arc::clone(&self).eval_mul(
                     eval_history,
                     Arc::clone(left),
                     Arc::clone(right),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -366,7 +328,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(left),
                     Arc::clone(right),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -375,7 +336,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     eval_history,
                     Arc::clone(left),
                     Arc::clone(right),
-                    keep_track_of_origin,
                 ))
                 .await?
             }
@@ -631,6 +591,20 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         expr: &Arc<Spanned<crate::ast::Expr>>,
         keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
+        let target = eval_history
+            .ast
+            .expr_types
+            .get(&expr.span)
+            .expect("Semantic analysis should have given a target type");
+
+        let keep_track_of_origin = match target {
+            a if a.is_lin_expr() => false,
+            a if a.is_int() => false,
+            a if a.is_list() => keep_track_of_origin,
+            a if a.is_string() => false,
+            _ => panic!("Expected Int, LinExpr, String or List output"),
+        };
+
         let collection_value =
             Box::pin(Arc::clone(&self).eval_expr(eval_history, collection, keep_track_of_origin))
                 .await?;
@@ -638,12 +612,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             ExprValue::List(list) => list,
             other => panic!("Expected collection for sum. Got: {:?}", other),
         };
-
-        let target = eval_history
-            .ast
-            .expr_types
-            .get(&expr.span)
-            .expect("Semantic analysis should have given a target type");
 
         let mut output = match target {
             a if a.is_lin_expr() => ExprValue::LinExpr(LinExpr::constant(0.)),
@@ -938,9 +906,8 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         self: Arc<Self>,
         eval_history: &mut EvalHistory<'_, D>,
         inner: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value = Box::pin(self.eval_expr(eval_history, inner, keep_track_of_origin)).await?;
+        let value = Box::pin(self.eval_expr(eval_history, inner, false)).await?;
         Err(EvalError::Panic(Box::new((*value).clone())))
     }
 
@@ -949,11 +916,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
             | (ExprValue::LinExpr(lin_expr_value), ExprValue::Int(int_value)) => {
@@ -971,11 +936,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 / v2),
             (value1, value2) => panic!(
@@ -990,11 +953,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 % v2),
             (value1, value2) => {
@@ -1077,9 +1038,8 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         self: Arc<Self>,
         eval_history: &mut EvalHistory<'_, D>,
         inner: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value = Box::pin(self.eval_expr(eval_history, inner, keep_track_of_origin)).await?;
+        let value = Box::pin(self.eval_expr(eval_history, inner, false)).await?;
         Ok(Arc::new(match &*value {
             ExprValue::Int(v) => ExprValue::Int(-v),
             ExprValue::LinExpr(v) => ExprValue::LinExpr(-v.clone()),
@@ -1092,11 +1052,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(ExprValue::Bool(*value1 == *value2)))
     }
 
@@ -1105,11 +1063,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(ExprValue::Bool(*value1 != *value2)))
     }
 
@@ -1118,11 +1074,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 < v2),
             (value1, value2) => {
@@ -1136,11 +1090,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 <= v2),
             (value1, value2) => panic!(
@@ -1155,11 +1107,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 > v2),
             (value1, value2) => {
@@ -1173,11 +1123,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Bool(v1 >= v2),
             (value1, value2) => panic!(
@@ -1192,11 +1140,10 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        // Ironically, we don't track the origin because it is going to be overwritten
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
 
         let ExprValue::LinExpr(lin_expr1) =
             (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
@@ -1219,11 +1166,10 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        // Ironically, we don't track the origin because it is going to be overwritten
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
 
         let ExprValue::LinExpr(lin_expr1) =
             (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
@@ -1246,11 +1192,10 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        // Ironically, we don't track the origin because it is going to be overwritten
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
 
         let ExprValue::LinExpr(lin_expr1) =
             (unsafe { value1.convert_to_unchecked(&SimpleType::LinExpr) })
@@ -1273,17 +1218,15 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         item: Arc<Spanned<crate::ast::Expr>>,
         collection: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         let collection_value =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, collection, keep_track_of_origin))
-                .await?;
+            Box::pin(Arc::clone(&self).eval_expr(eval_history, collection, false)).await?;
         let list = match &*collection_value {
             ExprValue::List(list) => list,
             _ => panic!("List expected"),
         };
 
-        let item_value = Box::pin(self.eval_expr(eval_history, item, keep_track_of_origin)).await?;
+        let item_value = Box::pin(self.eval_expr(eval_history, item, false)).await?;
         for elt in list {
             if *item_value == **elt {
                 return Ok(Arc::new(ExprValue::Bool(true)));
@@ -1322,11 +1265,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         left: Arc<Spanned<crate::ast::Expr>>,
         right: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value1 =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, left, keep_track_of_origin)).await?;
-        let value2 = Box::pin(self.eval_expr(eval_history, right, keep_track_of_origin)).await?;
+        let value1 = Box::pin(Arc::clone(&self).eval_expr(eval_history, left, false)).await?;
+        let value2 = Box::pin(self.eval_expr(eval_history, right, false)).await?;
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Bool(v1), ExprValue::Bool(v2)) => ExprValue::Bool(*v1 || *v2),
             (value1, value2) => panic!(
@@ -1340,9 +1281,8 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         self: Arc<Self>,
         eval_history: &mut EvalHistory<'_, D>,
         inner: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let value = Box::pin(self.eval_expr(eval_history, inner, keep_track_of_origin)).await?;
+        let value = Box::pin(self.eval_expr(eval_history, inner, false)).await?;
         Ok(Arc::new(match &*value {
             ExprValue::Bool(v) => ExprValue::Bool(!v),
             value => panic!("Unexpected type for NOT operand: {:?}", value),
@@ -1371,7 +1311,6 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         module: Option<&Spanned<String>>,
         name: &Spanned<String>,
         args: &[Arc<Spanned<crate::ast::Expr>>],
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
         let var_name_with_dollar = format!("${}", name.node);
 
@@ -1396,12 +1335,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         let mut eval_args: Vec<Arc<ExprValue<D::Connection>>> = Vec::with_capacity(args.len());
         for x in args {
             eval_args.push(
-                Box::pin(Arc::clone(&self).eval_expr(
-                    eval_history,
-                    Arc::clone(x),
-                    keep_track_of_origin,
-                ))
-                .await?,
+                Box::pin(Arc::clone(&self).eval_expr(eval_history, Arc::clone(x), false)).await?,
             );
         }
         let args = eval_args;
@@ -1490,7 +1424,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                         Box::pin(Arc::clone(&self).eval_expr(
                             eval_history,
                             Arc::clone(x),
-                            keep_track_of_origin,
+                            false, // Queries can't return constraints
                         ))
                         .await?,
                     );
@@ -1530,12 +1464,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         eval_history: &mut EvalHistory<'_, D>,
         start: Arc<Spanned<crate::ast::Expr>>,
         end: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let start_value =
-            Box::pin(Arc::clone(&self).eval_expr(eval_history, start, keep_track_of_origin))
-                .await?;
-        let end_value = Box::pin(self.eval_expr(eval_history, end, keep_track_of_origin)).await?;
+        let start_value = Box::pin(Arc::clone(&self).eval_expr(eval_history, start, false)).await?;
+        let end_value = Box::pin(self.eval_expr(eval_history, end, false)).await?;
 
         let start_num = match &*start_value {
             ExprValue::Int(v) => *v,
@@ -1664,10 +1595,8 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         self: Arc<Self>,
         eval_history: &mut EvalHistory<'_, D>,
         list_expr: Arc<Spanned<crate::ast::Expr>>,
-        keep_track_of_origin: bool,
     ) -> Result<Arc<ExprValue<D::Connection>>, EvalError<D::Connection>> {
-        let list_value =
-            Box::pin(self.eval_expr(eval_history, list_expr, keep_track_of_origin)).await?;
+        let list_value = Box::pin(self.eval_expr(eval_history, list_expr, false)).await?;
         let count = match &*list_value {
             ExprValue::List(list) => list.len(),
             _ => panic!("Unexpected type for list expression"),
