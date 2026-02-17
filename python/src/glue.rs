@@ -54,6 +54,11 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<settings::Limits>()?;
     m.add_class::<settings::SoftU32>()?;
     m.add_class::<settings::SoftNonZeroU32>()?;
+    m.add_class::<colloscopes::Colloscope>()?;
+    m.add_class::<colloscopes::ColloscopePeriod>()?;
+    m.add_class::<colloscopes::ColloscopeSlot>()?;
+    m.add_class::<colloscopes::ColloscopeInterrogation>()?;
+    m.add_class::<colloscopes::ColloscopeGroupList>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
@@ -1402,17 +1407,9 @@ impl CollomatiqueFile {
         self_.token.get_data().params.clone().try_into()
     }
 
-    /*fn get_colloscopes(
-        self_: PyRef<'_, Self>,
-    ) -> PyResult<BTreeMap<ColloscopeId, colloscopes::Colloscope>> {
-        let colloscopes = &self_.token.get_data().colloscopes;
-
-        colloscopes
-            .colloscope_map
-            .iter()
-            .map(|(collo_id, collo)| Ok((collo_id.into(), collo.clone().try_into()?)))
-            .collect::<PyResult<_>>()
-    }*/
+    fn get_colloscope(self_: PyRef<'_, Self>) -> colloscopes::Colloscope {
+        self_.token.get_data().colloscope.into()
+    }
 }
 
 #[derive(Clone, Debug)]
