@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 
 use collomatique_rpc::{
     GuiAnswer, ResultMsg,
-    cmd_msg::{ExtensionDesc, OpenFileDialogMsg},
+    cmd_msg::{ExtensionDesc, OpenFileDialogMsg, SaveFileDialogMsg},
 };
 
 use collomatique_ops::{
@@ -110,6 +110,37 @@ impl Session {
 
         match result {
             ResultMsg::AckGui(GuiAnswer::OpenFileDialog(answer)) => answer.file_path,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    #[pyo3(signature = (title, list, suggested_name=String::new()))]
+    fn dialog_save_file(
+        self_: PyRef<'_, Self>,
+        title: String,
+        list: Vec<(String, String)>,
+        suggested_name: String,
+    ) -> Option<std::path::PathBuf> {
+        let result = self_.send_msg(collomatique_rpc::CmdMsg::GuiRequest(
+            collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(SaveFileDialogMsg {
+                title,
+                list: list
+                    .into_iter()
+                    .map(|ext| ExtensionDesc {
+                        desc: ext.0,
+                        extension: ext.1,
+                    })
+                    .collect(),
+                suggested_name: if suggested_name.is_empty() {
+                    None
+                } else {
+                    Some(suggested_name)
+                },
+            }),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::SaveFileDialog(answer)) => answer.file_path,
             _ => panic!("Unexpected result: {:?}", result),
         }
     }

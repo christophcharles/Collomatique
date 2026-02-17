@@ -77,3 +77,25 @@ pub async fn generic_open_dialog(
 
     file.map(|handle| handle.path().to_owned())
 }
+
+pub async fn generic_save_dialog(
+    title: &str,
+    extensions: &[(&str, &str)],
+    suggested_name: Option<&str>,
+) -> Option<PathBuf> {
+    let mut dialog = rfd::AsyncFileDialog::new()
+        .set_title(title)
+        .set_can_create_directories(true);
+
+    for (desc, ext) in extensions {
+        dialog = dialog.add_filter(*desc, &[ext]);
+    }
+
+    if let Some(name) = suggested_name {
+        dialog = dialog.set_file_name(name);
+    }
+
+    let file = dialog.save_file().await;
+
+    file.map(|handle| handle.path().to_owned())
+}

@@ -1,4 +1,4 @@
-use collomatique_rpc::gui_answer::OpenFileDialogAnswer;
+use collomatique_rpc::gui_answer::{OpenFileDialogAnswer, SaveFileDialogAnswer};
 use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
@@ -512,6 +512,28 @@ impl Dialog {
 
                     DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
                         collomatique_rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
+                            file_path: file_name,
+                        }),
+                    ))
+                });
+            }
+            collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(params) => {
+                sender.oneshot_command(async move {
+                    let ext_vec: Vec<_> = params
+                        .list
+                        .iter()
+                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
+                        .collect();
+
+                    let file_name = crate::tools::open_save::generic_save_dialog(
+                        &params.title,
+                        &ext_vec[..],
+                        params.suggested_name.as_deref(),
+                    )
+                    .await;
+
+                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
+                        collomatique_rpc::GuiAnswer::SaveFileDialog(SaveFileDialogAnswer {
                             file_path: file_name,
                         }),
                     ))
