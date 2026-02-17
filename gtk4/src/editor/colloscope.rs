@@ -702,14 +702,24 @@ impl Colloscope {
     fn update_blame_dialog(&self) {
         let ilp_repr_opt = match &self.ilp_problem_builder {
             Some(r) => match r {
-                Ok(b) => b.ilp_repr.as_ref().map(|r| {
-                    r.as_ref()
-                        .map(|x| x.warnings.clone())
-                        .map_err(|e| e.clone())
-                }),
-                Err(e) => Some(Err(e.to_string())),
+                Ok(b) => match &b.ilp_repr {
+                    ComputationState::ComputingConstraints => {
+                        blame_dialog::ComputationState::ComputingConstraints
+                    }
+                    ComputationState::RecomputingWarnings => {
+                        blame_dialog::ComputationState::RecomputingWarnings
+                    }
+                    ComputationState::ResultAvailable(r) => {
+                        blame_dialog::ComputationState::ResultAvailable(
+                            r.as_ref()
+                                .map(|x| x.warnings.clone())
+                                .map_err(|e| e.clone()),
+                        )
+                    }
+                },
+                Err(e) => blame_dialog::ComputationState::ResultAvailable(Err(e.to_string())),
             },
-            None => None,
+            None => blame_dialog::ComputationState::ComputingConstraints,
         };
 
         self.blame_dialog

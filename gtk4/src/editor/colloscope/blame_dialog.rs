@@ -8,15 +8,47 @@ use relm4::{adw, gtk};
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
-    warnings: Option<Result<Vec<String>, String>>,
+    warnings: ComputationState,
     messages: FactoryVecDeque<Entry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComputationState {
+    ComputingConstraints,
+    RecomputingWarnings,
+    ResultAvailable(Result<Vec<String>, String>),
+}
+
+impl ComputationState {
+    fn as_ref(&self) -> Option<&Result<Vec<String>, String>> {
+        match self {
+            ComputationState::ResultAvailable(res) => Some(res),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
     Show,
     Close,
-    Update(Option<Result<Vec<String>, String>>),
+    Update(ComputationState),
+}
+
+impl Dialog {
+    fn is_constructing_constraints(&self) -> bool {
+        match &self.warnings {
+            ComputationState::ComputingConstraints => true,
+            _ => false,
+        }
+    }
+
+    fn is_rebuilding_warnings(&self) -> bool {
+        match &self.warnings {
+            ComputationState::RecomputingWarnings => true,
+            _ => false,
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -59,7 +91,7 @@ impl SimpleComponent for Dialog {
                             set_orientation: gtk::Orientation::Horizontal,
                             set_spacing: 10,
                             #[watch]
-                            set_visible: model.warnings.is_none(),
+                            set_visible: model.is_constructing_constraints(),
                             gtk::Box {
                                 set_hexpand: true,
                             },
@@ -79,11 +111,32 @@ impl SimpleComponent for Dialog {
                             set_vexpand: true,
                             set_orientation: gtk::Orientation::Horizontal,
                             set_spacing: 10,
+                            #[watch]
+                            set_visible: model.is_rebuilding_warnings(),
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            adw::Spinner {
+                                set_size_request: (30,30),
+                            },
+                            gtk::Label {
+                                set_label: "Vérification du colloscope en cours...",
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                        },
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 10,
                             gtk::Box {
                                 set_hexpand: true,
                             },
                             #[watch]
-                            set_visible: matches!(&model.warnings, Some(Ok(w)) if w.is_empty()),
+                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if w.is_empty()),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
                                 set_icon_name: Some("emblem-ok-symbolic"),
@@ -106,7 +159,7 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                             },
                             #[watch]
-                            set_visible: matches!(&model.warnings, Some(Err(_))),
+                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Err(_))),
                             gtk::Image {
                                 set_icon_size: gtk::IconSize::Large,
                                 set_icon_name: Some("dialog-error-symbolic"),
@@ -130,7 +183,7 @@ impl SimpleComponent for Dialog {
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::Single,
                             #[watch]
-                            set_visible: matches!(&model.warnings, Some(Ok(w)) if !w.is_empty()),
+                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if !w.is_empty()),
                         }
                     },
                 },
@@ -150,7 +203,7 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             move_front: false,
-            warnings: None,
+            warnings: ComputationState::ComputingConstraints,
             messages,
         };
 
@@ -188,7 +241,7 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn update_messages(&mut self) {
         let mut messages = vec![];
-        if let Some(Ok(warnings)) = &self.warnings {
+        if let ComputationState::ResultAvailable(Ok(warnings)) = &self.warnings {
             messages.extend(warnings.iter().map(|x| EntryData::Warning(x.clone())));
         }
         // On Err, messages stays empty (error shown via label)
