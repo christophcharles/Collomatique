@@ -2,12 +2,13 @@ mod all_groups_sheet;
 mod automatic_groups_sheet;
 mod colloscope_sheet;
 mod formats;
+mod per_group_list_sheet;
 mod prefilled_groups_sheet;
 
 use std::path::Path;
 
 use rust_xlsxwriter::{Workbook, XlsxError};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 /// rust_xlsxwriter paper-size index for A4 (210 × 297 mm)
 const PAPER_SIZE_A4: u8 = 9;
@@ -97,12 +98,17 @@ pub struct AllGroupsConfig {
     pub orientation: Option<PageOrientation>,
 }
 
+pub struct PerGroupListConfig {
+    pub orientation: PageOrientation,
+}
+
 pub struct Config {
     pub global: GlobalConfig,
     pub colloscope: Option<ColloscopeConfig>,
     pub all_groups: Option<AllGroupsConfig>,
     pub automatic_groups: Option<AutomaticGroupsConfig>,
     pub prefilled_groups: Option<PrefilledGroupsConfig>,
+    pub per_group_list: Option<PerGroupListConfig>,
 }
 
 impl Default for GlobalConfig {
@@ -157,6 +163,14 @@ impl Default for PrefilledGroupsConfig {
     }
 }
 
+impl Default for PerGroupListConfig {
+    fn default() -> Self {
+        PerGroupListConfig {
+            orientation: PageOrientation::Portrait,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -165,8 +179,24 @@ impl Default for Config {
             all_groups: Some(AllGroupsConfig::default()),
             automatic_groups: Some(AutomaticGroupsConfig::default()),
             prefilled_groups: Some(PrefilledGroupsConfig::default()),
+            per_group_list: Some(PerGroupListConfig::default()),
         }
     }
+}
+
+pub(crate) fn sanitize_sheet_name(name: &str) -> Option<String> {
+    let sanitized: String = name
+        .chars()
+        .map(|c| match c {
+            '[' | ']' | ':' | '*' | '?' | '/' | '\\' => '-',
+            _ => c,
+        })
+        .collect();
+    let trimmed = sanitized.trim().trim_matches('\'');
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.chars().take(31).collect())
 }
 
 fn apply_orientation(ws: &mut rust_xlsxwriter::Worksheet, orientation: &PageOrientation) {
@@ -181,7 +211,9 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
     if let Some(colloscope_config) = &config.colloscope {
         let colloscope_ws = workbook.add_worksheet();
-        colloscope_ws.set_name(&colloscope_config.sheet_name)?;
+        if let Some(safe_name) = sanitize_sheet_name(&colloscope_config.sheet_name) {
+            colloscope_ws.set_name(&safe_name)?;
+        }
         colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
         colloscope_ws.set_paper_size(PAPER_SIZE_A4);
         colloscope_ws.set_print_fit_to_pages(1, 1);
@@ -190,7 +222,9 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
     if let Some(all_groups_config) = &config.all_groups {
         let all_groups_ws = workbook.add_worksheet();
-        all_groups_ws.set_name(&all_groups_config.sheet_name)?;
+        if let Some(safe_name) = sanitize_sheet_name(&all_groups_config.sheet_name) {
+            all_groups_ws.set_name(&safe_name)?;
+        }
         let gl_count = all_groups_sheet::build(all_groups_ws, pool, &config.global).await?;
         all_groups_ws.set_paper_size(PAPER_SIZE_A4);
         all_groups_ws.set_print_fit_to_pages(1, 1);
@@ -214,7 +248,9 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
         if has_automatic_groups {
             let groups_ws = workbook.add_worksheet();
-            groups_ws.set_name(&automatic_groups_config.sheet_name)?;
+            if let Some(safe_name) = sanitize_sheet_name(&automatic_groups_config.sheet_name) {
+                groups_ws.set_name(&safe_name)?;
+            }
             let gl_count = automatic_groups_sheet::build(groups_ws, pool, &config.global).await?;
             groups_ws.set_paper_size(PAPER_SIZE_A4);
             groups_ws.set_print_fit_to_pages(1, 1);
@@ -239,7 +275,9 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
         if has_prefilled_groups {
             let prefilled_ws = workbook.add_worksheet();
-            prefilled_ws.set_name(&prefilled_groups_config.sheet_name)?;
+            if let Some(safe_name) = sanitize_sheet_name(&prefilled_groups_config.sheet_name) {
+                prefilled_ws.set_name(&safe_name)?;
+            }
             let gl_count =
                 prefilled_groups_sheet::build(prefilled_ws, pool, &config.global).await?;
             prefilled_ws.set_paper_size(PAPER_SIZE_A4);
@@ -252,6 +290,32 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
                 },
             );
             apply_orientation(prefilled_ws, orientation);
+        }
+    }
+
+    if let Some(per_group_list_config) = &config.per_group_list {
+        let group_lists = sqlx::query(
+            "SELECT DISTINCT gl.id, gl.name \
+             FROM group_lists gl \
+             WHERE EXISTS (SELECT 1 FROM colloscope_group_list_students WHERE group_list_id = gl.id) \
+                OR EXISTS (SELECT 1 FROM prefilled_group_students WHERE group_list_id = gl.id) \
+             ORDER BY gl.name",
+        )
+        .fetch_all(pool)
+        .await?;
+
+        for gl_row in &group_lists {
+            let gl_id: i64 = gl_row.get(0);
+            let gl_name: String = gl_row.get(1);
+
+            let ws = workbook.add_worksheet();
+            if let Some(safe_name) = sanitize_sheet_name(&gl_name) {
+                ws.set_name(&safe_name)?;
+            }
+            per_group_list_sheet::build(ws, pool, &config.global, gl_id).await?;
+            ws.set_paper_size(PAPER_SIZE_A4);
+            ws.set_print_fit_to_pages(1, 1);
+            apply_orientation(ws, &per_group_list_config.orientation);
         }
     }
 
