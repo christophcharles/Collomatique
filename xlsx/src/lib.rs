@@ -9,6 +9,17 @@ use std::path::Path;
 use rust_xlsxwriter::{Workbook, XlsxError};
 use sqlx::SqlitePool;
 
+/// rust_xlsxwriter paper-size index for A4 (210 × 297 mm)
+const PAPER_SIZE_A4: u8 = 9;
+
+/// Group sheets with at least this many group lists switch to landscape
+const AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD: usize = 4;
+
+pub enum PageOrientation {
+    Portrait,
+    Landscape,
+}
+
 pub struct Color {
     red: u8,
     green: u8,
@@ -64,18 +75,22 @@ pub struct ColloscopeConfig {
     pub extra_info_column_name: String,
     pub teacher_email: Option<String>,
     pub teacher_tel: Option<String>,
+    pub orientation: PageOrientation,
 }
 
 pub struct AutomaticGroupsConfig {
     pub sheet_name: String,
+    pub orientation: Option<PageOrientation>,
 }
 
 pub struct PrefilledGroupsConfig {
     pub sheet_name: String,
+    pub orientation: Option<PageOrientation>,
 }
 
 pub struct AllGroupsConfig {
     pub sheet_name: String,
+    pub orientation: Option<PageOrientation>,
 }
 
 pub struct Config {
@@ -98,18 +113,29 @@ impl Default for Config {
                 extra_info_column_name: "Info".into(),
                 teacher_email: Some("Contact".into()),
                 teacher_tel: None,
+                orientation: PageOrientation::Landscape,
             }),
             all_groups: Some(AllGroupsConfig {
                 sheet_name: "Tous les groupes".into(),
+                orientation: None,
             }),
             automatic_groups: Some(AutomaticGroupsConfig {
                 sheet_name: "Groupes automatiques".into(),
+                orientation: None,
             }),
             prefilled_groups: Some(PrefilledGroupsConfig {
                 sheet_name: "Groupes préremplis".into(),
+                orientation: None,
             }),
         }
     }
+}
+
+fn apply_orientation(ws: &mut rust_xlsxwriter::Worksheet, orientation: &PageOrientation) {
+    match orientation {
+        PageOrientation::Portrait => ws.set_portrait(),
+        PageOrientation::Landscape => ws.set_landscape(),
+    };
 }
 
 pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Result<(), Error> {
@@ -119,12 +145,25 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         let colloscope_ws = workbook.add_worksheet();
         colloscope_ws.set_name(&colloscope_config.sheet_name)?;
         colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
+        colloscope_ws.set_paper_size(PAPER_SIZE_A4);
+        colloscope_ws.set_print_fit_to_pages(1, 1);
+        apply_orientation(colloscope_ws, &colloscope_config.orientation);
     }
 
     if let Some(all_groups_config) = &config.all_groups {
         let all_groups_ws = workbook.add_worksheet();
         all_groups_ws.set_name(&all_groups_config.sheet_name)?;
-        all_groups_sheet::build(all_groups_ws, pool, &config.global).await?;
+        let gl_count = all_groups_sheet::build(all_groups_ws, pool, &config.global).await?;
+        all_groups_ws.set_paper_size(PAPER_SIZE_A4);
+        all_groups_ws.set_print_fit_to_pages(1, 1);
+        let orientation = all_groups_config.orientation.as_ref().unwrap_or(
+            if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
+                &PageOrientation::Landscape
+            } else {
+                &PageOrientation::Portrait
+            },
+        );
+        apply_orientation(all_groups_ws, orientation);
     }
 
     if let Some(automatic_groups_config) = &config.automatic_groups {
@@ -138,7 +177,17 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         if has_automatic_groups {
             let groups_ws = workbook.add_worksheet();
             groups_ws.set_name(&automatic_groups_config.sheet_name)?;
-            automatic_groups_sheet::build(groups_ws, pool, &config.global).await?;
+            let gl_count = automatic_groups_sheet::build(groups_ws, pool, &config.global).await?;
+            groups_ws.set_paper_size(PAPER_SIZE_A4);
+            groups_ws.set_print_fit_to_pages(1, 1);
+            let orientation = automatic_groups_config.orientation.as_ref().unwrap_or(
+                if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
+                    &PageOrientation::Landscape
+                } else {
+                    &PageOrientation::Portrait
+                },
+            );
+            apply_orientation(groups_ws, orientation);
         }
     }
 
@@ -153,7 +202,18 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         if has_prefilled_groups {
             let prefilled_ws = workbook.add_worksheet();
             prefilled_ws.set_name(&prefilled_groups_config.sheet_name)?;
-            prefilled_groups_sheet::build(prefilled_ws, pool, &config.global).await?;
+            let gl_count =
+                prefilled_groups_sheet::build(prefilled_ws, pool, &config.global).await?;
+            prefilled_ws.set_paper_size(PAPER_SIZE_A4);
+            prefilled_ws.set_print_fit_to_pages(1, 1);
+            let orientation = prefilled_groups_config.orientation.as_ref().unwrap_or(
+                if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
+                    &PageOrientation::Landscape
+                } else {
+                    &PageOrientation::Portrait
+                },
+            );
+            apply_orientation(prefilled_ws, orientation);
         }
     }
 

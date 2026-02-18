@@ -11,7 +11,7 @@ pub async fn build(
     worksheet: &mut Worksheet,
     pool: &SqlitePool,
     global: &crate::GlobalConfig,
-) -> Result<(), Error> {
+) -> Result<usize, Error> {
     let bg = global.background_color.to_xlsx();
     let stripe = global
         .stripes_color
@@ -147,7 +147,7 @@ pub async fn build(
         worksheet.set_column_range_width(4, 4 + gl_count as u16 - 1, 12)?;
     }
 
-    Ok(())
+    Ok(gl_count)
 }
 
 fn vertical_borders(row_idx: usize, count: usize) -> (u8, u8) {
