@@ -71,7 +71,7 @@ impl Default for Config {
             teacher_email: Some("Contact".into()),
             teacher_tel: None,
             background_color: Color::new(255, 255, 255),
-            stripes_color: Some(Color::new(180, 200, 220)),
+            stripes_color: Some(Color::new(220, 220, 230)),
         }
     }
 }
