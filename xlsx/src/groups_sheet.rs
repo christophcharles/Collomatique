@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rust_xlsxwriter::Worksheet;
+use rust_xlsxwriter::{Url, Worksheet};
 use sqlx::{Row, SqlitePool};
 
 use crate::Error;
@@ -111,7 +111,12 @@ pub async fn build(
         let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
         worksheet.write_with_format(row, 0, &surname, &data_fmt)?;
         worksheet.write_with_format(row, 1, &firstname, &data_fmt)?;
-        worksheet.write_with_format(row, 2, &email, &data_fmt)?;
+        if email.is_empty() {
+            worksheet.write_with_format(row, 2, "", &data_fmt)?;
+        } else {
+            let url = Url::new(format!("mailto:{email}")).set_text(&email);
+            worksheet.write_url_with_format(row, 2, url, &data_fmt)?;
+        }
         worksheet.write_with_format(row, 3, &tel, &data_fmt)?;
 
         for (i, gl_id) in gl_ids.iter().enumerate() {
