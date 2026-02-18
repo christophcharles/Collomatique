@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rust_xlsxwriter::{Url, Worksheet};
 use sqlx::{Row, SqlitePool};
@@ -121,6 +121,30 @@ pub async fn build(
     let show_week_dates = colloscope.display_week_dates && first_week_str.is_some();
     let header_row_offset: u32 = if show_week_dates { 1 } else { 0 };
 
+    // Weeks with no interrogations — for distinct background color
+    let no_interrog_rows =
+        sqlx::query("SELECT period_id, week_index FROM period_weeks WHERE has_interrogations = 0")
+            .fetch_all(pool)
+            .await?;
+
+    let no_interrog_weeks: HashSet<(i64, i64)> = no_interrog_rows
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect();
+
+    let no_interrog_bg = colloscope.no_interrogation_color.to_xlsx();
+
+    let week_bg = |period_id: i64,
+                   week_index: usize,
+                   default_bg: rust_xlsxwriter::Color|
+     -> rust_xlsxwriter::Color {
+        if no_interrog_weeks.contains(&(period_id, week_index as i64)) {
+            no_interrog_bg
+        } else {
+            default_bg
+        }
+    };
+
     // -- Row 0: Period labels --
     for pl in &period_layout {
         let label = crate::generate_period_title(
@@ -152,7 +176,7 @@ pub async fn build(
                 for w in 0..pl.num_weeks {
                     let col = pl.col_start + w as u16;
                     let (left, right) = period_border(w, pl.num_weeks);
-                    let fmt = formats::week_dates(left, right, bg);
+                    let fmt = formats::week_dates(left, right, week_bg(pl.period_id, w, bg));
                     let label = crate::generate_week_dates_title(first_week, pl.first_week_num + w)
                         .unwrap_or_default();
                     worksheet.write_with_format(1, col, &label, &fmt)?;
@@ -187,7 +211,7 @@ pub async fn build(
         for w in 0..pl.num_weeks {
             let col = pl.col_start + w as u16;
             let (left, right) = period_border(w, pl.num_weeks);
-            let fmt = formats::week_header(left, right, bg);
+            let fmt = formats::week_header(left, right, week_bg(pl.period_id, w, bg));
             worksheet.write_with_format(header_row, col, format!("S{week_counter}"), &fmt)?;
             week_counter += 1;
         }
@@ -316,7 +340,7 @@ pub async fn build(
             for pl in &period_layout {
                 for w in 0..pl.num_weeks {
                     let (left, right) = period_border(w, pl.num_weeks);
-                    let fmt = formats::empty_row(left, right, bg);
+                    let fmt = formats::empty_row(left, right, week_bg(pl.period_id, w, bg));
                     worksheet.write_with_format(row, pl.col_start + w as u16, "", &fmt)?;
                 }
             }
@@ -366,7 +390,13 @@ pub async fn build(
                 for w in 0..pl.num_weeks {
                     let col = pl.col_start + w as u16;
                     let (left_b, right_b) = period_border(w, pl.num_weeks);
-                    let fmt = formats::week_cell(top_b, bot_b, left_b, right_b, row_bg);
+                    let fmt = formats::week_cell(
+                        top_b,
+                        bot_b,
+                        left_b,
+                        right_b,
+                        week_bg(pl.period_id, w, row_bg),
+                    );
 
                     let cell_text = interrog_map
                         .get(&(pl.period_id, slot_id, w as i64))

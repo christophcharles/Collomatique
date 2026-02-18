@@ -78,6 +78,7 @@ pub struct ColloscopeConfig {
     pub orientation: PageOrientation,
     pub display_week_dates: bool,
     pub display_annotations: bool,
+    pub no_interrogation_color: Color,
 }
 
 pub struct AutomaticGroupsConfig {
@@ -122,6 +123,7 @@ impl Default for ColloscopeConfig {
             orientation: PageOrientation::Landscape,
             display_week_dates: true,
             display_annotations: true,
+            no_interrogation_color: Color::new(140, 140, 140),
         }
     }
 }
