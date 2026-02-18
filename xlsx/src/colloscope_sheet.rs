@@ -19,12 +19,12 @@ struct FixedColumns {
 }
 
 impl FixedColumns {
-    fn from_config(config: &crate::Config) -> Self {
+    fn from_config(colloscope: &crate::ColloscopeConfig) -> Self {
         let subject_col = 0;
         let teacher_col = 1;
         let mut next = 2u16;
 
-        let email_col = if config.teacher_email.is_some() {
+        let email_col = if colloscope.teacher_email.is_some() {
             let col = next;
             next += 1;
             Some(col)
@@ -32,7 +32,7 @@ impl FixedColumns {
             None
         };
 
-        let tel_col = if config.teacher_tel.is_some() {
+        let tel_col = if colloscope.teacher_tel.is_some() {
             let col = next;
             next += 1;
             Some(col)
@@ -68,14 +68,15 @@ struct PeriodLayout {
 pub async fn build(
     worksheet: &mut Worksheet,
     pool: &SqlitePool,
-    config: &crate::Config,
+    global: &crate::GlobalConfig,
+    colloscope: &crate::ColloscopeConfig,
 ) -> Result<(), Error> {
     worksheet.set_landscape();
 
-    let cols = FixedColumns::from_config(config);
+    let cols = FixedColumns::from_config(colloscope);
 
-    let bg = config.background_color.to_xlsx();
-    let stripe = config
+    let bg = global.background_color.to_xlsx();
+    let stripe = global
         .stripes_color
         .as_ref()
         .map(|c| c.to_xlsx())
@@ -151,18 +152,18 @@ pub async fn build(
     worksheet.write_with_format(1, cols.subject_col, "Matière", &header_fmt)?;
     worksheet.write_with_format(1, cols.teacher_col, "Colleur", &header_fmt)?;
     if let Some(email_col) = cols.email_col {
-        let name = config.teacher_email.as_deref().unwrap_or("Email");
+        let name = colloscope.teacher_email.as_deref().unwrap_or("Email");
         worksheet.write_with_format(1, email_col, name, &header_fmt)?;
     }
     if let Some(tel_col) = cols.tel_col {
-        let name = config.teacher_tel.as_deref().unwrap_or("Tél");
+        let name = colloscope.teacher_tel.as_deref().unwrap_or("Tél");
         worksheet.write_with_format(1, tel_col, name, &header_fmt)?;
     }
     worksheet.write_with_format(1, cols.slot_col, "Créneau", &header_fmt)?;
     worksheet.write_with_format(
         1,
         cols.extra_info_col,
-        &config.extra_info_column_name,
+        &colloscope.extra_info_column_name,
         &header_fmt,
     )?;
 

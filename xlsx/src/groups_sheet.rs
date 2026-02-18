@@ -10,10 +10,10 @@ use crate::get_group_name;
 pub async fn build(
     worksheet: &mut Worksheet,
     pool: &SqlitePool,
-    config: &crate::Config,
+    global: &crate::GlobalConfig,
 ) -> Result<(), Error> {
-    let bg = config.background_color.to_xlsx();
-    let stripe = config
+    let bg = global.background_color.to_xlsx();
+    let stripe = global
         .stripes_color
         .as_ref()
         .map(|c| c.to_xlsx())

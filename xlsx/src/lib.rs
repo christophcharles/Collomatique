@@ -52,26 +52,44 @@ impl From<sqlx::Error> for Error {
     }
 }
 
-pub struct Config {
-    pub colloscope_sheet: String,
-    pub automatic_groups_sheet: String,
+pub struct GlobalConfig {
+    pub background_color: Color,
+    pub stripes_color: Option<Color>,
+}
+
+pub struct ColloscopeConfig {
+    pub sheet_name: String,
     pub extra_info_column_name: String,
     pub teacher_email: Option<String>,
     pub teacher_tel: Option<String>,
-    pub background_color: Color,
-    pub stripes_color: Option<Color>,
+}
+
+pub struct AutomaticGroupsConfig {
+    pub sheet_name: String,
+}
+
+pub struct Config {
+    pub global: GlobalConfig,
+    pub colloscope: ColloscopeConfig,
+    pub automatic_groups: AutomaticGroupsConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            colloscope_sheet: "Colloscope".into(),
-            automatic_groups_sheet: "Groupes automatiques".into(),
-            extra_info_column_name: "Info".into(),
-            teacher_email: Some("Contact".into()),
-            teacher_tel: None,
-            background_color: Color::new(255, 255, 255),
-            stripes_color: Some(Color::new(220, 220, 230)),
+            global: GlobalConfig {
+                background_color: Color::new(255, 255, 255),
+                stripes_color: Some(Color::new(220, 220, 230)),
+            },
+            colloscope: ColloscopeConfig {
+                sheet_name: "Colloscope".into(),
+                extra_info_column_name: "Info".into(),
+                teacher_email: Some("Contact".into()),
+                teacher_tel: None,
+            },
+            automatic_groups: AutomaticGroupsConfig {
+                sheet_name: "Groupes automatiques".into(),
+            },
         }
     }
 }
@@ -80,8 +98,8 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     let mut workbook = Workbook::new();
 
     let colloscope_ws = workbook.add_worksheet();
-    colloscope_ws.set_name(&config.colloscope_sheet)?;
-    colloscope_sheet::build(colloscope_ws, pool, config).await?;
+    colloscope_ws.set_name(&config.colloscope.sheet_name)?;
+    colloscope_sheet::build(colloscope_ws, pool, &config.global, &config.colloscope).await?;
 
     let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'automatic'",
@@ -92,8 +110,8 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
     if has_automatic_groups {
         let groups_ws = workbook.add_worksheet();
-        groups_ws.set_name(&config.automatic_groups_sheet)?;
-        groups_sheet::build(groups_ws, pool, config).await?;
+        groups_ws.set_name(&config.automatic_groups.sheet_name)?;
+        groups_sheet::build(groups_ws, pool, &config.global).await?;
     }
 
     workbook.save(path)?;
