@@ -1,6 +1,7 @@
+mod automatic_groups_sheet;
 mod colloscope_sheet;
 mod formats;
-mod groups_sheet;
+mod prefilled_groups_sheet;
 
 use std::path::Path;
 
@@ -68,10 +69,15 @@ pub struct AutomaticGroupsConfig {
     pub sheet_name: String,
 }
 
+pub struct PrefilledGroupsConfig {
+    pub sheet_name: String,
+}
+
 pub struct Config {
     pub global: GlobalConfig,
-    pub colloscope: ColloscopeConfig,
-    pub automatic_groups: AutomaticGroupsConfig,
+    pub colloscope: Option<ColloscopeConfig>,
+    pub automatic_groups: Option<AutomaticGroupsConfig>,
+    pub prefilled_groups: Option<PrefilledGroupsConfig>,
 }
 
 impl Default for Config {
@@ -81,15 +87,18 @@ impl Default for Config {
                 background_color: Color::new(255, 255, 255),
                 stripes_color: Some(Color::new(220, 220, 230)),
             },
-            colloscope: ColloscopeConfig {
+            colloscope: Some(ColloscopeConfig {
                 sheet_name: "Colloscope".into(),
                 extra_info_column_name: "Info".into(),
                 teacher_email: Some("Contact".into()),
                 teacher_tel: None,
-            },
-            automatic_groups: AutomaticGroupsConfig {
+            }),
+            automatic_groups: Some(AutomaticGroupsConfig {
                 sheet_name: "Groupes automatiques".into(),
-            },
+            }),
+            prefilled_groups: Some(PrefilledGroupsConfig {
+                sheet_name: "Groupes préremplis".into(),
+            }),
         }
     }
 }
@@ -97,21 +106,40 @@ impl Default for Config {
 pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Result<(), Error> {
     let mut workbook = Workbook::new();
 
-    let colloscope_ws = workbook.add_worksheet();
-    colloscope_ws.set_name(&config.colloscope.sheet_name)?;
-    colloscope_sheet::build(colloscope_ws, pool, &config.global, &config.colloscope).await?;
+    if let Some(colloscope_config) = &config.colloscope {
+        let colloscope_ws = workbook.add_worksheet();
+        colloscope_ws.set_name(&colloscope_config.sheet_name)?;
+        colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
+    }
 
-    let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'automatic'",
-    )
-    .fetch_one(pool)
-    .await?
-        > 0;
+    if let Some(automatic_groups_config) = &config.automatic_groups {
+        let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'automatic'",
+        )
+        .fetch_one(pool)
+        .await?
+            > 0;
 
-    if has_automatic_groups {
-        let groups_ws = workbook.add_worksheet();
-        groups_ws.set_name(&config.automatic_groups.sheet_name)?;
-        groups_sheet::build(groups_ws, pool, &config.global).await?;
+        if has_automatic_groups {
+            let groups_ws = workbook.add_worksheet();
+            groups_ws.set_name(&automatic_groups_config.sheet_name)?;
+            automatic_groups_sheet::build(groups_ws, pool, &config.global).await?;
+        }
+    }
+
+    if let Some(prefilled_groups_config) = &config.prefilled_groups {
+        let has_prefilled_groups: bool = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'prefilled'",
+        )
+        .fetch_one(pool)
+        .await?
+            > 0;
+
+        if has_prefilled_groups {
+            let prefilled_ws = workbook.add_worksheet();
+            prefilled_ws.set_name(&prefilled_groups_config.sheet_name)?;
+            prefilled_groups_sheet::build(prefilled_ws, pool, &config.global).await?;
+        }
     }
 
     workbook.save(path)?;
