@@ -134,12 +134,43 @@ pub async fn build(
 
     let no_interrog_bg = colloscope.no_interrogation_color.to_xlsx();
 
+    // Annotations — fetched early so we can use them for week background colors
+    let annotation_rows = sqlx::query(
+        "SELECT period_id, week_index, annotation \
+         FROM period_weeks \
+         WHERE annotation != ''",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut annotations: HashMap<(i64, i64), String> = HashMap::new();
+    for arow in &annotation_rows {
+        let period_id: i64 = arow.get(0);
+        let week_index: i64 = arow.get(1);
+        let annotation: String = arow.get(2);
+        annotations.insert((period_id, week_index), annotation);
+    }
+
+    let annotation_bg = colloscope.annotation_color.as_ref().map(|c| c.to_xlsx());
+
+    let annotated_weeks: HashSet<(i64, i64)> = if annotation_bg.is_some() {
+        annotations.keys().copied().collect()
+    } else {
+        HashSet::new()
+    };
+
     let week_bg = |period_id: i64,
                    week_index: usize,
                    default_bg: rust_xlsxwriter::Color|
      -> rust_xlsxwriter::Color {
         if no_interrog_weeks.contains(&(period_id, week_index as i64)) {
             no_interrog_bg
+        } else if let Some(abg) = annotation_bg {
+            if annotated_weeks.contains(&(period_id, week_index as i64)) {
+                abg
+            } else {
+                default_bg
+            }
         } else {
             default_bg
         }
@@ -276,24 +307,7 @@ pub async fn build(
             .push(group_number);
     }
 
-    // 6. Annotations
-    let annotation_rows = sqlx::query(
-        "SELECT period_id, week_index, annotation \
-         FROM period_weeks \
-         WHERE annotation != ''",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut annotations: HashMap<(i64, i64), String> = HashMap::new();
-    for arow in &annotation_rows {
-        let period_id: i64 = arow.get(0);
-        let week_index: i64 = arow.get(1);
-        let annotation: String = arow.get(2);
-        annotations.insert((period_id, week_index), annotation);
-    }
-
-    // 7. Subjects that have slots, ordered by position
+    // 6. Subjects that have slots, ordered by position
     let subjects = sqlx::query(
         "SELECT sub.id, sub.name \
          FROM subjects sub \

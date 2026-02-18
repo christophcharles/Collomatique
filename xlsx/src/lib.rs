@@ -79,6 +79,7 @@ pub struct ColloscopeConfig {
     pub display_week_dates: bool,
     pub display_annotations: bool,
     pub no_interrogation_color: Color,
+    pub annotation_color: Option<Color>,
 }
 
 pub struct AutomaticGroupsConfig {
@@ -124,6 +125,7 @@ impl Default for ColloscopeConfig {
             display_week_dates: true,
             display_annotations: true,
             no_interrogation_color: Color::new(140, 140, 140),
+            annotation_color: Some(Color::new(255, 255, 0)),
         }
     }
 }
