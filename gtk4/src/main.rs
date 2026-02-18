@@ -83,7 +83,7 @@ fn main() -> Result<(), anyhow::Error> {
             collomatique_sqlite_state::create_schema(&pool).await?;
             collomatique_sqlite_state::inner_data_to_sqlite(&pool, data.get_inner_data()).await?;
 
-            collomatique_xlsx::write_xlsx(&pool, &xlsx_path)
+            collomatique_xlsx::write_xlsx(&pool, &xlsx_path, &collomatique_xlsx::Config::default())
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to write XLSX: {}", e))?;
 

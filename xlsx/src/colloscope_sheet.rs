@@ -8,14 +8,71 @@ use crate::format_slot_time;
 use crate::formats;
 use crate::get_group_name;
 
+struct FixedColumns {
+    subject_col: u16,
+    teacher_col: u16,
+    email_col: Option<u16>,
+    tel_col: Option<u16>,
+    slot_col: u16,
+    extra_info_col: u16,
+    count: u16,
+}
+
+impl FixedColumns {
+    fn from_config(config: &crate::Config) -> Self {
+        let subject_col = 0;
+        let teacher_col = 1;
+        let mut next = 2u16;
+
+        let email_col = if config.teacher_email.is_some() {
+            let col = next;
+            next += 1;
+            Some(col)
+        } else {
+            None
+        };
+
+        let tel_col = if config.teacher_tel.is_some() {
+            let col = next;
+            next += 1;
+            Some(col)
+        } else {
+            None
+        };
+
+        let slot_col = next;
+        next += 1;
+        let extra_info_col = next;
+        next += 1;
+
+        FixedColumns {
+            subject_col,
+            teacher_col,
+            email_col,
+            tel_col,
+            slot_col,
+            extra_info_col,
+            count: next,
+        }
+    }
+}
+
 struct PeriodLayout {
     period_id: i64,
     col_start: u16,
     num_weeks: usize,
+    period_index: usize,
+    first_week_num: usize,
 }
 
-pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), Error> {
+pub async fn build(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    config: &crate::Config,
+) -> Result<(), Error> {
     worksheet.set_landscape();
+
+    let cols = FixedColumns::from_config(config);
 
     // 1. Period layout — periods ordered by position, with week count
     let period_rows = sqlx::query(
@@ -29,8 +86,9 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
     .await?;
 
     let mut period_layout = Vec::new();
-    let mut col_offset: u16 = 5; // first 5 columns: Matière, Colleur, Contact, Créneau, Salle
-    for row in &period_rows {
+    let mut col_offset: u16 = cols.count;
+    let mut accumulated_weeks: usize = 0;
+    for (period_index, row) in period_rows.iter().enumerate() {
         let period_id: i64 = row.get(0);
         let num_weeks: i64 = row.get(2);
         let nw = num_weeks as usize;
@@ -38,60 +96,68 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
             period_id,
             col_start: col_offset,
             num_weeks: nw,
+            period_index,
+            first_week_num: accumulated_weeks,
         });
         col_offset += nw as u16;
+        accumulated_weeks += nw;
     }
 
-    let total_week_cols = col_offset - 5;
+    let total_week_cols = col_offset - cols.count;
     if total_week_cols == 0 {
         return Ok(());
     }
 
-    // 2. Period annotations — first non-empty annotation per period
-    let annotation_rows = sqlx::query(
-        "SELECT period_id, annotation \
-         FROM period_weeks \
-         WHERE annotation != '' \
-         ORDER BY period_id, week_index",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut period_annotations: HashMap<i64, String> = HashMap::new();
-    for row in annotation_rows {
-        let period_id: i64 = row.get(0);
-        let annotation: String = row.get(1);
-        period_annotations.entry(period_id).or_insert(annotation);
-    }
+    // 2. Fetch first_week from metadata for period title date ranges
+    let first_week_str: Option<String> =
+        sqlx::query_scalar("SELECT first_week FROM metadata WHERE id = 1")
+            .fetch_optional(pool)
+            .await?
+            .flatten();
 
     // -- Row 0: Period labels --
     for pl in &period_layout {
-        let label = period_annotations
-            .get(&pl.period_id)
-            .map(|a| a.as_str())
-            .unwrap_or("Période");
+        let label = crate::generate_period_title(
+            &first_week_str,
+            pl.period_index,
+            pl.first_week_num,
+            pl.num_weeks,
+        );
 
         let fmt = formats::period_header();
         if pl.num_weeks == 1 {
-            worksheet.write_with_format(0, pl.col_start, label, &fmt)?;
+            worksheet.write_with_format(0, pl.col_start, &label, &fmt)?;
         } else {
             worksheet.merge_range(
                 0,
                 pl.col_start,
                 0,
                 pl.col_start + pl.num_weeks as u16 - 1,
-                label,
+                &label,
                 &fmt,
             )?;
         }
     }
 
     // -- Row 1: Fixed headers + week numbers --
-    let fixed_headers = ["Matière", "Colleur", "Contact", "Créneau", "Salle"];
     let header_fmt = formats::header();
-    for (col, name) in fixed_headers.iter().enumerate() {
-        worksheet.write_with_format(1, col as u16, *name, &header_fmt)?;
+    worksheet.write_with_format(1, cols.subject_col, "Matière", &header_fmt)?;
+    worksheet.write_with_format(1, cols.teacher_col, "Colleur", &header_fmt)?;
+    if let Some(email_col) = cols.email_col {
+        let name = config.teacher_email.as_deref().unwrap_or("Email");
+        worksheet.write_with_format(1, email_col, name, &header_fmt)?;
     }
+    if let Some(tel_col) = cols.tel_col {
+        let name = config.teacher_tel.as_deref().unwrap_or("Tél");
+        worksheet.write_with_format(1, tel_col, name, &header_fmt)?;
+    }
+    worksheet.write_with_format(1, cols.slot_col, "Créneau", &header_fmt)?;
+    worksheet.write_with_format(
+        1,
+        cols.extra_info_col,
+        &config.extra_info_column_name,
+        &header_fmt,
+    )?;
 
     let mut week_counter: u32 = 1;
     for pl in &period_layout {
@@ -185,7 +251,8 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
         let slots = sqlx::query(
             "SELECT sl.id, \
                     COALESCE(t.surname, '') as surname, \
-                    COALESCE(NULLIF(t.email, ''), NULLIF(t.tel, ''), '') as contact, \
+                    COALESCE(t.email, '') as email, \
+                    COALESCE(t.tel, '') as tel, \
                     sl.day, sl.start_time, sl.extra_info \
              FROM slots sl \
              LEFT JOIN teachers t ON t.id = sl.teacher_id \
@@ -202,7 +269,7 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
 
         // Separator row between subjects
         if !first_subject {
-            for c in 0..5u16 {
+            for c in 0..cols.count {
                 worksheet.write_with_format(row, c, "", &formats::empty_row(2, 2))?;
             }
             for pl in &period_layout {
@@ -222,20 +289,26 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
         for (slot_idx, slot_row) in slots.iter().enumerate() {
             let slot_id: i64 = slot_row.get(0);
             let surname: String = slot_row.get(1);
-            let contact: String = slot_row.get(2);
-            let day: i64 = slot_row.get(3);
-            let start_time: i64 = slot_row.get(4);
-            let extra_info: String = slot_row.get(5);
+            let email: String = slot_row.get(2);
+            let tel: String = slot_row.get(3);
+            let day: i64 = slot_row.get(4);
+            let start_time: i64 = slot_row.get(5);
+            let extra_info: String = slot_row.get(6);
 
             let (top_b, bot_b) = vertical_borders(slot_idx, slot_count);
 
             let slot_time = format_slot_time(day, start_time);
 
             let data_fmt = formats::data_cell(top_b, bot_b, 2, 2);
-            worksheet.write_with_format(row, 1, &surname, &data_fmt)?;
-            worksheet.write_with_format(row, 2, &contact, &data_fmt)?;
-            worksheet.write_with_format(row, 3, &slot_time, &data_fmt)?;
-            worksheet.write_with_format(row, 4, &extra_info, &data_fmt)?;
+            worksheet.write_with_format(row, cols.teacher_col, &surname, &data_fmt)?;
+            if let Some(email_col) = cols.email_col {
+                worksheet.write_with_format(row, email_col, &email, &data_fmt)?;
+            }
+            if let Some(tel_col) = cols.tel_col {
+                worksheet.write_with_format(row, tel_col, &tel, &data_fmt)?;
+            }
+            worksheet.write_with_format(row, cols.slot_col, &slot_time, &data_fmt)?;
+            worksheet.write_with_format(row, cols.extra_info_col, &extra_info, &data_fmt)?;
 
             // Week columns
             for pl in &period_layout {
@@ -276,13 +349,18 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
         let subject_end_row = row - 1;
         let subject_fmt = formats::subject_cell(2, 2);
         if subject_start_row == subject_end_row {
-            worksheet.write_with_format(subject_start_row, 0, &subject_name, &subject_fmt)?;
+            worksheet.write_with_format(
+                subject_start_row,
+                cols.subject_col,
+                &subject_name,
+                &subject_fmt,
+            )?;
         } else {
             worksheet.merge_range(
                 subject_start_row,
-                0,
+                cols.subject_col,
                 subject_end_row,
-                0,
+                cols.subject_col,
                 &subject_name,
                 &subject_fmt,
             )?;
@@ -290,13 +368,18 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
     }
 
     // Column widths
-    worksheet.set_column_width(0, 14)?;
-    worksheet.set_column_width(1, 14)?;
-    worksheet.set_column_width(2, 22)?;
-    worksheet.set_column_width(3, 14)?;
-    worksheet.set_column_width(4, 10)?;
+    worksheet.set_column_width(cols.subject_col, 14)?;
+    worksheet.set_column_width(cols.teacher_col, 14)?;
+    if let Some(email_col) = cols.email_col {
+        worksheet.set_column_width(email_col, 22)?;
+    }
+    if let Some(tel_col) = cols.tel_col {
+        worksheet.set_column_width(tel_col, 14)?;
+    }
+    worksheet.set_column_width(cols.slot_col, 14)?;
+    worksheet.set_column_width(cols.extra_info_col, 10)?;
     if total_week_cols > 0 {
-        worksheet.set_column_range_width(5, 5 + total_week_cols - 1, 5)?;
+        worksheet.set_column_range_width(cols.count, cols.count + total_week_cols - 1, 5)?;
     }
 
     Ok(())

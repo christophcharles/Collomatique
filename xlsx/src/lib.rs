@@ -34,19 +34,76 @@ impl From<sqlx::Error> for Error {
     }
 }
 
-pub async fn write_xlsx(pool: &SqlitePool, path: &Path) -> Result<(), Error> {
+pub struct Config {
+    pub extra_info_column_name: String,
+    pub teacher_email: Option<String>,
+    pub teacher_tel: Option<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            extra_info_column_name: "Info".into(),
+            teacher_email: Some("Contact".into()),
+            teacher_tel: None,
+        }
+    }
+}
+
+pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Result<(), Error> {
     let mut workbook = Workbook::new();
 
     let colloscope_ws = workbook.add_worksheet();
     colloscope_ws.set_name("Colloscope")?;
-    colloscope_sheet::build(colloscope_ws, pool).await?;
+    colloscope_sheet::build(colloscope_ws, pool, config).await?;
 
-    let groups_ws = workbook.add_worksheet();
-    groups_ws.set_name("Groupes")?;
-    groups_sheet::build(groups_ws, pool).await?;
+    let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'automatic'",
+    )
+    .fetch_one(pool)
+    .await?
+        > 0;
+
+    if has_automatic_groups {
+        let groups_ws = workbook.add_worksheet();
+        groups_ws.set_name("Groupes automatiques")?;
+        groups_sheet::build(groups_ws, pool).await?;
+    }
 
     workbook.save(path)?;
     Ok(())
+}
+
+pub(crate) fn generate_period_title(
+    first_week_str: &Option<String>,
+    period_index: usize,
+    first_week_num: usize,
+    week_count: usize,
+) -> String {
+    if week_count == 0 {
+        return format!("Période {} (vide)", period_index + 1);
+    }
+
+    match first_week_str {
+        Some(date_str) => {
+            let Ok(global_monday) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
+                return format!("Période {}", period_index + 1);
+            };
+            let start = global_monday
+                .checked_add_days(chrono::Days::new(7 * first_week_num as u64))
+                .expect("Valid start date");
+            let end = start
+                .checked_add_days(chrono::Days::new(7 * week_count as u64 - 1))
+                .expect("Valid end date");
+            format!(
+                "Période {} du {} au {}",
+                period_index + 1,
+                start.format("%d/%m/%Y"),
+                end.format("%d/%m/%Y"),
+            )
+        }
+        None => format!("Période {}", period_index + 1),
+    }
 }
 
 pub(crate) fn get_group_name(group_names: &[String], group_num: i64) -> String {

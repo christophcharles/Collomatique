@@ -570,6 +570,7 @@ dependencies = [
 name = "collomatique-xlsx"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "rust_xlsxwriter",
  "sqlx",
 ]
