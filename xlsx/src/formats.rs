@@ -33,6 +33,19 @@ pub fn week_header(left: u8, right: u8, bg: Color) -> Format {
         .set_background_color(bg)
 }
 
+pub fn week_dates(left: u8, right: u8, bg: Color) -> Format {
+    Format::new()
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
+        .set_rotation(90)
+        .set_border_top(FormatBorder::Medium)
+        .set_border_bottom(FormatBorder::Medium)
+        .set_border_left(border(left))
+        .set_border_right(border(right))
+        .set_background_color(bg)
+        .set_font_size(8.0)
+}
+
 pub fn data_cell(top: u8, bottom: u8, left: u8, right: u8, bg: Color) -> Format {
     Format::new()
         .set_align(FormatAlign::Center)

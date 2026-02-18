@@ -76,6 +76,7 @@ pub struct ColloscopeConfig {
     pub teacher_email: Option<String>,
     pub teacher_tel: Option<String>,
     pub orientation: PageOrientation,
+    pub display_week_dates: bool,
 }
 
 pub struct AutomaticGroupsConfig {
@@ -101,32 +102,63 @@ pub struct Config {
     pub prefilled_groups: Option<PrefilledGroupsConfig>,
 }
 
+impl Default for GlobalConfig {
+    fn default() -> Self {
+        GlobalConfig {
+            background_color: Color::new(255, 255, 255),
+            stripes_color: Some(Color::new(220, 220, 230)),
+        }
+    }
+}
+
+impl Default for ColloscopeConfig {
+    fn default() -> Self {
+        ColloscopeConfig {
+            sheet_name: "Colloscope".into(),
+            extra_info_column_name: "Info".into(),
+            teacher_email: Some("Contact".into()),
+            teacher_tel: None,
+            orientation: PageOrientation::Landscape,
+            display_week_dates: true,
+        }
+    }
+}
+
+impl Default for AllGroupsConfig {
+    fn default() -> Self {
+        AllGroupsConfig {
+            sheet_name: "Tous les groupes".into(),
+            orientation: None,
+        }
+    }
+}
+
+impl Default for AutomaticGroupsConfig {
+    fn default() -> Self {
+        AutomaticGroupsConfig {
+            sheet_name: "Groupes automatiques".into(),
+            orientation: None,
+        }
+    }
+}
+
+impl Default for PrefilledGroupsConfig {
+    fn default() -> Self {
+        PrefilledGroupsConfig {
+            sheet_name: "Groupes préremplis".into(),
+            orientation: None,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
-            global: GlobalConfig {
-                background_color: Color::new(255, 255, 255),
-                stripes_color: Some(Color::new(220, 220, 230)),
-            },
-            colloscope: Some(ColloscopeConfig {
-                sheet_name: "Colloscope".into(),
-                extra_info_column_name: "Info".into(),
-                teacher_email: Some("Contact".into()),
-                teacher_tel: None,
-                orientation: PageOrientation::Landscape,
-            }),
-            all_groups: Some(AllGroupsConfig {
-                sheet_name: "Tous les groupes".into(),
-                orientation: None,
-            }),
-            automatic_groups: Some(AutomaticGroupsConfig {
-                sheet_name: "Groupes automatiques".into(),
-                orientation: None,
-            }),
-            prefilled_groups: Some(PrefilledGroupsConfig {
-                sheet_name: "Groupes préremplis".into(),
-                orientation: None,
-            }),
+            global: GlobalConfig::default(),
+            colloscope: Some(ColloscopeConfig::default()),
+            all_groups: Some(AllGroupsConfig::default()),
+            automatic_groups: Some(AutomaticGroupsConfig::default()),
+            prefilled_groups: Some(PrefilledGroupsConfig::default()),
         }
     }
 }
@@ -219,6 +251,17 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
     workbook.save(path)?;
     Ok(())
+}
+
+pub(crate) fn generate_week_dates_title(first_week_str: &str, week_num: usize) -> Option<String> {
+    let global_monday = chrono::NaiveDate::parse_from_str(first_week_str, "%Y-%m-%d").ok()?;
+    let start = global_monday.checked_add_days(chrono::Days::new(7 * week_num as u64))?;
+    let end = start.checked_add_days(chrono::Days::new(6))?;
+    Some(format!(
+        "  Du {} au {}  ",
+        start.format("%d/%m/%Y"),
+        end.format("%d/%m/%Y"),
+    ))
 }
 
 pub(crate) fn generate_period_title(

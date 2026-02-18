@@ -71,8 +71,6 @@ pub async fn build(
     global: &crate::GlobalConfig,
     colloscope: &crate::ColloscopeConfig,
 ) -> Result<(), Error> {
-    worksheet.set_landscape();
-
     let cols = FixedColumns::from_config(colloscope);
 
     let bg = global.background_color.to_xlsx();
@@ -120,6 +118,9 @@ pub async fn build(
             .await?
             .flatten();
 
+    let show_week_dates = colloscope.display_week_dates && first_week_str.is_some();
+    let header_row_offset: u32 = if show_week_dates { 1 } else { 0 };
+
     // -- Row 0: Period labels --
     for pl in &period_layout {
         let label = crate::generate_period_title(
@@ -144,21 +145,38 @@ pub async fn build(
         }
     }
 
-    // -- Row 1: Fixed headers + week numbers --
+    // -- Row 1 (optional): Week date ranges --
+    if let Some(first_week) = &first_week_str {
+        if show_week_dates {
+            for pl in &period_layout {
+                for w in 0..pl.num_weeks {
+                    let col = pl.col_start + w as u16;
+                    let (left, right) = period_border(w, pl.num_weeks);
+                    let fmt = formats::week_dates(left, right, bg);
+                    let label = crate::generate_week_dates_title(first_week, pl.first_week_num + w)
+                        .unwrap_or_default();
+                    worksheet.write_with_format(1, col, &label, &fmt)?;
+                }
+            }
+        }
+    }
+
+    // -- Fixed headers + week numbers --
+    let header_row = 1 + header_row_offset;
     let header_fmt = formats::header(bg);
-    worksheet.write_with_format(1, cols.subject_col, "Matière", &header_fmt)?;
-    worksheet.write_with_format(1, cols.teacher_col, "Colleur", &header_fmt)?;
+    worksheet.write_with_format(header_row, cols.subject_col, "Matière", &header_fmt)?;
+    worksheet.write_with_format(header_row, cols.teacher_col, "Colleur", &header_fmt)?;
     if let Some(email_col) = cols.email_col {
         let name = colloscope.teacher_email.as_deref().unwrap_or("Email");
-        worksheet.write_with_format(1, email_col, name, &header_fmt)?;
+        worksheet.write_with_format(header_row, email_col, name, &header_fmt)?;
     }
     if let Some(tel_col) = cols.tel_col {
         let name = colloscope.teacher_tel.as_deref().unwrap_or("Tél");
-        worksheet.write_with_format(1, tel_col, name, &header_fmt)?;
+        worksheet.write_with_format(header_row, tel_col, name, &header_fmt)?;
     }
-    worksheet.write_with_format(1, cols.slot_col, "Créneau", &header_fmt)?;
+    worksheet.write_with_format(header_row, cols.slot_col, "Créneau", &header_fmt)?;
     worksheet.write_with_format(
-        1,
+        header_row,
         cols.extra_info_col,
         &colloscope.extra_info_column_name,
         &header_fmt,
@@ -170,7 +188,7 @@ pub async fn build(
             let col = pl.col_start + w as u16;
             let (left, right) = period_border(w, pl.num_weeks);
             let fmt = formats::week_header(left, right, bg);
-            worksheet.write_with_format(1, col, format!("S{week_counter}"), &fmt)?;
+            worksheet.write_with_format(header_row, col, format!("S{week_counter}"), &fmt)?;
             week_counter += 1;
         }
     }
@@ -245,7 +263,7 @@ pub async fn build(
     .await?;
 
     // -- Data rows --
-    let mut row: u32 = 2;
+    let mut row: u32 = 2 + header_row_offset;
     let mut first_subject = true;
     let mut stripe_index: usize = 0;
 
