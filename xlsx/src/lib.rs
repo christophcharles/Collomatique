@@ -177,8 +177,8 @@ impl Default for Config {
             global: GlobalConfig::default(),
             colloscope: Some(ColloscopeConfig::default()),
             all_groups: Some(AllGroupsConfig::default()),
-            automatic_groups: Some(AutomaticGroupsConfig::default()),
-            prefilled_groups: Some(PrefilledGroupsConfig::default()),
+            automatic_groups: None,
+            prefilled_groups: None,
             per_group_list: Some(PerGroupListConfig::default()),
         }
     }
