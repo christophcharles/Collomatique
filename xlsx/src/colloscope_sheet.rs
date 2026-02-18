@@ -74,6 +74,13 @@ pub async fn build(
 
     let cols = FixedColumns::from_config(config);
 
+    let bg = config.background_color.to_xlsx();
+    let stripe = config
+        .stripes_color
+        .as_ref()
+        .map(|c| c.to_xlsx())
+        .unwrap_or(bg);
+
     // 1. Period layout — periods ordered by position, with week count
     let period_rows = sqlx::query(
         "SELECT p.id, p.position, COUNT(pw.week_index) as num_weeks \
@@ -124,7 +131,7 @@ pub async fn build(
             pl.num_weeks,
         );
 
-        let fmt = formats::period_header();
+        let fmt = formats::period_header(bg);
         if pl.num_weeks == 1 {
             worksheet.write_with_format(0, pl.col_start, &label, &fmt)?;
         } else {
@@ -140,7 +147,7 @@ pub async fn build(
     }
 
     // -- Row 1: Fixed headers + week numbers --
-    let header_fmt = formats::header();
+    let header_fmt = formats::header(bg);
     worksheet.write_with_format(1, cols.subject_col, "Matière", &header_fmt)?;
     worksheet.write_with_format(1, cols.teacher_col, "Colleur", &header_fmt)?;
     if let Some(email_col) = cols.email_col {
@@ -164,7 +171,7 @@ pub async fn build(
         for w in 0..pl.num_weeks {
             let col = pl.col_start + w as u16;
             let (left, right) = period_border(w, pl.num_weeks);
-            let fmt = formats::week_header(left, right);
+            let fmt = formats::week_header(left, right, bg);
             worksheet.write_with_format(1, col, format!("S{week_counter}"), &fmt)?;
             week_counter += 1;
         }
@@ -242,6 +249,7 @@ pub async fn build(
     // -- Data rows --
     let mut row: u32 = 2;
     let mut first_subject = true;
+    let mut stripe_index: usize = 0;
 
     for subject_row in &subjects {
         let subject_id: i64 = subject_row.get(0);
@@ -270,12 +278,12 @@ pub async fn build(
         // Separator row between subjects
         if !first_subject {
             for c in 0..cols.count {
-                worksheet.write_with_format(row, c, "", &formats::empty_row(2, 2))?;
+                worksheet.write_with_format(row, c, "", &formats::empty_row(2, 2, bg))?;
             }
             for pl in &period_layout {
                 for w in 0..pl.num_weeks {
                     let (left, right) = period_border(w, pl.num_weeks);
-                    let fmt = formats::empty_row(left, right);
+                    let fmt = formats::empty_row(left, right, bg);
                     worksheet.write_with_format(row, pl.col_start + w as u16, "", &fmt)?;
                 }
             }
@@ -296,10 +304,11 @@ pub async fn build(
             let extra_info: String = slot_row.get(6);
 
             let (top_b, bot_b) = vertical_borders(slot_idx, slot_count);
+            let row_bg = if stripe_index % 2 == 0 { stripe } else { bg };
 
             let slot_time = format_slot_time(day, start_time);
 
-            let data_fmt = formats::data_cell(top_b, bot_b, 2, 2);
+            let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
             worksheet.write_with_format(row, cols.teacher_col, &surname, &data_fmt)?;
             if let Some(email_col) = cols.email_col {
                 worksheet.write_with_format(row, email_col, &email, &data_fmt)?;
@@ -319,7 +328,7 @@ pub async fn build(
                 for w in 0..pl.num_weeks {
                     let col = pl.col_start + w as u16;
                     let (left_b, right_b) = period_border(w, pl.num_weeks);
-                    let fmt = formats::week_cell(top_b, bot_b, left_b, right_b);
+                    let fmt = formats::week_cell(top_b, bot_b, left_b, right_b, row_bg);
 
                     let cell_text = interrog_map
                         .get(&(pl.period_id, slot_id, w as i64))
@@ -342,12 +351,13 @@ pub async fn build(
                 }
             }
 
+            stripe_index += 1;
             row += 1;
         }
 
         // Merge subject name vertically
         let subject_end_row = row - 1;
-        let subject_fmt = formats::subject_cell(2, 2);
+        let subject_fmt = formats::subject_cell(2, 2, bg);
         if subject_start_row == subject_end_row {
             worksheet.write_with_format(
                 subject_start_row,

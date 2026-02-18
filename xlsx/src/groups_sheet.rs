@@ -7,7 +7,18 @@ use crate::Error;
 use crate::formats;
 use crate::get_group_name;
 
-pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), Error> {
+pub async fn build(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    config: &crate::Config,
+) -> Result<(), Error> {
+    let bg = config.background_color.to_xlsx();
+    let stripe = config
+        .stripes_color
+        .as_ref()
+        .map(|c| c.to_xlsx())
+        .unwrap_or(bg);
+
     // 1. Group lists that have student assignments
     let group_lists = sqlx::query(
         "SELECT DISTINCT cgls.group_list_id, gl.name \
@@ -25,7 +36,7 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
     let gl_count = group_lists.len();
 
     // -- Row 0: Headers --
-    let header_fmt = formats::header();
+    let header_fmt = formats::header(bg);
     let fixed_headers = ["Nom", "Prénom", "Courriel", "Téléphone"];
     for (col, name) in fixed_headers.iter().enumerate() {
         worksheet.write_with_format(0, col as u16, *name, &header_fmt)?;
@@ -95,8 +106,9 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
 
         let row = (row_idx + 1) as u32;
         let (top_b, bot_b) = vertical_borders(row_idx, student_count);
+        let row_bg = if row_idx % 2 == 0 { stripe } else { bg };
 
-        let data_fmt = formats::data_cell(top_b, bot_b, 2, 2);
+        let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
         worksheet.write_with_format(row, 0, &surname, &data_fmt)?;
         worksheet.write_with_format(row, 1, &firstname, &data_fmt)?;
         worksheet.write_with_format(row, 2, &email, &data_fmt)?;
@@ -105,7 +117,7 @@ pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), E
         for (i, gl_id) in gl_ids.iter().enumerate() {
             let col = 4 + i as u16;
             let (left_b, right_b) = gl_border(i, gl_count);
-            let cell_fmt = formats::data_cell(top_b, bot_b, left_b, right_b);
+            let cell_fmt = formats::data_cell(top_b, bot_b, left_b, right_b, row_bg);
 
             let cell_text = student_groups
                 .get(&(*gl_id, student_id))

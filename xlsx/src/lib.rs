@@ -7,6 +7,24 @@ use std::path::Path;
 use rust_xlsxwriter::{Workbook, XlsxError};
 use sqlx::SqlitePool;
 
+pub struct Color {
+    red: u8,
+    green: u8,
+    blue: u8,
+}
+
+impl Color {
+    pub fn new(red: u8, green: u8, blue: u8) -> Self {
+        Self { red, green, blue }
+    }
+
+    pub(crate) fn to_xlsx(&self) -> rust_xlsxwriter::Color {
+        rust_xlsxwriter::Color::RGB(
+            ((self.red as u32) << 16) | ((self.green as u32) << 8) | (self.blue as u32),
+        )
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     Xlsx(XlsxError),
@@ -35,17 +53,25 @@ impl From<sqlx::Error> for Error {
 }
 
 pub struct Config {
+    pub colloscope_sheet: String,
+    pub automatic_groups_sheet: String,
     pub extra_info_column_name: String,
     pub teacher_email: Option<String>,
     pub teacher_tel: Option<String>,
+    pub background_color: Color,
+    pub stripes_color: Option<Color>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
+            colloscope_sheet: "Colloscope".into(),
+            automatic_groups_sheet: "Groupes automatiques".into(),
             extra_info_column_name: "Info".into(),
             teacher_email: Some("Contact".into()),
             teacher_tel: None,
+            background_color: Color::new(255, 255, 255),
+            stripes_color: Some(Color::new(180, 200, 220)),
         }
     }
 }
@@ -54,7 +80,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     let mut workbook = Workbook::new();
 
     let colloscope_ws = workbook.add_worksheet();
-    colloscope_ws.set_name("Colloscope")?;
+    colloscope_ws.set_name(&config.colloscope_sheet)?;
     colloscope_sheet::build(colloscope_ws, pool, config).await?;
 
     let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
@@ -66,8 +92,8 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
 
     if has_automatic_groups {
         let groups_ws = workbook.add_worksheet();
-        groups_ws.set_name("Groupes automatiques")?;
-        groups_sheet::build(groups_ws, pool).await?;
+        groups_ws.set_name(&config.automatic_groups_sheet)?;
+        groups_sheet::build(groups_ws, pool, config).await?;
     }
 
     workbook.save(path)?;
