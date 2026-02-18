@@ -252,7 +252,24 @@ pub async fn build(
             .push(group_number);
     }
 
-    // 6. Subjects that have slots, ordered by position
+    // 6. Annotations
+    let annotation_rows = sqlx::query(
+        "SELECT period_id, week_index, annotation \
+         FROM period_weeks \
+         WHERE annotation != ''",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut annotations: HashMap<(i64, i64), String> = HashMap::new();
+    for arow in &annotation_rows {
+        let period_id: i64 = arow.get(0);
+        let week_index: i64 = arow.get(1);
+        let annotation: String = arow.get(2);
+        annotations.insert((period_id, week_index), annotation);
+    }
+
+    // 7. Subjects that have slots, ordered by position
     let subjects = sqlx::query(
         "SELECT sub.id, sub.name \
          FROM subjects sub \
@@ -271,7 +288,7 @@ pub async fn build(
         let subject_id: i64 = subject_row.get(0);
         let subject_name: String = subject_row.get(1);
 
-        // 7. Slots for this subject with teacher info
+        // 8. Slots for this subject with teacher info
         let slots = sqlx::query(
             "SELECT sl.id, \
                     COALESCE(t.surname, '') as surname, \
@@ -395,6 +412,19 @@ pub async fn build(
                 &subject_name,
                 &subject_fmt,
             )?;
+        }
+    }
+
+    // Annotation row
+    if colloscope.display_annotations && !annotations.is_empty() {
+        for pl in &period_layout {
+            for w in 0..pl.num_weeks {
+                if let Some(text) = annotations.get(&(pl.period_id, w as i64)) {
+                    let col = pl.col_start + w as u16;
+                    let fmt = formats::annotation(bg);
+                    worksheet.write_with_format(row, col, format!("{text} "), &fmt)?;
+                }
+            }
         }
     }
 

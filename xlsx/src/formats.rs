@@ -65,6 +65,14 @@ pub fn week_cell(top: u8, bottom: u8, left: u8, right: u8, bg: Color) -> Format 
     data_cell(top, bottom, left, right, bg)
 }
 
+pub fn annotation(bg: Color) -> Format {
+    Format::new()
+        .set_rotation(90)
+        .set_background_color(bg)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::Top)
+}
+
 pub fn empty_row(left: u8, right: u8, bg: Color) -> Format {
     Format::new()
         .set_border_top(FormatBorder::Medium)

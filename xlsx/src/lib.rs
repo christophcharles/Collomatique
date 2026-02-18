@@ -77,6 +77,7 @@ pub struct ColloscopeConfig {
     pub teacher_tel: Option<String>,
     pub orientation: PageOrientation,
     pub display_week_dates: bool,
+    pub display_annotations: bool,
 }
 
 pub struct AutomaticGroupsConfig {
@@ -120,6 +121,7 @@ impl Default for ColloscopeConfig {
             teacher_tel: None,
             orientation: PageOrientation::Landscape,
             display_week_dates: true,
+            display_annotations: true,
         }
     }
 }
