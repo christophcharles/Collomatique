@@ -1,24 +1,28 @@
-use collomatique_state_colloscopes::GroupListId;
-use collomatique_state_colloscopes::colloscope_params::Parameters;
-use collomatique_state_colloscopes::colloscopes::Colloscope;
-use rust_xlsxwriter::{Worksheet, XlsxError};
+use std::collections::HashMap;
 
+use rust_xlsxwriter::Worksheet;
+use sqlx::{Row, SqlitePool};
+
+use crate::Error;
 use crate::formats;
 use crate::get_group_name;
 
-pub fn build(
-    worksheet: &mut Worksheet,
-    params: &Parameters,
-    colloscope: &Colloscope,
-) -> Result<(), XlsxError> {
-    // Collect group list IDs that have student assignments
-    let group_list_ids: Vec<GroupListId> = colloscope.group_lists.keys().copied().collect();
+pub async fn build(worksheet: &mut Worksheet, pool: &SqlitePool) -> Result<(), Error> {
+    // 1. Group lists that have student assignments
+    let group_lists = sqlx::query(
+        "SELECT DISTINCT cgls.group_list_id, gl.name \
+         FROM colloscope_group_list_students cgls \
+         JOIN group_lists gl ON gl.id = cgls.group_list_id \
+         ORDER BY cgls.group_list_id",
+    )
+    .fetch_all(pool)
+    .await?;
 
-    if group_list_ids.is_empty() {
+    if group_lists.is_empty() {
         return Ok(());
     }
 
-    let gl_count = group_list_ids.len();
+    let gl_count = group_lists.len();
 
     // -- Row 0: Headers --
     let header_fmt = formats::header();
@@ -27,63 +31,88 @@ pub fn build(
         worksheet.write_with_format(0, col as u16, *name, &header_fmt)?;
     }
 
-    for (i, gl_id) in group_list_ids.iter().enumerate() {
-        let name = params
-            .group_lists
-            .group_list_map
-            .get(gl_id)
-            .map(|gl| gl.params.name.as_str())
-            .unwrap_or("");
-        worksheet.write_with_format(0, 4 + i as u16, name, &header_fmt)?;
+    let gl_ids: Vec<i64> = group_lists.iter().map(|r| r.get(0)).collect();
+
+    for (i, gl_row) in group_lists.iter().enumerate() {
+        let gl_name: String = gl_row.get(1);
+        worksheet.write_with_format(0, 4 + i as u16, &gl_name, &header_fmt)?;
     }
 
-    // -- Collect and sort students --
-    let mut students_sorted: Vec<_> = params.students.student_map.iter().collect();
-    students_sorted.sort_by(|a, b| {
-        (&a.1.desc.surname, &a.1.desc.firstname).cmp(&(&b.1.desc.surname, &b.1.desc.firstname))
-    });
+    // 2. Students sorted by name
+    let students = sqlx::query(
+        "SELECT id, surname, firstname, email, tel \
+         FROM students \
+         ORDER BY surname, firstname",
+    )
+    .fetch_all(pool)
+    .await?;
 
-    let student_count = students_sorted.len();
-    for (row_idx, (student_id, student)) in students_sorted.iter().enumerate() {
+    // 3. Student-to-group mapping: (group_list_id, student_id) -> group_number
+    let student_groups_rows = sqlx::query(
+        "SELECT group_list_id, student_id, group_number \
+         FROM colloscope_group_list_students",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
+    for row in student_groups_rows {
+        let gl_id: i64 = row.get(0);
+        let student_id: i64 = row.get(1);
+        let group_num: i64 = row.get(2);
+        student_groups.insert((gl_id, student_id), group_num);
+    }
+
+    // 4. Group names: group_list_id -> Vec<String>
+    let group_name_rows = sqlx::query(
+        "SELECT group_list_id, group_index, name \
+         FROM group_list_group_names \
+         ORDER BY group_list_id, group_index",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut group_names_map: HashMap<i64, Vec<String>> = HashMap::new();
+    for row in group_name_rows {
+        let gl_id: i64 = row.get(0);
+        let group_index: i64 = row.get(1);
+        let name: String = row.get(2);
+        let names = group_names_map.entry(gl_id).or_default();
+        let idx = group_index as usize;
+        if names.len() <= idx {
+            names.resize(idx + 1, String::new());
+        }
+        names[idx] = name;
+    }
+
+    let student_count = students.len();
+    for (row_idx, student_row) in students.iter().enumerate() {
+        let student_id: i64 = student_row.get(0);
+        let surname: String = student_row.get(1);
+        let firstname: String = student_row.get(2);
+        let email: String = student_row.get(3);
+        let tel: String = student_row.get(4);
+
         let row = (row_idx + 1) as u32;
         let (top_b, bot_b) = vertical_borders(row_idx, student_count);
 
         let data_fmt = formats::data_cell(top_b, bot_b, 2, 2);
-        worksheet.write_with_format(row, 0, &student.desc.surname, &data_fmt)?;
-        worksheet.write_with_format(row, 1, &student.desc.firstname, &data_fmt)?;
-        worksheet.write_with_format(
-            row,
-            2,
-            student
-                .desc
-                .email
-                .as_ref()
-                .map(|e| e.as_str())
-                .unwrap_or(""),
-            &data_fmt,
-        )?;
-        worksheet.write_with_format(
-            row,
-            3,
-            student.desc.tel.as_ref().map(|t| t.as_str()).unwrap_or(""),
-            &data_fmt,
-        )?;
+        worksheet.write_with_format(row, 0, &surname, &data_fmt)?;
+        worksheet.write_with_format(row, 1, &firstname, &data_fmt)?;
+        worksheet.write_with_format(row, 2, &email, &data_fmt)?;
+        worksheet.write_with_format(row, 3, &tel, &data_fmt)?;
 
-        for (i, gl_id) in group_list_ids.iter().enumerate() {
+        for (i, gl_id) in gl_ids.iter().enumerate() {
             let col = 4 + i as u16;
             let (left_b, right_b) = gl_border(i, gl_count);
             let cell_fmt = formats::data_cell(top_b, bot_b, left_b, right_b);
 
-            let cell_text = colloscope
-                .group_lists
-                .get(gl_id)
-                .and_then(|cgl| cgl.groups_for_students.get(student_id))
+            let cell_text = student_groups
+                .get(&(*gl_id, student_id))
                 .map(|&group_num| {
-                    params
-                        .group_lists
-                        .group_list_map
+                    group_names_map
                         .get(gl_id)
-                        .map(|gl| get_group_name(&gl.params, group_num))
+                        .map(|names| get_group_name(names, group_num))
                         .unwrap_or_else(|| (group_num + 1).to_string())
                 })
                 .unwrap_or_default();

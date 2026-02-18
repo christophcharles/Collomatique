@@ -79,7 +79,12 @@ fn main() -> Result<(), anyhow::Error> {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to load file: {:?}", e))?;
 
-            collomatique_xlsx::write_xlsx(data.get_inner_data(), &xlsx_path)
+            let pool = sqlx::SqlitePool::connect(":memory:").await?;
+            collomatique_sqlite_state::create_schema(&pool).await?;
+            collomatique_sqlite_state::inner_data_to_sqlite(&pool, data.get_inner_data()).await?;
+
+            collomatique_xlsx::write_xlsx(&pool, &xlsx_path)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to write XLSX: {}", e))?;
 
             println!("Exported to {}", xlsx_path.display());

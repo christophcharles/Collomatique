@@ -5,5 +5,5 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-collomatique-state-colloscopes = { path = "../state-colloscopes" }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 rust_xlsxwriter = "0.93"
