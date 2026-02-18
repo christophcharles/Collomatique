@@ -13,7 +13,6 @@
     adwaita-icon-theme,
     python3,
     clippy,
-    python3Packages,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -30,7 +29,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-AKv3TFT0J+CGUSn/Qv/YZ5nbPO72WSmj+jWJAGiL7Z0=";
+    cargoHash = "sha256-k7xE/Wax62kKfy6fzrUjPD6pcw+PR91K0tLQVg2eZzg=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
@@ -40,7 +39,6 @@ rustPlatform.buildRustPackage rec {
         cbc # We need it for tests
         clippy
         python3
-        python3Packages.xlsxwriter
     ];
 
     buildInputs = [
@@ -52,7 +50,6 @@ rustPlatform.buildRustPackage rec {
         wayland
         adwaita-icon-theme
         python3
-        python3Packages.xlsxwriter
     ];
 
     preFixup = ''

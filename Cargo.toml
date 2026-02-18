@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "ilp", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "collo-ml", "collo-ml-derive", "binding-colloscopes", "sqlite-state"]
+members = [ "gtk4", "state", "ilp", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "collo-ml", "collo-ml-derive", "binding-colloscopes", "sqlite-state", "xlsx"]
 
 [workspace.package]
 version = "0.1.0"
