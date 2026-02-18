@@ -312,7 +312,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&gl_name) {
                 ws.set_name(&safe_name)?;
             }
-            per_group_list_sheet::build(ws, pool, &config.global, gl_id).await?;
+            per_group_list_sheet::build(ws, pool, &config.global, gl_id, &gl_name).await?;
             ws.set_paper_size(PAPER_SIZE_A4);
             ws.set_print_fit_to_pages(1, 1);
             apply_orientation(ws, &per_group_list_config.orientation);

@@ -12,6 +12,7 @@ pub async fn build(
     pool: &SqlitePool,
     global: &crate::GlobalConfig,
     gl_id: i64,
+    gl_name: &str,
 ) -> Result<(), Error> {
     let bg = global.background_color.to_xlsx();
     let stripe = global
@@ -70,8 +71,12 @@ pub async fn build(
             .push((surname, firstname));
     }
 
-    // 4. Write rows
-    let mut current_row: u32 = 0;
+    // 4. Header row
+    let header_fmt = formats::header(bg);
+    worksheet.merge_range(0, 0, 0, 1, gl_name, &header_fmt)?;
+
+    // 5. Write rows
+    let mut current_row: u32 = 1;
     let group_count = groups.len();
 
     for (display_idx, (group_idx, students)) in groups.iter().enumerate() {
@@ -98,10 +103,10 @@ pub async fn build(
 
             // Col 0: group name (merged or single)
             if is_first_in_group {
-                let group_fmt = formats::data_cell(top_b, bottom_b, 2, 1, row_bg);
+                let group_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
                 if student_count > 1 {
                     let merge_bottom_b: u8 = if is_last_group { 2 } else { 2 };
-                    let merge_fmt = formats::data_cell(top_b, merge_bottom_b, 2, 1, row_bg);
+                    let merge_fmt = formats::data_cell(top_b, merge_bottom_b, 2, 2, row_bg);
                     worksheet.merge_range(
                         current_row,
                         0,
@@ -117,7 +122,7 @@ pub async fn build(
 
             // Col 1: student name
             let student_name = format!("{surname} {firstname}");
-            let student_fmt = formats::data_cell(top_b, bottom_b, 1, 2, row_bg);
+            let student_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
             worksheet.write_with_format(current_row, 1, &student_name, &student_fmt)?;
 
             current_row += 1;
