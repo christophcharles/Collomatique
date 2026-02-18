@@ -19,11 +19,12 @@ pub async fn build(
         .map(|c| c.to_xlsx())
         .unwrap_or(bg);
 
-    // 1. Group lists that have prefilled student assignments
+    // 1. Group lists from both automatic and prefilled sources
     let group_lists = sqlx::query(
-        "SELECT DISTINCT pgs.group_list_id, gl.name \
-         FROM prefilled_group_students pgs \
-         JOIN group_lists gl ON gl.id = pgs.group_list_id \
+        "SELECT DISTINCT gl.id, gl.name \
+         FROM group_lists gl \
+         WHERE EXISTS (SELECT 1 FROM colloscope_group_list_students WHERE group_list_id = gl.id) \
+            OR EXISTS (SELECT 1 FROM prefilled_group_students WHERE group_list_id = gl.id) \
          ORDER BY gl.name",
     )
     .fetch_all(pool)
@@ -54,9 +55,12 @@ pub async fn build(
     .fetch_all(pool)
     .await?;
 
-    // 3. Student-to-group mapping: (group_list_id, student_id) -> group_index
+    // 3. Student-to-group mapping from both sources: (group_list_id, student_id) -> group_idx
     let student_groups_rows = sqlx::query(
-        "SELECT group_list_id, student_id, group_index \
+        "SELECT group_list_id, student_id, group_number AS group_idx \
+         FROM colloscope_group_list_students \
+         UNION ALL \
+         SELECT group_list_id, student_id, group_index AS group_idx \
          FROM prefilled_group_students",
     )
     .fetch_all(pool)
@@ -66,8 +70,8 @@ pub async fn build(
     for row in student_groups_rows {
         let gl_id: i64 = row.get(0);
         let student_id: i64 = row.get(1);
-        let group_index: i64 = row.get(2);
-        student_groups.insert((gl_id, student_id), group_index);
+        let group_idx: i64 = row.get(2);
+        student_groups.insert((gl_id, student_id), group_idx);
     }
 
     // 4. Group names: group_list_id -> Vec<String>
@@ -122,11 +126,11 @@ pub async fn build(
 
             let cell_text = student_groups
                 .get(&(*gl_id, student_id))
-                .map(|&group_index| {
+                .map(|&group_idx| {
                     group_names_map
                         .get(gl_id)
-                        .map(|names| get_group_name(names, group_index))
-                        .unwrap_or_else(|| (group_index + 1).to_string())
+                        .map(|names| get_group_name(names, group_idx))
+                        .unwrap_or_else(|| (group_idx + 1).to_string())
                 })
                 .unwrap_or_default();
 

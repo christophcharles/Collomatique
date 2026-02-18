@@ -112,9 +112,6 @@ pub async fn build(
     }
 
     let total_week_cols = col_offset - cols.count;
-    if total_week_cols == 0 {
-        return Ok(());
-    }
 
     // 2. Fetch first_week from metadata for period title date ranges
     let first_week_str: Option<String> =

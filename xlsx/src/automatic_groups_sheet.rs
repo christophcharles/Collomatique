@@ -24,14 +24,10 @@ pub async fn build(
         "SELECT DISTINCT cgls.group_list_id, gl.name \
          FROM colloscope_group_list_students cgls \
          JOIN group_lists gl ON gl.id = cgls.group_list_id \
-         ORDER BY cgls.group_list_id",
+         ORDER BY gl.name",
     )
     .fetch_all(pool)
     .await?;
-
-    if group_lists.is_empty() {
-        return Ok(());
-    }
 
     let gl_count = group_lists.len();
 

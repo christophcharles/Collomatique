@@ -1,3 +1,4 @@
+mod all_groups_sheet;
 mod automatic_groups_sheet;
 mod colloscope_sheet;
 mod formats;
@@ -73,9 +74,14 @@ pub struct PrefilledGroupsConfig {
     pub sheet_name: String,
 }
 
+pub struct AllGroupsConfig {
+    pub sheet_name: String,
+}
+
 pub struct Config {
     pub global: GlobalConfig,
     pub colloscope: Option<ColloscopeConfig>,
+    pub all_groups: Option<AllGroupsConfig>,
     pub automatic_groups: Option<AutomaticGroupsConfig>,
     pub prefilled_groups: Option<PrefilledGroupsConfig>,
 }
@@ -92,6 +98,9 @@ impl Default for Config {
                 extra_info_column_name: "Info".into(),
                 teacher_email: Some("Contact".into()),
                 teacher_tel: None,
+            }),
+            all_groups: Some(AllGroupsConfig {
+                sheet_name: "Tous les groupes".into(),
             }),
             automatic_groups: Some(AutomaticGroupsConfig {
                 sheet_name: "Groupes automatiques".into(),
@@ -110,6 +119,12 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         let colloscope_ws = workbook.add_worksheet();
         colloscope_ws.set_name(&colloscope_config.sheet_name)?;
         colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
+    }
+
+    if let Some(all_groups_config) = &config.all_groups {
+        let all_groups_ws = workbook.add_worksheet();
+        all_groups_ws.set_name(&all_groups_config.sheet_name)?;
+        all_groups_sheet::build(all_groups_ws, pool, &config.global).await?;
     }
 
     if let Some(automatic_groups_config) = &config.automatic_groups {
