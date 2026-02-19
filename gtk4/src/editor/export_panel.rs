@@ -10,11 +10,12 @@ use crate::tools;
 
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
+    file_name: Option<PathBuf>,
 }
 
 #[derive(Debug)]
 pub enum ExportPanelInput {
-    Update(export_config::ExportConfig),
+    Update(export_config::ExportConfig, Option<PathBuf>),
     ExportClicked,
 }
 
@@ -66,6 +67,7 @@ impl Component for ExportPanel {
     ) -> ComponentParts<Self> {
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
+            file_name: None,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -73,21 +75,23 @@ impl Component for ExportPanel {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ExportPanelInput::Update(config) => {
+            ExportPanelInput::Update(config, file_name) => {
                 self.export_config = config;
+                self.file_name = file_name;
             }
             ExportPanelInput::ExportClicked => {
+                let default = match &self.file_name {
+                    Some(path) => {
+                        let mut xlsx_path = path.clone();
+                        xlsx_path.set_extension("xlsx");
+                        tools::open_save::DefaultSaveFile::ExistingFile(xlsx_path)
+                    }
+                    None => tools::open_save::DefaultSaveFile::SuggestedName(
+                        "FichierSansNom.xlsx".into(),
+                    ),
+                };
                 sender.oneshot_command(async move {
-                    match tools::open_save::generic_save_dialog(
-                        "Exporter en XLSX",
-                        &[
-                            ("Fichiers XLSX (*.xlsx)", "xlsx"),
-                            ("Tous les fichiers", "*"),
-                        ],
-                        Some("colloscope.xlsx"),
-                    )
-                    .await
-                    {
+                    match tools::open_save::save_xlsx_dialog(default).await {
                         Some(path) => ExportPanelCommandOutput::FileChosen(path),
                         None => ExportPanelCommandOutput::FileNotChosen,
                     }

@@ -465,6 +465,7 @@ impl EditorPanel {
             .sender()
             .send(export_panel::ExportPanelInput::Update(
                 self.data.get_data().get_inner_data().export_config.clone(),
+                self.file_name.clone(),
             ))
             .unwrap();
     }
@@ -866,7 +867,7 @@ impl Component for EditorPanel {
                 let file_name = self.file_name.clone();
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_dialog(match &file_name {
+                    match tools::open_save::save_collomatique_dialog(match &file_name {
                         Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
                         None => tools::open_save::DefaultSaveFile::SuggestedName(
                             "FichierSansNom.collomatique".into(),

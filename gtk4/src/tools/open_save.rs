@@ -7,14 +7,20 @@ pub enum DefaultSaveFile {
     SuggestedName(String),
 }
 
-pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
+fn build_save_dialog(
+    title: &str,
+    extensions: &[(&str, &str)],
+    default: DefaultSaveFile,
+) -> rfd::AsyncFileDialog {
     let mut dialog = rfd::AsyncFileDialog::new()
-        .set_title("Enregistrer sous")
-        .set_can_create_directories(true)
-        .add_filter("Fichiers collomatique (*.collomatique)", &["collomatique"])
-        .add_filter("Tous les fichiers", &["*"]);
+        .set_title(title)
+        .set_can_create_directories(true);
 
-    match default_name {
+    for (desc, ext) in extensions {
+        dialog = dialog.add_filter(*desc, &[ext]);
+    }
+
+    match default {
         DefaultSaveFile::None => {}
         DefaultSaveFile::ExistingFile(mut path) => {
             let filename = path
@@ -30,9 +36,35 @@ pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
         }
     }
 
-    let file = dialog.save_file().await;
+    dialog
+}
 
-    file.map(|handle| handle.path().to_owned())
+pub async fn save_collomatique_dialog(default: DefaultSaveFile) -> Option<PathBuf> {
+    build_save_dialog(
+        "Enregistrer sous",
+        &[
+            ("Fichiers collomatique (*.collomatique)", "collomatique"),
+            ("Tous les fichiers", "*"),
+        ],
+        default,
+    )
+    .save_file()
+    .await
+    .map(|h| h.path().to_owned())
+}
+
+pub async fn save_xlsx_dialog(default: DefaultSaveFile) -> Option<PathBuf> {
+    build_save_dialog(
+        "Exporter en XLSX",
+        &[
+            ("Fichiers XLSX (*.xlsx)", "xlsx"),
+            ("Tous les fichiers", "*"),
+        ],
+        default,
+    )
+    .save_file()
+    .await
+    .map(|h| h.path().to_owned())
 }
 
 pub async fn open_dialog() -> Option<PathBuf> {
