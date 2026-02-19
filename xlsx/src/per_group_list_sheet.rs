@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use rust_xlsxwriter::Worksheet;
+use rust_xlsxwriter::{Url, Worksheet};
 use sqlx::{Row, SqlitePool};
 
 use crate::Error;
@@ -43,7 +43,7 @@ pub async fn build(
 
     // 2. Fetch students per group (both automatic and prefilled sources)
     let student_rows = sqlx::query(
-        "SELECT s.surname, s.firstname, sg.group_idx \
+        "SELECT s.surname, s.firstname, s.email, s.tel, sg.group_idx \
          FROM students s \
          JOIN ( \
              SELECT student_id, group_number AS group_idx \
@@ -59,24 +59,32 @@ pub async fn build(
     .fetch_all(pool)
     .await?;
 
-    // 3. Build data structure: group_index -> list of (surname, firstname)
-    let mut groups: BTreeMap<i64, Vec<(String, String)>> = BTreeMap::new();
+    // 3. Build data structure: group_index -> list of (surname, firstname, email, tel)
+    let mut groups: BTreeMap<i64, Vec<(String, String, String, String)>> = BTreeMap::new();
     for row in &student_rows {
         let surname: String = row.get(0);
         let firstname: String = row.get(1);
-        let group_idx: i64 = row.get(2);
+        let email: String = row.get(2);
+        let tel: String = row.get(3);
+        let group_idx: i64 = row.get(4);
         groups
             .entry(group_idx)
             .or_default()
-            .push((surname, firstname));
+            .push((surname, firstname, email, tel));
     }
 
-    // 4. Header row
+    // 4. Title row
     let header_fmt = formats::header(bg);
-    worksheet.merge_range(0, 0, 0, 1, gl_name, &header_fmt)?;
+    worksheet.merge_range(0, 0, 0, 4, gl_name, &header_fmt)?;
 
-    // 5. Write rows
-    let mut current_row: u32 = 1;
+    // 5. Header row
+    let col_headers = ["Groupe", "Nom", "Prénom", "Courriel", "Téléphone"];
+    for (col, name) in col_headers.iter().enumerate() {
+        worksheet.write_with_format(1, col as u16, *name, &header_fmt)?;
+    }
+
+    // 6. Write rows
+    let mut current_row: u32 = 2;
     let group_count = groups.len();
 
     for (display_idx, (group_idx, students)) in groups.iter().enumerate() {
@@ -86,7 +94,7 @@ pub async fn build(
 
         let is_last_group = display_idx == group_count - 1;
 
-        for (student_idx, (surname, firstname)) in students.iter().enumerate() {
+        for (student_idx, (surname, firstname, email, tel)) in students.iter().enumerate() {
             let is_first_in_group = student_idx == 0;
             let is_last_in_group = student_idx == student_count - 1;
 
@@ -120,10 +128,17 @@ pub async fn build(
                 }
             }
 
-            // Col 1: student name
-            let student_name = format!("{surname} {firstname}");
+            // Cols 1–4: surname, firstname, email, telephone
             let student_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
-            worksheet.write_with_format(current_row, 1, &student_name, &student_fmt)?;
+            worksheet.write_with_format(current_row, 1, surname, &student_fmt)?;
+            worksheet.write_with_format(current_row, 2, firstname, &student_fmt)?;
+            if email.is_empty() {
+                worksheet.write_with_format(current_row, 3, "", &student_fmt)?;
+            } else {
+                let url = Url::new(format!("mailto:{email}")).set_text(email);
+                worksheet.write_url_with_format(current_row, 3, url, &student_fmt)?;
+            }
+            worksheet.write_with_format(current_row, 4, tel, &student_fmt)?;
 
             current_row += 1;
         }
@@ -131,7 +146,10 @@ pub async fn build(
 
     // Column widths
     worksheet.set_column_width(0, 14)?;
-    worksheet.set_column_width(1, 30)?;
+    worksheet.set_column_width(1, 16)?;
+    worksheet.set_column_width(2, 14)?;
+    worksheet.set_column_width(3, 24)?;
+    worksheet.set_column_width(4, 14)?;
 
     Ok(())
 }
