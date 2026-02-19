@@ -42,6 +42,8 @@ pub mod main_script;
 pub use main_script::*;
 pub mod colloscope;
 pub use colloscope::*;
+pub mod export_config;
+pub use export_config::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -60,6 +62,7 @@ pub enum OpCategory {
     Settings,
     MainScript,
     Colloscope,
+    ExportConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +79,7 @@ pub enum UpdateOp {
     Settings(SettingsUpdateOp),
     MainScript(MainScriptUpdateOp),
     Colloscope(ColloscopeUpdateOp),
+    ExportConfig(ExportConfigUpdateOp),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -104,6 +108,8 @@ pub enum UpdateError {
     MainScript(#[from] MainScriptUpdateError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeUpdateError),
+    #[error(transparent)]
+    ExportConfig(#[from] ExportConfigUpdateError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -120,6 +126,7 @@ pub enum UpdateWarning {
     Settings(SettingsUpdateWarning),
     MainScript(MainScriptUpdateWarning),
     Colloscope(ColloscopeUpdateWarning),
+    ExportConfig(ExportConfigUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -194,6 +201,12 @@ impl From<ColloscopeUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<ExportConfigUpdateWarning> for UpdateWarning {
+    fn from(value: ExportConfigUpdateWarning) -> Self {
+        UpdateWarning::ExportConfig(value)
+    }
+}
+
 impl UpdateWarning {
     fn build_desc_from_data<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
@@ -212,6 +225,7 @@ impl UpdateWarning {
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
             UpdateWarning::MainScript(w) => w.build_desc_from_data(data),
             UpdateWarning::Colloscope(w) => w.build_desc_from_data(data),
+            UpdateWarning::ExportConfig(w) => w.build_desc_from_data(data),
         }
     }
 }
@@ -290,6 +304,9 @@ impl UpdateOp {
             UpdateOp::Colloscope(colloscope_op) => {
                 CleaningOp::downcast(colloscope_op.get_next_cleaning_op(data))
             }
+            UpdateOp::ExportConfig(export_config_op) => {
+                CleaningOp::downcast(export_config_op.get_next_cleaning_op(data))
+            }
         }
     }
 
@@ -346,6 +363,10 @@ impl UpdateOp {
                 colloscope_op.apply_no_cleaning(data)?;
                 Ok(None)
             }
+            UpdateOp::ExportConfig(export_config_op) => {
+                export_config_op.apply_no_cleaning(data)?;
+                Ok(None)
+            }
         }
     }
 
@@ -387,6 +408,7 @@ impl UpdateOp {
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
             UpdateOp::MainScript(main_script_op) => main_script_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
+            UpdateOp::ExportConfig(export_config_op) => export_config_op.get_desc(),
         }
     }
 
