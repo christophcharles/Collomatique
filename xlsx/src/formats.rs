@@ -21,7 +21,7 @@ pub fn period_header(bg: Color) -> Format {
     header(bg)
 }
 
-pub fn week_header(left: u8, right: u8, bg: Color) -> Format {
+pub fn header_cell(left: u8, right: u8, bg: Color) -> Format {
     Format::new()
         .set_bold()
         .set_align(FormatAlign::Center)
@@ -31,6 +31,10 @@ pub fn week_header(left: u8, right: u8, bg: Color) -> Format {
         .set_border_left(border(left))
         .set_border_right(border(right))
         .set_background_color(bg)
+}
+
+pub fn week_header(left: u8, right: u8, bg: Color) -> Format {
+    header_cell(left, right, bg)
 }
 
 pub fn week_dates(left: u8, right: u8, bg: Color) -> Format {

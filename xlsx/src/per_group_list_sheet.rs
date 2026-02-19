@@ -89,7 +89,12 @@ pub async fn build(
 
     // 5. Header row
     for (col, name) in col_headers.iter().enumerate() {
-        worksheet.write_with_format(1, col as u16, *name, &header_fmt)?;
+        let fmt = match col {
+            1 => formats::header_cell(2, 1, bg),
+            2 => formats::header_cell(1, 2, bg),
+            _ => formats::header(bg),
+        };
+        worksheet.write_with_format(1, col as u16, *name, &fmt)?;
     }
 
     // 6. Write rows
@@ -153,21 +158,24 @@ pub async fn build(
             }
 
             // Cols 1+: surname, firstname, (email), (telephone)
-            let student_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
-            worksheet.write_with_format(current_row, 1, surname, &student_fmt)?;
-            worksheet.write_with_format(current_row, 2, firstname, &student_fmt)?;
+            let nom_fmt = formats::data_cell(top_b, bottom_b, 2, 1, row_bg);
+            let prenom_fmt = formats::data_cell(top_b, bottom_b, 1, 2, row_bg);
+            worksheet.write_with_format(current_row, 1, surname, &nom_fmt)?;
+            worksheet.write_with_format(current_row, 2, firstname, &prenom_fmt)?;
             let mut c = 3u16;
             if show_emails {
+                let data_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
                 if email.is_empty() {
-                    worksheet.write_with_format(current_row, c, "", &student_fmt)?;
+                    worksheet.write_with_format(current_row, c, "", &data_fmt)?;
                 } else {
                     let url = Url::new(format!("mailto:{email}")).set_text(email);
-                    worksheet.write_url_with_format(current_row, c, url, &student_fmt)?;
+                    worksheet.write_url_with_format(current_row, c, url, &data_fmt)?;
                 }
                 c += 1;
             }
             if show_tel {
-                worksheet.write_with_format(current_row, c, tel, &student_fmt)?;
+                let data_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
+                worksheet.write_with_format(current_row, c, tel, &data_fmt)?;
                 c += 1;
             }
             let _ = c;

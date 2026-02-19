@@ -126,23 +126,29 @@ async fn build_internal(
     let gl_count = group_lists.len();
 
     // -- Row 0: Headers --
-    let header_fmt = formats::header(bg);
-    let mut fixed_headers: Vec<&str> = vec!["Nom", "Prénom"];
+    let nom_hdr = formats::header_cell(2, 1, bg);
+    let prenom_hdr = formats::header_cell(1, 2, bg);
+    worksheet.write_with_format(0, 0, "Nom", &nom_hdr)?;
+    worksheet.write_with_format(0, 1, "Prénom", &prenom_hdr)?;
+    let mut c = 2u16;
     if show_emails {
-        fixed_headers.push("Courriel");
+        let hdr = formats::header(bg);
+        worksheet.write_with_format(0, c, "Courriel", &hdr)?;
+        c += 1;
     }
     if show_tel {
-        fixed_headers.push("Téléphone");
+        let hdr = formats::header(bg);
+        worksheet.write_with_format(0, c, "Téléphone", &hdr)?;
+        c += 1;
     }
-    let gl_start_col = fixed_headers.len() as u16;
-    for (col, name) in fixed_headers.iter().enumerate() {
-        worksheet.write_with_format(0, col as u16, *name, &header_fmt)?;
-    }
+    let gl_start_col = c;
 
     let gl_ids: Vec<i64> = group_lists.iter().map(|(id, _)| *id).collect();
 
     for (i, (_, gl_name)) in group_lists.iter().enumerate() {
-        worksheet.write_with_format(0, gl_start_col + i as u16, gl_name, &header_fmt)?;
+        let (left_b, right_b) = gl_border(i, gl_count);
+        let gl_hdr = formats::header_cell(left_b, right_b, bg);
+        worksheet.write_with_format(0, gl_start_col + i as u16, gl_name, &gl_hdr)?;
     }
 
     // Students sorted by name
@@ -188,11 +194,13 @@ async fn build_internal(
         let (top_b, bot_b) = vertical_borders(row_idx, student_count);
         let row_bg = if row_idx % 2 == 0 { stripe } else { bg };
 
-        let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
-        worksheet.write_with_format(row, 0, &surname, &data_fmt)?;
-        worksheet.write_with_format(row, 1, &firstname, &data_fmt)?;
+        let nom_fmt = formats::data_cell(top_b, bot_b, 2, 1, row_bg);
+        let prenom_fmt = formats::data_cell(top_b, bot_b, 1, 2, row_bg);
+        worksheet.write_with_format(row, 0, &surname, &nom_fmt)?;
+        worksheet.write_with_format(row, 1, &firstname, &prenom_fmt)?;
         let mut c = 2u16;
         if show_emails {
+            let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
             if email.is_empty() {
                 worksheet.write_with_format(row, c, "", &data_fmt)?;
             } else {
@@ -202,6 +210,7 @@ async fn build_internal(
             c += 1;
         }
         if show_tel {
+            let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
             worksheet.write_with_format(row, c, &tel, &data_fmt)?;
             c += 1;
         }
