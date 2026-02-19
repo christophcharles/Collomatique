@@ -756,6 +756,9 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportSqliteAs(path) => {
                         EditorInput::ExportSqliteAs(path)
                     }
+                    export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
+                    }
                 });
 
         let check_script_dialog = check_script::Dialog::builder()
