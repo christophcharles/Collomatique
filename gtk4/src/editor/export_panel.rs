@@ -87,7 +87,7 @@ impl Component for ExportPanel {
                         tools::open_save::DefaultSaveFile::ExistingFile(xlsx_path)
                     }
                     None => tools::open_save::DefaultSaveFile::SuggestedName(
-                        "FichierSansNom.xlsx".into(),
+                        format!("{}.xlsx", super::DEFAULT_FILE_STEM).into(),
                     ),
                 };
                 sender.oneshot_command(async move {

@@ -22,6 +22,8 @@ type ProblemBuilder = collo_ml::problem::ProblemBuilder<
 use crate::editor::colloscope::ColloscopeOutput;
 use crate::tools;
 
+pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
+
 mod error_dialog;
 
 mod assignments;
@@ -870,7 +872,7 @@ impl Component for EditorPanel {
                     match tools::open_save::save_collomatique_dialog(match &file_name {
                         Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
                         None => tools::open_save::DefaultSaveFile::SuggestedName(
-                            "FichierSansNom.collomatique".into(),
+                            format!("{DEFAULT_FILE_STEM}.collomatique").into(),
                         ),
                     })
                     .await
