@@ -67,6 +67,20 @@ pub async fn save_xlsx_dialog(default: DefaultSaveFile) -> Option<PathBuf> {
     .map(|h| h.path().to_owned())
 }
 
+pub async fn save_sqlite_dialog(default: DefaultSaveFile) -> Option<PathBuf> {
+    build_save_dialog(
+        "Exporter la base de données SQLite",
+        &[
+            ("Fichiers SQLite (*.sqlite)", "sqlite"),
+            ("Tous les fichiers", "*"),
+        ],
+        default,
+    )
+    .save_file()
+    .await
+    .map(|h| h.path().to_owned())
+}
+
 pub async fn open_dialog() -> Option<PathBuf> {
     generic_open_dialog(
         "Ouvrir",

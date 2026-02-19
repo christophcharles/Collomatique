@@ -23,10 +23,6 @@ struct Args {
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
 
-    /// Export file to SQLite database instead of opening GUI
-    #[arg(long, value_name = "OUTPUT")]
-    export: Option<PathBuf>,
-
     /// Everything after gets passed through to GTK.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     gtk_options: Vec<String>,
@@ -37,31 +33,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     if args.rpc_engine {
         return collomatique_rpc_engine::run_rpc_engine();
-    }
-
-    if let Some(export_path) = args.export {
-        let input_file = args
-            .file
-            .ok_or_else(|| anyhow::anyhow!("--export requires an input file argument"))?;
-
-        let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(async {
-            let (data, _caveats) = collomatique_storage::load_data_from_file(&input_file)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to load file: {:?}", e))?;
-
-            let pool = sqlx::SqlitePool::connect(":memory:").await?;
-            collomatique_sqlite_state::create_schema(&pool).await?;
-
-            collomatique_sqlite_state::inner_data_to_sqlite(&pool, data.get_inner_data()).await?;
-
-            collomatique_sqlite_state::export_to_file(&pool, &export_path).await?;
-
-            println!("Exported to {}", export_path.display());
-            Ok::<(), anyhow::Error>(())
-        })?;
-
-        return Ok(());
     }
 
     let payload = collomatique_gtk4::AppInit {

@@ -17,17 +17,21 @@ pub struct ExportPanel {
 pub enum ExportPanelInput {
     Update(export_config::ExportConfig, Option<PathBuf>),
     ExportClicked,
+    ExportSqliteClicked,
 }
 
 #[derive(Debug)]
 pub enum ExportPanelOutput {
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
+    ExportSqliteAs(PathBuf),
 }
 
 #[derive(Debug)]
 pub enum ExportPanelCommandOutput {
     FileChosen(PathBuf),
     FileNotChosen,
+    SqliteFileChosen(PathBuf),
+    SqliteFileNotChosen,
 }
 
 #[relm4::component(pub)]
@@ -55,6 +59,27 @@ impl Component for ExportPanel {
                         set_label: "Exporter le colloscope",
                     },
                     connect_clicked => ExportPanelInput::ExportClicked,
+                },
+                gtk::Box {
+                    set_vexpand: true,
+                    set_size_request: (-1,300),
+                },
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "Informations de débogage",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                    set_margin_all: 5,
+                },
+                gtk::Button {
+                    add_css_class: "frame",
+                    add_css_class: "warning",
+                    set_hexpand: true,
+                    set_margin_all: 5,
+                    adw::ButtonContent {
+                        set_icon_name: "document-export-symbolic",
+                        set_label: "Exporter la base de donnée SQL",
+                    },
+                    connect_clicked => ExportPanelInput::ExportSqliteClicked,
                 },
             },
         }
@@ -97,6 +122,24 @@ impl Component for ExportPanel {
                     }
                 });
             }
+            ExportPanelInput::ExportSqliteClicked => {
+                let default = match &self.file_name {
+                    Some(path) => {
+                        let mut sqlite_path = path.clone();
+                        sqlite_path.set_extension("sqlite");
+                        tools::open_save::DefaultSaveFile::ExistingFile(sqlite_path)
+                    }
+                    None => tools::open_save::DefaultSaveFile::SuggestedName(
+                        format!("{}.sqlite", super::DEFAULT_FILE_STEM).into(),
+                    ),
+                };
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_sqlite_dialog(default).await {
+                        Some(path) => ExportPanelCommandOutput::SqliteFileChosen(path),
+                        None => ExportPanelCommandOutput::SqliteFileNotChosen,
+                    }
+                });
+            }
         }
     }
 
@@ -107,11 +150,17 @@ impl Component for ExportPanel {
         _root: &Self::Root,
     ) {
         match message {
-            ExportPanelCommandOutput::FileNotChosen => {}
+            ExportPanelCommandOutput::FileNotChosen
+            | ExportPanelCommandOutput::SqliteFileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
                 let xlsx_config = super::export::to_xlsx_config(&self.export_config);
                 sender
                     .output(ExportPanelOutput::ExportColloscopeAs(path, xlsx_config))
+                    .unwrap();
+            }
+            ExportPanelCommandOutput::SqliteFileChosen(path) => {
+                sender
+                    .output(ExportPanelOutput::ExportSqliteAs(path))
                     .unwrap();
             }
         }

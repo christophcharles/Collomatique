@@ -29,6 +29,7 @@ mod error_dialog;
 mod assignments;
 mod check_script;
 mod colloscope;
+mod diagnostics;
 mod export;
 mod export_panel;
 mod general_planning;
@@ -69,6 +70,7 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     SolveColloscopeClicked,
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
+    ExportSqliteAs(PathBuf),
 }
 
 #[derive(Debug)]
@@ -97,6 +99,8 @@ pub enum EditorCommandOutput {
     },
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
+    ExportSqliteSuccessful(PathBuf),
+    ExportSqliteFailed(PathBuf, String),
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -748,6 +752,9 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
                     }
+                    export_panel::ExportPanelOutput::ExportSqliteAs(path) => {
+                        EditorInput::ExportSqliteAs(path)
+                    }
                 });
 
         let check_script_dialog = check_script::Dialog::builder()
@@ -1020,6 +1027,19 @@ impl Component for EditorPanel {
                     }
                 });
             }
+            EditorInput::ExportSqliteAs(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("Export en cours de {}...", path.to_string_lossy()),
+                    timeout: None,
+                });
+                let inner_data = self.data.get_data().get_inner_data().clone();
+                sender.oneshot_command(async move {
+                    match diagnostics::export_to_sqlite(&inner_data, &path).await {
+                        Ok(()) => EditorCommandOutput::ExportSqliteSuccessful(path),
+                        Err(e) => EditorCommandOutput::ExportSqliteFailed(path, e.to_string()),
+                    }
+                });
+            }
         }
     }
 
@@ -1082,6 +1102,18 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::ExportXlsxFailed(path, error) => {
+                self.toast_info = Some(ToastInfo::Dismiss);
+                sender
+                    .output(EditorOutput::ExportError(path, error))
+                    .unwrap();
+            }
+            EditorCommandOutput::ExportSqliteSuccessful(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} exporté", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+            }
+            EditorCommandOutput::ExportSqliteFailed(path, error) => {
                 self.toast_info = Some(ToastInfo::Dismiss);
                 sender
                     .output(EditorOutput::ExportError(path, error))
