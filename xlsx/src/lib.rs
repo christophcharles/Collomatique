@@ -5,6 +5,7 @@ mod formats;
 mod per_group_list_sheet;
 mod prefilled_groups_sheet;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use rust_xlsxwriter::{Workbook, XlsxError};
@@ -81,6 +82,7 @@ pub struct ColloscopeConfig {
     pub display_annotations: bool,
     pub no_interrogation_color: Color,
     pub annotation_color: Option<Color>,
+    pub extra_colors: BTreeMap<String, Color>,
 }
 
 pub struct AutomaticGroupsConfig {
@@ -132,6 +134,7 @@ impl Default for ColloscopeConfig {
             display_annotations: true,
             no_interrogation_color: Color::new(140, 140, 140),
             annotation_color: Some(Color::new(255, 255, 0)),
+            extra_colors: BTreeMap::new(),
         }
     }
 }

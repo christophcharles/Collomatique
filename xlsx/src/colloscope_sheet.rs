@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rust_xlsxwriter::{Url, Worksheet};
 use sqlx::{Row, SqlitePool};
@@ -153,27 +153,34 @@ pub async fn build(
 
     let annotation_bg = colloscope.annotation_color.as_ref().map(|c| c.to_xlsx());
 
-    let annotated_weeks: HashSet<(i64, i64)> = if annotation_bg.is_some() {
-        annotations.keys().copied().collect()
-    } else {
-        HashSet::new()
-    };
+    let extra_colors_xlsx: BTreeMap<&str, rust_xlsxwriter::Color> = colloscope
+        .extra_colors
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.to_xlsx()))
+        .collect();
 
     let week_bg = |period_id: i64,
                    week_index: usize,
                    default_bg: rust_xlsxwriter::Color|
      -> rust_xlsxwriter::Color {
-        if no_interrog_weeks.contains(&(period_id, week_index as i64)) {
-            no_interrog_bg
-        } else if let Some(abg) = annotation_bg {
-            if annotated_weeks.contains(&(period_id, week_index as i64)) {
-                abg
-            } else {
-                default_bg
+        // 1. extra_colors match has highest priority
+        if let Some(annotation_text) = annotations.get(&(period_id, week_index as i64)) {
+            if let Some(&color) = extra_colors_xlsx.get(annotation_text.as_str()) {
+                return color;
             }
-        } else {
-            default_bg
         }
+        // 2. no-interrogation week
+        if no_interrog_weeks.contains(&(period_id, week_index as i64)) {
+            return no_interrog_bg;
+        }
+        // 3. generic annotation color
+        if let Some(abg) = annotation_bg {
+            if annotations.contains_key(&(period_id, week_index as i64)) {
+                return abg;
+            }
+        }
+        // 4. default
+        default_bg
     };
 
     // -- Row 0: Period labels --
