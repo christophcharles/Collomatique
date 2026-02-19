@@ -11,6 +11,8 @@ pub async fn build(
     worksheet: &mut Worksheet,
     pool: &SqlitePool,
     global: &crate::GlobalConfig,
+    show_emails: bool,
+    show_tel: bool,
 ) -> Result<usize, Error> {
     let bg = global.background_color.to_xlsx();
     let stripe = global
@@ -34,7 +36,14 @@ pub async fn build(
 
     // -- Row 0: Headers --
     let header_fmt = formats::header(bg);
-    let fixed_headers = ["Nom", "Prénom", "Courriel", "Téléphone"];
+    let mut fixed_headers: Vec<&str> = vec!["Nom", "Prénom"];
+    if show_emails {
+        fixed_headers.push("Courriel");
+    }
+    if show_tel {
+        fixed_headers.push("Téléphone");
+    }
+    let gl_start_col = fixed_headers.len() as u16;
     for (col, name) in fixed_headers.iter().enumerate() {
         worksheet.write_with_format(0, col as u16, *name, &header_fmt)?;
     }
@@ -43,7 +52,7 @@ pub async fn build(
 
     for (i, gl_row) in group_lists.iter().enumerate() {
         let gl_name: String = gl_row.get(1);
-        worksheet.write_with_format(0, 4 + i as u16, &gl_name, &header_fmt)?;
+        worksheet.write_with_format(0, gl_start_col + i as u16, &gl_name, &header_fmt)?;
     }
 
     // 2. Students sorted by name
@@ -111,16 +120,24 @@ pub async fn build(
         let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
         worksheet.write_with_format(row, 0, &surname, &data_fmt)?;
         worksheet.write_with_format(row, 1, &firstname, &data_fmt)?;
-        if email.is_empty() {
-            worksheet.write_with_format(row, 2, "", &data_fmt)?;
-        } else {
-            let url = Url::new(format!("mailto:{email}")).set_text(&email);
-            worksheet.write_url_with_format(row, 2, url, &data_fmt)?;
+        let mut c = 2u16;
+        if show_emails {
+            if email.is_empty() {
+                worksheet.write_with_format(row, c, "", &data_fmt)?;
+            } else {
+                let url = Url::new(format!("mailto:{email}")).set_text(&email);
+                worksheet.write_url_with_format(row, c, url, &data_fmt)?;
+            }
+            c += 1;
         }
-        worksheet.write_with_format(row, 3, &tel, &data_fmt)?;
+        if show_tel {
+            worksheet.write_with_format(row, c, &tel, &data_fmt)?;
+            c += 1;
+        }
+        let _ = c;
 
         for (i, gl_id) in gl_ids.iter().enumerate() {
-            let col = 4 + i as u16;
+            let col = gl_start_col + i as u16;
             let (left_b, right_b) = gl_border(i, gl_count);
             let cell_fmt = formats::data_cell(top_b, bot_b, left_b, right_b, row_bg);
 
@@ -141,10 +158,17 @@ pub async fn build(
     // Column widths
     worksheet.set_column_width(0, 16)?;
     worksheet.set_column_width(1, 14)?;
-    worksheet.set_column_width(2, 24)?;
-    worksheet.set_column_width(3, 14)?;
+    let mut c = 2u16;
+    if show_emails {
+        worksheet.set_column_width(c, 24)?;
+        c += 1;
+    }
+    if show_tel {
+        worksheet.set_column_width(c, 14)?;
+        c += 1;
+    }
     if gl_count > 0 {
-        worksheet.set_column_range_width(4, 4 + gl_count as u16 - 1, 12)?;
+        worksheet.set_column_range_width(c, c + gl_count as u16 - 1, 12)?;
     }
 
     Ok(gl_count)

@@ -13,6 +13,8 @@ pub async fn build(
     global: &crate::GlobalConfig,
     gl_id: i64,
     gl_name: &str,
+    show_emails: bool,
+    show_tel: bool,
 ) -> Result<(), Error> {
     let bg = global.background_color.to_xlsx();
     let stripe = global
@@ -75,10 +77,17 @@ pub async fn build(
 
     // 4. Title row
     let header_fmt = formats::header(bg);
-    worksheet.merge_range(0, 0, 0, 4, gl_name, &header_fmt)?;
+    let mut col_headers: Vec<&str> = vec!["Groupe", "Nom", "Prénom"];
+    if show_emails {
+        col_headers.push("Courriel");
+    }
+    if show_tel {
+        col_headers.push("Téléphone");
+    }
+    let last_col = col_headers.len() as u16 - 1;
+    worksheet.merge_range(0, 0, 0, last_col, gl_name, &header_fmt)?;
 
     // 5. Header row
-    let col_headers = ["Groupe", "Nom", "Prénom", "Courriel", "Téléphone"];
     for (col, name) in col_headers.iter().enumerate() {
         worksheet.write_with_format(1, col as u16, *name, &header_fmt)?;
     }
@@ -128,17 +137,25 @@ pub async fn build(
                 }
             }
 
-            // Cols 1–4: surname, firstname, email, telephone
+            // Cols 1+: surname, firstname, (email), (telephone)
             let student_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
             worksheet.write_with_format(current_row, 1, surname, &student_fmt)?;
             worksheet.write_with_format(current_row, 2, firstname, &student_fmt)?;
-            if email.is_empty() {
-                worksheet.write_with_format(current_row, 3, "", &student_fmt)?;
-            } else {
-                let url = Url::new(format!("mailto:{email}")).set_text(email);
-                worksheet.write_url_with_format(current_row, 3, url, &student_fmt)?;
+            let mut c = 3u16;
+            if show_emails {
+                if email.is_empty() {
+                    worksheet.write_with_format(current_row, c, "", &student_fmt)?;
+                } else {
+                    let url = Url::new(format!("mailto:{email}")).set_text(email);
+                    worksheet.write_url_with_format(current_row, c, url, &student_fmt)?;
+                }
+                c += 1;
             }
-            worksheet.write_with_format(current_row, 4, tel, &student_fmt)?;
+            if show_tel {
+                worksheet.write_with_format(current_row, c, tel, &student_fmt)?;
+                c += 1;
+            }
+            let _ = c;
 
             current_row += 1;
         }
@@ -148,8 +165,16 @@ pub async fn build(
     worksheet.set_column_width(0, 14)?;
     worksheet.set_column_width(1, 16)?;
     worksheet.set_column_width(2, 14)?;
-    worksheet.set_column_width(3, 24)?;
-    worksheet.set_column_width(4, 14)?;
+    let mut c = 3u16;
+    if show_emails {
+        worksheet.set_column_width(c, 24)?;
+        c += 1;
+    }
+    if show_tel {
+        worksheet.set_column_width(c, 14)?;
+        c += 1;
+    }
+    let _ = c;
 
     Ok(())
 }

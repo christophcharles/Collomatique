@@ -88,20 +88,28 @@ pub struct ColloscopeConfig {
 pub struct AutomaticGroupsConfig {
     pub sheet_name: String,
     pub orientation: Option<PageOrientation>,
+    pub show_emails: bool,
+    pub show_tel: bool,
 }
 
 pub struct PrefilledGroupsConfig {
     pub sheet_name: String,
     pub orientation: Option<PageOrientation>,
+    pub show_emails: bool,
+    pub show_tel: bool,
 }
 
 pub struct AllGroupsConfig {
     pub sheet_name: String,
     pub orientation: Option<PageOrientation>,
+    pub show_emails: bool,
+    pub show_tel: bool,
 }
 
 pub struct PerGroupListConfig {
     pub orientation: PageOrientation,
+    pub show_emails: bool,
+    pub show_tel: bool,
 }
 
 pub struct Config {
@@ -144,6 +152,8 @@ impl Default for AllGroupsConfig {
         AllGroupsConfig {
             sheet_name: "Tous les groupes".into(),
             orientation: None,
+            show_emails: true,
+            show_tel: false,
         }
     }
 }
@@ -153,6 +163,8 @@ impl Default for AutomaticGroupsConfig {
         AutomaticGroupsConfig {
             sheet_name: "Groupes automatiques".into(),
             orientation: None,
+            show_emails: true,
+            show_tel: false,
         }
     }
 }
@@ -162,6 +174,8 @@ impl Default for PrefilledGroupsConfig {
         PrefilledGroupsConfig {
             sheet_name: "Groupes préremplis".into(),
             orientation: None,
+            show_emails: true,
+            show_tel: false,
         }
     }
 }
@@ -170,6 +184,8 @@ impl Default for PerGroupListConfig {
     fn default() -> Self {
         PerGroupListConfig {
             orientation: PageOrientation::Portrait,
+            show_emails: true,
+            show_tel: false,
         }
     }
 }
@@ -219,6 +235,8 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         }
         colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
         colloscope_ws.set_paper_size(PAPER_SIZE_A4);
+        colloscope_ws.set_print_center_horizontally(true);
+        colloscope_ws.set_print_center_vertically(true);
         colloscope_ws.set_print_fit_to_pages(1, 1);
         apply_orientation(colloscope_ws, &colloscope_config.orientation);
     }
@@ -228,8 +246,17 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         if let Some(safe_name) = sanitize_sheet_name(&all_groups_config.sheet_name) {
             all_groups_ws.set_name(&safe_name)?;
         }
-        let gl_count = all_groups_sheet::build(all_groups_ws, pool, &config.global).await?;
+        let gl_count = all_groups_sheet::build(
+            all_groups_ws,
+            pool,
+            &config.global,
+            all_groups_config.show_emails,
+            all_groups_config.show_tel,
+        )
+        .await?;
         all_groups_ws.set_paper_size(PAPER_SIZE_A4);
+        all_groups_ws.set_print_center_horizontally(true);
+        all_groups_ws.set_print_center_vertically(true);
         all_groups_ws.set_print_fit_to_pages(1, 1);
         let orientation = all_groups_config.orientation.as_ref().unwrap_or(
             if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
@@ -254,8 +281,17 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&automatic_groups_config.sheet_name) {
                 groups_ws.set_name(&safe_name)?;
             }
-            let gl_count = automatic_groups_sheet::build(groups_ws, pool, &config.global).await?;
+            let gl_count = automatic_groups_sheet::build(
+                groups_ws,
+                pool,
+                &config.global,
+                automatic_groups_config.show_emails,
+                automatic_groups_config.show_tel,
+            )
+            .await?;
             groups_ws.set_paper_size(PAPER_SIZE_A4);
+            groups_ws.set_print_center_horizontally(true);
+            groups_ws.set_print_center_vertically(true);
             groups_ws.set_print_fit_to_pages(1, 1);
             let orientation = automatic_groups_config.orientation.as_ref().unwrap_or(
                 if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
@@ -281,9 +317,17 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&prefilled_groups_config.sheet_name) {
                 prefilled_ws.set_name(&safe_name)?;
             }
-            let gl_count =
-                prefilled_groups_sheet::build(prefilled_ws, pool, &config.global).await?;
+            let gl_count = prefilled_groups_sheet::build(
+                prefilled_ws,
+                pool,
+                &config.global,
+                prefilled_groups_config.show_emails,
+                prefilled_groups_config.show_tel,
+            )
+            .await?;
             prefilled_ws.set_paper_size(PAPER_SIZE_A4);
+            prefilled_ws.set_print_center_horizontally(true);
+            prefilled_ws.set_print_center_vertically(true);
             prefilled_ws.set_print_fit_to_pages(1, 1);
             let orientation = prefilled_groups_config.orientation.as_ref().unwrap_or(
                 if gl_count >= AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD {
@@ -315,8 +359,19 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&gl_name) {
                 ws.set_name(&safe_name)?;
             }
-            per_group_list_sheet::build(ws, pool, &config.global, gl_id, &gl_name).await?;
+            per_group_list_sheet::build(
+                ws,
+                pool,
+                &config.global,
+                gl_id,
+                &gl_name,
+                per_group_list_config.show_emails,
+                per_group_list_config.show_tel,
+            )
+            .await?;
             ws.set_paper_size(PAPER_SIZE_A4);
+            ws.set_print_center_horizontally(true);
+            ws.set_print_center_vertically(true);
             ws.set_print_fit_to_pages(1, 1);
             apply_orientation(ws, &per_group_list_config.orientation);
         }
