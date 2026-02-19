@@ -118,8 +118,14 @@ pub async fn build(
                 1
             };
 
-            // Col 0: group name (merged or single)
+            // Col 0: group name (merged or single), with mailto link if emails exist
             if is_first_in_group {
+                let emails: Vec<&str> = students
+                    .iter()
+                    .map(|(_, _, email, _)| email.as_str())
+                    .filter(|e| !e.is_empty())
+                    .collect();
+
                 let group_fmt = formats::data_cell(top_b, bottom_b, 2, 2, row_bg);
                 if student_count > 1 {
                     let merge_bottom_b: u8 = if is_last_group { 2 } else { 2 };
@@ -132,6 +138,15 @@ pub async fn build(
                         &name,
                         &merge_fmt,
                     )?;
+                    if !emails.is_empty() && show_emails {
+                        let mailto = format!("mailto:{}", emails.join(","));
+                        let url = Url::new(mailto).set_text(&name);
+                        worksheet.write_url_with_format(current_row, 0, url, &merge_fmt)?;
+                    }
+                } else if !emails.is_empty() && show_emails {
+                    let mailto = format!("mailto:{}", emails.join(","));
+                    let url = Url::new(mailto).set_text(&name);
+                    worksheet.write_url_with_format(current_row, 0, url, &group_fmt)?;
                 } else {
                     worksheet.write_with_format(current_row, 0, &name, &group_fmt)?;
                 }
