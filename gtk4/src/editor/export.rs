@@ -15,7 +15,7 @@ fn to_xlsx_orientation(o: &export_config::PageOrientation) -> collomatique_xlsx:
     }
 }
 
-fn to_xlsx_config(ec: &export_config::ExportConfig) -> collomatique_xlsx::Config {
+pub fn to_xlsx_config(ec: &export_config::ExportConfig) -> collomatique_xlsx::Config {
     collomatique_xlsx::Config {
         global: collomatique_xlsx::GlobalConfig {
             background_color: to_xlsx_color(&ec.global.background_color),
@@ -91,13 +91,13 @@ fn to_xlsx_per_student_groups(
 pub async fn export_to_xlsx(
     data: &collomatique_state_colloscopes::InnerData,
     path: &std::path::Path,
+    xlsx_config: &collomatique_xlsx::Config,
 ) -> Result<(), anyhow::Error> {
     let pool = sqlx::SqlitePool::connect(":memory:").await?;
     collomatique_sqlite_state::create_schema(&pool).await?;
     collomatique_sqlite_state::inner_data_to_sqlite(&pool, data).await?;
 
-    let xlsx_config = to_xlsx_config(&data.export_config);
-    collomatique_xlsx::write_xlsx(&pool, path, &xlsx_config)
+    collomatique_xlsx::write_xlsx(&pool, path, xlsx_config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to write XLSX: {e}"))?;
     Ok(())

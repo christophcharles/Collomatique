@@ -27,6 +27,8 @@ mod error_dialog;
 mod assignments;
 mod check_script;
 mod colloscope;
+mod export;
+mod export_panel;
 mod general_planning;
 mod group_lists;
 mod incompats;
@@ -64,6 +66,7 @@ pub enum EditorInput {
     RunScript(PathBuf, String),
     NewStateFromSecondInstance(AppState<Data, Desc>),
     SolveColloscopeClicked,
+    ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
 }
 
 #[derive(Debug)]
@@ -71,6 +74,7 @@ pub enum EditorOutput {
     UpdateActions,
     SaveError(PathBuf, String),
     PythonLoadingError(PathBuf, String),
+    ExportError(PathBuf, String),
     StartOpenSaveDialog,
     EndOpenSaveDialog,
 }
@@ -89,6 +93,8 @@ pub enum EditorCommandOutput {
         source: Option<String>,
         result: Result<ProblemBuilder, SimpleProblemError>,
     },
+    ExportXlsxSuccessful(PathBuf),
+    ExportXlsxFailed(PathBuf, String),
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -116,6 +122,7 @@ enum PanelNumbers {
     ExtraSettings = 9,
     MainScript = 10,
     Colloscope = 11,
+    Export = 12,
 }
 
 impl PanelNumbers {
@@ -133,6 +140,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings,
             PanelNumbers::MainScript,
             PanelNumbers::Colloscope,
+            PanelNumbers::Export,
         ]
         .into_iter()
     }
@@ -151,6 +159,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "extra_settings",
             PanelNumbers::MainScript => "main_script",
             PanelNumbers::Colloscope => "colloscope",
+            PanelNumbers::Export => "export",
         }
     }
 
@@ -168,6 +177,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
             PanelNumbers::MainScript => "Script ColloML (avancé)",
             PanelNumbers::Colloscope => "Colloscope",
+            PanelNumbers::Export => "Exporter",
         }
     }
 }
@@ -210,6 +220,7 @@ pub struct EditorPanel {
     settings: Controller<settings::Settings>,
     main_script: Controller<main_script::MainScript>,
     colloscope: Controller<colloscope::Colloscope>,
+    export_panel: Controller<export_panel::ExportPanel>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_second_instance_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -448,6 +459,12 @@ impl EditorPanel {
                 self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
                 ast_option,
+            ))
+            .unwrap();
+        self.export_panel
+            .sender()
+            .send(export_panel::ExportPanelInput::Update(
+                self.data.get_data().get_inner_data().export_config.clone(),
             ))
             .unwrap();
     }
@@ -721,6 +738,15 @@ impl Component for EditorPanel {
                     ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
                 });
 
+        let export_panel =
+            export_panel::ExportPanel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
+                        EditorInput::ExportColloscopeAs(path, config)
+                    }
+                });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -779,6 +805,7 @@ impl Component for EditorPanel {
             settings,
             main_script,
             colloscope,
+            export_panel,
             check_script_dialog,
             run_second_instance_dialog,
             warning_op_dialog,
@@ -799,6 +826,7 @@ impl Component for EditorPanel {
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
                 PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
+                PanelNumbers::Export => model.export_panel.widget().clone().upcast(),
             };
             widgets
                 .main_stack
@@ -976,6 +1004,19 @@ impl Component for EditorPanel {
                     ))
                     .unwrap();
             }
+            EditorInput::ExportColloscopeAs(path, xlsx_config) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("Export en cours de {}...", path.to_string_lossy()),
+                    timeout: None,
+                });
+                let inner_data = self.data.get_data().get_inner_data().clone();
+                sender.oneshot_command(async move {
+                    match export::export_to_xlsx(&inner_data, &path, &xlsx_config).await {
+                        Ok(()) => EditorCommandOutput::ExportXlsxSuccessful(path),
+                        Err(e) => EditorCommandOutput::ExportXlsxFailed(path, e.to_string()),
+                    }
+                });
+            }
         }
     }
 
@@ -1029,6 +1070,18 @@ impl Component for EditorPanel {
             EditorCommandOutput::ScriptLoadingFailed(path, error) => {
                 sender
                     .output(EditorOutput::PythonLoadingError(path, error))
+                    .unwrap();
+            }
+            EditorCommandOutput::ExportXlsxSuccessful(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} exporté", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+            }
+            EditorCommandOutput::ExportXlsxFailed(path, error) => {
+                self.toast_info = Some(ToastInfo::Dismiss);
+                sender
+                    .output(EditorOutput::ExportError(path, error))
                     .unwrap();
             }
             EditorCommandOutput::MainScriptCompiled { source, result } => {

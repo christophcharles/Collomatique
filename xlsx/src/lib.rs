@@ -15,11 +15,13 @@ const PAPER_SIZE_A4: u8 = 9;
 /// Group sheets with at least this many group lists switch to landscape
 const AUTO_LANDSCAPE_GROUP_LIST_THRESHOLD: usize = 4;
 
+#[derive(Debug)]
 pub enum PageOrientation {
     Portrait,
     Landscape,
 }
 
+#[derive(Debug)]
 pub struct Color {
     red: u8,
     green: u8,
@@ -65,11 +67,13 @@ impl From<sqlx::Error> for Error {
     }
 }
 
+#[derive(Debug)]
 pub struct GlobalConfig {
     pub background_color: Color,
     pub stripes_color: Option<Color>,
 }
 
+#[derive(Debug)]
 pub struct ColloscopeConfig {
     pub sheet_name: String,
     pub extra_info_column_name: String,
@@ -83,6 +87,7 @@ pub struct ColloscopeConfig {
     pub extra_colors: BTreeMap<String, Color>,
 }
 
+#[derive(Debug)]
 pub struct PerStudentGroupsConfig {
     pub sheet_name: String,
     pub orientation: Option<PageOrientation>,
@@ -90,6 +95,7 @@ pub struct PerStudentGroupsConfig {
     pub show_tel: bool,
 }
 
+#[derive(Debug)]
 pub struct PerGroupListConfig {
     pub orientation: PageOrientation,
     pub show_emails: bool,
@@ -97,6 +103,7 @@ pub struct PerGroupListConfig {
     pub center_vertically: bool,
 }
 
+#[derive(Debug)]
 pub struct Config {
     pub global: GlobalConfig,
     pub colloscope: Option<ColloscopeConfig>,

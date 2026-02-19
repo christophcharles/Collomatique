@@ -3,8 +3,6 @@
 //! At this date, the goal of this code is to be a gtk4 GUI
 //! for the collomatique-state crate.
 
-mod export;
-
 use clap::Parser;
 use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
@@ -28,10 +26,6 @@ struct Args {
     /// Export file to SQLite database instead of opening GUI
     #[arg(long, value_name = "OUTPUT")]
     export: Option<PathBuf>,
-
-    /// Export file to XLSX spreadsheet instead of opening GUI
-    #[arg(long, value_name = "OUTPUT")]
-    xlsx: Option<PathBuf>,
 
     /// Everything after gets passed through to GTK.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
@@ -64,26 +58,6 @@ fn main() -> Result<(), anyhow::Error> {
             collomatique_sqlite_state::export_to_file(&pool, &export_path).await?;
 
             println!("Exported to {}", export_path.display());
-            Ok::<(), anyhow::Error>(())
-        })?;
-
-        return Ok(());
-    }
-
-    if let Some(xlsx_path) = args.xlsx {
-        let input_file = args
-            .file
-            .ok_or_else(|| anyhow::anyhow!("--xlsx requires an input file argument"))?;
-
-        let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(async {
-            let (data, _caveats) = collomatique_storage::load_data_from_file(&input_file)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to load file: {:?}", e))?;
-
-            export::export_to_xlsx(data.get_inner_data(), &xlsx_path).await?;
-
-            println!("Exported to {}", xlsx_path.display());
             Ok::<(), anyhow::Error>(())
         })?;
 

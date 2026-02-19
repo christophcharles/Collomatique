@@ -181,6 +181,9 @@ impl Component for AppModel {
                 editor::EditorOutput::PythonLoadingError(path, error) => {
                     AppInput::PythonLoadingFailed(path, error)
                 }
+                editor::EditorOutput::ExportError(path, error) => {
+                    AppInput::ColloscopeSavingFailed(path, error)
+                }
                 editor::EditorOutput::StartOpenSaveDialog => AppInput::StartOpenSaveDialog,
                 editor::EditorOutput::EndOpenSaveDialog => AppInput::EndOpenSaveDialog,
             },
