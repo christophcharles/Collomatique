@@ -7,22 +7,10 @@ use crate::Error;
 use crate::formats;
 use crate::get_group_name;
 
-pub async fn build(
-    worksheet: &mut Worksheet,
+async fn query_all(
     pool: &SqlitePool,
-    global: &crate::GlobalConfig,
-    show_emails: bool,
-    show_tel: bool,
-) -> Result<usize, Error> {
-    let bg = global.background_color.to_xlsx();
-    let stripe = global
-        .stripes_color
-        .as_ref()
-        .map(|c| c.to_xlsx())
-        .unwrap_or(bg);
-
-    // 1. Group lists from both automatic and prefilled sources
-    let group_lists = sqlx::query(
+) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
+    let group_lists_rows = sqlx::query(
         "SELECT DISTINCT gl.id, gl.name \
          FROM group_lists gl \
          WHERE EXISTS (SELECT 1 FROM colloscope_group_list_students WHERE group_list_id = gl.id) \
@@ -31,6 +19,109 @@ pub async fn build(
     )
     .fetch_all(pool)
     .await?;
+
+    let group_lists: Vec<(i64, String)> = group_lists_rows
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect();
+
+    let student_groups_rows = sqlx::query(
+        "SELECT group_list_id, student_id, group_number AS group_idx \
+         FROM colloscope_group_list_students \
+         UNION ALL \
+         SELECT group_list_id, student_id, group_index AS group_idx \
+         FROM prefilled_group_students",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
+    for row in student_groups_rows {
+        student_groups.insert((row.get(0), row.get(1)), row.get(2));
+    }
+
+    Ok((group_lists, student_groups))
+}
+
+async fn query_automatic(
+    pool: &SqlitePool,
+) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
+    let group_lists_rows = sqlx::query(
+        "SELECT DISTINCT cgls.group_list_id, gl.name \
+         FROM colloscope_group_list_students cgls \
+         JOIN group_lists gl ON gl.id = cgls.group_list_id \
+         ORDER BY gl.name",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let group_lists: Vec<(i64, String)> = group_lists_rows
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect();
+
+    let student_groups_rows = sqlx::query(
+        "SELECT group_list_id, student_id, group_number \
+         FROM colloscope_group_list_students",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
+    for row in student_groups_rows {
+        student_groups.insert((row.get(0), row.get(1)), row.get(2));
+    }
+
+    Ok((group_lists, student_groups))
+}
+
+async fn query_prefilled(
+    pool: &SqlitePool,
+) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
+    let group_lists_rows = sqlx::query(
+        "SELECT DISTINCT pgs.group_list_id, gl.name \
+         FROM prefilled_group_students pgs \
+         JOIN group_lists gl ON gl.id = pgs.group_list_id \
+         ORDER BY gl.name",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let group_lists: Vec<(i64, String)> = group_lists_rows
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect();
+
+    let student_groups_rows = sqlx::query(
+        "SELECT group_list_id, student_id, group_index \
+         FROM prefilled_group_students",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
+    for row in student_groups_rows {
+        student_groups.insert((row.get(0), row.get(1)), row.get(2));
+    }
+
+    Ok((group_lists, student_groups))
+}
+
+async fn build_internal(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    global: &crate::GlobalConfig,
+    show_emails: bool,
+    show_tel: bool,
+    group_lists: &[(i64, String)],
+    student_groups: &HashMap<(i64, i64), i64>,
+) -> Result<usize, Error> {
+    let bg = global.background_color.to_xlsx();
+    let stripe = global
+        .stripes_color
+        .as_ref()
+        .map(|c| c.to_xlsx())
+        .unwrap_or(bg);
 
     let gl_count = group_lists.len();
 
@@ -48,14 +139,13 @@ pub async fn build(
         worksheet.write_with_format(0, col as u16, *name, &header_fmt)?;
     }
 
-    let gl_ids: Vec<i64> = group_lists.iter().map(|r| r.get(0)).collect();
+    let gl_ids: Vec<i64> = group_lists.iter().map(|(id, _)| *id).collect();
 
-    for (i, gl_row) in group_lists.iter().enumerate() {
-        let gl_name: String = gl_row.get(1);
-        worksheet.write_with_format(0, gl_start_col + i as u16, &gl_name, &header_fmt)?;
+    for (i, (_, gl_name)) in group_lists.iter().enumerate() {
+        worksheet.write_with_format(0, gl_start_col + i as u16, gl_name, &header_fmt)?;
     }
 
-    // 2. Students sorted by name
+    // Students sorted by name
     let students = sqlx::query(
         "SELECT id, surname, firstname, email, tel \
          FROM students \
@@ -64,26 +154,7 @@ pub async fn build(
     .fetch_all(pool)
     .await?;
 
-    // 3. Student-to-group mapping from both sources: (group_list_id, student_id) -> group_idx
-    let student_groups_rows = sqlx::query(
-        "SELECT group_list_id, student_id, group_number AS group_idx \
-         FROM colloscope_group_list_students \
-         UNION ALL \
-         SELECT group_list_id, student_id, group_index AS group_idx \
-         FROM prefilled_group_students",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
-    for row in student_groups_rows {
-        let gl_id: i64 = row.get(0);
-        let student_id: i64 = row.get(1);
-        let group_idx: i64 = row.get(2);
-        student_groups.insert((gl_id, student_id), group_idx);
-    }
-
-    // 4. Group names: group_list_id -> Vec<String>
+    // Group names: group_list_id -> Vec<String>
     let group_name_rows = sqlx::query(
         "SELECT group_list_id, group_index, name \
          FROM group_list_group_names \
@@ -172,6 +243,66 @@ pub async fn build(
     }
 
     Ok(gl_count)
+}
+
+pub async fn build_all(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    global: &crate::GlobalConfig,
+    show_emails: bool,
+    show_tel: bool,
+) -> Result<usize, Error> {
+    let (group_lists, student_groups) = query_all(pool).await?;
+    build_internal(
+        worksheet,
+        pool,
+        global,
+        show_emails,
+        show_tel,
+        &group_lists,
+        &student_groups,
+    )
+    .await
+}
+
+pub async fn build_automatic(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    global: &crate::GlobalConfig,
+    show_emails: bool,
+    show_tel: bool,
+) -> Result<usize, Error> {
+    let (group_lists, student_groups) = query_automatic(pool).await?;
+    build_internal(
+        worksheet,
+        pool,
+        global,
+        show_emails,
+        show_tel,
+        &group_lists,
+        &student_groups,
+    )
+    .await
+}
+
+pub async fn build_prefilled(
+    worksheet: &mut Worksheet,
+    pool: &SqlitePool,
+    global: &crate::GlobalConfig,
+    show_emails: bool,
+    show_tel: bool,
+) -> Result<usize, Error> {
+    let (group_lists, student_groups) = query_prefilled(pool).await?;
+    build_internal(
+        worksheet,
+        pool,
+        global,
+        show_emails,
+        show_tel,
+        &group_lists,
+        &student_groups,
+    )
+    .await
 }
 
 fn vertical_borders(row_idx: usize, count: usize) -> (u8, u8) {

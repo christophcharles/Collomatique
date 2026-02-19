@@ -1,9 +1,7 @@
-mod all_groups_sheet;
-mod automatic_groups_sheet;
 mod colloscope_sheet;
 mod formats;
 mod per_group_list_sheet;
-mod prefilled_groups_sheet;
+mod per_student_groups_sheet;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -85,25 +83,34 @@ pub struct ColloscopeConfig {
     pub extra_colors: BTreeMap<String, Color>,
 }
 
-pub struct AutomaticGroupsConfig {
+pub struct PerStudentGroupsConfig {
     pub sheet_name: String,
     pub orientation: Option<PageOrientation>,
     pub show_emails: bool,
     pub show_tel: bool,
 }
 
-pub struct PrefilledGroupsConfig {
-    pub sheet_name: String,
-    pub orientation: Option<PageOrientation>,
-    pub show_emails: bool,
-    pub show_tel: bool,
-}
+impl PerStudentGroupsConfig {
+    pub fn new(sheet_name: String) -> Self {
+        Self {
+            sheet_name,
+            orientation: None,
+            show_emails: true,
+            show_tel: false,
+        }
+    }
 
-pub struct AllGroupsConfig {
-    pub sheet_name: String,
-    pub orientation: Option<PageOrientation>,
-    pub show_emails: bool,
-    pub show_tel: bool,
+    pub fn all_groups() -> Self {
+        Self::new("Tous les groupes".into())
+    }
+
+    pub fn automatic_groups() -> Self {
+        Self::new("Groupes automatiques".into())
+    }
+
+    pub fn prefilled_groups() -> Self {
+        Self::new("Groupes préremplis".into())
+    }
 }
 
 pub struct PerGroupListConfig {
@@ -115,9 +122,9 @@ pub struct PerGroupListConfig {
 pub struct Config {
     pub global: GlobalConfig,
     pub colloscope: Option<ColloscopeConfig>,
-    pub all_groups: Option<AllGroupsConfig>,
-    pub automatic_groups: Option<AutomaticGroupsConfig>,
-    pub prefilled_groups: Option<PrefilledGroupsConfig>,
+    pub all_groups: Option<PerStudentGroupsConfig>,
+    pub automatic_groups: Option<PerStudentGroupsConfig>,
+    pub prefilled_groups: Option<PerStudentGroupsConfig>,
     pub per_group_list: Option<PerGroupListConfig>,
 }
 
@@ -147,39 +154,6 @@ impl Default for ColloscopeConfig {
     }
 }
 
-impl Default for AllGroupsConfig {
-    fn default() -> Self {
-        AllGroupsConfig {
-            sheet_name: "Tous les groupes".into(),
-            orientation: None,
-            show_emails: true,
-            show_tel: false,
-        }
-    }
-}
-
-impl Default for AutomaticGroupsConfig {
-    fn default() -> Self {
-        AutomaticGroupsConfig {
-            sheet_name: "Groupes automatiques".into(),
-            orientation: None,
-            show_emails: true,
-            show_tel: false,
-        }
-    }
-}
-
-impl Default for PrefilledGroupsConfig {
-    fn default() -> Self {
-        PrefilledGroupsConfig {
-            sheet_name: "Groupes préremplis".into(),
-            orientation: None,
-            show_emails: true,
-            show_tel: false,
-        }
-    }
-}
-
 impl Default for PerGroupListConfig {
     fn default() -> Self {
         PerGroupListConfig {
@@ -195,7 +169,7 @@ impl Default for Config {
         Config {
             global: GlobalConfig::default(),
             colloscope: Some(ColloscopeConfig::default()),
-            all_groups: Some(AllGroupsConfig::default()),
+            all_groups: Some(PerStudentGroupsConfig::all_groups()),
             automatic_groups: None,
             prefilled_groups: None,
             per_group_list: Some(PerGroupListConfig::default()),
@@ -246,7 +220,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         if let Some(safe_name) = sanitize_sheet_name(&all_groups_config.sheet_name) {
             all_groups_ws.set_name(&safe_name)?;
         }
-        let gl_count = all_groups_sheet::build(
+        let gl_count = per_student_groups_sheet::build_all(
             all_groups_ws,
             pool,
             &config.global,
@@ -281,7 +255,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&automatic_groups_config.sheet_name) {
                 groups_ws.set_name(&safe_name)?;
             }
-            let gl_count = automatic_groups_sheet::build(
+            let gl_count = per_student_groups_sheet::build_automatic(
                 groups_ws,
                 pool,
                 &config.global,
@@ -317,7 +291,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             if let Some(safe_name) = sanitize_sheet_name(&prefilled_groups_config.sheet_name) {
                 prefilled_ws.set_name(&safe_name)?;
             }
-            let gl_count = prefilled_groups_sheet::build(
+            let gl_count = per_student_groups_sheet::build_prefilled(
                 prefilled_ws,
                 pool,
                 &config.global,
