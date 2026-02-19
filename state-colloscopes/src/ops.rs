@@ -40,6 +40,8 @@ pub enum Op {
     MainScript(MainScriptOp),
     /// Operation on colloscopes
     Colloscope(ColloscopeOp),
+    /// Operation on export configuration
+    ExportConfig(ExportConfigOp),
 }
 
 impl Operation for Op {}
@@ -217,6 +219,25 @@ pub enum ColloscopeOp {
     ),
 }
 
+/// Export configuration operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// export configuration we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportConfigOp {
+    UpdateGlobalConfig(export_config::GlobalConfig),
+    UpdateColloscopeEnabled(bool),
+    UpdateAllGroupsEnabled(bool),
+    UpdatePrefilledGroupsEnabled(bool),
+    UpdateAutomaticGroupsEnabled(bool),
+    UpdatePerGroupListEnabled(bool),
+    UpdateColloscopeConfig(export_config::ColloscopeConfig),
+    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -250,6 +271,8 @@ pub enum AnnotatedOp {
     MainScript(AnnotatedMainScriptOp),
     /// Operation on colloscopes
     Colloscope(AnnotatedColloscopeOp),
+    /// Operation on export configuration
+    ExportConfig(AnnotatedExportConfigOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -321,6 +344,12 @@ impl From<AnnotatedMainScriptOp> for AnnotatedOp {
 impl From<AnnotatedColloscopeOp> for AnnotatedOp {
     fn from(value: AnnotatedColloscopeOp) -> Self {
         AnnotatedOp::Colloscope(value)
+    }
+}
+
+impl From<AnnotatedExportConfigOp> for AnnotatedOp {
+    fn from(value: AnnotatedExportConfigOp) -> Self {
+        AnnotatedOp::ExportConfig(value)
     }
 }
 
@@ -540,6 +569,28 @@ pub enum AnnotatedColloscopeOp {
     ),
 }
 
+/// Export configuration annotated operation enumeration
+///
+/// Compared to [ExportConfigOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedExportConfigOp {
+    UpdateGlobalConfig(export_config::GlobalConfig),
+    UpdateColloscopeEnabled(bool),
+    UpdateAllGroupsEnabled(bool),
+    UpdatePrefilledGroupsEnabled(bool),
+    UpdateAutomaticGroupsEnabled(bool),
+    UpdatePerGroupListEnabled(bool),
+    UpdateColloscopeConfig(export_config::ColloscopeConfig),
+    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
+    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -600,6 +651,10 @@ impl AnnotatedOp {
             }
             Op::Colloscope(colloscope_op) => {
                 let op = AnnotatedColloscopeOp::annotate(colloscope_op);
+                (op.into(), None)
+            }
+            Op::ExportConfig(export_config_op) => {
+                let op = AnnotatedExportConfigOp::annotate(export_config_op);
                 (op.into(), None)
             }
         }
@@ -853,6 +908,47 @@ impl AnnotatedColloscopeOp {
                 week_in_period,
                 interrogation,
             ),
+        }
+    }
+}
+
+impl AnnotatedExportConfigOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [ExportConfigOp].
+    fn annotate(export_config_op: ExportConfigOp) -> AnnotatedExportConfigOp {
+        match export_config_op {
+            ExportConfigOp::UpdateGlobalConfig(v) => AnnotatedExportConfigOp::UpdateGlobalConfig(v),
+            ExportConfigOp::UpdateColloscopeEnabled(v) => {
+                AnnotatedExportConfigOp::UpdateColloscopeEnabled(v)
+            }
+            ExportConfigOp::UpdateAllGroupsEnabled(v) => {
+                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v)
+            }
+            ExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v)
+            }
+            ExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v)
+            }
+            ExportConfigOp::UpdatePerGroupListEnabled(v) => {
+                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v)
+            }
+            ExportConfigOp::UpdateColloscopeConfig(v) => {
+                AnnotatedExportConfigOp::UpdateColloscopeConfig(v)
+            }
+            ExportConfigOp::UpdateAllGroupsConfig(v) => {
+                AnnotatedExportConfigOp::UpdateAllGroupsConfig(v)
+            }
+            ExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v)
+            }
+            ExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v)
+            }
+            ExportConfigOp::UpdatePerGroupListConfig(v) => {
+                AnnotatedExportConfigOp::UpdatePerGroupListConfig(v)
+            }
         }
     }
 }

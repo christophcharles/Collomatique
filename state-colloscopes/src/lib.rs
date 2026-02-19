@@ -6,6 +6,7 @@
 
 use colloscopes::ColloscopePeriod;
 use ops::AnnotatedColloscopeOp;
+use ops::AnnotatedExportConfigOp;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{InMemoryData, Operation, tools};
@@ -26,8 +27,8 @@ use ops::{
     AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, MainScriptOp, Op, PeriodOp,
-    SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, MainScriptOp,
+    Op, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -581,6 +582,12 @@ pub enum SettingsError {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MainScriptError {}
 
+/// Errors for export configuration operations
+///
+/// These errors can be returned when trying to modify [Data] with an export config op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ExportConfigError {}
+
 /// Errors for colloscopes operations
 ///
 /// These errors can be returned when trying to modify [Data] with a colloscope op.
@@ -671,6 +678,8 @@ pub enum Error {
     MainScript(#[from] MainScriptError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeError),
+    #[error(transparent)]
+    ExportConfig(#[from] ExportConfigError),
 }
 
 /// Errors for IDs
@@ -857,6 +866,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Colloscope(colloscope_op) => Ok(AnnotatedOp::Colloscope(
                 self.build_rev_colloscope(colloscope_op)?,
             )),
+            AnnotatedOp::ExportConfig(export_config_op) => Ok(AnnotatedOp::ExportConfig(
+                self.build_rev_export_config(export_config_op),
+            )),
         }
     }
 
@@ -876,6 +888,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::MainScript(main_script_op) => self.apply_main_script(main_script_op)?,
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
+            AnnotatedOp::ExportConfig(export_config_op) => {
+                self.apply_export_config(export_config_op)?
+            }
         }
         self.check_invariants();
         Ok(())
@@ -2733,6 +2748,51 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply export configuration operations
+    fn apply_export_config(
+        &mut self,
+        export_config_op: &AnnotatedExportConfigOp,
+    ) -> std::result::Result<(), ExportConfigError> {
+        match export_config_op {
+            AnnotatedExportConfigOp::UpdateGlobalConfig(v) => {
+                self.inner_data.export_config.global = v.clone();
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeEnabled(v) => {
+                self.inner_data.export_config.colloscope_enabled = *v;
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v) => {
+                self.inner_data.export_config.all_groups_enabled = *v;
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
+                self.inner_data.export_config.prefilled_groups_enabled = *v;
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
+                self.inner_data.export_config.automatic_groups_enabled = *v;
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v) => {
+                self.inner_data.export_config.per_group_list_enabled = *v;
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeConfig(v) => {
+                self.inner_data.export_config.colloscope_config = v.clone();
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsConfig(v) => {
+                self.inner_data.export_config.all_groups_config = v.clone();
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
+                self.inner_data.export_config.prefilled_groups_config = v.clone();
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
+                self.inner_data.export_config.automatic_groups_config = v.clone();
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListConfig(v) => {
+                self.inner_data.export_config.per_group_list_config = v.clone();
+            }
+        }
+        Ok(())
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -3353,6 +3413,78 @@ impl Data {
             AnnotatedSettingsOp::Update(_new_settings) => {
                 let old_settings = self.inner_data.params.settings.clone();
                 AnnotatedSettingsOp::Update(old_settings)
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of an export configuration operation
+    fn build_rev_export_config(
+        &self,
+        export_config_op: &AnnotatedExportConfigOp,
+    ) -> AnnotatedExportConfigOp {
+        match export_config_op {
+            AnnotatedExportConfigOp::UpdateGlobalConfig(_) => {
+                AnnotatedExportConfigOp::UpdateGlobalConfig(
+                    self.inner_data.export_config.global.clone(),
+                )
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeEnabled(_) => {
+                AnnotatedExportConfigOp::UpdateColloscopeEnabled(
+                    self.inner_data.export_config.colloscope_enabled,
+                )
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsEnabled(_) => {
+                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(
+                    self.inner_data.export_config.all_groups_enabled,
+                )
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(_) => {
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(
+                    self.inner_data.export_config.prefilled_groups_enabled,
+                )
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(_) => {
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(
+                    self.inner_data.export_config.automatic_groups_enabled,
+                )
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListEnabled(_) => {
+                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(
+                    self.inner_data.export_config.per_group_list_enabled,
+                )
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeConfig(_) => {
+                AnnotatedExportConfigOp::UpdateColloscopeConfig(
+                    self.inner_data.export_config.colloscope_config.clone(),
+                )
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsConfig(_) => {
+                AnnotatedExportConfigOp::UpdateAllGroupsConfig(
+                    self.inner_data.export_config.all_groups_config.clone(),
+                )
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(_) => {
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(
+                    self.inner_data
+                        .export_config
+                        .prefilled_groups_config
+                        .clone(),
+                )
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(_) => {
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(
+                    self.inner_data
+                        .export_config
+                        .automatic_groups_config
+                        .clone(),
+                )
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListConfig(_) => {
+                AnnotatedExportConfigOp::UpdatePerGroupListConfig(
+                    self.inner_data.export_config.per_group_list_config.clone(),
+                )
             }
         }
     }
