@@ -117,6 +117,7 @@ pub struct PerGroupListConfig {
     pub orientation: PageOrientation,
     pub show_emails: bool,
     pub show_tel: bool,
+    pub center_vertically: bool,
 }
 
 pub struct Config {
@@ -160,6 +161,7 @@ impl Default for PerGroupListConfig {
             orientation: PageOrientation::Portrait,
             show_emails: true,
             show_tel: false,
+            center_vertically: false,
         }
     }
 }
@@ -345,7 +347,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             .await?;
             ws.set_paper_size(PAPER_SIZE_A4);
             ws.set_print_center_horizontally(true);
-            ws.set_print_center_vertically(true);
+            ws.set_print_center_vertically(per_group_list_config.center_vertically);
             ws.set_print_fit_to_pages(1, 1);
             apply_orientation(ws, &per_group_list_config.orientation);
         }
