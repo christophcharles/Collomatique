@@ -479,4 +479,72 @@ BEGIN
     DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'group_list';
     INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'group_list');
 END;
+
+-- ============================================================================
+-- 14. Export Configuration
+-- ============================================================================
+
+-- Global settings and sheet enabled flags
+CREATE TABLE IF NOT EXISTS export_config (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    background_color_r INTEGER NOT NULL CHECK (background_color_r >= 0 AND background_color_r <= 255),
+    background_color_g INTEGER NOT NULL CHECK (background_color_g >= 0 AND background_color_g <= 255),
+    background_color_b INTEGER NOT NULL CHECK (background_color_b >= 0 AND background_color_b <= 255),
+    stripes_color_enabled INTEGER NOT NULL CHECK (stripes_color_enabled IN (0, 1)),
+    stripes_color_r INTEGER NOT NULL CHECK (stripes_color_r >= 0 AND stripes_color_r <= 255),
+    stripes_color_g INTEGER NOT NULL CHECK (stripes_color_g >= 0 AND stripes_color_g <= 255),
+    stripes_color_b INTEGER NOT NULL CHECK (stripes_color_b >= 0 AND stripes_color_b <= 255),
+    colloscope_enabled INTEGER NOT NULL CHECK (colloscope_enabled IN (0, 1)),
+    all_groups_enabled INTEGER NOT NULL CHECK (all_groups_enabled IN (0, 1)),
+    automatic_groups_enabled INTEGER NOT NULL CHECK (automatic_groups_enabled IN (0, 1)),
+    prefilled_groups_enabled INTEGER NOT NULL CHECK (prefilled_groups_enabled IN (0, 1)),
+    per_group_list_enabled INTEGER NOT NULL CHECK (per_group_list_enabled IN (0, 1))
+);
+
+-- Colloscope sheet settings
+CREATE TABLE IF NOT EXISTS export_config_colloscope (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    sheet_name TEXT NOT NULL,
+    extra_info_column_name TEXT NOT NULL,
+    teacher_email_enabled INTEGER NOT NULL CHECK (teacher_email_enabled IN (0, 1)),
+    teacher_email TEXT NOT NULL,
+    teacher_tel_enabled INTEGER NOT NULL CHECK (teacher_tel_enabled IN (0, 1)),
+    teacher_tel TEXT NOT NULL,
+    orientation TEXT NOT NULL CHECK (orientation IN ('portrait', 'landscape')),
+    display_week_dates INTEGER NOT NULL CHECK (display_week_dates IN (0, 1)),
+    display_annotations INTEGER NOT NULL CHECK (display_annotations IN (0, 1)),
+    no_interrogation_color_r INTEGER NOT NULL CHECK (no_interrogation_color_r >= 0 AND no_interrogation_color_r <= 255),
+    no_interrogation_color_g INTEGER NOT NULL CHECK (no_interrogation_color_g >= 0 AND no_interrogation_color_g <= 255),
+    no_interrogation_color_b INTEGER NOT NULL CHECK (no_interrogation_color_b >= 0 AND no_interrogation_color_b <= 255),
+    annotation_color_enabled INTEGER NOT NULL CHECK (annotation_color_enabled IN (0, 1)),
+    annotation_color_r INTEGER NOT NULL CHECK (annotation_color_r >= 0 AND annotation_color_r <= 255),
+    annotation_color_g INTEGER NOT NULL CHECK (annotation_color_g >= 0 AND annotation_color_g <= 255),
+    annotation_color_b INTEGER NOT NULL CHECK (annotation_color_b >= 0 AND annotation_color_b <= 255)
+);
+
+-- Colloscope per-annotation custom colors
+CREATE TABLE IF NOT EXISTS export_config_colloscope_extra_colors (
+    name TEXT NOT NULL PRIMARY KEY,
+    color_r INTEGER NOT NULL CHECK (color_r >= 0 AND color_r <= 255),
+    color_g INTEGER NOT NULL CHECK (color_g >= 0 AND color_g <= 255),
+    color_b INTEGER NOT NULL CHECK (color_b >= 0 AND color_b <= 255)
+);
+
+-- Per-student group sheets (one row each for all/automatic/prefilled)
+CREATE TABLE IF NOT EXISTS export_config_per_student_groups (
+    type TEXT NOT NULL PRIMARY KEY CHECK (type IN ('all', 'automatic', 'prefilled')),
+    sheet_name TEXT NOT NULL,
+    orientation TEXT CHECK (orientation IN ('portrait', 'landscape')),
+    show_emails INTEGER NOT NULL CHECK (show_emails IN (0, 1)),
+    show_tel INTEGER NOT NULL CHECK (show_tel IN (0, 1))
+);
+
+-- Per-group-list sheet settings
+CREATE TABLE IF NOT EXISTS export_config_per_group_list (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    orientation TEXT NOT NULL CHECK (orientation IN ('portrait', 'landscape')),
+    show_emails INTEGER NOT NULL CHECK (show_emails IN (0, 1)),
+    show_tel INTEGER NOT NULL CHECK (show_tel IN (0, 1)),
+    center_vertically INTEGER NOT NULL CHECK (center_vertically IN (0, 1))
+);
 "#;

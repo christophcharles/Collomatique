@@ -90,29 +90,6 @@ pub struct PerStudentGroupsConfig {
     pub show_tel: bool,
 }
 
-impl PerStudentGroupsConfig {
-    pub fn new(sheet_name: String) -> Self {
-        Self {
-            sheet_name,
-            orientation: None,
-            show_emails: true,
-            show_tel: false,
-        }
-    }
-
-    pub fn all_groups() -> Self {
-        Self::new("Tous les groupes".into())
-    }
-
-    pub fn automatic_groups() -> Self {
-        Self::new("Groupes automatiques".into())
-    }
-
-    pub fn prefilled_groups() -> Self {
-        Self::new("Groupes préremplis".into())
-    }
-}
-
 pub struct PerGroupListConfig {
     pub orientation: PageOrientation,
     pub show_emails: bool,
@@ -127,56 +104,6 @@ pub struct Config {
     pub automatic_groups: Option<PerStudentGroupsConfig>,
     pub prefilled_groups: Option<PerStudentGroupsConfig>,
     pub per_group_list: Option<PerGroupListConfig>,
-}
-
-impl Default for GlobalConfig {
-    fn default() -> Self {
-        GlobalConfig {
-            background_color: Color::new(255, 255, 255),
-            stripes_color: Some(Color::new(220, 220, 230)),
-        }
-    }
-}
-
-impl Default for ColloscopeConfig {
-    fn default() -> Self {
-        ColloscopeConfig {
-            sheet_name: "Colloscope".into(),
-            extra_info_column_name: "Info".into(),
-            teacher_email: Some("Contact".into()),
-            teacher_tel: None,
-            orientation: PageOrientation::Landscape,
-            display_week_dates: true,
-            display_annotations: true,
-            no_interrogation_color: Color::new(140, 140, 140),
-            annotation_color: Some(Color::new(255, 255, 0)),
-            extra_colors: BTreeMap::new(),
-        }
-    }
-}
-
-impl Default for PerGroupListConfig {
-    fn default() -> Self {
-        PerGroupListConfig {
-            orientation: PageOrientation::Portrait,
-            show_emails: true,
-            show_tel: false,
-            center_vertically: false,
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            global: GlobalConfig::default(),
-            colloscope: Some(ColloscopeConfig::default()),
-            all_groups: Some(PerStudentGroupsConfig::all_groups()),
-            automatic_groups: None,
-            prefilled_groups: None,
-            per_group_list: Some(PerGroupListConfig::default()),
-        }
-    }
 }
 
 pub(crate) fn sanitize_sheet_name(name: &str) -> Option<String> {

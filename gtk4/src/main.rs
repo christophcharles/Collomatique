@@ -3,6 +3,8 @@
 //! At this date, the goal of this code is to be a gtk4 GUI
 //! for the collomatique-state crate.
 
+mod export;
+
 use clap::Parser;
 use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
@@ -79,13 +81,7 @@ fn main() -> Result<(), anyhow::Error> {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to load file: {:?}", e))?;
 
-            let pool = sqlx::SqlitePool::connect(":memory:").await?;
-            collomatique_sqlite_state::create_schema(&pool).await?;
-            collomatique_sqlite_state::inner_data_to_sqlite(&pool, data.get_inner_data()).await?;
-
-            collomatique_xlsx::write_xlsx(&pool, &xlsx_path, &collomatique_xlsx::Config::default())
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to write XLSX: {}", e))?;
+            export::export_to_xlsx(data.get_inner_data(), &xlsx_path).await?;
 
             println!("Exported to {}", xlsx_path.display());
             Ok::<(), anyhow::Error>(())

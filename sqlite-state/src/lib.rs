@@ -7,8 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use collomatique_state_colloscopes::{
-    InnerData, PersonWithContact, assignments, colloscope_params, colloscopes, group_lists, ids,
-    incompats, periods, settings, slots, students, subjects, teachers, week_patterns,
+    InnerData, PersonWithContact, assignments, colloscope_params, colloscopes, export_config,
+    group_lists, ids, incompats, periods, settings, slots, students, subjects, teachers,
+    week_patterns,
 };
 use collomatique_time::{
     NonZeroMinutes, SlotStart, SlotWithDuration, WeekStart, Weekday, WholeMinuteTime,
@@ -148,6 +149,9 @@ pub async fn inner_data_to_sqlite(pool: &SqlitePool, data: &InnerData) -> Result
     // Insert colloscope data
     insert_colloscope(&mut tx, &data.colloscope, &data.params).await?;
 
+    // Insert export configuration
+    insert_export_config(&mut tx, &data.export_config).await?;
+
     tx.commit().await?;
     Ok(())
 }
@@ -156,8 +160,13 @@ pub async fn inner_data_to_sqlite(pool: &SqlitePool, data: &InnerData) -> Result
 pub async fn sqlite_to_inner_data(pool: &SqlitePool) -> Result<InnerData, Error> {
     let params = read_parameters(pool).await?;
     let colloscope = read_colloscope(pool, &params).await?;
+    let export_config = read_export_config(pool).await?;
 
-    Ok(InnerData { params, colloscope })
+    Ok(InnerData {
+        params,
+        colloscope,
+        export_config,
+    })
 }
 
 /// Export the database to a file
@@ -857,6 +866,327 @@ async fn insert_colloscope(
     }
 
     Ok(())
+}
+
+fn orientation_to_str(o: &export_config::PageOrientation) -> &'static str {
+    match o {
+        export_config::PageOrientation::Portrait => "portrait",
+        export_config::PageOrientation::Landscape => "landscape",
+    }
+}
+
+fn str_to_orientation(s: &str) -> Result<export_config::PageOrientation, Error> {
+    match s {
+        "portrait" => Ok(export_config::PageOrientation::Portrait),
+        "landscape" => Ok(export_config::PageOrientation::Landscape),
+        other => Err(Error::InvalidData(format!("Invalid orientation: {other}"))),
+    }
+}
+
+async fn insert_export_config(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    config: &export_config::ExportConfig,
+) -> Result<(), Error> {
+    // Main export_config table
+    sqlx::query(
+        "INSERT INTO export_config (id,
+            background_color_r, background_color_g, background_color_b,
+            stripes_color_enabled, stripes_color_r, stripes_color_g, stripes_color_b,
+            colloscope_enabled, all_groups_enabled, automatic_groups_enabled,
+            prefilled_groups_enabled, per_group_list_enabled)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(config.global.background_color.red as i64)
+    .bind(config.global.background_color.green as i64)
+    .bind(config.global.background_color.blue as i64)
+    .bind(config.global.stripes_color_enabled as i64)
+    .bind(config.global.stripes_color.red as i64)
+    .bind(config.global.stripes_color.green as i64)
+    .bind(config.global.stripes_color.blue as i64)
+    .bind(config.colloscope_enabled as i64)
+    .bind(config.all_groups_enabled as i64)
+    .bind(config.automatic_groups_enabled as i64)
+    .bind(config.prefilled_groups_enabled as i64)
+    .bind(config.per_group_list_enabled as i64)
+    .execute(&mut **tx)
+    .await?;
+
+    // Colloscope sheet config
+    let cc = &config.colloscope_config;
+    sqlx::query(
+        "INSERT INTO export_config_colloscope (id,
+            sheet_name, extra_info_column_name,
+            teacher_email_enabled, teacher_email,
+            teacher_tel_enabled, teacher_tel,
+            orientation, display_week_dates, display_annotations,
+            no_interrogation_color_r, no_interrogation_color_g, no_interrogation_color_b,
+            annotation_color_enabled,
+            annotation_color_r, annotation_color_g, annotation_color_b)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&cc.sheet_name)
+    .bind(&cc.extra_info_column_name)
+    .bind(cc.teacher_email_enabled as i64)
+    .bind(&cc.teacher_email)
+    .bind(cc.teacher_tel_enabled as i64)
+    .bind(&cc.teacher_tel)
+    .bind(orientation_to_str(&cc.orientation))
+    .bind(cc.display_week_dates as i64)
+    .bind(cc.display_annotations as i64)
+    .bind(cc.no_interrogation_color.red as i64)
+    .bind(cc.no_interrogation_color.green as i64)
+    .bind(cc.no_interrogation_color.blue as i64)
+    .bind(cc.annotation_color_enabled as i64)
+    .bind(cc.annotation_color.red as i64)
+    .bind(cc.annotation_color.green as i64)
+    .bind(cc.annotation_color.blue as i64)
+    .execute(&mut **tx)
+    .await?;
+
+    // Extra colors
+    for (name, color) in &cc.extra_colors {
+        sqlx::query(
+            "INSERT INTO export_config_colloscope_extra_colors (name, color_r, color_g, color_b)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(name)
+        .bind(color.red as i64)
+        .bind(color.green as i64)
+        .bind(color.blue as i64)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    // Per-student group sheets
+    for (type_name, psg) in [
+        ("all", &config.all_groups_config),
+        ("automatic", &config.automatic_groups_config),
+        ("prefilled", &config.prefilled_groups_config),
+    ] {
+        sqlx::query(
+            "INSERT INTO export_config_per_student_groups (type, sheet_name, orientation, show_emails, show_tel)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(type_name)
+        .bind(&psg.sheet_name)
+        .bind(psg.orientation.as_ref().map(orientation_to_str))
+        .bind(psg.show_emails as i64)
+        .bind(psg.show_tel as i64)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    // Per-group-list config
+    let pgl = &config.per_group_list_config;
+    sqlx::query(
+        "INSERT INTO export_config_per_group_list (id, orientation, show_emails, show_tel, center_vertically)
+         VALUES (1, ?, ?, ?, ?)",
+    )
+    .bind(orientation_to_str(&pgl.orientation))
+    .bind(pgl.show_emails as i64)
+    .bind(pgl.show_tel as i64)
+    .bind(pgl.center_vertically as i64)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+async fn read_export_config(pool: &SqlitePool) -> Result<export_config::ExportConfig, Error> {
+    // Check if main table has data (retro-compat with old DBs)
+    let row: Option<(
+        i64,
+        i64,
+        i64, // background_color
+        i64, // stripes_color_enabled
+        i64,
+        i64,
+        i64, // stripes_color
+        i64,
+        i64,
+        i64,
+        i64,
+        i64, // enabled flags
+    )> = sqlx::query_as(
+        "SELECT background_color_r, background_color_g, background_color_b,
+                stripes_color_enabled, stripes_color_r, stripes_color_g, stripes_color_b,
+                colloscope_enabled, all_groups_enabled, automatic_groups_enabled,
+                prefilled_groups_enabled, per_group_list_enabled
+         FROM export_config WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let Some((
+        bg_r,
+        bg_g,
+        bg_b,
+        stripes_enabled,
+        stripes_r,
+        stripes_g,
+        stripes_b,
+        colloscope_enabled,
+        all_groups_enabled,
+        automatic_groups_enabled,
+        prefilled_groups_enabled,
+        per_group_list_enabled,
+    )) = row
+    else {
+        return Ok(export_config::ExportConfig::default());
+    };
+
+    let global = export_config::GlobalConfig {
+        background_color: export_config::Color {
+            red: bg_r as u8,
+            green: bg_g as u8,
+            blue: bg_b as u8,
+        },
+        stripes_color_enabled: stripes_enabled != 0,
+        stripes_color: export_config::Color {
+            red: stripes_r as u8,
+            green: stripes_g as u8,
+            blue: stripes_b as u8,
+        },
+    };
+
+    // Read colloscope config
+    let cc_row: (
+        String,
+        String, // sheet_name, extra_info_column_name
+        i64,
+        String, // teacher_email_enabled, teacher_email
+        i64,
+        String, // teacher_tel_enabled, teacher_tel
+        String, // orientation
+        i64,
+        i64, // display_week_dates, display_annotations
+        i64,
+        i64,
+        i64, // no_interrogation_color
+        i64, // annotation_color_enabled
+        i64,
+        i64,
+        i64, // annotation_color
+    ) = sqlx::query_as(
+        "SELECT sheet_name, extra_info_column_name,
+                teacher_email_enabled, teacher_email,
+                teacher_tel_enabled, teacher_tel,
+                orientation, display_week_dates, display_annotations,
+                no_interrogation_color_r, no_interrogation_color_g, no_interrogation_color_b,
+                annotation_color_enabled,
+                annotation_color_r, annotation_color_g, annotation_color_b
+         FROM export_config_colloscope WHERE id = 1",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let extra_color_rows: Vec<(String, i64, i64, i64)> = sqlx::query_as(
+        "SELECT name, color_r, color_g, color_b FROM export_config_colloscope_extra_colors ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let extra_colors: BTreeMap<String, export_config::Color> = extra_color_rows
+        .into_iter()
+        .map(|(name, r, g, b)| {
+            (
+                name,
+                export_config::Color {
+                    red: r as u8,
+                    green: g as u8,
+                    blue: b as u8,
+                },
+            )
+        })
+        .collect();
+
+    let colloscope_config = export_config::ColloscopeConfig {
+        sheet_name: cc_row.0,
+        extra_info_column_name: cc_row.1,
+        teacher_email_enabled: cc_row.2 != 0,
+        teacher_email: cc_row.3,
+        teacher_tel_enabled: cc_row.4 != 0,
+        teacher_tel: cc_row.5,
+        orientation: str_to_orientation(&cc_row.6)?,
+        display_week_dates: cc_row.7 != 0,
+        display_annotations: cc_row.8 != 0,
+        no_interrogation_color: export_config::Color {
+            red: cc_row.9 as u8,
+            green: cc_row.10 as u8,
+            blue: cc_row.11 as u8,
+        },
+        annotation_color_enabled: cc_row.12 != 0,
+        annotation_color: export_config::Color {
+            red: cc_row.13 as u8,
+            green: cc_row.14 as u8,
+            blue: cc_row.15 as u8,
+        },
+        extra_colors,
+    };
+
+    // Read per-student group configs
+    let psg_rows: Vec<(String, String, Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT type, sheet_name, orientation, show_emails, show_tel
+         FROM export_config_per_student_groups",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut all_groups_config = export_config::PerStudentGroupsConfig::default_all_groups();
+    let mut automatic_groups_config =
+        export_config::PerStudentGroupsConfig::default_automatic_groups();
+    let mut prefilled_groups_config =
+        export_config::PerStudentGroupsConfig::default_prefilled_groups();
+
+    for (type_name, sheet_name, orientation, show_emails, show_tel) in psg_rows {
+        let orientation = orientation.map(|s| str_to_orientation(&s)).transpose()?;
+        let cfg = export_config::PerStudentGroupsConfig {
+            sheet_name,
+            orientation,
+            show_emails: show_emails != 0,
+            show_tel: show_tel != 0,
+        };
+        match type_name.as_str() {
+            "all" => all_groups_config = cfg,
+            "automatic" => automatic_groups_config = cfg,
+            "prefilled" => prefilled_groups_config = cfg,
+            _ => {}
+        }
+    }
+
+    // Read per-group-list config
+    let pgl_row: Option<(String, i64, i64, i64)> = sqlx::query_as(
+        "SELECT orientation, show_emails, show_tel, center_vertically
+         FROM export_config_per_group_list WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let per_group_list_config = match pgl_row {
+        Some((orientation, show_emails, show_tel, center_vertically)) => {
+            export_config::PerGroupListConfig {
+                orientation: str_to_orientation(&orientation)?,
+                show_emails: show_emails != 0,
+                show_tel: show_tel != 0,
+                center_vertically: center_vertically != 0,
+            }
+        }
+        None => export_config::PerGroupListConfig::default(),
+    };
+
+    Ok(export_config::ExportConfig {
+        global,
+        colloscope_enabled: colloscope_enabled != 0,
+        all_groups_enabled: all_groups_enabled != 0,
+        automatic_groups_enabled: automatic_groups_enabled != 0,
+        prefilled_groups_enabled: prefilled_groups_enabled != 0,
+        per_group_list_enabled: per_group_list_enabled != 0,
+        colloscope_config,
+        all_groups_config,
+        automatic_groups_config,
+        prefilled_groups_config,
+        per_group_list_config,
+    })
 }
 
 // ============================================================================
@@ -2174,5 +2504,112 @@ mod tests {
 
         // Validation should pass for valid empty data
         validate_database(&pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_export_config_round_trip() {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        create_schema(&pool).await.unwrap();
+
+        // Test with default config
+        let mut original = InnerData::default();
+        inner_data_to_sqlite(&pool, &original).await.unwrap();
+        let restored = sqlite_to_inner_data(&pool).await.unwrap();
+        assert_eq!(original.export_config, restored.export_config);
+
+        // Test with customized config
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        create_schema(&pool).await.unwrap();
+
+        original.export_config = export_config::ExportConfig {
+            global: export_config::GlobalConfig {
+                background_color: export_config::Color {
+                    red: 10,
+                    green: 20,
+                    blue: 30,
+                },
+                stripes_color_enabled: false,
+                stripes_color: export_config::Color {
+                    red: 100,
+                    green: 110,
+                    blue: 120,
+                },
+            },
+            colloscope_enabled: false,
+            all_groups_enabled: false,
+            automatic_groups_enabled: true,
+            prefilled_groups_enabled: true,
+            per_group_list_enabled: false,
+            colloscope_config: export_config::ColloscopeConfig {
+                sheet_name: "Mon colloscope".into(),
+                extra_info_column_name: "Details".into(),
+                teacher_email_enabled: false,
+                teacher_email: "Email".into(),
+                teacher_tel_enabled: true,
+                teacher_tel: "Téléphone".into(),
+                orientation: export_config::PageOrientation::Portrait,
+                display_week_dates: false,
+                display_annotations: false,
+                no_interrogation_color: export_config::Color {
+                    red: 50,
+                    green: 60,
+                    blue: 70,
+                },
+                annotation_color_enabled: false,
+                annotation_color: export_config::Color {
+                    red: 200,
+                    green: 210,
+                    blue: 220,
+                },
+                extra_colors: {
+                    let mut m = BTreeMap::new();
+                    m.insert(
+                        "DS".into(),
+                        export_config::Color {
+                            red: 255,
+                            green: 0,
+                            blue: 0,
+                        },
+                    );
+                    m.insert(
+                        "Exam".into(),
+                        export_config::Color {
+                            red: 0,
+                            green: 255,
+                            blue: 0,
+                        },
+                    );
+                    m
+                },
+            },
+            all_groups_config: export_config::PerStudentGroupsConfig {
+                sheet_name: "Custom all".into(),
+                orientation: Some(export_config::PageOrientation::Landscape),
+                show_emails: false,
+                show_tel: true,
+            },
+            automatic_groups_config: export_config::PerStudentGroupsConfig {
+                sheet_name: "Custom auto".into(),
+                orientation: None,
+                show_emails: true,
+                show_tel: true,
+            },
+            prefilled_groups_config: export_config::PerStudentGroupsConfig {
+                sheet_name: "Custom prefilled".into(),
+                orientation: Some(export_config::PageOrientation::Portrait),
+                show_emails: false,
+                show_tel: false,
+            },
+            per_group_list_config: export_config::PerGroupListConfig {
+                orientation: export_config::PageOrientation::Landscape,
+                show_emails: false,
+                show_tel: true,
+                center_vertically: true,
+            },
+        };
+
+        inner_data_to_sqlite(&pool, &original).await.unwrap();
+        let restored = sqlite_to_inner_data(&pool).await.unwrap();
+        assert_eq!(original.export_config, restored.export_config);
     }
 }

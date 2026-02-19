@@ -36,6 +36,7 @@ pub use subjects::{
 pub mod assignments;
 pub mod colloscope_params;
 pub mod colloscopes;
+pub mod export_config;
 pub mod group_lists;
 pub mod incompats;
 pub mod periods;
@@ -95,6 +96,8 @@ pub struct PersonWithContact {
 pub struct InnerData {
     pub params: colloscope_params::Parameters,
     pub colloscope: colloscopes::Colloscope,
+    #[serde(default)]
+    pub export_config: export_config::ExportConfig,
 }
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]

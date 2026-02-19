@@ -762,7 +762,11 @@ impl Colloscope {
 
         sender.oneshot_command(async move {
             let result: Result<IlpProblem, String> = async {
-                let inner_data = collomatique_state_colloscopes::InnerData { params, colloscope };
+                let inner_data = collomatique_state_colloscopes::InnerData {
+                    params,
+                    colloscope,
+                    ..Default::default()
+                };
                 let env = inner_data.params.clone();
 
                 let pool = sqlx::SqlitePool::connect(":memory:")
