@@ -39,6 +39,16 @@ impl SimpleComponent for Dialog {
                 sender.input(DialogInput::Hide);
                 gtk::glib::Propagation::Stop
             },
+            add_controller = gtk::EventControllerKey {
+                connect_key_pressed[sender] => move |_, key, _, _| {
+                    if key == gtk::gdk::Key::Escape {
+                        sender.input(DialogInput::Hide);
+                        gtk::glib::Propagation::Stop
+                    } else {
+                        gtk::glib::Propagation::Proceed
+                    }
+                }
+            },
             #[wrap(Some)]
             set_titlebar = &gtk::Box {
                 set_visible: false,
