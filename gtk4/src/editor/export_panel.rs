@@ -1,4 +1,4 @@
-use adw::prelude::{ActionRowExt, PreferencesRowExt};
+use adw::prelude::{ActionRowExt, ComboRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
@@ -36,6 +36,10 @@ pub enum ExportPanelInput {
     UpdateStripesEnabled(bool),
     UpdateStripesColor(collomatique_state_colloscopes::export_config::Color),
     UpdateBackgroundColor(collomatique_state_colloscopes::export_config::Color),
+
+    UpdateAllGroupsShowEmails(bool),
+    UpdateAllGroupsShowTel(bool),
+    UpdateAllGroupsOrientation(Option<export_config::PageOrientation>),
 }
 
 #[derive(Debug)]
@@ -72,6 +76,27 @@ impl ExportPanel {
             red: (gtk_color.red() * 255.0f32) as u8,
             green: (gtk_color.green() * 255.0f32) as u8,
             blue: (gtk_color.blue() * 255.0f32) as u8,
+        }
+    }
+
+    fn generate_all_groups_orientation_model() -> gtk::StringList {
+        gtk::StringList::new(&["Automatique", "Portrait", "Paysage"])
+    }
+
+    fn orientation_to_selected(orientation: Option<&export_config::PageOrientation>) -> u32 {
+        match orientation {
+            None => 0,
+            Some(export_config::PageOrientation::Portrait) => 1,
+            Some(export_config::PageOrientation::Landscape) => 2,
+        }
+    }
+
+    fn selected_to_orientation(selected: u32) -> Option<export_config::PageOrientation> {
+        match selected {
+            0 => None,
+            1 => Some(export_config::PageOrientation::Portrait),
+            2 => Some(export_config::PageOrientation::Landscape),
+            _ => panic!("Invalid selection for orientation"),
         }
     }
 }
@@ -186,6 +211,12 @@ impl Component for ExportPanel {
                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                             set_margin_all: 5,
                         },
+                        gtk::Label {
+                            set_label: "<i>association des élèves aux groupes</i>",
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                        },
                         gtk::Box {
                             set_hexpand: true,
                         },
@@ -200,13 +231,50 @@ impl Component for ExportPanel {
                             connect_clicked => ExportPanelInput::RestoreDefaultAllGroupsConfigClicked,
                         },
                     },
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_use_markup: true,
-                        set_label: "<i>Configuration à venir...</i>",
+                    adw::PreferencesGroup {
                         set_margin_all: 5,
+                        set_hexpand: true,
                         #[watch]
                         set_visible: model.export_config.all_groups_enabled,
+
+                        adw::EntryRow {
+                            set_title: "Nom de la feuille",
+                            // Dud for now — no wiring
+                        },
+
+                        #[name(all_groups_orientation_combo)]
+                        adw::ComboRow {
+                            set_title: "Orientation de la page",
+                            set_model: Some(&Self::generate_all_groups_orientation_model()),
+                            #[track(Self::orientation_to_selected(model.export_config.all_groups_config.orientation.as_ref()) != all_groups_orientation_combo.selected())]
+                            set_selected: Self::orientation_to_selected(model.export_config.all_groups_config.orientation.as_ref()),
+                            connect_selected_notify[sender] => move |widget| {
+                                let selected = widget.selected();
+                                sender.input(ExportPanelInput::UpdateAllGroupsOrientation(
+                                    Self::selected_to_orientation(selected)
+                                ));
+                            },
+                        },
+
+                        #[name(all_groups_emails_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher les emails",
+                            #[track(model.export_config.all_groups_config.show_emails != all_groups_emails_switch.is_active())]
+                            set_active: model.export_config.all_groups_config.show_emails,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateAllGroupsShowEmails(widget.is_active()));
+                            },
+                        },
+
+                        #[name(all_groups_tel_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher les téléphones",
+                            #[track(model.export_config.all_groups_config.show_tel != all_groups_tel_switch.is_active())]
+                            set_active: model.export_config.all_groups_config.show_tel,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateAllGroupsShowTel(widget.is_active()));
+                            },
+                        },
                     },
                 },
                 // Section: Groupes préremplis
@@ -687,6 +755,51 @@ impl Component for ExportPanel {
                             collomatique_state_colloscopes::export_config::GlobalConfig {
                                 background_color,
                                 ..self.export_config.global.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateAllGroupsShowEmails(show_emails) => {
+                if self.export_config.all_groups_config.show_emails == show_emails {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateAllGroupsConfig(
+                            export_config::PerStudentGroupsConfig {
+                                show_emails,
+                                ..self.export_config.all_groups_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateAllGroupsShowTel(show_tel) => {
+                if self.export_config.all_groups_config.show_tel == show_tel {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateAllGroupsConfig(
+                            export_config::PerStudentGroupsConfig {
+                                show_tel,
+                                ..self.export_config.all_groups_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateAllGroupsOrientation(orientation) => {
+                if self.export_config.all_groups_config.orientation == orientation {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateAllGroupsConfig(
+                            export_config::PerStudentGroupsConfig {
+                                orientation,
+                                ..self.export_config.all_groups_config.clone()
                             },
                         ),
                     ))
