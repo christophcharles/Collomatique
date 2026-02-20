@@ -1,6 +1,6 @@
-use gtk::prelude::{DialogExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::gtk;
-use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
@@ -43,22 +43,61 @@ impl SimpleComponent for Dialog {
     type Output = DialogOutput;
 
     view! {
-        dialog = gtk::MessageDialog {
+        dialog = gtk::Window {
             set_modal: true,
+            set_resizable: false,
             #[watch]
             set_visible: !model.hidden,
-            set_text: Some("Attention !"),
-            #[watch]
-            set_secondary_text: Some(&model.generate_secondary_text()),
-            add_button: ("Poursuivre", gtk::ResponseType::Accept),
-            add_button: ("Annuler", gtk::ResponseType::Cancel),
-            connect_response[sender] => move |_, resp| {
-                sender.input(if resp == gtk::ResponseType::Accept {
-                    DialogInput::Continue
-                } else {
-                    DialogInput::Cancel
-                })
-            }
+            connect_close_request[sender] => move |_| {
+                sender.input(DialogInput::Cancel);
+                gtk::glib::Propagation::Stop
+            },
+            #[wrap(Some)]
+            set_titlebar = &gtk::Box {
+                set_visible: false,
+            },
+
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 20,
+                set_margin_all: 25,
+
+                gtk::Label {
+                    set_label: "<big><b>Attention !</b></big>",
+                    set_use_markup: true,
+                    set_halign: gtk::Align::Center,
+                },
+
+                gtk::Label {
+                    #[watch]
+                    set_label: &model.generate_secondary_text(),
+                    set_wrap: true,
+                    set_halign: gtk::Align::Center,
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 10,
+                    set_halign: gtk::Align::Center,
+
+                    gtk::Button {
+                        set_size_request: (200, 40),
+                        set_label: "Annuler",
+                        connect_clicked[sender] => move |_| {
+                            sender.input(DialogInput::Cancel);
+                        },
+                    },
+
+                    gtk::Button {
+                        set_size_request: (200, 40),
+                        set_label: "Poursuivre",
+                        add_css_class: "destructive-action",
+                        connect_clicked[sender] => move |_| {
+                            sender.input(DialogInput::Continue);
+                        },
+                    },
+                },
+            },
         }
     }
 
@@ -72,12 +111,6 @@ impl SimpleComponent for Dialog {
             warnings: vec![],
         };
         let widgets = view_output!();
-
-        let accept_widget = widgets
-            .dialog
-            .widget_for_response(gtk::ResponseType::Accept)
-            .expect("There should be an accept button");
-        accept_widget.add_css_class("destructive-action");
 
         ComponentParts { model, widgets }
     }

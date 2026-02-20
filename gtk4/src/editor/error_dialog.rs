@@ -1,6 +1,6 @@
-use gtk::prelude::{DialogExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::gtk;
-use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
@@ -21,18 +21,51 @@ impl SimpleComponent for Dialog {
     type Output = ();
 
     view! {
-        dialog = gtk::MessageDialog {
+        dialog = gtk::Window {
             set_modal: true,
+            set_resizable: false,
             #[watch]
             set_visible: !model.hidden,
-            set_text: Some("L'opération ne peut être effectuée"),
-            #[watch]
-            set_secondary_text: Some(&model.error_msg),
+            connect_close_request[sender] => move |_| {
+                sender.input(DialogInput::Hide);
+                gtk::glib::Propagation::Stop
+            },
+            #[wrap(Some)]
+            set_titlebar = &gtk::Box {
+                set_visible: false,
+            },
 
-            add_button: ("Ok", gtk::ResponseType::Ok),
-            connect_response[sender] => move |_, _| {
-                sender.input(DialogInput::Hide)
-            }
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 20,
+                set_margin_all: 25,
+
+                gtk::Label {
+                    set_label: "<big><b>L'opération ne peut être effectuée</b></big>",
+                    set_use_markup: true,
+                    set_halign: gtk::Align::Center,
+                },
+
+                gtk::Label {
+                    #[watch]
+                    set_label: &model.error_msg,
+                    set_wrap: true,
+                    set_halign: gtk::Align::Center,
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_halign: gtk::Align::Center,
+
+                    gtk::Button {
+                        set_size_request: (200, 40),
+                        set_label: "Ok",
+                        connect_clicked[sender] => move |_| {
+                            sender.input(DialogInput::Hide);
+                        },
+                    },
+                },
+            },
         }
     }
 
