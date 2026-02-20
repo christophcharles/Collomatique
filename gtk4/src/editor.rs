@@ -20,6 +20,7 @@ type ProblemBuilder = collo_ml::problem::ProblemBuilder<
 >;
 
 use crate::editor::colloscope::ColloscopeOutput;
+use crate::editor::export_panel::ExportPanelInput;
 use crate::tools;
 
 pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
@@ -71,6 +72,7 @@ pub enum EditorInput {
     SolveColloscopeClicked,
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
+    ExportClicked,
 }
 
 #[derive(Debug)]
@@ -595,6 +597,21 @@ impl Component for EditorPanel {
                                 connect_clicked => EditorInput::RedoClicked,
                             },
                         },
+                        pack_start = &gtk::Button {
+                            add_css_class: "frame",
+                            add_css_class: "raised",
+                            add_css_class: "accent",
+                            set_margin_start: 10,
+                            #[watch]
+                            set_visible: main_stack.visible_child_name().as_ref().map(
+                                |x| x.as_str()
+                            ) == Some(PanelNumbers::Export.panel_name()),
+                            adw::ButtonContent {
+                                set_icon_name: "document-export-symbolic",
+                                set_label: "Exporter le colloscope",
+                            },
+                            connect_clicked => EditorInput::ExportClicked,
+                        },
                         pack_end = &gtk::Separator {
                             set_orientation: gtk::Orientation::Vertical,
                             add_css_class: "spacer",
@@ -1043,6 +1060,9 @@ impl Component for EditorPanel {
                         Err(e) => EditorCommandOutput::ExportSqliteFailed(path, e.to_string()),
                     }
                 });
+            }
+            EditorInput::ExportClicked => {
+                self.export_panel.emit(ExportPanelInput::ExportClicked);
             }
         }
     }

@@ -1,3 +1,4 @@
+use adw::prelude::{ActionRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
@@ -31,6 +32,10 @@ pub enum ExportPanelInput {
     RestoreDefaultPrefilledConfigClicked,
     RestoreDefaultAutomaticConfigClicked,
     RestoreDefaultPerGroupListConfigClicked,
+
+    UpdateStripesEnabled(bool),
+    UpdateStripesColor(collomatique_state_colloscopes::export_config::Color),
+    UpdateBackgroundColor(collomatique_state_colloscopes::export_config::Color),
 }
 
 #[derive(Debug)]
@@ -46,6 +51,29 @@ pub enum ExportPanelCommandOutput {
     FileNotChosen,
     SqliteFileChosen(PathBuf),
     SqliteFileNotChosen,
+}
+
+impl ExportPanel {
+    fn compute_gtk_color(
+        color: &collomatique_state_colloscopes::export_config::Color,
+    ) -> gtk::gdk::RGBA {
+        gtk::gdk::RGBA::new(
+            color.red as f32 / 255.0f32,
+            color.green as f32 / 255.0f32,
+            color.blue as f32 / 255.0f32,
+            1.0f32,
+        )
+    }
+
+    fn compute_internal_color(
+        gtk_color: &gtk::gdk::RGBA,
+    ) -> collomatique_state_colloscopes::export_config::Color {
+        collomatique_state_colloscopes::export_config::Color {
+            red: (gtk_color.red() * 255.0f32) as u8,
+            green: (gtk_color.green() * 255.0f32) as u8,
+            blue: (gtk_color.blue() * 255.0f32) as u8,
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -67,51 +95,12 @@ impl Component for ExportPanel {
                 gtk::Box {
                     set_hexpand: true,
                     set_spacing: 5,
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "<b><i><big>Configuration globale</big></i></b>",
-                        set_use_markup: true,
-                        set_margin_all: 5,
-                    },
-                },
-                // Section: Couleurs de fond
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_spacing: 5,
-                        gtk::Label {
-                            set_label: "Couleurs de fond",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                            set_margin_all: 5,
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
-                        gtk::Button {
-                            set_icon_name: "edit-delete-symbolic",
-                            add_css_class: "flat",
-                            set_tooltip_text: Some("Restaurer les valeurs par défaut"),
-                            #[watch]
-                            set_sensitive: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
-                            connect_clicked => ExportPanelInput::RestoreDefaultGeneralConfigClicked,
-                        },
-                    },
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_use_markup: true,
-                        set_label: "<i>Configuration à venir...</i>",
-                        set_margin_all: 5,
-                    },
-                },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_spacing: 5,
-                    set_orientation: gtk::Orientation::Vertical,
+                    set_orientation: gtk::Orientation::Horizontal,
                     gtk::Label {
                         set_label: "<b><i><big>Feuilles à inclure</big></i></b>",
                         set_use_markup: true,
                         set_margin_all: 5,
+                        set_hexpand: true,
                     },
                 },
                 // Section: Colloscope
@@ -379,16 +368,95 @@ impl Component for ExportPanel {
                         set_visible: model.export_config.per_group_list_enabled,
                     },
                 },
-                gtk::Button {
-                    add_css_class: "frame",
-                    add_css_class: "accent",
+                gtk::Box {
                     set_hexpand: true,
-                    set_margin_all: 5,
-                    adw::ButtonContent {
-                        set_icon_name: "document-export-symbolic",
-                        set_label: "Exporter le colloscope",
+                    set_spacing: 5,
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Label {
+                        set_label: "<b><i><big>Configuration globale</big></i></b>",
+                        set_use_markup: true,
+                        set_margin_all: 5,
                     },
-                    connect_clicked => ExportPanelInput::ExportClicked,
+                },
+                // Section: Couleurs de fond
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 5,
+                        gtk::Label {
+                            set_label: "Couleurs de fond",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                            set_margin_all: 5,
+                        },
+                        gtk::Label {
+                            set_label: "<i>Couleurs de fond des cellules du tableur</i>",
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                        },
+                        gtk::Box {
+                            set_hexpand: true,
+                        },
+                        gtk::Button {
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Restaurer les valeurs par défaut"),
+                            #[watch]
+                            set_sensitive: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
+                            connect_clicked => ExportPanelInput::RestoreDefaultGeneralConfigClicked,
+                        },
+                    },
+                    adw::PreferencesGroup {
+                        set_margin_all: 5,
+                        set_hexpand: true,
+                        adw::ActionRow {
+                            set_title: "Couleur de fond (par défaut)",
+                            add_suffix = &gtk::ColorDialogButton {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_rgba: &Self::compute_gtk_color(&model.export_config.global.background_color),
+                                set_dialog = &gtk::ColorDialog {
+                                    set_title: "Choisir la couleur de fond par défaut",
+                                    set_with_alpha: false,
+                                },
+                                connect_rgba_notify[sender] => move |widget| {
+                                    let rgba = widget.rgba();
+                                    sender.input(ExportPanelInput::UpdateBackgroundColor(
+                                        Self::compute_internal_color(&rgba)
+                                    ));
+                                },
+                            },
+                        },
+                        #[name(stripes_switch)]
+                        adw::SwitchRow {
+                            set_title: "Activer le zébrage",
+                            #[track(model.export_config.global.stripes_color_enabled != stripes_switch.is_active())]
+                            set_active: model.export_config.global.stripes_color_enabled,
+                            connect_active_notify[sender] => move |widget| {
+                                let status = widget.is_active();
+                                sender.input(ExportPanelInput::UpdateStripesEnabled(status));
+                            },
+                        },
+                        adw::ActionRow {
+                            set_title: "Couleur de zébrage",
+                            add_suffix = &gtk::ColorDialogButton {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_rgba: &Self::compute_gtk_color(&model.export_config.global.stripes_color),
+                                set_dialog = &gtk::ColorDialog {
+                                    set_title: "Choisir la couleur de zébrage",
+                                    set_with_alpha: false,
+                                },
+                                connect_rgba_notify[sender] => move |widget| {
+                                    let rgba = widget.rgba();
+                                    sender.input(ExportPanelInput::UpdateStripesColor(
+                                        Self::compute_internal_color(&rgba)
+                                    ));
+                                },
+                            },
+                        },
+                    },
                 },
                 gtk::Box {
                     set_hexpand: true,
@@ -578,6 +646,51 @@ impl Component for ExportPanel {
                 sender.output(ExportPanelOutput::UpdateExportConfig(
                     collomatique_ops::ExportConfigUpdateOp::UpdatePerGroupListConfig(collomatique_state_colloscopes::export_config::PerGroupListConfig::default())
                 )).unwrap();
+            }
+            ExportPanelInput::UpdateStripesEnabled(stripes_enabled) => {
+                if self.export_config.global.stripes_color_enabled == stripes_enabled {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
+                            collomatique_state_colloscopes::export_config::GlobalConfig {
+                                stripes_color_enabled: stripes_enabled,
+                                ..self.export_config.global.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateStripesColor(stripes_color) => {
+                if self.export_config.global.stripes_color == stripes_color {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
+                            collomatique_state_colloscopes::export_config::GlobalConfig {
+                                stripes_color,
+                                ..self.export_config.global.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateBackgroundColor(background_color) => {
+                if self.export_config.global.background_color == background_color {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
+                            collomatique_state_colloscopes::export_config::GlobalConfig {
+                                background_color,
+                                ..self.export_config.global.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
             }
         }
     }

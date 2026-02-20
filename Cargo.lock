@@ -431,6 +431,7 @@ dependencies = [
  "collomatique-storage",
  "collomatique-time",
  "collomatique-xlsx",
+ "gtk4",
  "libadwaita",
  "libc",
  "non-empty-string",

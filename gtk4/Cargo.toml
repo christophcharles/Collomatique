@@ -18,6 +18,7 @@ collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-xlsx = { path = "../xlsx" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
+gtk4 = { version = "0.9", features = [ "v4_10" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
 rustix = { version = "1.0", features = [ "pty" ] }
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
