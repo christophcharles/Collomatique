@@ -18,6 +18,12 @@ pub struct ExportPanel {
     should_redraw_prefilled_sheet_name: bool,
     automatic_sheet_name_committed: String,
     should_redraw_automatic_sheet_name: bool,
+    colloscope_sheet_name_committed: String,
+    should_redraw_colloscope_sheet_name: bool,
+    colloscope_teacher_email_committed: String,
+    should_redraw_colloscope_teacher_email: bool,
+    colloscope_teacher_tel_committed: String,
+    should_redraw_colloscope_teacher_tel: bool,
 }
 
 #[derive(Debug)]
@@ -62,6 +68,18 @@ pub enum ExportPanelInput {
     UpdatePerGroupListShowTel(bool),
     UpdatePerGroupListOrientation(export_config::PageOrientation),
     UpdatePerGroupListCenterVertically(bool),
+
+    UpdateColloscopeSheetName(String),
+    UpdateColloscopeOrientation(export_config::PageOrientation),
+    UpdateColloscopeTeacherEmailEnabled(bool),
+    UpdateColloscopeTeacherEmail(String),
+    UpdateColloscopeTeacherTelEnabled(bool),
+    UpdateColloscopeTeacherTel(String),
+    UpdateColloscopeDisplayWeekDates(bool),
+    UpdateColloscopeDisplayAnnotations(bool),
+    UpdateColloscopeNoInterrogationColor(export_config::Color),
+    UpdateColloscopeAnnotationColorEnabled(bool),
+    UpdateColloscopeAnnotationColor(export_config::Color),
 }
 
 #[derive(Debug)]
@@ -214,6 +232,12 @@ impl Component for ExportPanel {
                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                             set_margin_all: 5,
                         },
+                        gtk::Label {
+                            set_label: "<i>affectation des groupes dans les créneaux de colles</i>",
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                        },
                         gtk::Box {
                             set_hexpand: true,
                         },
@@ -228,13 +252,146 @@ impl Component for ExportPanel {
                             connect_clicked => ExportPanelInput::RestoreDefaultColloscopeConfigClicked,
                         },
                     },
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_use_markup: true,
-                        set_label: "<i>Configuration à venir...</i>",
+                    adw::PreferencesGroup {
                         set_margin_all: 5,
+                        set_hexpand: true,
                         #[watch]
                         set_visible: model.export_config.colloscope_enabled,
+
+                        #[name(colloscope_sheet_name_entry)]
+                        adw::EntryRow {
+                            set_title: "Nom de la feuille",
+                            #[track(model.should_redraw_colloscope_sheet_name)]
+                            set_text: &model.export_config.colloscope_config.sheet_name,
+                            connect_entry_activated[sender] => move |widget| {
+                                let text: String = widget.text().into();
+                                sender.input(ExportPanelInput::UpdateColloscopeSheetName(text));
+                            },
+                        },
+
+                        #[name(colloscope_orientation_combo)]
+                        adw::ComboRow {
+                            set_title: "Orientation de la page",
+                            set_model: Some(&Self::generate_per_group_list_orientation_model()),
+                            #[track(Self::mandatory_orientation_to_selected(&model.export_config.colloscope_config.orientation) != colloscope_orientation_combo.selected())]
+                            set_selected: Self::mandatory_orientation_to_selected(&model.export_config.colloscope_config.orientation),
+                            connect_selected_notify[sender] => move |widget| {
+                                let selected = widget.selected();
+                                sender.input(ExportPanelInput::UpdateColloscopeOrientation(
+                                    Self::selected_to_mandatory_orientation(selected)
+                                ));
+                            },
+                        },
+
+                        #[name(colloscope_teacher_email_enabled_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher l'email du colleur",
+                            #[track(model.export_config.colloscope_config.teacher_email_enabled != colloscope_teacher_email_enabled_switch.is_active())]
+                            set_active: model.export_config.colloscope_config.teacher_email_enabled,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateColloscopeTeacherEmailEnabled(widget.is_active()));
+                            },
+                        },
+
+                        #[name(colloscope_teacher_email_entry)]
+                        adw::EntryRow {
+                            set_title: "Nom de la colonne email",
+                            #[track(model.should_redraw_colloscope_teacher_email)]
+                            set_text: &model.export_config.colloscope_config.teacher_email,
+                            connect_entry_activated[sender] => move |widget| {
+                                let text: String = widget.text().into();
+                                sender.input(ExportPanelInput::UpdateColloscopeTeacherEmail(text));
+                            },
+                        },
+
+                        #[name(colloscope_teacher_tel_enabled_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher le téléphone du colleur",
+                            #[track(model.export_config.colloscope_config.teacher_tel_enabled != colloscope_teacher_tel_enabled_switch.is_active())]
+                            set_active: model.export_config.colloscope_config.teacher_tel_enabled,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateColloscopeTeacherTelEnabled(widget.is_active()));
+                            },
+                        },
+
+                        #[name(colloscope_teacher_tel_entry)]
+                        adw::EntryRow {
+                            set_title: "Nom de la colonne téléphone",
+                            #[track(model.should_redraw_colloscope_teacher_tel)]
+                            set_text: &model.export_config.colloscope_config.teacher_tel,
+                            connect_entry_activated[sender] => move |widget| {
+                                let text: String = widget.text().into();
+                                sender.input(ExportPanelInput::UpdateColloscopeTeacherTel(text));
+                            },
+                        },
+
+                        #[name(colloscope_display_week_dates_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher les dates des semaines",
+                            #[track(model.export_config.colloscope_config.display_week_dates != colloscope_display_week_dates_switch.is_active())]
+                            set_active: model.export_config.colloscope_config.display_week_dates,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateColloscopeDisplayWeekDates(widget.is_active()));
+                            },
+                        },
+
+                        #[name(colloscope_display_annotations_switch)]
+                        adw::SwitchRow {
+                            set_title: "Afficher les annotations",
+                            #[track(model.export_config.colloscope_config.display_annotations != colloscope_display_annotations_switch.is_active())]
+                            set_active: model.export_config.colloscope_config.display_annotations,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateColloscopeDisplayAnnotations(widget.is_active()));
+                            },
+                        },
+
+                        adw::ActionRow {
+                            set_title: "Couleur sans interrogation",
+                            add_suffix = &gtk::ColorDialogButton {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_rgba: &Self::compute_gtk_color(&model.export_config.colloscope_config.no_interrogation_color),
+                                set_dialog = &gtk::ColorDialog {
+                                    set_title: "Choisir la couleur sans interrogation",
+                                    set_with_alpha: false,
+                                },
+                                connect_rgba_notify[sender] => move |widget| {
+                                    let rgba = widget.rgba();
+                                    sender.input(ExportPanelInput::UpdateColloscopeNoInterrogationColor(
+                                        Self::compute_internal_color(&rgba)
+                                    ));
+                                },
+                            },
+                        },
+
+                        #[name(colloscope_annotation_color_enabled_switch)]
+                        adw::SwitchRow {
+                            set_title: "Activer la couleur d'annotation",
+                            #[track(model.export_config.colloscope_config.annotation_color_enabled != colloscope_annotation_color_enabled_switch.is_active())]
+                            set_active: model.export_config.colloscope_config.annotation_color_enabled,
+                            connect_active_notify[sender] => move |widget| {
+                                sender.input(ExportPanelInput::UpdateColloscopeAnnotationColorEnabled(widget.is_active()));
+                            },
+                        },
+
+                        adw::ActionRow {
+                            set_title: "Couleur d'annotation",
+                            add_suffix = &gtk::ColorDialogButton {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_rgba: &Self::compute_gtk_color(&model.export_config.colloscope_config.annotation_color),
+                                set_dialog = &gtk::ColorDialog {
+                                    set_title: "Choisir la couleur d'annotation",
+                                    set_with_alpha: false,
+                                },
+                                connect_rgba_notify[sender] => move |widget| {
+                                    let rgba = widget.rgba();
+                                    sender.input(ExportPanelInput::UpdateColloscopeAnnotationColor(
+                                        Self::compute_internal_color(&rgba)
+                                    ));
+                                },
+                            },
+                        },
                     },
                 },
                 // Section: Tous les groupes
@@ -780,6 +937,14 @@ impl Component for ExportPanel {
             automatic_sheet_name_committed:
                 export_config::PerStudentGroupsConfig::default_automatic_groups().sheet_name,
             should_redraw_automatic_sheet_name: false,
+            colloscope_sheet_name_committed: export_config::ColloscopeConfig::default().sheet_name,
+            should_redraw_colloscope_sheet_name: false,
+            colloscope_teacher_email_committed: export_config::ColloscopeConfig::default()
+                .teacher_email,
+            should_redraw_colloscope_teacher_email: false,
+            colloscope_teacher_tel_committed: export_config::ColloscopeConfig::default()
+                .teacher_tel,
+            should_redraw_colloscope_teacher_tel: false,
         };
         let widgets = view_output!();
 
@@ -798,6 +963,21 @@ impl Component for ExportPanel {
             &widgets.automatic_sheet_name_entry,
             &sender,
             ExportPanelInput::UpdateAutomaticSheetName,
+        );
+        Self::setup_entry_focus_commit(
+            &widgets.colloscope_sheet_name_entry,
+            &sender,
+            ExportPanelInput::UpdateColloscopeSheetName,
+        );
+        Self::setup_entry_focus_commit(
+            &widgets.colloscope_teacher_email_entry,
+            &sender,
+            ExportPanelInput::UpdateColloscopeTeacherEmail,
+        );
+        Self::setup_entry_focus_commit(
+            &widgets.colloscope_teacher_tel_entry,
+            &sender,
+            ExportPanelInput::UpdateColloscopeTeacherTel,
         );
 
         if !model.export_config.colloscope_enabled {
@@ -823,6 +1003,9 @@ impl Component for ExportPanel {
         self.should_redraw_all_groups_sheet_name = false;
         self.should_redraw_prefilled_sheet_name = false;
         self.should_redraw_automatic_sheet_name = false;
+        self.should_redraw_colloscope_sheet_name = false;
+        self.should_redraw_colloscope_teacher_email = false;
+        self.should_redraw_colloscope_teacher_tel = false;
 
         match message {
             ExportPanelInput::Update(config, file_name) => {
@@ -842,6 +1025,22 @@ impl Component for ExportPanel {
                     self.should_redraw_automatic_sheet_name = true;
                     self.automatic_sheet_name_committed =
                         config.automatic_groups_config.sheet_name.clone();
+                }
+                if config.colloscope_config.sheet_name != self.colloscope_sheet_name_committed {
+                    self.should_redraw_colloscope_sheet_name = true;
+                    self.colloscope_sheet_name_committed =
+                        config.colloscope_config.sheet_name.clone();
+                }
+                if config.colloscope_config.teacher_email != self.colloscope_teacher_email_committed
+                {
+                    self.should_redraw_colloscope_teacher_email = true;
+                    self.colloscope_teacher_email_committed =
+                        config.colloscope_config.teacher_email.clone();
+                }
+                if config.colloscope_config.teacher_tel != self.colloscope_teacher_tel_committed {
+                    self.should_redraw_colloscope_teacher_tel = true;
+                    self.colloscope_teacher_tel_committed =
+                        config.colloscope_config.teacher_tel.clone();
                 }
                 self.export_config = config;
                 self.file_name = file_name;
@@ -1253,6 +1452,183 @@ impl Component for ExportPanel {
                             export_config::PerGroupListConfig {
                                 center_vertically,
                                 ..self.export_config.per_group_list_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeSheetName(new_name) => {
+                if self.export_config.colloscope_config.sheet_name == new_name {
+                    return;
+                }
+                self.colloscope_sheet_name_committed = new_name.clone();
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                sheet_name: new_name,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeOrientation(orientation) => {
+                if self.export_config.colloscope_config.orientation == orientation {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                orientation,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeTeacherEmailEnabled(teacher_email_enabled) => {
+                if self.export_config.colloscope_config.teacher_email_enabled
+                    == teacher_email_enabled
+                {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                teacher_email_enabled,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeTeacherEmail(new_name) => {
+                if self.export_config.colloscope_config.teacher_email == new_name {
+                    return;
+                }
+                self.colloscope_teacher_email_committed = new_name.clone();
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                teacher_email: new_name,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeTeacherTelEnabled(teacher_tel_enabled) => {
+                if self.export_config.colloscope_config.teacher_tel_enabled == teacher_tel_enabled {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                teacher_tel_enabled,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeTeacherTel(new_name) => {
+                if self.export_config.colloscope_config.teacher_tel == new_name {
+                    return;
+                }
+                self.colloscope_teacher_tel_committed = new_name.clone();
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                teacher_tel: new_name,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeDisplayWeekDates(display_week_dates) => {
+                if self.export_config.colloscope_config.display_week_dates == display_week_dates {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                display_week_dates,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeDisplayAnnotations(display_annotations) => {
+                if self.export_config.colloscope_config.display_annotations == display_annotations {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                display_annotations,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeNoInterrogationColor(no_interrogation_color) => {
+                if self.export_config.colloscope_config.no_interrogation_color
+                    == no_interrogation_color
+                {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                no_interrogation_color,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeAnnotationColorEnabled(annotation_color_enabled) => {
+                if self
+                    .export_config
+                    .colloscope_config
+                    .annotation_color_enabled
+                    == annotation_color_enabled
+                {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                annotation_color_enabled,
+                                ..self.export_config.colloscope_config.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateColloscopeAnnotationColor(annotation_color) => {
+                if self.export_config.colloscope_config.annotation_color == annotation_color {
+                    return;
+                }
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateColloscopeConfig(
+                            export_config::ColloscopeConfig {
+                                annotation_color,
+                                ..self.export_config.colloscope_config.clone()
                             },
                         ),
                     ))
