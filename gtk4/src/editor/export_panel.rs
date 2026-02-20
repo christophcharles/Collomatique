@@ -1,4 +1,4 @@
-use adw::prelude::{ActionRowExt, ComboRowExt, PreferencesRowExt};
+use adw::prelude::{ActionRowExt, ComboRowExt, EditableExt, EntryRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
@@ -12,6 +12,8 @@ use crate::tools;
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
+    all_groups_sheet_name_committed: String,
+    should_redraw_all_groups_sheet_name: bool,
 }
 
 #[derive(Debug)]
@@ -37,6 +39,7 @@ pub enum ExportPanelInput {
     UpdateStripesColor(collomatique_state_colloscopes::export_config::Color),
     UpdateBackgroundColor(collomatique_state_colloscopes::export_config::Color),
 
+    UpdateAllGroupsSheetName(String),
     UpdateAllGroupsShowEmails(bool),
     UpdateAllGroupsShowTel(bool),
     UpdateAllGroupsOrientation(Option<export_config::PageOrientation>),
@@ -237,9 +240,15 @@ impl Component for ExportPanel {
                         #[watch]
                         set_visible: model.export_config.all_groups_enabled,
 
+                        #[name(all_groups_sheet_name_entry)]
                         adw::EntryRow {
                             set_title: "Nom de la feuille",
-                            // Dud for now — no wiring
+                            #[track(model.should_redraw_all_groups_sheet_name)]
+                            set_text: &model.export_config.all_groups_config.sheet_name,
+                            connect_entry_activated[sender] => move |widget| {
+                                let text: String = widget.text().into();
+                                sender.input(ExportPanelInput::UpdateAllGroupsSheetName(text));
+                            },
                         },
 
                         #[name(all_groups_orientation_combo)]
@@ -563,8 +572,25 @@ impl Component for ExportPanel {
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
+            all_groups_sheet_name_committed:
+                export_config::PerStudentGroupsConfig::default_all_groups().sheet_name,
+            should_redraw_all_groups_sheet_name: false,
         };
         let widgets = view_output!();
+
+        // Focus-loss auto-commit for entry rows
+        {
+            let focus_controller = gtk::EventControllerFocus::new();
+            let sender_clone = sender.clone();
+            let entry_ref = widgets.all_groups_sheet_name_entry.clone();
+            focus_controller.connect_leave(move |_controller| {
+                let text: String = entry_ref.text().into();
+                sender_clone.input(ExportPanelInput::UpdateAllGroupsSheetName(text));
+            });
+            widgets
+                .all_groups_sheet_name_entry
+                .add_controller(focus_controller);
+        }
 
         if !model.export_config.colloscope_enabled {
             widgets.colloscope_box.add_css_class("dimmed");
@@ -586,8 +612,15 @@ impl Component for ExportPanel {
     }
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.should_redraw_all_groups_sheet_name = false;
+
         match message {
             ExportPanelInput::Update(config, file_name) => {
+                if config.all_groups_config.sheet_name != self.all_groups_sheet_name_committed {
+                    self.should_redraw_all_groups_sheet_name = true;
+                    self.all_groups_sheet_name_committed =
+                        config.all_groups_config.sheet_name.clone();
+                }
                 self.export_config = config;
                 self.file_name = file_name;
             }
@@ -755,6 +788,22 @@ impl Component for ExportPanel {
                             collomatique_state_colloscopes::export_config::GlobalConfig {
                                 background_color,
                                 ..self.export_config.global.clone()
+                            },
+                        ),
+                    ))
+                    .unwrap();
+            }
+            ExportPanelInput::UpdateAllGroupsSheetName(new_name) => {
+                if self.export_config.all_groups_config.sheet_name == new_name {
+                    return;
+                }
+                self.all_groups_sheet_name_committed = new_name.clone();
+                sender
+                    .output(ExportPanelOutput::UpdateExportConfig(
+                        collomatique_ops::ExportConfigUpdateOp::UpdateAllGroupsConfig(
+                            export_config::PerStudentGroupsConfig {
+                                sheet_name: new_name,
+                                ..self.export_config.all_groups_config.clone()
                             },
                         ),
                     ))
