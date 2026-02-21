@@ -76,7 +76,7 @@ pub struct GlobalConfig {
 #[derive(Debug)]
 pub struct ColloscopeConfig {
     pub sheet_name: String,
-    pub extra_info_column_name: String,
+    pub extra_info_column_name: Option<String>,
     pub teacher_email: Option<String>,
     pub teacher_tel: Option<String>,
     pub orientation: PageOrientation,

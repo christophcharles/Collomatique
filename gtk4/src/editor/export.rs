@@ -28,7 +28,10 @@ pub fn to_xlsx_config(ec: &export_config::ExportConfig) -> collomatique_xlsx::Co
             let cc = &ec.colloscope_config;
             Some(collomatique_xlsx::ColloscopeConfig {
                 sheet_name: cc.sheet_name.clone(),
-                extra_info_column_name: cc.extra_info_column_name.clone(),
+                extra_info_column_name: optional(
+                    cc.extra_info_column_enabled,
+                    cc.extra_info_column_name.clone(),
+                ),
                 teacher_email: optional(cc.teacher_email_enabled, cc.teacher_email.clone()),
                 teacher_tel: optional(cc.teacher_tel_enabled, cc.teacher_tel.clone()),
                 orientation: to_xlsx_orientation(&cc.orientation),

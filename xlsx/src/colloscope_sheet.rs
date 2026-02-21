@@ -14,7 +14,7 @@ struct FixedColumns {
     email_col: Option<u16>,
     tel_col: Option<u16>,
     slot_col: u16,
-    extra_info_col: u16,
+    extra_info_col: Option<u16>,
     count: u16,
 }
 
@@ -42,8 +42,14 @@ impl FixedColumns {
 
         let slot_col = next;
         next += 1;
-        let extra_info_col = next;
-        next += 1;
+
+        let extra_info_col = if colloscope.extra_info_column_name.is_some() {
+            let col = next;
+            next += 1;
+            Some(col)
+        } else {
+            None
+        };
 
         FixedColumns {
             subject_col,
@@ -237,12 +243,13 @@ pub async fn build(
         worksheet.write_with_format(header_row, tel_col, name, &header_fmt)?;
     }
     worksheet.write_with_format(header_row, cols.slot_col, "Créneau", &header_fmt)?;
-    worksheet.write_with_format(
-        header_row,
-        cols.extra_info_col,
-        &colloscope.extra_info_column_name,
-        &header_fmt,
-    )?;
+    if let Some(extra_info_col) = cols.extra_info_col {
+        let name = colloscope
+            .extra_info_column_name
+            .as_deref()
+            .unwrap_or("Info");
+        worksheet.write_with_format(header_row, extra_info_col, name, &header_fmt)?;
+    }
 
     let mut week_counter: u32 = 1;
     for pl in &period_layout {
@@ -400,7 +407,9 @@ pub async fn build(
                 worksheet.write_with_format(row, tel_col, &tel, &data_fmt)?;
             }
             worksheet.write_with_format(row, cols.slot_col, &slot_time, &data_fmt)?;
-            worksheet.write_with_format(row, cols.extra_info_col, &extra_info, &data_fmt)?;
+            if let Some(extra_info_col) = cols.extra_info_col {
+                worksheet.write_with_format(row, extra_info_col, &extra_info, &data_fmt)?;
+            }
 
             // Week columns
             for pl in &period_layout {
@@ -489,7 +498,9 @@ pub async fn build(
         worksheet.set_column_width(tel_col, 14)?;
     }
     worksheet.set_column_width(cols.slot_col, 14)?;
-    worksheet.set_column_width(cols.extra_info_col, 10)?;
+    if let Some(extra_info_col) = cols.extra_info_col {
+        worksheet.set_column_width(extra_info_col, 10)?;
+    }
     if total_week_cols > 0 {
         worksheet.set_column_range_width(cols.count, cols.count + total_week_cols - 1, 5)?;
     }
