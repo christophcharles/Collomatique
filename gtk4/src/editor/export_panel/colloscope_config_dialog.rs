@@ -1,4 +1,6 @@
-use adw::prelude::{ActionRowExt, ComboRowExt, EditableExt, PreferencesRowExt};
+use adw::prelude::{
+    ActionRowExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
+};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
@@ -118,6 +120,7 @@ impl SimpleComponent for Dialog {
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
+                            set_title: "Paramètres de la feuille",
 
                             #[name(sheet_name_entry)]
                             adw::EntryRow {
@@ -143,6 +146,12 @@ impl SimpleComponent for Dialog {
                                     ));
                                 },
                             },
+                        },
+
+                        adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_title: "Paramètres des colonnes",
 
                             #[name(extra_info_column_enabled_switch)]
                             adw::SwitchRow {
@@ -206,6 +215,12 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateTeacherTel(text));
                                 },
                             },
+                        },
+
+                        adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_title: "Affichages supplémentaires",
 
                             #[name(display_week_dates_switch)]
                             adw::SwitchRow {
@@ -226,6 +241,12 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateDisplayAnnotations(widget.is_active()));
                                 },
                             },
+                        },
+
+                        adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_title: "Couleurs",
 
                             adw::ActionRow {
                                 set_title: "Couleur sans interrogation",

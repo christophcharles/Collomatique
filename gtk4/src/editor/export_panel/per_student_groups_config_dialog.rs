@@ -69,7 +69,7 @@ impl SimpleComponent for Dialog {
             set_visible: !model.hidden,
             #[watch]
             set_title: Some(&format!("Configuration : {}", model.sheet_display_name)),
-            set_default_size: (500, 400),
+            set_default_size: (500, 285),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
