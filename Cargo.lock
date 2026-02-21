@@ -457,6 +457,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-mps"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+]
+
+[[package]]
 name = "collomatique-ops"
 version = "0.1.0"
 dependencies = [

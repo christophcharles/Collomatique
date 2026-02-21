@@ -1,0 +1,8 @@
+[package]
+name = "collomatique-mps"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-ilp = { path = "../ilp", default-features = false }
