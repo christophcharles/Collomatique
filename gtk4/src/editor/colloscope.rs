@@ -57,6 +57,7 @@ pub enum ColloscopeCommandOutput {
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
     SolveColloscopeClicked,
+    UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -671,7 +672,7 @@ impl Component for Colloscope {
                         self.recompute_warnings(sender, ilp_problem);
                     }
                     Err(msg) => {
-                        self.update_ilp_repr(ComputationState::ResultAvailable(Err(msg)));
+                        self.update_ilp_repr(ComputationState::ResultAvailable(Err(msg)), &sender);
                     }
                 }
             }
@@ -679,7 +680,7 @@ impl Component for Colloscope {
                 if ilp_repr.ilp_problem.env != self.params {
                     return; // Ignore old computation that are no longer relevant
                 }
-                self.update_ilp_repr(ComputationState::ResultAvailable(Ok(ilp_repr)));
+                self.update_ilp_repr(ComputationState::ResultAvailable(Ok(ilp_repr)), &sender);
             }
             ColloscopeCommandOutput::DebouncedStart(instant) => match &self.ilp_problem_builder {
                 Some(b) => match b {
@@ -701,7 +702,12 @@ impl Component for Colloscope {
 
 impl Colloscope {
     fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
-        self.update_ilp_repr(ComputationState::RecomputingWarnings);
+        self.update_ilp_repr(ComputationState::RecomputingWarnings, &sender);
+
+        let inner_problem = ilp_problem.problem.get_inner_problem().clone();
+        sender
+            .output(ColloscopeOutput::UpdateIlpProblem(Some(inner_problem)))
+            .unwrap();
 
         let colloscope = self.colloscope.clone();
 
@@ -738,7 +744,10 @@ impl Colloscope {
 
     fn debounce_compute(&mut self, sender: ComponentSender<Self>) {
         let instant = std::time::Instant::now();
-        self.update_ilp_repr(ComputationState::AwaitingRecompilation(instant.clone()));
+        self.update_ilp_repr(
+            ComputationState::AwaitingRecompilation(instant.clone()),
+            &sender,
+        );
 
         sender.oneshot_command(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
@@ -747,7 +756,7 @@ impl Colloscope {
     }
 
     fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
-        self.update_ilp_repr(ComputationState::ComputingConstraints);
+        self.update_ilp_repr(ComputationState::ComputingConstraints, &sender);
 
         let builder = self
             .ilp_problem_builder
@@ -829,11 +838,19 @@ impl Colloscope {
             .unwrap();
     }
 
-    fn update_ilp_repr(&mut self, ilp_repr: ComputationState) {
+    fn update_ilp_repr(&mut self, ilp_repr: ComputationState, sender: &ComponentSender<Self>) {
         let Some(Ok(ref mut builder)) = self.ilp_problem_builder else {
             return;
         };
         builder.ilp_repr = ilp_repr;
+        match &builder.ilp_repr {
+            ComputationState::AwaitingRecompilation(_) | ComputationState::ComputingConstraints => {
+                sender
+                    .output(ColloscopeOutput::UpdateIlpProblem(None))
+                    .unwrap();
+            }
+            _ => {}
+        }
         self.update_blame_dialog();
     }
 

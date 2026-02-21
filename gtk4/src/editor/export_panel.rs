@@ -48,6 +48,8 @@ pub enum ExportPanelInput {
     ExportSqliteClicked,
     ExportMpsClicked,
 
+    UpdateIlpProblem(Option<IlpInnerProblem>),
+
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
     UpdatePrefilledEnabled(bool),
@@ -610,15 +612,11 @@ impl Component for ExportPanel {
                 }
             });
 
-        let placeholder_ilp_problem = collomatique_ilp::ProblemBuilder::new()
-            .build()
-            .expect("Empty problem should build successfully");
-
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             annotations: BTreeSet::new(),
-            ilp_problem: Some(placeholder_ilp_problem),
+            ilp_problem: None,
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -689,6 +687,9 @@ impl Component for ExportPanel {
                         None => ExportPanelCommandOutput::SqliteFileNotChosen,
                     }
                 });
+            }
+            ExportPanelInput::UpdateIlpProblem(problem) => {
+                self.ilp_problem = problem;
             }
             ExportPanelInput::ExportMpsClicked => {
                 let default = match &self.file_name {

@@ -73,6 +73,7 @@ pub enum EditorInput {
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
+    UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
     ExportClicked,
 }
 
@@ -776,6 +777,9 @@ impl Component for EditorPanel {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
                     }
                     ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
+                    ColloscopeOutput::UpdateIlpProblem(problem) => {
+                        EditorInput::UpdateIlpProblem(problem)
+                    }
                 });
 
         let export_panel =
@@ -1090,6 +1094,10 @@ impl Component for EditorPanel {
                         Err(e) => EditorCommandOutput::ExportMpsFailed(path, e.to_string()),
                     }
                 });
+            }
+            EditorInput::UpdateIlpProblem(problem) => {
+                self.export_panel
+                    .emit(ExportPanelInput::UpdateIlpProblem(problem));
             }
             EditorInput::ExportClicked => {
                 self.export_panel.emit(ExportPanelInput::ExportClicked);
