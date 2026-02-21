@@ -9,6 +9,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 use relm4::{adw, gtk};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use collomatique_state_colloscopes::export_config;
@@ -18,6 +19,7 @@ use crate::tools;
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
+    annotations: BTreeSet<String>,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
     global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -28,7 +30,11 @@ pub struct ExportPanel {
 
 #[derive(Debug)]
 pub enum ExportPanelInput {
-    Update(export_config::ExportConfig, Option<PathBuf>),
+    Update(
+        export_config::ExportConfig,
+        Option<PathBuf>,
+        BTreeSet<String>,
+    ),
     ExportClicked,
     ExportSqliteClicked,
 
@@ -581,6 +587,7 @@ impl Component for ExportPanel {
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
+            annotations: BTreeSet::new(),
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -611,9 +618,10 @@ impl Component for ExportPanel {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ExportPanelInput::Update(config, file_name) => {
+            ExportPanelInput::Update(config, file_name, annotations) => {
                 self.export_config = config;
                 self.file_name = file_name;
+                self.annotations = annotations;
             }
             ExportPanelInput::ExportClicked => {
                 let default = match &self.file_name {
@@ -762,6 +770,7 @@ impl Component for ExportPanel {
                     .sender()
                     .send(colloscope_config_dialog::DialogInput::Show(
                         self.export_config.colloscope_config.clone(),
+                        self.annotations.clone(),
                     ))
                     .unwrap();
             }

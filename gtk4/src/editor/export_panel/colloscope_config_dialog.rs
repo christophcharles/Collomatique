@@ -2,21 +2,211 @@ use adw::prelude::{
     ActionRowExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
 };
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, WidgetExt};
+use relm4::FactorySender;
+use relm4::factory::FactoryView;
 use relm4::gtk::prelude::OrientableExt;
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
+use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_state_colloscopes::export_config;
+
+// === Extra Color Factory ===
+
+#[derive(Debug, Clone)]
+enum ExtraColorEntryData {
+    Switch {
+        annotation: String,
+        enabled: bool,
+    },
+    Color {
+        annotation: String,
+        color: export_config::Color,
+        visible: bool,
+    },
+}
+
+#[derive(Debug)]
+struct ExtraColorEntry {
+    data: ExtraColorEntryData,
+    index: DynamicIndex,
+    should_redraw: bool,
+}
+
+impl ExtraColorEntry {
+    fn is_switch(&self) -> bool {
+        matches!(self.data, ExtraColorEntryData::Switch { .. })
+    }
+
+    fn title(&self) -> String {
+        match &self.data {
+            ExtraColorEntryData::Switch { annotation, .. } => {
+                format!("Colorer l'annotation \"{annotation}\"")
+            }
+            ExtraColorEntryData::Color { annotation, .. } => {
+                format!("Couleur pour \"{annotation}\"")
+            }
+        }
+    }
+
+    fn is_row_visible(&self) -> bool {
+        match &self.data {
+            ExtraColorEntryData::Switch { .. } => true,
+            ExtraColorEntryData::Color { visible, .. } => *visible,
+        }
+    }
+
+    fn is_enabled(&self) -> bool {
+        match &self.data {
+            ExtraColorEntryData::Switch { enabled, .. } => *enabled,
+            ExtraColorEntryData::Color { .. } => false,
+        }
+    }
+
+    fn get_gtk_color(&self) -> gtk::gdk::RGBA {
+        match &self.data {
+            ExtraColorEntryData::Color { color, .. } => Dialog::compute_gtk_color(color),
+            ExtraColorEntryData::Switch { .. } => gtk::gdk::RGBA::BLACK,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum ExtraColorInput {
+    UpdateData(ExtraColorEntryData),
+    UpdateStatus(bool),
+    UpdateColor(export_config::Color),
+}
+
+#[derive(Debug)]
+enum ExtraColorOutput {
+    UpdateEnabled(usize, bool),
+    UpdateColor(usize, export_config::Color),
+}
+
+#[relm4::factory]
+impl FactoryComponent for ExtraColorEntry {
+    type Init = ExtraColorEntryData;
+    type Input = ExtraColorInput;
+    type Output = ExtraColorOutput;
+    type CommandOutput = ();
+    type ParentWidget = adw::PreferencesGroup;
+
+    view! {
+        #[root]
+        adw::ActionRow {
+            set_use_markup: false,
+            #[watch]
+            set_title: &self.title(),
+            #[watch]
+            set_visible: self.is_row_visible(),
+
+            add_suffix = &gtk::Switch {
+                set_valign: gtk::Align::Center,
+                #[watch]
+                set_visible: self.is_switch(),
+                #[track(self.should_redraw)]
+                set_active: self.is_enabled(),
+                connect_active_notify[sender] => move |widget| {
+                    sender.input(ExtraColorInput::UpdateStatus(widget.is_active()));
+                },
+            },
+
+            add_suffix = &gtk::ColorDialogButton {
+                set_margin_all: 5,
+                #[watch]
+                set_visible: !self.is_switch(),
+                #[track(self.should_redraw)]
+                set_rgba: &self.get_gtk_color(),
+                set_dialog = &gtk::ColorDialog {
+                    set_title: "Choisir la couleur",
+                    set_with_alpha: false,
+                },
+                connect_rgba_notify[sender] => move |widget| {
+                    let rgba = widget.rgba();
+                    sender.input(ExtraColorInput::UpdateColor(
+                        Dialog::compute_internal_color(&rgba)
+                    ));
+                },
+            },
+        }
+    }
+
+    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+            data,
+            index: index.clone(),
+            should_redraw: false,
+        }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        self.should_redraw = false;
+        match msg {
+            ExtraColorInput::UpdateData(new_data) => {
+                self.data = new_data;
+                self.should_redraw = true;
+            }
+            ExtraColorInput::UpdateStatus(new_status) => {
+                if let ExtraColorEntryData::Switch {
+                    ref mut enabled, ..
+                } = self.data
+                {
+                    if *enabled == new_status {
+                        return;
+                    }
+                    *enabled = new_status;
+                    sender
+                        .output(ExtraColorOutput::UpdateEnabled(
+                            self.index.current_index(),
+                            new_status,
+                        ))
+                        .unwrap();
+                }
+            }
+            ExtraColorInput::UpdateColor(new_color) => {
+                if let ExtraColorEntryData::Color { ref mut color, .. } = self.data {
+                    if *color == new_color {
+                        return;
+                    }
+                    *color = new_color.clone();
+                    sender
+                        .output(ExtraColorOutput::UpdateColor(
+                            self.index.current_index(),
+                            new_color,
+                        ))
+                        .unwrap();
+                }
+            }
+        }
+    }
+}
+
+// === Dialog ===
 
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     config: export_config::ColloscopeConfig,
+    extra_colors_state: BTreeMap<String, (bool, export_config::Color)>,
+    extra_color_entries: FactoryVecDeque<ExtraColorEntry>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(export_config::ColloscopeConfig),
+    Show(export_config::ColloscopeConfig, BTreeSet<String>),
     Cancel,
     Accept,
 
@@ -33,6 +223,8 @@ pub enum DialogInput {
     UpdateNoInterrogationColor(export_config::Color),
     UpdateAnnotationColorEnabled(bool),
     UpdateAnnotationColor(export_config::Color),
+    UpdateExtraColorEnabled(usize, bool),
+    UpdateExtraColorColor(usize, export_config::Color),
 }
 
 #[derive(Debug)]
@@ -93,7 +285,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_title: Some("Configuration : colloscope"),
-            set_default_size: (500, 600),
+            set_default_size: (500, 700),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -296,6 +488,15 @@ impl SimpleComponent for Dialog {
                                 },
                             },
                         },
+
+                        #[local_ref]
+                        extra_color_entries_widget -> adw::PreferencesGroup {
+                            set_title: "Couleurs des annotations",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: !model.extra_colors_state.is_empty(),
+                        },
                     },
                 },
             }
@@ -307,12 +508,26 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let extra_color_entries = FactoryVecDeque::builder()
+            .launch(adw::PreferencesGroup::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                ExtraColorOutput::UpdateEnabled(index, enabled) => {
+                    DialogInput::UpdateExtraColorEnabled(index, enabled)
+                }
+                ExtraColorOutput::UpdateColor(index, color) => {
+                    DialogInput::UpdateExtraColorColor(index, color)
+                }
+            });
+
         let model = Dialog {
             hidden: true,
             should_redraw: false,
             config: export_config::ColloscopeConfig::default(),
+            extra_colors_state: BTreeMap::new(),
+            extra_color_entries,
         };
 
+        let extra_color_entries_widget = model.extra_color_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -321,16 +536,73 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(config) => {
+            DialogInput::Show(config, annotations) => {
                 self.config = config;
                 self.hidden = false;
                 self.should_redraw = true;
+
+                // Build extra_colors_state by merging annotations and config.extra_colors
+                let mut state = BTreeMap::new();
+                for annotation in &annotations {
+                    state.insert(
+                        annotation.clone(),
+                        (
+                            false,
+                            export_config::Color {
+                                red: 255,
+                                green: 0,
+                                blue: 0,
+                            },
+                        ),
+                    );
+                }
+                for (annotation, color) in &self.config.extra_colors {
+                    state
+                        .entry(annotation.clone())
+                        .and_modify(|e| {
+                            e.0 = true;
+                            e.1 = color.clone();
+                        })
+                        .or_insert((true, color.clone()));
+                }
+                self.extra_colors_state = state;
+
+                // Rebuild factory
+                let entries: Vec<ExtraColorEntryData> = self
+                    .extra_colors_state
+                    .iter()
+                    .flat_map(|(annotation, (enabled, color))| {
+                        [
+                            ExtraColorEntryData::Switch {
+                                annotation: annotation.clone(),
+                                enabled: *enabled,
+                            },
+                            ExtraColorEntryData::Color {
+                                annotation: annotation.clone(),
+                                color: color.clone(),
+                                visible: *enabled,
+                            },
+                        ]
+                    })
+                    .collect();
+                crate::tools::factories::update_vec_deque(
+                    &mut self.extra_color_entries,
+                    entries.into_iter(),
+                    ExtraColorInput::UpdateData,
+                );
             }
             DialogInput::Cancel => {
                 self.hidden = true;
             }
             DialogInput::Accept => {
                 self.hidden = true;
+                // Rebuild extra_colors from state (only enabled entries)
+                self.config.extra_colors = self
+                    .extra_colors_state
+                    .iter()
+                    .filter(|(_, (enabled, _))| *enabled)
+                    .map(|(annotation, (_, color))| (annotation.clone(), color.clone()))
+                    .collect();
                 sender
                     .output(DialogOutput::Accepted(self.config.clone()))
                     .unwrap();
@@ -412,6 +684,49 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.config.annotation_color = color;
+            }
+            DialogInput::UpdateExtraColorEnabled(index, enabled) => {
+                let annotation_index = index / 2;
+                let annotation = match self.extra_colors_state.keys().nth(annotation_index) {
+                    Some(a) => a.clone(),
+                    None => return,
+                };
+                let state = match self.extra_colors_state.get_mut(&annotation) {
+                    Some(s) => s,
+                    None => return,
+                };
+                if state.0 == enabled {
+                    return;
+                }
+                state.0 = enabled;
+                let color = state.1.clone();
+                // Update the color row's visibility
+                let color_index = index + 1;
+                let guard = self.extra_color_entries.guard();
+                guard.send(
+                    color_index,
+                    ExtraColorInput::UpdateData(ExtraColorEntryData::Color {
+                        annotation,
+                        color,
+                        visible: enabled,
+                    }),
+                );
+                guard.drop();
+            }
+            DialogInput::UpdateExtraColorColor(index, color) => {
+                let annotation_index = index / 2;
+                let annotation = match self.extra_colors_state.keys().nth(annotation_index) {
+                    Some(a) => a.clone(),
+                    None => return,
+                };
+                let state = match self.extra_colors_state.get_mut(&annotation) {
+                    Some(s) => s,
+                    None => return,
+                };
+                if state.1 == color {
+                    return;
+                }
+                state.1 = color;
             }
         }
     }

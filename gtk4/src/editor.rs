@@ -5,7 +5,7 @@ use libadwaita::prelude::Cast;
 use relm4::prelude::{ComponentController, RelmWidgetExt};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use relm4::{adw, gtk};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
@@ -469,11 +469,23 @@ impl EditorPanel {
                 ast_option,
             ))
             .unwrap();
+        let annotations: BTreeSet<String> = self
+            .data
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .ordered_period_list
+            .iter()
+            .flat_map(|(_, weeks)| weeks.iter())
+            .filter_map(|w| w.annotation.as_ref().map(|a| a.to_string()))
+            .collect();
         self.export_panel
             .sender()
             .send(export_panel::ExportPanelInput::Update(
                 self.data.get_data().get_inner_data().export_config.clone(),
                 self.file_name.clone(),
+                annotations,
             ))
             .unwrap();
     }
