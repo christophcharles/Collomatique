@@ -6,6 +6,8 @@ use collomatique_ilp::{
     objectives::ObjectiveSense,
 };
 
+const MAX_NAME_LEN: usize = 100;
+
 pub struct MpsNames<V: UsableData> {
     pub variables: HashMap<V, String>,
     pub constraints: Vec<String>,
@@ -49,6 +51,22 @@ fn sanitize_name(debug_str: &str) -> String {
     }
 }
 
+/// Truncate a sanitized (ASCII-only) name, trimming trailing underscores.
+fn truncate_name(name: &str, max_len: usize) -> &str {
+    if name.len() <= max_len {
+        return name;
+    }
+    let mut end = max_len;
+    while end > 0 && name.as_bytes()[end - 1] == b'_' {
+        end -= 1;
+    }
+    if end == 0 {
+        &name[..max_len.min(name.len())]
+    } else {
+        &name[..end]
+    }
+}
+
 pub fn generate_names<V, C, P>(problem: &Problem<V, C, P>) -> MpsNames<V>
 where
     V: UsableData,
@@ -66,9 +84,12 @@ where
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut variables = HashMap::new();
 
+    const UNIQUENESS_BUDGET: usize = 10;
+    let var_max = MAX_NAME_LEN.saturating_sub(UNIQUENESS_BUDGET);
     for (v, debug_str) in var_entries {
-        let base = sanitize_name(&debug_str);
-        let name = make_unique(&base, &mut seen);
+        let sanitized = sanitize_name(&debug_str);
+        let base = truncate_name(&sanitized, var_max);
+        let name = make_unique(base, &mut seen);
         variables.insert(v, name);
     }
 
@@ -78,8 +99,11 @@ where
         .iter()
         .enumerate()
         .map(|(i, (_, desc))| {
+            let prefix = format!("c{}_", i);
+            let desc_budget = MAX_NAME_LEN.saturating_sub(prefix.len());
             let sanitized = sanitize_name(&format!("{:?}", desc));
-            format!("c{}_{}", i, sanitized)
+            let truncated = truncate_name(&sanitized, desc_budget);
+            format!("{}{}", prefix, truncated)
         })
         .collect();
 
@@ -588,5 +612,75 @@ mod tests {
 
         let bv_count = mps.lines().filter(|l| l.contains("BV bnd")).count();
         assert_eq!(bv_count, 8);
+    }
+
+    #[test]
+    fn test_truncate_name() {
+        assert_eq!(truncate_name("hello", 10), "hello");
+        assert_eq!(truncate_name("hello", 5), "hello");
+        assert_eq!(truncate_name("hello_world", 5), "hello");
+        assert_eq!(truncate_name("hello_world", 6), "hello");
+        // Trailing underscores after truncation are trimmed
+        assert_eq!(truncate_name("abc___def", 5), "abc");
+        assert_eq!(truncate_name("abc___def", 6), "abc");
+        // Edge case: all underscores
+        assert_eq!(truncate_name("______", 3), "___");
+    }
+
+    #[test]
+    fn test_long_names_are_truncated() {
+        let long_name = "a".repeat(200);
+        let long_desc = "d".repeat(200);
+
+        let problem: Problem<String, String> = ProblemBuilder::new()
+            .set_variable(long_name.clone(), Variable::binary())
+            .add_constraint(LinExpr::var(long_name).leq(&cst(1.0)), long_desc)
+            .set_objective(Objective::new(cst(0.0), ObjectiveSense::Minimize))
+            .build()
+            .unwrap();
+
+        let names = generate_names(&problem);
+
+        for name in names.variables.values() {
+            assert!(
+                name.len() <= MAX_NAME_LEN,
+                "Variable name too long ({} chars): {}",
+                name.len(),
+                name,
+            );
+        }
+        for name in &names.constraints {
+            assert!(
+                name.len() <= MAX_NAME_LEN,
+                "Constraint name too long ({} chars): {}",
+                name.len(),
+                name,
+            );
+        }
+    }
+
+    #[test]
+    fn test_truncated_variables_remain_unique() {
+        // Two variables that differ only past the truncation point
+        let prefix = "x".repeat(95);
+        let var1 = format!("{}aaaaa", prefix);
+        let var2 = format!("{}bbbbb", prefix);
+
+        let problem: Problem<String, String> = ProblemBuilder::new()
+            .set_variable(var1.clone(), Variable::binary())
+            .set_variable(var2.clone(), Variable::binary())
+            .add_constraint(
+                (LinExpr::var(var1) + LinExpr::var(var2)).leq(&cst(1.0)),
+                "c".to_string(),
+            )
+            .set_objective(Objective::new(cst(0.0), ObjectiveSense::Minimize))
+            .build()
+            .unwrap();
+
+        let names = generate_names(&problem);
+        let name_values: Vec<&String> = names.variables.values().collect();
+
+        assert_eq!(name_values.len(), 2);
+        assert_ne!(name_values[0], name_values[1], "Names should be unique");
     }
 }
