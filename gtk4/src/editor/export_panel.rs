@@ -513,7 +513,7 @@ impl Component for ExportPanel {
                 },
                 gtk::Box {
                     set_hexpand: true,
-                    set_spacing: 5,
+                    set_spacing: 10,
                     set_margin_top: 40,
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Separator {
@@ -523,12 +523,14 @@ impl Component for ExportPanel {
                         set_label: "<b><i><big>Options de débogage</big></i></b>",
                         set_use_markup: true,
                         set_margin_all: 5,
+                        set_margin_bottom: 10,
                     },
                     gtk::Button {
                         add_css_class: "frame",
                         add_css_class: "warning",
                         set_hexpand: true,
-                        set_margin_all: 10,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
                         adw::ButtonContent {
                             set_icon_name: "document-export-symbolic",
                             set_label: "Exporter la base de donnée SQL",
@@ -539,7 +541,8 @@ impl Component for ExportPanel {
                         add_css_class: "frame",
                         add_css_class: "warning",
                         set_hexpand: true,
-                        set_margin_all: 10,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
                         #[watch]
                         set_sensitive: model.ilp_problem.is_some(),
                         adw::ButtonContent {
