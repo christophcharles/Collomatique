@@ -12,10 +12,10 @@ Collomatique est en développement actif et au stade alpha. L'interface, le form
 - **Construction automatique des groupes** par le solveur, avec possibilité d'exclure des élèves — attention, très lent pour l'instant
 - **Import d'élèves depuis Pronote** (fichier CSV)
 - **Gestion des incompatibilités de créneaux**
+- **Export du colloscope en xlsx** : colloscope complet et fiches par groupe, avec couleurs et mise en page configurables
 
 ## À venir
 
-- Export du colloscope en xlsx
 - Complétion de colloscopes partiels
 - Meilleurs réglages pour l'équilibrage
 - Support d'autres solveurs
