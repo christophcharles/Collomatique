@@ -117,6 +117,7 @@ impl Component for ExportPanel {
                 gtk::Box {
                     set_hexpand: true,
                     set_spacing: 5,
+                    set_margin_top: 15,
                     set_orientation: gtk::Orientation::Horizontal,
                     gtk::Label {
                         set_label: "<b><i><big>Feuilles à inclure</big></i></b>",
@@ -129,6 +130,7 @@ impl Component for ExportPanel {
                 #[name(colloscope_box)]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -186,6 +188,7 @@ impl Component for ExportPanel {
                 #[name(all_groups_box)]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -243,6 +246,7 @@ impl Component for ExportPanel {
                 #[name(prefilled_box)]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -300,6 +304,7 @@ impl Component for ExportPanel {
                 #[name(automatic_box)]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -357,6 +362,7 @@ impl Component for ExportPanel {
                 #[name(per_group_list_box)]
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -423,6 +429,7 @@ impl Component for ExportPanel {
                 // Section: Couleurs de fond
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_spacing: 5,
@@ -450,8 +457,8 @@ impl Component for ExportPanel {
                         },
                     },
                     adw::PreferencesGroup {
-                        set_margin_all: 5,
                         set_hexpand: true,
+                        set_margin_all: 5,
                         adw::ActionRow {
                             set_title: "Couleur de fond (par défaut)",
                             add_suffix = &gtk::ColorDialogButton {
@@ -517,7 +524,7 @@ impl Component for ExportPanel {
                         add_css_class: "frame",
                         add_css_class: "warning",
                         set_hexpand: true,
-                        set_margin_all: 5,
+                        set_margin_all: 10,
                         adw::ButtonContent {
                             set_icon_name: "document-export-symbolic",
                             set_label: "Exporter la base de donnée SQL",
