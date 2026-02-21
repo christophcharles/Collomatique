@@ -134,17 +134,11 @@ def build_colloscope_sheet(workbook, params, colloscope):
     # -- Row 0: Period labels --
     # Leave first 5 cols empty in row 0
     for period, p_col_start, num_weeks in period_layout:
-        annotation = ""
-        for w in period.weeks_status:
-            if w.annotation:
-                annotation = w.annotation
-                break
-        label = annotation if annotation else "Période"
         if num_weeks == 1:
-            worksheet.write(0, p_col_start, label, period_header_fmt)
+            worksheet.write(0, p_col_start, "Période", period_header_fmt)
         else:
             worksheet.merge_range(0, p_col_start, 0, p_col_start + num_weeks - 1,
-                                  label, period_header_fmt)
+                                  "Période", period_header_fmt)
 
     # -- Row 1: Fixed headers + week numbers --
     fixed_headers = ["Matière", "Colleur", "Contact", "Créneau", "Salle"]
