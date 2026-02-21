@@ -88,13 +88,60 @@ impl Component for ExportPanel {
             set_hexpand: true,
             set_vexpand: true,
             gtk::Box {
+                set_margin_top: 30,
                 set_orientation: gtk::Orientation::Vertical,
                 set_hexpand: true,
-                set_spacing: 30,
+                set_spacing: 15,
+                // Section: Configuration globale
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 5,
+                        gtk::Label {
+                            set_label: "Configuration globale",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                            set_margin_all: 5,
+                        },
+                        gtk::Label {
+                            set_label: "<i>Configuration s'appliquant à toutes les feuilles</i>",
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                        },
+                        gtk::Box {
+                            set_hexpand: true,
+                        },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
+                        },
+                        gtk::Button {
+                            set_icon_name: "document-edit-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Configurer les paramètres généraux"),
+                            connect_clicked => ExportPanelInput::EditGlobalConfigClicked,
+                        },
+                        gtk::Button {
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Restaurer les valeurs par défaut"),
+                            #[watch]
+                            set_sensitive: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
+                            connect_clicked => ExportPanelInput::RestoreDefaultGeneralConfigClicked,
+                        },
+                    },
+                },
                 gtk::Box {
                     set_hexpand: true,
                     set_spacing: 5,
-                    set_margin_top: 15,
                     set_orientation: gtk::Orientation::Horizontal,
                     gtk::Label {
                         set_label: "<b><i><big>Feuilles à inclure</big></i></b>",
@@ -142,6 +189,16 @@ impl Component for ExportPanel {
                         },
                         gtk::Box {
                             set_hexpand: true,
+                        },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.colloscope_enabled && model.export_config.colloscope_config != collomatique_state_colloscopes::export_config::ColloscopeConfig::default(),
                         },
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
@@ -201,6 +258,16 @@ impl Component for ExportPanel {
                         gtk::Box {
                             set_hexpand: true,
                         },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.all_groups_enabled && model.export_config.all_groups_config != collomatique_state_colloscopes::export_config::PerStudentGroupsConfig::default_all_groups(),
+                        },
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
@@ -258,6 +325,16 @@ impl Component for ExportPanel {
                         },
                         gtk::Box {
                             set_hexpand: true,
+                        },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.prefilled_groups_enabled && model.export_config.prefilled_groups_config != collomatique_state_colloscopes::export_config::PerStudentGroupsConfig::default_prefilled_groups(),
                         },
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
@@ -317,6 +394,16 @@ impl Component for ExportPanel {
                         gtk::Box {
                             set_hexpand: true,
                         },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.automatic_groups_enabled && model.export_config.automatic_groups_config != collomatique_state_colloscopes::export_config::PerStudentGroupsConfig::default_automatic_groups(),
+                        },
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
@@ -375,6 +462,16 @@ impl Component for ExportPanel {
                         gtk::Box {
                             set_hexpand: true,
                         },
+                        gtk::Label {
+                            add_css_class: "dimmed",
+                            set_label: "<i>(modifié)</i>",
+                            set_margin_end: 10,
+                            set_use_markup: true,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: model.export_config.per_group_list_enabled && model.export_config.per_group_list_config != collomatique_state_colloscopes::export_config::PerGroupListConfig::default(),
+                        },
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
@@ -390,53 +487,6 @@ impl Component for ExportPanel {
                             #[watch]
                             set_sensitive: model.export_config.per_group_list_enabled && model.export_config.per_group_list_config != collomatique_state_colloscopes::export_config::PerGroupListConfig::default(),
                             connect_clicked => ExportPanelInput::RestoreDefaultPerGroupListConfigClicked,
-                        },
-                    },
-                },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_spacing: 5,
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Label {
-                        set_label: "<b><i><big>Configuration globale</big></i></b>",
-                        set_use_markup: true,
-                        set_margin_all: 5,
-                    },
-                },
-                // Section: Couleurs de fond
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_margin_all: 5,
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_spacing: 5,
-                        gtk::Label {
-                            set_label: "Couleurs de fond",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                            set_margin_all: 5,
-                        },
-                        gtk::Label {
-                            set_label: "<i>Couleurs de fond des cellules du tableur</i>",
-                            set_use_markup: true,
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.85").unwrap()),
-                            set_valign: gtk::Align::Center,
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
-                        gtk::Button {
-                            set_icon_name: "document-edit-symbolic",
-                            add_css_class: "flat",
-                            set_tooltip_text: Some("Configurer les couleurs de fond"),
-                            connect_clicked => ExportPanelInput::EditGlobalConfigClicked,
-                        },
-                        gtk::Button {
-                            set_icon_name: "edit-delete-symbolic",
-                            add_css_class: "flat",
-                            set_tooltip_text: Some("Restaurer les valeurs par défaut"),
-                            #[watch]
-                            set_sensitive: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
-                            connect_clicked => ExportPanelInput::RestoreDefaultGeneralConfigClicked,
                         },
                     },
                 },
