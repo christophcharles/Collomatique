@@ -72,6 +72,7 @@ pub enum EditorInput {
     SolveColloscopeClicked,
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
+    ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
     ExportClicked,
 }
 
@@ -103,6 +104,8 @@ pub enum EditorCommandOutput {
     ExportXlsxFailed(PathBuf, String),
     ExportSqliteSuccessful(PathBuf),
     ExportSqliteFailed(PathBuf, String),
+    ExportMpsSuccessful(PathBuf),
+    ExportMpsFailed(PathBuf, String),
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -785,6 +788,9 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportSqliteAs(path) => {
                         EditorInput::ExportSqliteAs(path)
                     }
+                    export_panel::ExportPanelOutput::ExportMpsAs(path, problem) => {
+                        EditorInput::ExportMpsAs(path, problem)
+                    }
                     export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
                     }
@@ -1073,6 +1079,18 @@ impl Component for EditorPanel {
                     }
                 });
             }
+            EditorInput::ExportMpsAs(path, problem) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("Export MPS en cours de {}...", path.to_string_lossy()),
+                    timeout: None,
+                });
+                sender.oneshot_command(async move {
+                    match diagnostics::export_to_mps(&problem, &path).await {
+                        Ok(()) => EditorCommandOutput::ExportMpsSuccessful(path),
+                        Err(e) => EditorCommandOutput::ExportMpsFailed(path, e.to_string()),
+                    }
+                });
+            }
             EditorInput::ExportClicked => {
                 self.export_panel.emit(ExportPanelInput::ExportClicked);
             }
@@ -1150,6 +1168,18 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::ExportSqliteFailed(path, error) => {
+                self.toast_info = Some(ToastInfo::Dismiss);
+                sender
+                    .output(EditorOutput::ExportError(path, error))
+                    .unwrap();
+            }
+            EditorCommandOutput::ExportMpsSuccessful(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} exporté", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+            }
+            EditorCommandOutput::ExportMpsFailed(path, error) => {
                 self.toast_info = Some(ToastInfo::Dismiss);
                 sender
                     .output(EditorOutput::ExportError(path, error))

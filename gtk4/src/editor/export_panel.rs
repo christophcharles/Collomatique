@@ -16,10 +16,19 @@ use collomatique_state_colloscopes::export_config;
 
 use crate::tools;
 
+pub type IlpInnerProblem = collomatique_ilp::Problem<
+    collo_ml::problem::HashedProblemVar<
+        collo_ml::SqliteDatabaseConnection,
+        collomatique_binding_colloscopes::vars::Var,
+    >,
+    collo_ml::problem::ConstraintDesc<collo_ml::SqliteDatabaseConnection>,
+>;
+
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
     annotations: BTreeSet<String>,
+    ilp_problem: Option<IlpInnerProblem>,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
     global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -37,6 +46,7 @@ pub enum ExportPanelInput {
     ),
     ExportClicked,
     ExportSqliteClicked,
+    ExportMpsClicked,
 
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -71,6 +81,7 @@ pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
+    ExportMpsAs(PathBuf, IlpInnerProblem),
 }
 
 #[derive(Debug)]
@@ -79,6 +90,8 @@ pub enum ExportPanelCommandOutput {
     FileNotChosen,
     SqliteFileChosen(PathBuf),
     SqliteFileNotChosen,
+    MpsFileChosen(PathBuf),
+    MpsFileNotChosen,
 }
 
 #[relm4::component(pub)]
@@ -520,6 +533,19 @@ impl Component for ExportPanel {
                         },
                         connect_clicked => ExportPanelInput::ExportSqliteClicked,
                     },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_all: 10,
+                        #[watch]
+                        set_sensitive: model.ilp_problem.is_some(),
+                        adw::ButtonContent {
+                            set_icon_name: "document-export-symbolic",
+                            set_label: "Exporter le problème ILP (MPS)",
+                        },
+                        connect_clicked => ExportPanelInput::ExportMpsClicked,
+                    },
                 },
             },
         }
@@ -584,10 +610,15 @@ impl Component for ExportPanel {
                 }
             });
 
+        let placeholder_ilp_problem = collomatique_ilp::ProblemBuilder::new()
+            .build()
+            .expect("Empty problem should build successfully");
+
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             annotations: BTreeSet::new(),
+            ilp_problem: Some(placeholder_ilp_problem),
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -656,6 +687,24 @@ impl Component for ExportPanel {
                     match tools::open_save::save_sqlite_dialog(default).await {
                         Some(path) => ExportPanelCommandOutput::SqliteFileChosen(path),
                         None => ExportPanelCommandOutput::SqliteFileNotChosen,
+                    }
+                });
+            }
+            ExportPanelInput::ExportMpsClicked => {
+                let default = match &self.file_name {
+                    Some(path) => {
+                        let mut mps_path = path.clone();
+                        mps_path.set_extension("mps");
+                        tools::open_save::DefaultSaveFile::ExistingFile(mps_path)
+                    }
+                    None => tools::open_save::DefaultSaveFile::SuggestedName(
+                        format!("{}.mps", super::DEFAULT_FILE_STEM).into(),
+                    ),
+                };
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_mps_dialog(default).await {
+                        Some(path) => ExportPanelCommandOutput::MpsFileChosen(path),
+                        None => ExportPanelCommandOutput::MpsFileNotChosen,
                     }
                 });
             }
@@ -867,7 +916,8 @@ impl Component for ExportPanel {
     ) {
         match message {
             ExportPanelCommandOutput::FileNotChosen
-            | ExportPanelCommandOutput::SqliteFileNotChosen => {}
+            | ExportPanelCommandOutput::SqliteFileNotChosen
+            | ExportPanelCommandOutput::MpsFileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
                 let xlsx_config = super::export::to_xlsx_config(&self.export_config);
                 sender
@@ -878,6 +928,13 @@ impl Component for ExportPanel {
                 sender
                     .output(ExportPanelOutput::ExportSqliteAs(path))
                     .unwrap();
+            }
+            ExportPanelCommandOutput::MpsFileChosen(path) => {
+                if let Some(problem) = self.ilp_problem.clone() {
+                    sender
+                        .output(ExportPanelOutput::ExportMpsAs(path, problem))
+                        .unwrap();
+                }
             }
         }
     }

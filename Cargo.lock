@@ -422,6 +422,7 @@ dependencies = [
  "collo-ml",
  "collomatique-binding-colloscopes",
  "collomatique-ilp",
+ "collomatique-mps",
  "collomatique-ops",
  "collomatique-rpc",
  "collomatique-rpc-engine",
