@@ -20,6 +20,8 @@ pub enum DialogInput {
 
     UpdateSheetName(String),
     UpdateOrientation(export_config::PageOrientation),
+    UpdateExtraInfoColumnEnabled(bool),
+    UpdateExtraInfoColumnName(String),
     UpdateTeacherEmailEnabled(bool),
     UpdateTeacherEmail(String),
     UpdateTeacherTelEnabled(bool),
@@ -139,6 +141,27 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateOrientation(
                                         Self::selected_to_mandatory_orientation(selected)
                                     ));
+                                },
+                            },
+
+                            #[name(extra_info_column_enabled_switch)]
+                            adw::SwitchRow {
+                                set_title: "Afficher la colonne d'info supplémentaire",
+                                #[track(model.config.extra_info_column_enabled != extra_info_column_enabled_switch.is_active())]
+                                set_active: model.config.extra_info_column_enabled,
+                                connect_active_notify[sender] => move |widget| {
+                                    sender.input(DialogInput::UpdateExtraInfoColumnEnabled(widget.is_active()));
+                                },
+                            },
+
+                            #[name(extra_info_column_name_entry)]
+                            adw::EntryRow {
+                                set_title: "Nom de la colonne d'info supplémentaire",
+                                #[track(model.should_redraw)]
+                                set_text: &model.config.extra_info_column_name,
+                                connect_text_notify[sender] => move |widget| {
+                                    let text: String = widget.text().into();
+                                    sender.input(DialogInput::UpdateExtraInfoColumnName(text));
                                 },
                             },
 
@@ -302,6 +325,18 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.config.orientation = orientation;
+            }
+            DialogInput::UpdateExtraInfoColumnEnabled(enabled) => {
+                if self.config.extra_info_column_enabled == enabled {
+                    return;
+                }
+                self.config.extra_info_column_enabled = enabled;
+            }
+            DialogInput::UpdateExtraInfoColumnName(new_name) => {
+                if self.config.extra_info_column_name == new_name {
+                    return;
+                }
+                self.config.extra_info_column_name = new_name;
             }
             DialogInput::UpdateTeacherEmailEnabled(enabled) => {
                 if self.config.teacher_email_enabled == enabled {

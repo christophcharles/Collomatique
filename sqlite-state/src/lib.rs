@@ -17,7 +17,7 @@ use collomatique_time::{
 use ids::{
     GroupListId, Id, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
 };
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use thiserror::Error;
 
 mod schema;
@@ -915,16 +915,17 @@ async fn insert_export_config(
     let cc = &config.colloscope_config;
     sqlx::query(
         "INSERT INTO export_config_colloscope (id,
-            sheet_name, extra_info_column_name,
+            sheet_name, extra_info_column_enabled, extra_info_column_name,
             teacher_email_enabled, teacher_email,
             teacher_tel_enabled, teacher_tel,
             orientation, display_week_dates, display_annotations,
             no_interrogation_color_r, no_interrogation_color_g, no_interrogation_color_b,
             annotation_color_enabled,
             annotation_color_r, annotation_color_g, annotation_color_b)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&cc.sheet_name)
+    .bind(cc.extra_info_column_enabled as i64)
     .bind(&cc.extra_info_column_name)
     .bind(cc.teacher_email_enabled as i64)
     .bind(&cc.teacher_email)
@@ -1050,25 +1051,8 @@ async fn read_export_config(pool: &SqlitePool) -> Result<export_config::ExportCo
     };
 
     // Read colloscope config
-    let cc_row: (
-        String,
-        String, // sheet_name, extra_info_column_name
-        i64,
-        String, // teacher_email_enabled, teacher_email
-        i64,
-        String, // teacher_tel_enabled, teacher_tel
-        String, // orientation
-        i64,
-        i64, // display_week_dates, display_annotations
-        i64,
-        i64,
-        i64, // no_interrogation_color
-        i64, // annotation_color_enabled
-        i64,
-        i64,
-        i64, // annotation_color
-    ) = sqlx::query_as(
-        "SELECT sheet_name, extra_info_column_name,
+    let cc_row = sqlx::query(
+        "SELECT sheet_name, extra_info_column_enabled, extra_info_column_name,
                 teacher_email_enabled, teacher_email,
                 teacher_tel_enabled, teacher_tel,
                 orientation, display_week_dates, display_annotations,
@@ -1101,25 +1085,26 @@ async fn read_export_config(pool: &SqlitePool) -> Result<export_config::ExportCo
         .collect();
 
     let colloscope_config = export_config::ColloscopeConfig {
-        sheet_name: cc_row.0,
-        extra_info_column_name: cc_row.1,
-        teacher_email_enabled: cc_row.2 != 0,
-        teacher_email: cc_row.3,
-        teacher_tel_enabled: cc_row.4 != 0,
-        teacher_tel: cc_row.5,
-        orientation: str_to_orientation(&cc_row.6)?,
-        display_week_dates: cc_row.7 != 0,
-        display_annotations: cc_row.8 != 0,
+        sheet_name: cc_row.get("sheet_name"),
+        extra_info_column_enabled: cc_row.get::<i64, _>("extra_info_column_enabled") != 0,
+        extra_info_column_name: cc_row.get("extra_info_column_name"),
+        teacher_email_enabled: cc_row.get::<i64, _>("teacher_email_enabled") != 0,
+        teacher_email: cc_row.get("teacher_email"),
+        teacher_tel_enabled: cc_row.get::<i64, _>("teacher_tel_enabled") != 0,
+        teacher_tel: cc_row.get("teacher_tel"),
+        orientation: str_to_orientation(&cc_row.get::<String, _>("orientation"))?,
+        display_week_dates: cc_row.get::<i64, _>("display_week_dates") != 0,
+        display_annotations: cc_row.get::<i64, _>("display_annotations") != 0,
         no_interrogation_color: export_config::Color {
-            red: cc_row.9 as u8,
-            green: cc_row.10 as u8,
-            blue: cc_row.11 as u8,
+            red: cc_row.get::<i64, _>("no_interrogation_color_r") as u8,
+            green: cc_row.get::<i64, _>("no_interrogation_color_g") as u8,
+            blue: cc_row.get::<i64, _>("no_interrogation_color_b") as u8,
         },
-        annotation_color_enabled: cc_row.12 != 0,
+        annotation_color_enabled: cc_row.get::<i64, _>("annotation_color_enabled") != 0,
         annotation_color: export_config::Color {
-            red: cc_row.13 as u8,
-            green: cc_row.14 as u8,
-            blue: cc_row.15 as u8,
+            red: cc_row.get::<i64, _>("annotation_color_r") as u8,
+            green: cc_row.get::<i64, _>("annotation_color_g") as u8,
+            blue: cc_row.get::<i64, _>("annotation_color_b") as u8,
         },
         extra_colors,
     };
@@ -2542,6 +2527,7 @@ mod tests {
             per_group_list_enabled: false,
             colloscope_config: export_config::ColloscopeConfig {
                 sheet_name: "Mon colloscope".into(),
+                extra_info_column_enabled: false,
                 extra_info_column_name: "Details".into(),
                 teacher_email_enabled: false,
                 teacher_email: "Email".into(),

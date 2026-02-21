@@ -25,6 +25,7 @@ pub struct GlobalConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeConfig {
     pub sheet_name: String,
+    pub extra_info_column_enabled: bool,
     pub extra_info_column_name: String,
     pub teacher_email_enabled: bool,
     pub teacher_email: String,
@@ -93,6 +94,7 @@ impl Default for ColloscopeConfig {
     fn default() -> Self {
         Self {
             sheet_name: "Colloscope".into(),
+            extra_info_column_enabled: true,
             extra_info_column_name: "Info".into(),
             teacher_email_enabled: true,
             teacher_email: "Contact".into(),

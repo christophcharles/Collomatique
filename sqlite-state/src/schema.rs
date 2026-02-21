@@ -505,6 +505,7 @@ CREATE TABLE IF NOT EXISTS export_config (
 CREATE TABLE IF NOT EXISTS export_config_colloscope (
     id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     sheet_name TEXT NOT NULL,
+    extra_info_column_enabled INTEGER NOT NULL CHECK (extra_info_column_enabled IN (0, 1)),
     extra_info_column_name TEXT NOT NULL,
     teacher_email_enabled INTEGER NOT NULL CHECK (teacher_email_enabled IN (0, 1)),
     teacher_email TEXT NOT NULL,
