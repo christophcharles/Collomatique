@@ -1,8 +1,8 @@
 mod colloscope_config_dialog;
+mod global_config_dialog;
 mod per_group_list_config_dialog;
 mod per_student_groups_config_dialog;
 
-use adw::prelude::{ActionRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{
@@ -19,6 +19,7 @@ pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
+    global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
     prefilled_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
     automatic_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -44,9 +45,8 @@ pub enum ExportPanelInput {
     RestoreDefaultAutomaticConfigClicked,
     RestoreDefaultPerGroupListConfigClicked,
 
-    UpdateStripesEnabled(bool),
-    UpdateStripesColor(collomatique_state_colloscopes::export_config::Color),
-    UpdateBackgroundColor(collomatique_state_colloscopes::export_config::Color),
+    EditGlobalConfigClicked,
+    GlobalConfigAccepted(export_config::GlobalConfig),
 
     EditColloscopeConfigClicked,
     ColloscopeConfigAccepted(export_config::ColloscopeConfig),
@@ -73,29 +73,6 @@ pub enum ExportPanelCommandOutput {
     FileNotChosen,
     SqliteFileChosen(PathBuf),
     SqliteFileNotChosen,
-}
-
-impl ExportPanel {
-    fn compute_gtk_color(
-        color: &collomatique_state_colloscopes::export_config::Color,
-    ) -> gtk::gdk::RGBA {
-        gtk::gdk::RGBA::new(
-            color.red as f32 / 255.0f32,
-            color.green as f32 / 255.0f32,
-            color.blue as f32 / 255.0f32,
-            1.0f32,
-        )
-    }
-
-    fn compute_internal_color(
-        gtk_color: &gtk::gdk::RGBA,
-    ) -> collomatique_state_colloscopes::export_config::Color {
-        collomatique_state_colloscopes::export_config::Color {
-            red: (gtk_color.red() * 255.0f32) as u8,
-            green: (gtk_color.green() * 255.0f32) as u8,
-            blue: (gtk_color.blue() * 255.0f32) as u8,
-        }
-    }
 }
 
 #[relm4::component(pub)]
@@ -448,62 +425,18 @@ impl Component for ExportPanel {
                             set_hexpand: true,
                         },
                         gtk::Button {
+                            set_icon_name: "document-edit-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Configurer les couleurs de fond"),
+                            connect_clicked => ExportPanelInput::EditGlobalConfigClicked,
+                        },
+                        gtk::Button {
                             set_icon_name: "edit-delete-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Restaurer les valeurs par défaut"),
                             #[watch]
                             set_sensitive: model.export_config.global != collomatique_state_colloscopes::export_config::GlobalConfig::default(),
                             connect_clicked => ExportPanelInput::RestoreDefaultGeneralConfigClicked,
-                        },
-                    },
-                    adw::PreferencesGroup {
-                        set_hexpand: true,
-                        set_margin_all: 5,
-                        adw::ActionRow {
-                            set_title: "Couleur de fond (par défaut)",
-                            add_suffix = &gtk::ColorDialogButton {
-                                set_margin_all: 5,
-                                #[watch]
-                                set_rgba: &Self::compute_gtk_color(&model.export_config.global.background_color),
-                                set_dialog = &gtk::ColorDialog {
-                                    set_title: "Choisir la couleur de fond par défaut",
-                                    set_with_alpha: false,
-                                },
-                                connect_rgba_notify[sender] => move |widget| {
-                                    let rgba = widget.rgba();
-                                    sender.input(ExportPanelInput::UpdateBackgroundColor(
-                                        Self::compute_internal_color(&rgba)
-                                    ));
-                                },
-                            },
-                        },
-                        #[name(stripes_switch)]
-                        adw::SwitchRow {
-                            set_title: "Activer le zébrage",
-                            #[track(model.export_config.global.stripes_color_enabled != stripes_switch.is_active())]
-                            set_active: model.export_config.global.stripes_color_enabled,
-                            connect_active_notify[sender] => move |widget| {
-                                let status = widget.is_active();
-                                sender.input(ExportPanelInput::UpdateStripesEnabled(status));
-                            },
-                        },
-                        adw::ActionRow {
-                            set_title: "Couleur de zébrage",
-                            add_suffix = &gtk::ColorDialogButton {
-                                set_margin_all: 5,
-                                #[watch]
-                                set_rgba: &Self::compute_gtk_color(&model.export_config.global.stripes_color),
-                                set_dialog = &gtk::ColorDialog {
-                                    set_title: "Choisir la couleur de zébrage",
-                                    set_with_alpha: false,
-                                },
-                                connect_rgba_notify[sender] => move |widget| {
-                                    let rgba = widget.rgba();
-                                    sender.input(ExportPanelInput::UpdateStripesColor(
-                                        Self::compute_internal_color(&rgba)
-                                    ));
-                                },
-                            },
                         },
                     },
                 },
@@ -586,10 +519,20 @@ impl Component for ExportPanel {
                 }
             });
 
+        let global_config_dialog = global_config_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                global_config_dialog::DialogOutput::Accepted(config) => {
+                    ExportPanelInput::GlobalConfigAccepted(config)
+                }
+            });
+
         let model = ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             colloscope_config_dialog,
+            global_config_dialog,
             all_groups_config_dialog,
             prefilled_config_dialog,
             automatic_config_dialog,
@@ -746,48 +689,21 @@ impl Component for ExportPanel {
                     collomatique_ops::ExportConfigUpdateOp::UpdatePerGroupListConfig(collomatique_state_colloscopes::export_config::PerGroupListConfig::default())
                 )).unwrap();
             }
-            ExportPanelInput::UpdateStripesEnabled(stripes_enabled) => {
-                if self.export_config.global.stripes_color_enabled == stripes_enabled {
-                    return;
-                }
-                sender
-                    .output(ExportPanelOutput::UpdateExportConfig(
-                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
-                            collomatique_state_colloscopes::export_config::GlobalConfig {
-                                stripes_color_enabled: stripes_enabled,
-                                ..self.export_config.global.clone()
-                            },
-                        ),
+            ExportPanelInput::EditGlobalConfigClicked => {
+                self.global_config_dialog
+                    .sender()
+                    .send(global_config_dialog::DialogInput::Show(
+                        self.export_config.global.clone(),
                     ))
                     .unwrap();
             }
-            ExportPanelInput::UpdateStripesColor(stripes_color) => {
-                if self.export_config.global.stripes_color == stripes_color {
+            ExportPanelInput::GlobalConfigAccepted(config) => {
+                if self.export_config.global == config {
                     return;
                 }
                 sender
                     .output(ExportPanelOutput::UpdateExportConfig(
-                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
-                            collomatique_state_colloscopes::export_config::GlobalConfig {
-                                stripes_color,
-                                ..self.export_config.global.clone()
-                            },
-                        ),
-                    ))
-                    .unwrap();
-            }
-            ExportPanelInput::UpdateBackgroundColor(background_color) => {
-                if self.export_config.global.background_color == background_color {
-                    return;
-                }
-                sender
-                    .output(ExportPanelOutput::UpdateExportConfig(
-                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(
-                            collomatique_state_colloscopes::export_config::GlobalConfig {
-                                background_color,
-                                ..self.export_config.global.clone()
-                            },
-                        ),
+                        collomatique_ops::ExportConfigUpdateOp::UpdateGlobalConfig(config),
                     ))
                     .unwrap();
             }
