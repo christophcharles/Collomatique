@@ -507,6 +507,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
+            collomatique_ops::OpCategory::Balancing => None,
             collomatique_ops::OpCategory::MainScript => Some(PanelNumbers::MainScript),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
             collomatique_ops::OpCategory::ExportConfig => Some(PanelNumbers::Export),
