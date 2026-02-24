@@ -692,8 +692,11 @@ impl Parameters {
         balancing: &balancing::Balancing,
     ) -> Result<(), BalancingError> {
         for subject_id in balancing.subjects.keys() {
-            if self.subjects.find_subject(*subject_id).is_none() {
+            let Some(subject) = self.subjects.find_subject(*subject_id) else {
                 return Err(BalancingError::InvalidSubjectId(*subject_id));
+            };
+            if subject.parameters.interrogation_parameters.is_none() {
+                return Err(BalancingError::SubjectHasNoInterrogation(*subject_id));
             }
         }
         Ok(())
@@ -707,6 +710,9 @@ impl Parameters {
             Ok(()) => Ok(()),
             Err(BalancingError::InvalidSubjectId(_id)) => {
                 Err(InvariantError::InvalidSubjectIdInBalancing)
+            }
+            Err(BalancingError::SubjectHasNoInterrogation(_id)) => {
+                Err(InvariantError::BalancingForSubjectWithoutInterrogations)
             }
         }
     }

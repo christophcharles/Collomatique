@@ -316,7 +316,7 @@ CREATE TABLE balancing_global (
 
 CREATE TABLE balancing_subjects (
     subject_id INTEGER NOT NULL PRIMARY KEY
-        REFERENCES subjects(id) ON DELETE RESTRICT,
+        REFERENCES subject_interrogation_params(subject_id) ON DELETE RESTRICT,
     teacher_rotation_soft INTEGER CHECK (teacher_rotation_soft IN (0, 1)),
     avoid_twice_in_a_row_soft INTEGER CHECK (avoid_twice_in_a_row_soft IN (0, 1))
 );

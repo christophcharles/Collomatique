@@ -590,6 +590,9 @@ pub enum BalancingError {
     /// A subject id is invalid
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(SubjectId),
+    /// Subject does not have interrogations
+    #[error("subject id ({0:?}) does not have interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
 }
 
 /// Errors for main script operations
@@ -832,6 +835,8 @@ pub enum InvariantError {
     InvalidWeekPattern,
     #[error("invalid subject id in balancing")]
     InvalidSubjectIdInBalancing,
+    #[error("balancing options given for subject without interrogations")]
+    BalancingForSubjectWithoutInterrogations,
 }
 
 impl InMemoryData for Data {
@@ -1615,6 +1620,10 @@ impl Data {
                 if old_params.parameters.interrogation_parameters.is_some()
                     && new_params.parameters.interrogation_parameters.is_none()
                 {
+                    if self.inner_data.params.balancing.subjects.contains_key(id) {
+                        return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
+                    }
+
                     // The new subject does not have interrogations, let's check that no teacher has been assigned to it
                     for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
                         if teacher.subjects.contains(id) {
