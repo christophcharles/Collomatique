@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use collomatique_state_colloscopes::{
-    InnerData, PersonWithContact, assignments, colloscope_params, colloscopes, export_config,
-    group_lists, ids, incompats, periods, settings, slots, students, subjects, teachers,
-    week_patterns,
+    InnerData, PersonWithContact, assignments, balancing, colloscope_params, colloscopes,
+    export_config, group_lists, ids, incompats, periods, settings, slots, soft_param, students,
+    subjects, teachers, week_patterns,
 };
 use collomatique_time::{
     NonZeroMinutes, SlotStart, SlotWithDuration, WeekStart, Weekday, WholeMinuteTime,
@@ -145,6 +145,9 @@ pub async fn inner_data_to_sqlite(pool: &SqlitePool, data: &InnerData) -> Result
 
     // Insert settings
     insert_settings(&mut tx, &data.params.settings).await?;
+
+    // Insert balancing
+    insert_balancing(&mut tx, &data.params.balancing).await?;
 
     // Insert colloscope data
     insert_colloscope(&mut tx, &data.colloscope, &data.params).await?;
@@ -810,6 +813,51 @@ async fn insert_settings(
     Ok(())
 }
 
+fn encode_soft_param_unit(opt: &Option<soft_param::SoftParam<()>>) -> Option<i64> {
+    opt.as_ref().map(|p| p.soft as i64)
+}
+
+fn decode_soft_param_unit(soft_val: Option<i64>) -> Option<soft_param::SoftParam<()>> {
+    soft_val.map(|s| soft_param::SoftParam {
+        soft: s != 0,
+        value: (),
+    })
+}
+
+async fn insert_balancing(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    balancing_data: &balancing::Balancing,
+) -> Result<(), Error> {
+    // Insert global balancing
+    sqlx::query(
+        "INSERT INTO balancing_global (id, teacher_rotation_soft, avoid_twice_in_a_row_soft)
+         VALUES (1, ?, ?)",
+    )
+    .bind(encode_soft_param_unit(
+        &balancing_data.global.teacher_rotation,
+    ))
+    .bind(encode_soft_param_unit(
+        &balancing_data.global.avoid_twice_in_a_row,
+    ))
+    .execute(&mut **tx)
+    .await?;
+
+    // Insert per-subject balancing
+    for (subject_id, options) in &balancing_data.subjects {
+        sqlx::query(
+            "INSERT INTO balancing_subjects (subject_id, teacher_rotation_soft, avoid_twice_in_a_row_soft)
+             VALUES (?, ?, ?)",
+        )
+        .bind(subject_id.inner() as i64)
+        .bind(encode_soft_param_unit(&options.teacher_rotation))
+        .bind(encode_soft_param_unit(&options.avoid_twice_in_a_row))
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn insert_colloscope(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     colloscope: &colloscopes::Colloscope,
@@ -1189,6 +1237,7 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
     let group_lists = read_group_lists(pool).await?;
     let assignments = read_assignments(pool).await?;
     let settings = read_settings(pool).await?;
+    let balancing = read_balancing(pool).await?;
     let main_script = read_main_script(pool).await?;
 
     Ok(colloscope_params::Parameters {
@@ -1202,6 +1251,7 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
         incompats,
         group_lists,
         settings,
+        balancing,
         main_script,
     })
 }
@@ -1897,6 +1947,45 @@ async fn read_settings(pool: &SqlitePool) -> Result<settings::Settings, Error> {
         global,
         students: students_settings,
     })
+}
+
+type BalancingGlobalRow = (Option<i64>, Option<i64>);
+type BalancingSubjectRow = (i64, Option<i64>, Option<i64>);
+
+async fn read_balancing(pool: &SqlitePool) -> Result<balancing::Balancing, Error> {
+    let global_row: Option<BalancingGlobalRow> = sqlx::query_as(
+        "SELECT teacher_rotation_soft, avoid_twice_in_a_row_soft
+         FROM balancing_global WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let global = match global_row {
+        Some((tr_soft, atar_soft)) => balancing::BalancingOptions {
+            teacher_rotation: decode_soft_param_unit(tr_soft),
+            avoid_twice_in_a_row: decode_soft_param_unit(atar_soft),
+        },
+        None => balancing::BalancingOptions::default(),
+    };
+
+    let subject_rows: Vec<BalancingSubjectRow> = sqlx::query_as(
+        "SELECT subject_id, teacher_rotation_soft, avoid_twice_in_a_row_soft
+         FROM balancing_subjects",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut subjects = BTreeMap::new();
+    for (subject_id, tr_soft, atar_soft) in subject_rows {
+        let id = unsafe { SubjectId::new(subject_id as u64) };
+        let options = balancing::BalancingOptions {
+            teacher_rotation: decode_soft_param_unit(tr_soft),
+            avoid_twice_in_a_row: decode_soft_param_unit(atar_soft),
+        };
+        subjects.insert(id, options);
+    }
+
+    Ok(balancing::Balancing { global, subjects })
 }
 
 async fn read_main_script(pool: &SqlitePool) -> Result<Option<String>, Error> {

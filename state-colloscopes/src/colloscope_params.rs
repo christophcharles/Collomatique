@@ -30,6 +30,8 @@ pub struct Parameters {
     pub incompats: incompats::Incompats,
     pub group_lists: group_lists::GroupLists,
     pub settings: settings::Settings,
+    #[serde(default)]
+    pub balancing: balancing::Balancing,
     pub main_script: Option<String>,
 }
 
@@ -684,6 +686,33 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
+    /// used to check balancing before commiting a balancing op
+    pub(crate) fn validate_balancing(
+        &self,
+        balancing: &balancing::Balancing,
+    ) -> Result<(), BalancingError> {
+        for subject_id in balancing.subjects.keys() {
+            if self.subjects.find_subject(*subject_id).is_none() {
+                return Err(BalancingError::InvalidSubjectId(*subject_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in balancing data
+    fn check_balancing_data_consistency(&self) -> Result<(), InvariantError> {
+        match self.validate_balancing(&self.balancing) {
+            Ok(()) => Ok(()),
+            Err(BalancingError::InvalidSubjectId(_id)) => {
+                Err(InvariantError::InvalidSubjectIdInBalancing)
+            }
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// used to check week patterns
     fn validate_week_pattern_internal(
         week_pattern: &week_patterns::WeekPattern,
@@ -808,6 +837,7 @@ impl Parameters {
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
         self.check_group_lists_data_consistency()?;
         self.check_settings_data_consistency()?;
+        self.check_balancing_data_consistency()?;
         self.check_week_pattern_data_consistency(total_week_count)?;
 
         Ok(())

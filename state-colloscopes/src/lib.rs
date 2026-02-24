@@ -10,7 +10,7 @@ use ops::AnnotatedExportConfigOp;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{InMemoryData, Operation, tools};
-use ops::{AnnotatedMainScriptOp, AnnotatedSettingsOp};
+use ops::{AnnotatedBalancingOp, AnnotatedMainScriptOp, AnnotatedSettingsOp};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -27,14 +27,15 @@ use ops::{
     AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, MainScriptOp,
-    Op, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
+    MainScriptOp, Op, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
 };
 
 pub mod assignments;
+pub mod balancing;
 pub mod colloscope_params;
 pub mod colloscopes;
 pub mod export_config;
@@ -43,6 +44,7 @@ pub mod incompats;
 pub mod periods;
 pub mod settings;
 pub mod slots;
+pub mod soft_param;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
@@ -324,6 +326,10 @@ pub enum SubjectError {
     /// The subject has filled slots in colloscope
     #[error("subject id {0:?} has a least one non-empty slot {1:?} in colloscope")]
     SubjectStillHasNonEmptySlotInColloscope(SubjectId, SlotId),
+
+    /// The subject still has balancing options
+    #[error("subject id {0:?} still has balancing options")]
+    SubjectStillHasBalancingOptions(SubjectId),
 }
 
 /// Errors for teacher operations
@@ -576,6 +582,16 @@ pub enum SettingsError {
     InvalidStudentId(StudentId),
 }
 
+/// Errors for balancing operations
+///
+/// These errors can be returned when trying to modify [Data] with a balancing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum BalancingError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+}
+
 /// Errors for main script operations
 ///
 /// These errors can be returned when trying to modify [Data] with a main script op.
@@ -674,6 +690,8 @@ pub enum Error {
     GroupList(#[from] GroupListError),
     #[error(transparent)]
     Settings(#[from] SettingsError),
+    #[error(transparent)]
+    Balancing(#[from] BalancingError),
     #[error(transparent)]
     MainScript(#[from] MainScriptError),
     #[error(transparent)]
@@ -812,6 +830,8 @@ pub enum InvariantError {
     InvalidStudentIdInSettings,
     #[error("week pattern is invalid")]
     InvalidWeekPattern,
+    #[error("invalid subject id in balancing")]
+    InvalidSubjectIdInBalancing,
 }
 
 impl InMemoryData for Data {
@@ -858,6 +878,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Settings(settings_op) => {
                 Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
             }
+            AnnotatedOp::Balancing(balancing_op) => Ok(AnnotatedOp::Balancing(
+                self.build_rev_balancing(balancing_op),
+            )),
             AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(_)) => {
                 Ok(AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(
                     self.inner_data.params.main_script.clone(),
@@ -886,6 +909,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
+            AnnotatedOp::Balancing(balancing_op) => self.apply_balancing(balancing_op)?,
             AnnotatedOp::MainScript(main_script_op) => self.apply_main_script(main_script_op)?,
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
             AnnotatedOp::ExportConfig(export_config_op) => {
@@ -1485,6 +1509,10 @@ impl Data {
                 else {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
+
+                if self.inner_data.params.balancing.subjects.contains_key(id) {
+                    return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
+                }
 
                 for (period_id, subject_map) in
                     &self.inner_data.params.group_lists.subjects_associations
@@ -2657,6 +2685,22 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply balancing operations
+    fn apply_balancing(
+        &mut self,
+        balancing_op: &AnnotatedBalancingOp,
+    ) -> std::result::Result<(), BalancingError> {
+        match balancing_op {
+            AnnotatedBalancingOp::Update(new_balancing) => {
+                self.inner_data.params.validate_balancing(new_balancing)?;
+                self.inner_data.params.balancing = new_balancing.clone();
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Apply main script operations
     fn apply_main_script(
         &mut self,
@@ -3413,6 +3457,18 @@ impl Data {
             AnnotatedSettingsOp::Update(_new_settings) => {
                 let old_settings = self.inner_data.params.settings.clone();
                 AnnotatedSettingsOp::Update(old_settings)
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a balancing operation
+    fn build_rev_balancing(&self, balancing_op: &AnnotatedBalancingOp) -> AnnotatedBalancingOp {
+        match balancing_op {
+            AnnotatedBalancingOp::Update(_new_balancing) => {
+                let old_balancing = self.inner_data.params.balancing.clone();
+                AnnotatedBalancingOp::Update(old_balancing)
             }
         }
     }
