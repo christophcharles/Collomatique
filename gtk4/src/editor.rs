@@ -28,6 +28,7 @@ pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
 mod error_dialog;
 
 mod assignments;
+mod balancing;
 mod check_script;
 mod colloscope;
 mod diagnostics;
@@ -131,10 +132,11 @@ enum PanelNumbers {
     Students = 6,
     Assignments = 7,
     GroupLists = 8,
-    ExtraSettings = 9,
-    MainScript = 10,
-    Colloscope = 11,
-    Export = 12,
+    Balancing = 9,
+    ExtraSettings = 10,
+    MainScript = 11,
+    Colloscope = 12,
+    Export = 13,
 }
 
 impl PanelNumbers {
@@ -149,6 +151,7 @@ impl PanelNumbers {
             PanelNumbers::Students,
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
+            PanelNumbers::Balancing,
             PanelNumbers::ExtraSettings,
             PanelNumbers::MainScript,
             PanelNumbers::Colloscope,
@@ -168,6 +171,7 @@ impl PanelNumbers {
             PanelNumbers::Slots => "slots",
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
+            PanelNumbers::Balancing => "balancing",
             PanelNumbers::ExtraSettings => "extra_settings",
             PanelNumbers::MainScript => "main_script",
             PanelNumbers::Colloscope => "colloscope",
@@ -186,6 +190,7 @@ impl PanelNumbers {
             PanelNumbers::Slots => "Créneaux de colles",
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
+            PanelNumbers::Balancing => "Équilibrage",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
             PanelNumbers::MainScript => "Script ColloML (avancé)",
             PanelNumbers::Colloscope => "Colloscope",
@@ -230,6 +235,7 @@ pub struct EditorPanel {
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
     settings: Controller<settings::Settings>,
+    balancing: Controller<balancing::Balancing>,
     main_script: Controller<main_script::MainScript>,
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
@@ -449,6 +455,23 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        self.balancing
+            .sender()
+            .send(balancing::BalancingInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .balancing
+                    .clone(),
+            ))
+            .unwrap();
         let ast_option = match &self.main_script_ast {
             MainScriptAst::Ready(result) => Some(result.clone()),
             _ => None,
@@ -507,7 +530,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
-            collomatique_ops::OpCategory::Balancing => None,
+            collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
             collomatique_ops::OpCategory::MainScript => Some(PanelNumbers::MainScript),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
             collomatique_ops::OpCategory::ExportConfig => Some(PanelNumbers::Export),
@@ -764,6 +787,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
+        let balancing = balancing::Balancing::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
+            });
+
         let main_script = main_script::MainScript::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
@@ -857,6 +886,7 @@ impl Component for EditorPanel {
             incompats,
             group_lists,
             settings,
+            balancing,
             main_script,
             colloscope,
             export_panel,
@@ -877,6 +907,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Slots => model.slots.widget().clone().upcast(),
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
+                PanelNumbers::Balancing => model.balancing.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
                 PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
