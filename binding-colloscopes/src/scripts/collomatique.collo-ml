@@ -13,6 +13,7 @@ import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
 import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
 import "collomatique_students_per_group" as students_per_group;
+import "collomatique_balancing_rotation" as balancing_rotation;
 
 pub let default_constraint(db: Db) -> Constraint =
     one_interrogation_at_once::constraint(db) and
@@ -27,9 +28,11 @@ pub let default_constraint(db: Db) -> Constraint =
     periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and
     periodicity_ofeb::constraint(db) and
-    forbidden_groups::constraint(db);
+    forbidden_groups::constraint(db) and
+    balancing_rotation::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
-    limits::objective(db) + [interrogation_cost::objective(db)];
+    limits::objective(db) + [interrogation_cost::objective(db)]
+    + balancing_rotation::objective(db);
 
 
