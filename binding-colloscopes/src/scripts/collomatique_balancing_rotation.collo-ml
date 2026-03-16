@@ -180,6 +180,11 @@ let count_student_teacher(db: Db, student_id: StudentId, subject_id: SubjectId, 
 
 // --- Core constraint for one window ---
 
+/// Pas plus de `(nt * nb_interr + ntot - 1) / ntot` colles avec `teacher_id` pour `student_id` entre `first_week` et `last_week`
+let enforce_ceiling_for_window(db: Db, student_id: StudentId, subject_id: SubjectId, teacher_id: TeacherId, first_week: GlobalWeek, last_week: GlobalWeek, nt: Int, nb_interr: Int, ntot: Int) -> Constraint =
+    count_student_teacher(db, student_id, subject_id, teacher_id, first_week, last_week)
+        <== (nt * nb_interr + ntot - 1) / ntot;
+
 let enforce_rotation_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek, nb_interr: Int) -> Constraint =
     let ntot = nb_tot_internal(db, subject_id, first_week, last_week) cast! Int {
         if ntot == 0 {
@@ -188,8 +193,7 @@ let enforce_rotation_for_all_in_window(db: Db, subject_id: SubjectId, first_week
             forall student in students_for_subject(db, subject_id) {
                 forall teacher in teachers_for_subject(db, subject_id) {
                     let nt = nb_teach_internal(db, subject_id, teacher, first_week, last_week) cast! Int {
-                        count_student_teacher(db, student, subject_id, teacher, first_week, last_week)
-                            <== (nt * nb_interr + ntot - 1) / ntot
+                        enforce_ceiling_for_window(db, student, subject_id, teacher, first_week, last_week, nt, nb_interr, ntot)
                     }
                 }
             }
