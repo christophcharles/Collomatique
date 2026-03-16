@@ -33,6 +33,8 @@ impl Default for Balancing {
 pub struct BalancingOptions {
     /// Whether to rotate teachers across groups
     pub teacher_rotation: Option<SoftParam<()>>,
+    /// Whether to rotate time slots across groups
+    pub slot_rotation: Option<SoftParam<()>>,
     /// Whether to avoid having the same teacher twice in a row for a group
     pub avoid_twice_in_a_row: Option<SoftParam<()>>,
 }
@@ -44,6 +46,7 @@ impl Default for BalancingOptions {
                 soft: true,
                 value: (),
             }),
+            slot_rotation: None,
             avoid_twice_in_a_row: Some(SoftParam {
                 soft: true,
                 value: (),

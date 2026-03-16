@@ -261,6 +261,12 @@ fn options_to_string(options: &BalancingOptions) -> String {
             soft_constraint_symbol(tr.soft)
         ));
     }
+    if let Some(sr) = &options.slot_rotation {
+        parts.push(format!(
+            "rotation des créneaux {}",
+            soft_constraint_symbol(sr.soft)
+        ));
+    }
     if let Some(at) = &options.avoid_twice_in_a_row {
         parts.push(format!(
             "éviter 2× de suite le même colleur {}",

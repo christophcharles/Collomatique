@@ -14,6 +14,9 @@ pub struct Dialog {
     has_teacher_rotation: bool,
     soft_teacher_rotation: bool,
 
+    has_slot_rotation: bool,
+    soft_slot_rotation: bool,
+
     has_avoid_twice_in_a_row: bool,
     soft_avoid_twice_in_a_row: bool,
 }
@@ -26,6 +29,9 @@ pub enum DialogInput {
 
     UpdateHasTeacherRotation(bool),
     UpdateSoftTeacherRotation(bool),
+
+    UpdateHasSlotRotation(bool),
+    UpdateSoftSlotRotation(bool),
 
     UpdateHasAvoidTwiceInARow(bool),
     UpdateSoftAvoidTwiceInARow(bool),
@@ -122,6 +128,35 @@ impl SimpleComponent for Dialog {
                                 },
                             },
                             adw::PreferencesGroup {
+                                set_title: "Rotation des créneaux",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Activer la rotation des créneaux",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_slot_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasSlotRotation(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Contrainte douce",
+                                    #[watch]
+                                    set_visible: model.has_slot_rotation,
+                                    #[track(self.should_redraw)]
+                                    set_active: model.soft_slot_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateSoftSlotRotation(value));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
                                 set_title: "Éviter deux fois de suite le même colleur",
                                 set_margin_all: 5,
                                 set_hexpand: true,
@@ -174,6 +209,8 @@ impl SimpleComponent for Dialog {
             subject_name: None,
             has_teacher_rotation: false,
             soft_teacher_rotation: false,
+            has_slot_rotation: false,
+            soft_slot_rotation: false,
             has_avoid_twice_in_a_row: false,
             soft_avoid_twice_in_a_row: false,
         };
@@ -213,6 +250,18 @@ impl SimpleComponent for Dialog {
                 }
                 self.soft_teacher_rotation = value;
             }
+            DialogInput::UpdateHasSlotRotation(value) => {
+                if self.has_slot_rotation == value {
+                    return;
+                }
+                self.has_slot_rotation = value;
+            }
+            DialogInput::UpdateSoftSlotRotation(value) => {
+                if self.soft_slot_rotation == value {
+                    return;
+                }
+                self.soft_slot_rotation = value;
+            }
             DialogInput::UpdateHasAvoidTwiceInARow(value) => {
                 if self.has_avoid_twice_in_a_row == value {
                     return;
@@ -246,6 +295,14 @@ impl Dialog {
             self.soft_teacher_rotation = false;
         }
 
+        if let Some(sr) = options.slot_rotation {
+            self.has_slot_rotation = true;
+            self.soft_slot_rotation = sr.soft;
+        } else {
+            self.has_slot_rotation = false;
+            self.soft_slot_rotation = false;
+        }
+
         if let Some(at) = options.avoid_twice_in_a_row {
             self.has_avoid_twice_in_a_row = true;
             self.soft_avoid_twice_in_a_row = at.soft;
@@ -261,6 +318,7 @@ impl Dialog {
                 self.has_teacher_rotation,
                 self.soft_teacher_rotation,
             ),
+            slot_rotation: Self::soft_unit_value(self.has_slot_rotation, self.soft_slot_rotation),
             avoid_twice_in_a_row: Self::soft_unit_value(
                 self.has_avoid_twice_in_a_row,
                 self.soft_avoid_twice_in_a_row,
