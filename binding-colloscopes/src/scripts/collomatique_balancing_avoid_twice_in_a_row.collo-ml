@@ -90,6 +90,69 @@ query aiy_max_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
 query afab_total_max_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
     "SELECT SUM(interrogation_count_max) AS value FROM periodicity_week_blocks WHERE subject_id = ?";
 
+// --- Queries for recursive approach (AIY/AFAB) ---
+
+query slots_for_teacher(db: Db, subject_id: SubjectId, teacher_id: TeacherId) -> [SlotId] =
+    "SELECT s.id AS id FROM slots s WHERE s.subject_id = ? AND s.teacher_id = ?";
+
+query subject_weeks(db: Db, subject_id: SubjectId) -> [GlobalWeek] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+    AND NOT EXISTS (
+        SELECT 1 FROM subject_excluded_periods sep
+        WHERE sep.subject_id = ? AND sep.period_id = pw.period_id
+    )
+)
+SELECT global_week_number AS id FROM ordered_weeks
+";
+
+let previous_week(week: GlobalWeek) -> GlobalWeek =
+    if Int(week) <= 0 {
+        panic! "Tried to get a week before the start week"
+    } else {
+        GlobalWeek(Int(week) - 1)
+    };
+
+let seen_this_week(db: Db, subject_id: SubjectId, student_id: StudentId, teacher_id: TeacherId, week: GlobalWeek) -> LinExpr =
+    sum slot_id in slots_for_teacher(db, subject_id, teacher_id) {
+        $StudentAtInterrogation(db, student_id, slot_id, week)
+    };
+
+let is_last_teacher_seen(db: Db, subject_id: SubjectId, student_id: StudentId, teacher_id: TeacherId, week: GlobalWeek) -> Constraint =
+    if Int(week) == 0 {
+        seen_this_week(db, subject_id, student_id, teacher_id, week) >== 1
+    } else {
+        $IsLastTeacherSeen(db, subject_id, student_id, teacher_id, previous_week(week))
+        + seen_this_week(db, subject_id, student_id, teacher_id, week)
+        - sum other_teacher in teachers_for_subject(db, subject_id) where other_teacher != teacher_id {
+            seen_this_week(db, subject_id, student_id, other_teacher, week)
+        } >== 1
+    };
+
+reify is_last_teacher_seen as $IsLastTeacherSeen;
+
+/// Ne peut pas être collé par `teacher_id` si c'est le dernier colleur vu par `student_id`
+let enforce_avoid_twice_recursive_for_week(db: Db, subject_id: SubjectId, student_id: StudentId, teacher_id: TeacherId, week: GlobalWeek) -> Constraint =
+    seen_this_week(db, subject_id, student_id, teacher_id, week)
+        <== 1 - $IsLastTeacherSeen(db, subject_id, student_id, teacher_id, previous_week(week));
+
+let constraint_for_subject_recursive(db: Db, subject_id: SubjectId) -> Constraint =
+    forall week in subject_weeks(db, subject_id) where Int(week) > 0 {
+        forall student in students_for_subject(db, subject_id) {
+            forall teacher in teachers_for_subject(db, subject_id) {
+                enforce_avoid_twice_recursive_for_week(db, subject_id, student, teacher, week)
+            }
+        }
+    };
+
 // --- LinExpr builder ---
 
 let count_student_teacher(db: Db, student_id: StudentId, subject_id: SubjectId, teacher_id: TeacherId, first_week: GlobalWeek, last_week: GlobalWeek) -> LinExpr =
@@ -112,20 +175,18 @@ let enforce_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalW
 
 // --- Per-periodicity-type sub-functions ---
 
-// TODO: amount_in_year - pas de notion naturelle de "deux consécutives"
 let constraint_for_subject_aiy(db: Db, subject_id: SubjectId) -> Constraint =
     forall row in aiy_max_internal(db, subject_id) {
         match row.value {
-            _ as Int { infeasible }
+            _ as Int { constraint_for_subject_recursive(db, subject_id) }
             _ { trivial }
         }
     };
 
-// TODO: amount_for_every_arbitrary_block - pas de notion naturelle de "deux consécutives"
 let constraint_for_subject_afab(db: Db, subject_id: SubjectId) -> Constraint =
     forall row in afab_total_max_internal(db, subject_id) {
         match row.value {
-            _ as Int { infeasible }
+            _ as Int { constraint_for_subject_recursive(db, subject_id) }
             _ { trivial }
         }
     };
