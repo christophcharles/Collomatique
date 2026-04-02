@@ -26,6 +26,7 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseBalancingOptionsForSubject(collomatique_state_colloscopes::SubjectId),
 }
 
 impl SubjectsUpdateWarning {
@@ -174,6 +175,21 @@ impl SubjectsUpdateWarning {
                     subject.parameters.name,
                     group_list.params.name,
                     period_num + 1
+                ))
+            }
+            Self::LooseBalancingOptionsForSubject(subject_id) => {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des paramètres d'équilibrage pour la matière \"{}\"",
+                    subject.parameters.name,
                 ))
             }
             Self::LooseColloscopeSlotsForPeriod(subject_id, period_id) => {
@@ -375,6 +391,24 @@ impl SubjectsUpdateOp {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                        });
+                    }
+
+                    if data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .balancing
+                        .subjects
+                        .contains_key(subject_id)
+                    {
+                        return Some(CleaningOp {
+                            warning: SubjectsUpdateWarning::LooseBalancingOptionsForSubject(
+                                *subject_id,
+                            ),
+                            op: UpdateOp::Balancing(BalancingUpdateOp::RemoveSubjectOptions(
+                                *subject_id,
+                            )),
                         });
                     }
                 }
@@ -624,6 +658,24 @@ impl SubjectsUpdateOp {
                             )),
                         });
                     }
+                }
+
+                if data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .balancing
+                    .subjects
+                    .contains_key(subject_id)
+                {
+                    return Some(CleaningOp {
+                        warning: SubjectsUpdateWarning::LooseBalancingOptionsForSubject(
+                            *subject_id,
+                        ),
+                        op: UpdateOp::Balancing(BalancingUpdateOp::RemoveSubjectOptions(
+                            *subject_id,
+                        )),
+                    });
                 }
 
                 None

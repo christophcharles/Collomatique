@@ -1,0 +1,275 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as queries;
+import "collomatique_balancing_helpers" as bal_helpers;
+
+type NullableIntRow = {
+    value: ?Int | String | Bool,
+};
+
+type StudentSlotWeek = {
+    global_week: ?GlobalWeek | String | Bool,
+};
+
+// --- Subject enumeration (hard vs soft) ---
+
+query hard_slot_rotation_subjects(db: Db) -> [SubjectId] =
+    "SELECT subject_id AS id FROM balancing_effective WHERE slot_rotation_soft = 0";
+
+query soft_slot_rotation_subjects(db: Db) -> [SubjectId] =
+    "SELECT subject_id AS id FROM balancing_effective WHERE slot_rotation_soft = 1";
+
+// --- Students & slots for a subject ---
+
+query students_for_subject(db: Db, subject_id: SubjectId) -> [StudentId] =
+    "SELECT DISTINCT a.student_id AS id FROM assignments a WHERE a.subject_id = ?";
+
+query slots_for_subject(db: Db, subject_id: SubjectId) -> [SlotId] =
+    "SELECT id FROM slots WHERE subject_id = ?";
+
+// --- Subject total weeks (active, non-excluded) ---
+
+query subject_total_weeks_internal(db: Db, subject_id: SubjectId) -> ?Int = "
+SELECT COUNT(*) AS total
+FROM period_weeks pw
+WHERE pw.has_interrogations = 1
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = ? AND sep.period_id = pw.period_id
+)
+";
+
+// --- Slot-week counts for slot rotation bound ---
+
+query nb_slot_internal(db: Db, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM ordered_weeks ow
+JOIN slots s ON s.id = ?1
+WHERE ow.global_week_number >= ?2 AND ow.global_week_number <= ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+query nb_tot_internal(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?1
+AND ow.global_week_number >= ?2 AND ow.global_week_number <= ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+// --- Student-slot interaction weeks (for building LinExpr) ---
+
+query student_slot_weeks_in_range(db: Db, student_id: StudentId, subject_id: SubjectId, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek) -> [StudentSlotWeek] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT ow.global_week_number AS global_week
+FROM ordered_weeks ow
+JOIN slots s ON s.id = ?3
+WHERE s.subject_id = ?2
+AND ow.global_week_number >= ?4 AND ow.global_week_number <= ?5
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM student_excluded_periods stxp
+    WHERE stxp.student_id = ?1
+      AND stxp.period_id = ow.period_id
+)
+AND EXISTS (
+    SELECT 1 FROM assignments a
+    WHERE a.student_id = ?1
+      AND a.subject_id = ?2
+      AND a.period_id = ow.period_id
+)
+";
+
+// --- Periodicity parameters ---
+
+query ep_periodicity_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
+    "SELECT ep_periodicity_in_weeks AS value FROM subject_interrogation_params WHERE subject_id = ?";
+
+query ofeb_block_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
+    "SELECT ofeb_weeks_per_block AS value FROM subject_interrogation_params WHERE subject_id = ?";
+
+query aiy_max_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
+    "SELECT aiy_count_max AS value FROM subject_interrogation_params WHERE subject_id = ?";
+
+query afab_total_max_internal(db: Db, subject_id: SubjectId) -> [NullableIntRow] =
+    "SELECT SUM(interrogation_count_max) AS value FROM periodicity_week_blocks WHERE subject_id = ?";
+
+// --- LinExpr builder ---
+
+let count_student_slot(db: Db, student_id: StudentId, subject_id: SubjectId, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek) -> LinExpr =
+    sum data in student_slot_weeks_in_range(db, student_id, subject_id, slot_id, first_week, last_week) {
+        $StudentAtInterrogation(db, student_id, slot_id, data.global_week cast! GlobalWeek)
+    };
+
+// --- Core constraint for one window ---
+
+/// Pas plus de `(ns * nb_interr + ntot - 1) / ntot` colles dans `slot_id` pour `student_id` entre `first_week` et `last_week`
+let enforce_ceiling_for_window(db: Db, student_id: StudentId, subject_id: SubjectId, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek, ns: Int, nb_interr: Int, ntot: Int) -> Constraint =
+    count_student_slot(db, student_id, subject_id, slot_id, first_week, last_week)
+        <== (ns * nb_interr + ntot - 1) / ntot;
+
+let enforce_rotation_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek, nb_interr: Int) -> Constraint =
+    let ntot = nb_tot_internal(db, subject_id, first_week, last_week) cast! Int {
+        if ntot == 0 {
+            trivial
+        } else {
+            forall student in students_for_subject(db, subject_id) {
+                forall slot in slots_for_subject(db, subject_id) {
+                    let ns = nb_slot_internal(db, slot, first_week, last_week) cast! Int {
+                        enforce_ceiling_for_window(db, student, subject_id, slot, first_week, last_week, ns, nb_interr, ntot)
+                    }
+                }
+            }
+        }
+    };
+
+// --- Per-periodicity-type sub-functions ---
+
+let constraint_for_subject_aiy(db: Db, subject_id: SubjectId) -> Constraint =
+    forall row in aiy_max_internal(db, subject_id) {
+        match row.value {
+            nb_interr as Int {
+                enforce_rotation_for_all_in_window(db, subject_id,
+                    GlobalWeek(0), queries::last_global_week(db), nb_interr)
+            }
+            _ { trivial }
+        }
+    };
+
+let constraint_for_subject_afab(db: Db, subject_id: SubjectId) -> Constraint =
+    forall row in afab_total_max_internal(db, subject_id) {
+        match row.value {
+            nb_interr as Int {
+                enforce_rotation_for_all_in_window(db, subject_id,
+                    GlobalWeek(0), queries::last_global_week(db), nb_interr)
+            }
+            _ { trivial }
+        }
+    };
+
+let constraint_for_subject_ep(db: Db, subject_id: SubjectId) -> Constraint =
+    forall row in ep_periodicity_internal(db, subject_id) {
+        match row.value {
+            periodicity as Int {
+                let total = subject_total_weeks_internal(db, subject_id) cast! Int {
+                    forall ws in [2..total+1] {
+                        forall wb in bal_helpers::roll_weeks_for_subject(db, subject_id, ws, 1) {
+                            enforce_rotation_for_all_in_window(db, subject_id,
+                                wb.first_week cast! GlobalWeek, wb.last_week cast! GlobalWeek,
+                                (ws + periodicity - 1) / periodicity)
+                        }
+                    }
+                }
+            }
+            _ { trivial }
+        }
+    };
+
+let constraint_for_subject_ofeb(db: Db, subject_id: SubjectId) -> Constraint =
+    forall row in ofeb_block_internal(db, subject_id) {
+        match row.value {
+            block as Int {
+                let total = subject_total_weeks_internal(db, subject_id) cast! Int {
+                    forall k in [2..total/block+1] {
+                        forall wb in bal_helpers::roll_weeks_for_subject(db, subject_id, k * block, block) {
+                            enforce_rotation_for_all_in_window(db, subject_id,
+                                wb.first_week cast! GlobalWeek, wb.last_week cast! GlobalWeek, k)
+                        }
+                    }
+                }
+            }
+            _ { trivial }
+        }
+    };
+
+// --- Main per-subject function ---
+
+let constraint_for_subject(db: Db, subject_id: SubjectId) -> Constraint =
+    constraint_for_subject_aiy(db, subject_id) and
+    constraint_for_subject_ep(db, subject_id) and
+    constraint_for_subject_ofeb(db, subject_id) and
+    constraint_for_subject_afab(db, subject_id);
+
+// --- Public entry points ---
+
+pub let constraint(db: Db) -> Constraint =
+    forall subject_id in hard_slot_rotation_subjects(db) {
+        constraint_for_subject(db, subject_id)
+    };
+
+pub let objective(db: Db) -> [Constraint] =
+    [constraint_for_subject(db, subject_id)
+     for subject_id in soft_slot_rotation_subjects(db)];

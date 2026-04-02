@@ -13,6 +13,11 @@ import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
 import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
 import "collomatique_students_per_group" as students_per_group;
+import "collomatique_balancing_rotation" as balancing_rotation;
+import "collomatique_balancing_slot_rotation" as balancing_slot_rotation;
+import "collomatique_balancing_avoid_twice_in_a_row" as balancing_avoid_twice;
+import "collomatique_balancing_year_rotation" as balancing_year_rotation;
+import "collomatique_balancing_period_rotation" as balancing_period_rotation;
 
 pub let default_constraint(db: Db) -> Constraint =
     one_interrogation_at_once::constraint(db) and
@@ -27,9 +32,19 @@ pub let default_constraint(db: Db) -> Constraint =
     periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and
     periodicity_ofeb::constraint(db) and
-    forbidden_groups::constraint(db);
+    forbidden_groups::constraint(db) and
+    balancing_rotation::constraint(db) and
+    balancing_slot_rotation::constraint(db) and
+    balancing_avoid_twice::constraint(db) and
+    balancing_year_rotation::constraint(db) and
+    balancing_period_rotation::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
-    limits::objective(db) + [interrogation_cost::objective(db)];
+    limits::objective(db) + [interrogation_cost::objective(db)]
+    + balancing_rotation::objective(db)
+    + balancing_slot_rotation::objective(db)
+    + balancing_avoid_twice::objective(db)
+    + balancing_year_rotation::objective(db)
+    + balancing_period_rotation::objective(db);
 
 

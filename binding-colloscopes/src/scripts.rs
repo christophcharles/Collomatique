@@ -105,6 +105,30 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique_periodicity_once_for_every_block_of_weeks.collo-ml"),
     ),
     (
+        "collomatique_balancing_helpers",
+        include_str!("scripts/collomatique_balancing_helpers.collo-ml"),
+    ),
+    (
+        "collomatique_balancing_rotation",
+        include_str!("scripts/collomatique_balancing_rotation.collo-ml"),
+    ),
+    (
+        "collomatique_balancing_slot_rotation",
+        include_str!("scripts/collomatique_balancing_slot_rotation.collo-ml"),
+    ),
+    (
+        "collomatique_balancing_avoid_twice_in_a_row",
+        include_str!("scripts/collomatique_balancing_avoid_twice_in_a_row.collo-ml"),
+    ),
+    (
+        "collomatique_balancing_year_rotation",
+        include_str!("scripts/collomatique_balancing_year_rotation.collo-ml"),
+    ),
+    (
+        "collomatique_balancing_period_rotation",
+        include_str!("scripts/collomatique_balancing_period_rotation.collo-ml"),
+    ),
+    (
         "collomatique_students_have_groups",
         include_str!("scripts/collomatique_students_have_groups.collo-ml"),
     ),
