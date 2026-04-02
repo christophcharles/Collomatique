@@ -273,6 +273,18 @@ fn options_to_string(options: &BalancingOptions) -> String {
             soft_constraint_symbol(at.soft)
         ));
     }
+    if let Some(ytr) = &options.year_teacher_rotation {
+        parts.push(format!(
+            "rotation annuelle des colleurs {}",
+            soft_constraint_symbol(ytr.soft)
+        ));
+    }
+    if let Some(ptr) = &options.period_teacher_rotation {
+        parts.push(format!(
+            "rotation des colleurs par période {}",
+            soft_constraint_symbol(ptr.soft)
+        ));
+    }
     if parts.is_empty() {
         "aucune contrainte".into()
     } else {

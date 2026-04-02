@@ -19,6 +19,12 @@ pub struct Dialog {
 
     has_avoid_twice_in_a_row: bool,
     soft_avoid_twice_in_a_row: bool,
+
+    has_year_teacher_rotation: bool,
+    soft_year_teacher_rotation: bool,
+
+    has_period_teacher_rotation: bool,
+    soft_period_teacher_rotation: bool,
 }
 
 #[derive(Debug)]
@@ -35,6 +41,12 @@ pub enum DialogInput {
 
     UpdateHasAvoidTwiceInARow(bool),
     UpdateSoftAvoidTwiceInARow(bool),
+
+    UpdateHasYearTeacherRotation(bool),
+    UpdateSoftYearTeacherRotation(bool),
+
+    UpdateHasPeriodTeacherRotation(bool),
+    UpdateSoftPeriodTeacherRotation(bool),
 }
 
 #[derive(Debug)]
@@ -185,6 +197,64 @@ impl SimpleComponent for Dialog {
                                     },
                                 },
                             },
+                            adw::PreferencesGroup {
+                                set_title: "Rotation annuelle des colleurs",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Activer la rotation annuelle des colleurs",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_year_teacher_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasYearTeacherRotation(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Contrainte douce",
+                                    #[watch]
+                                    set_visible: model.has_year_teacher_rotation,
+                                    #[track(self.should_redraw)]
+                                    set_active: model.soft_year_teacher_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateSoftYearTeacherRotation(value));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Rotation des colleurs par période",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Activer la rotation des colleurs par période",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_period_teacher_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasPeriodTeacherRotation(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Contrainte douce",
+                                    #[watch]
+                                    set_visible: model.has_period_teacher_rotation,
+                                    #[track(self.should_redraw)]
+                                    set_active: model.soft_period_teacher_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateSoftPeriodTeacherRotation(value));
+                                    },
+                                },
+                            },
                         },
                     },
                     gtk::Label {
@@ -213,6 +283,10 @@ impl SimpleComponent for Dialog {
             soft_slot_rotation: false,
             has_avoid_twice_in_a_row: false,
             soft_avoid_twice_in_a_row: false,
+            has_year_teacher_rotation: false,
+            soft_year_teacher_rotation: false,
+            has_period_teacher_rotation: false,
+            soft_period_teacher_rotation: false,
         };
 
         let widgets = view_output!();
@@ -274,6 +348,30 @@ impl SimpleComponent for Dialog {
                 }
                 self.soft_avoid_twice_in_a_row = value;
             }
+            DialogInput::UpdateHasYearTeacherRotation(value) => {
+                if self.has_year_teacher_rotation == value {
+                    return;
+                }
+                self.has_year_teacher_rotation = value;
+            }
+            DialogInput::UpdateSoftYearTeacherRotation(value) => {
+                if self.soft_year_teacher_rotation == value {
+                    return;
+                }
+                self.soft_year_teacher_rotation = value;
+            }
+            DialogInput::UpdateHasPeriodTeacherRotation(value) => {
+                if self.has_period_teacher_rotation == value {
+                    return;
+                }
+                self.has_period_teacher_rotation = value;
+            }
+            DialogInput::UpdateSoftPeriodTeacherRotation(value) => {
+                if self.soft_period_teacher_rotation == value {
+                    return;
+                }
+                self.soft_period_teacher_rotation = value;
+            }
         }
     }
 
@@ -310,6 +408,22 @@ impl Dialog {
             self.has_avoid_twice_in_a_row = false;
             self.soft_avoid_twice_in_a_row = false;
         }
+
+        if let Some(ytr) = options.year_teacher_rotation {
+            self.has_year_teacher_rotation = true;
+            self.soft_year_teacher_rotation = ytr.soft;
+        } else {
+            self.has_year_teacher_rotation = false;
+            self.soft_year_teacher_rotation = false;
+        }
+
+        if let Some(ptr) = options.period_teacher_rotation {
+            self.has_period_teacher_rotation = true;
+            self.soft_period_teacher_rotation = ptr.soft;
+        } else {
+            self.has_period_teacher_rotation = false;
+            self.soft_period_teacher_rotation = false;
+        }
     }
 
     fn build_options(&self) -> BalancingOptions {
@@ -322,6 +436,14 @@ impl Dialog {
             avoid_twice_in_a_row: Self::soft_unit_value(
                 self.has_avoid_twice_in_a_row,
                 self.soft_avoid_twice_in_a_row,
+            ),
+            year_teacher_rotation: Self::soft_unit_value(
+                self.has_year_teacher_rotation,
+                self.soft_year_teacher_rotation,
+            ),
+            period_teacher_rotation: Self::soft_unit_value(
+                self.has_period_teacher_rotation,
+                self.soft_period_teacher_rotation,
             ),
         }
     }

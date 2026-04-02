@@ -312,7 +312,9 @@ CREATE TABLE balancing_global (
     id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     teacher_rotation_soft INTEGER CHECK (teacher_rotation_soft IN (0, 1)),
     slot_rotation_soft INTEGER CHECK (slot_rotation_soft IN (0, 1)),
-    avoid_twice_in_a_row_soft INTEGER CHECK (avoid_twice_in_a_row_soft IN (0, 1))
+    avoid_twice_in_a_row_soft INTEGER CHECK (avoid_twice_in_a_row_soft IN (0, 1)),
+    year_teacher_rotation_soft INTEGER CHECK (year_teacher_rotation_soft IN (0, 1)),
+    period_teacher_rotation_soft INTEGER CHECK (period_teacher_rotation_soft IN (0, 1))
 );
 
 CREATE TABLE balancing_subjects (
@@ -320,7 +322,9 @@ CREATE TABLE balancing_subjects (
         REFERENCES subject_interrogation_params(subject_id) ON DELETE RESTRICT,
     teacher_rotation_soft INTEGER CHECK (teacher_rotation_soft IN (0, 1)),
     slot_rotation_soft INTEGER CHECK (slot_rotation_soft IN (0, 1)),
-    avoid_twice_in_a_row_soft INTEGER CHECK (avoid_twice_in_a_row_soft IN (0, 1))
+    avoid_twice_in_a_row_soft INTEGER CHECK (avoid_twice_in_a_row_soft IN (0, 1)),
+    year_teacher_rotation_soft INTEGER CHECK (year_teacher_rotation_soft IN (0, 1)),
+    period_teacher_rotation_soft INTEGER CHECK (period_teacher_rotation_soft IN (0, 1))
 );
 
 CREATE VIEW balancing_effective AS
@@ -328,7 +332,9 @@ SELECT
     s.id AS subject_id,
     COALESCE(bs.teacher_rotation_soft, bg.teacher_rotation_soft) AS teacher_rotation_soft,
     COALESCE(bs.slot_rotation_soft, bg.slot_rotation_soft) AS slot_rotation_soft,
-    COALESCE(bs.avoid_twice_in_a_row_soft, bg.avoid_twice_in_a_row_soft) AS avoid_twice_in_a_row_soft
+    COALESCE(bs.avoid_twice_in_a_row_soft, bg.avoid_twice_in_a_row_soft) AS avoid_twice_in_a_row_soft,
+    COALESCE(bs.year_teacher_rotation_soft, bg.year_teacher_rotation_soft) AS year_teacher_rotation_soft,
+    COALESCE(bs.period_teacher_rotation_soft, bg.period_teacher_rotation_soft) AS period_teacher_rotation_soft
 FROM subjects s
 CROSS JOIN balancing_global bg
 LEFT JOIN balancing_subjects bs ON bs.subject_id = s.id;
