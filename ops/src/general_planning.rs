@@ -546,8 +546,7 @@ impl GeneralPlanningUpdateOp {
                         return Some(CleaningOp {
                             warning:
                                 GeneralPlanningUpdateWarning::LoosePairingRuleExclusionForPeriod(
-                                    *rule_id,
-                                    *period_id,
+                                    *rule_id, *period_id,
                                 ),
                             op: UpdateOp::Pairings(PairingsUpdateOp::UpdatePairingRule(
                                 *rule_id, new_rule,
@@ -691,8 +690,7 @@ impl GeneralPlanningUpdateOp {
                         return Some(CleaningOp {
                             warning:
                                 GeneralPlanningUpdateWarning::LoosePairingRuleExclusionForPeriod(
-                                    *rule_id,
-                                    *period_id,
+                                    *rule_id, *period_id,
                                 ),
                             op: UpdateOp::Pairings(PairingsUpdateOp::UpdatePairingRule(
                                 *rule_id, new_rule,

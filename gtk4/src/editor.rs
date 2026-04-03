@@ -38,6 +38,7 @@ mod general_planning;
 mod group_lists;
 mod incompats;
 mod main_script;
+mod pairings;
 mod run_second_instance;
 mod settings;
 mod slots;
@@ -132,11 +133,12 @@ enum PanelNumbers {
     Students = 6,
     Assignments = 7,
     GroupLists = 8,
-    Balancing = 9,
-    ExtraSettings = 10,
-    MainScript = 11,
-    Colloscope = 12,
-    Export = 13,
+    Pairings = 9,
+    Balancing = 10,
+    ExtraSettings = 11,
+    MainScript = 12,
+    Colloscope = 13,
+    Export = 14,
 }
 
 impl PanelNumbers {
@@ -151,6 +153,7 @@ impl PanelNumbers {
             PanelNumbers::Students,
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
+            PanelNumbers::Pairings,
             PanelNumbers::Balancing,
             PanelNumbers::ExtraSettings,
             PanelNumbers::MainScript,
@@ -171,6 +174,7 @@ impl PanelNumbers {
             PanelNumbers::Slots => "slots",
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
+            PanelNumbers::Pairings => "pairings",
             PanelNumbers::Balancing => "balancing",
             PanelNumbers::ExtraSettings => "extra_settings",
             PanelNumbers::MainScript => "main_script",
@@ -190,6 +194,7 @@ impl PanelNumbers {
             PanelNumbers::Slots => "Créneaux de colles",
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
+            PanelNumbers::Pairings => "Appariements",
             PanelNumbers::Balancing => "Équilibrage",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
             PanelNumbers::MainScript => "Script ColloML (avancé)",
@@ -234,6 +239,7 @@ pub struct EditorPanel {
     slots: Controller<slots::Slots>,
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
+    pairings: Controller<pairings::Pairings>,
     settings: Controller<settings::Settings>,
     balancing: Controller<balancing::Balancing>,
     main_script: Controller<main_script::MainScript>,
@@ -414,6 +420,24 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        self.pairings
+            .sender()
+            .send(pairings::PairingsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .pairings
+                    .clone(),
+            ))
+            .unwrap();
         self.group_lists
             .sender()
             .send(group_lists::GroupListsInput::Update(
@@ -528,7 +552,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
-            collomatique_ops::OpCategory::Pairings => None, // TODO: wire to Pairings panel in Session 3
+            collomatique_ops::OpCategory::Pairings => Some(PanelNumbers::Pairings),
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
@@ -782,6 +806,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::GroupLists(op))
             });
 
+        let pairings = pairings::Pairings::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Pairings(op))
+            });
+
         let settings = settings::Settings::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
@@ -886,6 +916,7 @@ impl Component for EditorPanel {
             slots,
             incompats,
             group_lists,
+            pairings,
             settings,
             balancing,
             main_script,
@@ -908,6 +939,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Slots => model.slots.widget().clone().upcast(),
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
+                PanelNumbers::Pairings => model.pairings.widget().clone().upcast(),
                 PanelNumbers::Balancing => model.balancing.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
                 PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),

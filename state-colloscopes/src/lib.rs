@@ -24,8 +24,8 @@ pub use ids::{
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPairingOp,
-    AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp,
-    AnnotatedTeacherOp, AnnotatedWeekPatternOp,
+    AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
+    AnnotatedWeekPatternOp,
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
@@ -43,6 +43,7 @@ pub mod colloscopes;
 pub mod export_config;
 pub mod group_lists;
 pub mod incompats;
+pub mod pairings;
 pub mod periods;
 pub mod settings;
 pub mod slots;
@@ -50,7 +51,6 @@ pub mod soft_param;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
-pub mod pairings;
 pub mod week_patterns;
 
 /// Description of a person with contacts
@@ -1330,8 +1330,7 @@ impl Data {
                 for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByPairingRule(
-                            *period_id,
-                            *rule_id,
+                            *period_id, *rule_id,
                         ));
                     }
                 }
@@ -2447,12 +2446,7 @@ impl Data {
             AnnotatedPairingOp::Update(id, new_rule) => {
                 self.inner_data.params.validate_pairing_rule(new_rule)?;
 
-                let Some(rule) = self
-                    .inner_data
-                    .params
-                    .pairings
-                    .pairing_rule_map
-                    .get_mut(id)
+                let Some(rule) = self.inner_data.params.pairings.pairing_rule_map.get_mut(id)
                 else {
                     return Err(PairingError::InvalidPairingRuleId(*id));
                 };
@@ -3510,12 +3504,7 @@ impl Data {
         match pairing_op {
             AnnotatedPairingOp::Add(new_id, _rule) => Ok(AnnotatedPairingOp::Remove(*new_id)),
             AnnotatedPairingOp::Remove(id) => {
-                let Some(old_rule) = self
-                    .inner_data
-                    .params
-                    .pairings
-                    .pairing_rule_map
-                    .get(id)
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
                 else {
                     return Err(PairingError::InvalidPairingRuleId(*id));
                 };
@@ -3523,12 +3512,7 @@ impl Data {
                 Ok(AnnotatedPairingOp::Add(*id, old_rule.clone()))
             }
             AnnotatedPairingOp::Update(id, _new_rule) => {
-                let Some(old_rule) = self
-                    .inner_data
-                    .params
-                    .pairings
-                    .pairing_rule_map
-                    .get(id)
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
                 else {
                     return Err(PairingError::InvalidPairingRuleId(*id));
                 };

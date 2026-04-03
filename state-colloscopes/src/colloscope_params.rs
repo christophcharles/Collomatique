@@ -200,11 +200,7 @@ impl Parameters {
             });
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
-        let pairing_rule_ids = self
-            .pairings
-            .pairing_rule_map
-            .keys()
-            .map(|x| x.inner());
+        let pairing_rule_ids = self.pairings.pairing_rule_map.keys().map(|x| x.inner());
 
         student_ids
             .chain(period_ids)

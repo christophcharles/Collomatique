@@ -2002,8 +2002,21 @@ async fn read_settings(pool: &SqlitePool) -> Result<settings::Settings, Error> {
     })
 }
 
-type BalancingGlobalRow = (Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>);
-type BalancingSubjectRow = (i64, Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>);
+type BalancingGlobalRow = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+type BalancingSubjectRow = (
+    i64,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
 
 async fn read_balancing(pool: &SqlitePool) -> Result<balancing::Balancing, Error> {
     let global_row: Option<BalancingGlobalRow> = sqlx::query_as(
