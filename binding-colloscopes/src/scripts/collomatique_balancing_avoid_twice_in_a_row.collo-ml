@@ -178,7 +178,13 @@ let enforce_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalW
 let constraint_for_subject_aiy(db: Db, subject_id: SubjectId) -> Constraint =
     forall row in aiy_max_internal(db, subject_id) {
         match row.value {
-            _ as Int { constraint_for_subject_recursive(db, subject_id) }
+            _ as Int {
+                if (queries::subject_is_at_most_once_per_week(db, subject_id) cast! Int) == 1 {
+                    constraint_for_subject_recursive(db, subject_id)
+                } else {
+                    panic! "Avoid twice in a row is not supported for AmountInYear subjects with minimum_week_separation < 1"
+                }
+            }
             _ { trivial }
         }
     };
@@ -186,7 +192,13 @@ let constraint_for_subject_aiy(db: Db, subject_id: SubjectId) -> Constraint =
 let constraint_for_subject_afab(db: Db, subject_id: SubjectId) -> Constraint =
     forall row in afab_total_max_internal(db, subject_id) {
         match row.value {
-            _ as Int { constraint_for_subject_recursive(db, subject_id) }
+            _ as Int {
+                if (queries::subject_is_at_most_once_per_week(db, subject_id) cast! Int) == 1 {
+                    constraint_for_subject_recursive(db, subject_id)
+                } else {
+                    panic! "Avoid twice in a row is not supported for AmountForEveryArbitraryBlock subjects with minimum_week_separation < 1"
+                }
+            }
             _ { trivial }
         }
     };

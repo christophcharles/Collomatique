@@ -167,20 +167,6 @@ let student_has_interrogation_in(db: Db, student_id: StudentId, subject_id: Subj
 let student_max_interrogation_count_in(db: Db, subject_id: SubjectId, global_week: GlobalWeek) -> Int =
     |get_subject_slots_for_week(db, subject_id, global_week)|;
 
-/// Check if a subject's periodicity guarantees at most one interrogation per week.
-/// Returns 1 if so, 0 otherwise.
-query subject_is_at_most_once_per_week(db: Db, subject_id: SubjectId) -> ?Int = "
-SELECT CASE
-    WHEN sip.ep_periodicity_in_weeks IS NOT NULL THEN 1
-    WHEN sip.ofeb_weeks_per_block IS NOT NULL THEN 1
-    WHEN sip.aiy_count_min IS NOT NULL AND sip.aiy_minimum_week_separation >= 1 THEN 1
-    WHEN sip.afab_minimum_week_separation IS NOT NULL AND sip.afab_minimum_week_separation >= 1 THEN 1
-    ELSE 0
-END AS result
-FROM subject_interrogation_params sip
-WHERE sip.subject_id = ?1
-";
-
 /// Reified binary variable: 1 iff student has at least one interrogation in the subject on that week.
 /// Only used for A → ¬B when the antecedent subject can have multiple interrogations per week.
 let student_has_interrogation_in_constraint(db: Db, student_id: StudentId, subject_id: SubjectId, global_week: GlobalWeek) -> Constraint =
