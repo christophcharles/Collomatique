@@ -34,6 +34,8 @@ pub mod slots;
 pub use slots::*;
 pub mod incompatibilities;
 pub use incompatibilities::*;
+pub mod pairings;
+pub use pairings::*;
 pub mod group_lists;
 pub use group_lists::*;
 pub mod settings;
@@ -60,6 +62,7 @@ pub enum OpCategory {
     WeekPatterns,
     Slots,
     Incompatibilities,
+    Pairings,
     GroupLists,
     Settings,
     Balancing,
@@ -78,6 +81,7 @@ pub enum UpdateOp {
     WeekPatterns(WeekPatternsUpdateOp),
     Slots(SlotsUpdateOp),
     Incompatibilities(IncompatibilitiesUpdateOp),
+    Pairings(PairingsUpdateOp),
     GroupLists(GroupListsUpdateOp),
     Settings(SettingsUpdateOp),
     Balancing(BalancingUpdateOp),
@@ -105,6 +109,8 @@ pub enum UpdateError {
     #[error(transparent)]
     Incompatibilities(#[from] IncompatibilitiesUpdateError),
     #[error(transparent)]
+    Pairings(#[from] PairingsUpdateError),
+    #[error(transparent)]
     GroupLists(#[from] GroupListsUpdateError),
     #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
@@ -128,6 +134,7 @@ pub enum UpdateWarning {
     WeekPatterns(WeekPatternsUpdateWarning),
     Slots(SlotsUpdateWarning),
     Incompatibilities(IncompatibilitiesUpdateWarning),
+    Pairings(PairingsUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
     Settings(SettingsUpdateWarning),
     Balancing(BalancingUpdateWarning),
@@ -184,6 +191,12 @@ impl From<IncompatibilitiesUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<PairingsUpdateWarning> for UpdateWarning {
+    fn from(value: PairingsUpdateWarning) -> Self {
+        UpdateWarning::Pairings(value)
+    }
+}
+
 impl From<GroupListsUpdateWarning> for UpdateWarning {
     fn from(value: GroupListsUpdateWarning) -> Self {
         UpdateWarning::GroupLists(value)
@@ -234,6 +247,7 @@ impl UpdateWarning {
             UpdateWarning::WeekPatterns(w) => w.build_desc_from_data(data),
             UpdateWarning::Slots(w) => w.build_desc_from_data(data),
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
+            UpdateWarning::Pairings(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
             UpdateWarning::Balancing(w) => w.build_desc_from_data(data),
@@ -306,6 +320,9 @@ impl UpdateOp {
             UpdateOp::Incompatibilities(incompat_op) => {
                 CleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
             }
+            UpdateOp::Pairings(pairing_op) => {
+                CleaningOp::downcast(pairing_op.get_next_cleaning_op(data))
+            }
             UpdateOp::GroupLists(group_list_op) => {
                 CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
@@ -362,6 +379,10 @@ impl UpdateOp {
             }
             UpdateOp::Incompatibilities(incompat_op) => {
                 let result = incompat_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Pairings(pairing_op) => {
+                let result = pairing_op.apply_no_cleaning(data)?;
                 Ok(result.map(|x| x.into()))
             }
             UpdateOp::GroupLists(group_list_op) => {
@@ -425,6 +446,7 @@ impl UpdateOp {
             UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
             UpdateOp::Slots(slot_op) => slot_op.get_desc(),
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
+            UpdateOp::Pairings(pairing_op) => pairing_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
             UpdateOp::Balancing(balancing_op) => balancing_op.get_desc(),

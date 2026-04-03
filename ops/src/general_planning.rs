@@ -21,6 +21,10 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::PeriodId,
     ),
     LoosePeriodDataInColloscope(collomatique_state_colloscopes::PeriodId),
+    LoosePairingRuleExclusionForPeriod(
+        collomatique_state_colloscopes::PairingRuleId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GeneralPlanningUpdateWarning {
@@ -179,6 +183,24 @@ impl GeneralPlanningUpdateWarning {
                 };
                 Some(format!(
                     "Perte de tout ou d'une partie du colloscope sur la période {}",
+                    period_index + 1
+                ))
+            }
+            GeneralPlanningUpdateWarning::LoosePairingRuleExclusionForPeriod(
+                _rule_id,
+                period_id,
+            ) => {
+                let Some(period_index) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Modification d'un appariement (retrait de la période exclue {})",
                     period_index + 1
                 ))
             }
@@ -511,6 +533,29 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                for (rule_id, rule) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                {
+                    if rule.excluded_periods.contains(period_id) {
+                        let mut new_rule = rule.clone();
+                        new_rule.excluded_periods.remove(period_id);
+                        return Some(CleaningOp {
+                            warning:
+                                GeneralPlanningUpdateWarning::LoosePairingRuleExclusionForPeriod(
+                                    *rule_id,
+                                    *period_id,
+                                ),
+                            op: UpdateOp::Pairings(PairingsUpdateOp::UpdatePairingRule(
+                                *rule_id, new_rule,
+                            )),
+                        });
+                    }
+                }
+
                 let Some(period_assignments) = data
                     .get_data()
                     .get_inner_data()
@@ -628,6 +673,29 @@ impl GeneralPlanningUpdateOp {
                             op: UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
                                 *student_id,
                                 new_student,
+                            )),
+                        });
+                    }
+                }
+
+                for (rule_id, rule) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                {
+                    if rule.excluded_periods.contains(period_id) {
+                        let mut new_rule = rule.clone();
+                        new_rule.excluded_periods.remove(period_id);
+                        return Some(CleaningOp {
+                            warning:
+                                GeneralPlanningUpdateWarning::LoosePairingRuleExclusionForPeriod(
+                                    *rule_id,
+                                    *period_id,
+                                ),
+                            op: UpdateOp::Pairings(PairingsUpdateOp::UpdatePairingRule(
+                                *rule_id, new_rule,
                             )),
                         });
                     }
