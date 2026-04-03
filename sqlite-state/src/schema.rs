@@ -16,7 +16,8 @@ CREATE TABLE all_ids (
     id INTEGER NOT NULL PRIMARY KEY,
     entity_type TEXT NOT NULL CHECK (entity_type IN (
         'student', 'teacher', 'subject', 'period',
-        'slot', 'week_pattern', 'incompat', 'group_list'
+        'slot', 'week_pattern', 'incompat', 'group_list',
+        'pairing_rule'
     ))
 );
 
@@ -340,6 +341,25 @@ CROSS JOIN balancing_global bg
 LEFT JOIN balancing_subjects bs ON bs.subject_id = s.id;
 
 -- ============================================================================
+-- 13b. Pairing Rules
+-- ============================================================================
+
+CREATE TABLE pairing_rules (
+    id INTEGER NOT NULL PRIMARY KEY,
+    antecedent_subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE RESTRICT,
+    antecedent_should_have INTEGER NOT NULL CHECK (antecedent_should_have IN (0, 1)),
+    consequent_subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE RESTRICT,
+    consequent_should_have INTEGER NOT NULL CHECK (consequent_should_have IN (0, 1)),
+    soft INTEGER NOT NULL CHECK (soft IN (0, 1))
+);
+
+CREATE TABLE pairing_rule_excluded_periods (
+    pairing_rule_id INTEGER NOT NULL REFERENCES pairing_rules(id) ON DELETE CASCADE,
+    period_id INTEGER NOT NULL REFERENCES periods(id) ON DELETE RESTRICT,
+    PRIMARY KEY (pairing_rule_id, period_id)
+);
+
+-- ============================================================================
 -- 14. Colloscope (Schedule Data)
 -- ============================================================================
 
@@ -513,6 +533,24 @@ WHEN OLD.id != NEW.id
 BEGIN
     DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'group_list';
     INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'group_list');
+END;
+
+-- PAIRING_RULES
+CREATE TRIGGER pairing_rule_id_insert AFTER INSERT ON pairing_rules
+BEGIN
+    INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'pairing_rule');
+END;
+
+CREATE TRIGGER pairing_rule_id_delete AFTER DELETE ON pairing_rules
+BEGIN
+    DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'pairing_rule';
+END;
+
+CREATE TRIGGER pairing_rule_id_update AFTER UPDATE OF id ON pairing_rules
+WHEN OLD.id != NEW.id
+BEGIN
+    DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'pairing_rule';
+    INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'pairing_rule');
 END;
 
 -- ============================================================================
