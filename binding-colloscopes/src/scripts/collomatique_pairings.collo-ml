@@ -157,23 +157,56 @@ AND NOT EXISTS (
 // --- LinExpr helper ---
 
 /// Sum of $StudentAtInterrogation over all slots for a given subject on a given week.
-/// Returns 0 or 1 (a student has at most one interrogation per subject per week).
+/// Can be > 1 if multiple interrogations of the same subject are allowed in the same week.
 let student_has_interrogation_in(db: Db, student_id: StudentId, subject_id: SubjectId, global_week: GlobalWeek) -> LinExpr =
     sum slot_id in get_subject_slots_for_week(db, subject_id, global_week) {
         $StudentAtInterrogation(db, student_id, slot_id, global_week)
     };
+
+/// Maximum number of interrogation slots for a given subject on a given week.
+let student_max_interrogation_count_in(db: Db, subject_id: SubjectId, global_week: GlobalWeek) -> Int =
+    |get_subject_slots_for_week(db, subject_id, global_week)|;
+
+/// Check if a subject's periodicity guarantees at most one interrogation per week.
+/// Returns 1 if so, 0 otherwise.
+query subject_is_at_most_once_per_week(db: Db, subject_id: SubjectId) -> ?Int = "
+SELECT CASE
+    WHEN sip.ep_periodicity_in_weeks IS NOT NULL THEN 1
+    WHEN sip.ofeb_weeks_per_block IS NOT NULL THEN 1
+    WHEN sip.aiy_count_min IS NOT NULL AND sip.aiy_minimum_week_separation >= 1 THEN 1
+    WHEN sip.afab_minimum_week_separation IS NOT NULL AND sip.afab_minimum_week_separation >= 1 THEN 1
+    ELSE 0
+END AS result
+FROM subject_interrogation_params sip
+WHERE sip.subject_id = ?1
+";
+
+/// Reified binary variable: 1 iff student has at least one interrogation in the subject on that week.
+/// Only used for A → ¬B when the antecedent subject can have multiple interrogations per week.
+let student_has_interrogation_in_constraint(db: Db, student_id: StudentId, subject_id: SubjectId, global_week: GlobalWeek) -> Constraint =
+    student_has_interrogation_in(db, student_id, subject_id, global_week) >== 1;
+
+reify student_has_interrogation_in_constraint as $StudentHasInterrogationIn;
 
 // --- Individual constraint forms ---
 
 /// Si l'élève `student_id` a une interrogation dans la matière `ant_subject` pendant la semaine `global_week`, il doit aussi en avoir une dans la matière `con_subject`
 let enforce_having_implies_having(db: Db, student_id: StudentId, ant_subject: SubjectId, con_subject: SubjectId, global_week: GlobalWeek) -> Constraint =
     student_has_interrogation_in(db, student_id, ant_subject, global_week)
-        <== student_has_interrogation_in(db, student_id, con_subject, global_week);
+        <== student_max_interrogation_count_in(db, ant_subject, global_week)
+            * student_has_interrogation_in(db, student_id, con_subject, global_week);
 
 /// Si l'élève `student_id` a une interrogation dans la matière `ant_subject` pendant la semaine `global_week`, il ne doit pas en avoir dans la matière `con_subject`
 let enforce_having_implies_not_having(db: Db, student_id: StudentId, ant_subject: SubjectId, con_subject: SubjectId, global_week: GlobalWeek) -> Constraint =
-    student_has_interrogation_in(db, student_id, ant_subject, global_week)
-        + student_has_interrogation_in(db, student_id, con_subject, global_week) <== 1;
+    if (subject_is_at_most_once_per_week(db, ant_subject) cast! Int) == 1 {
+        student_has_interrogation_in(db, student_id, con_subject, global_week)
+            <== student_max_interrogation_count_in(db, con_subject, global_week)
+                * (1 - student_has_interrogation_in(db, student_id, ant_subject, global_week))
+    } else {
+        student_has_interrogation_in(db, student_id, con_subject, global_week)
+            <== student_max_interrogation_count_in(db, con_subject, global_week)
+                * (1 - $StudentHasInterrogationIn(db, student_id, ant_subject, global_week))
+    };
 
 /// Si l'élève `student_id` n'a pas d'interrogation dans la matière `ant_subject` pendant la semaine `global_week`, il doit en avoir une dans la matière `con_subject`
 let enforce_not_having_implies_having(db: Db, student_id: StudentId, ant_subject: SubjectId, con_subject: SubjectId, global_week: GlobalWeek) -> Constraint =
@@ -183,7 +216,8 @@ let enforce_not_having_implies_having(db: Db, student_id: StudentId, ant_subject
 /// Si l'élève `student_id` n'a pas d'interrogation dans la matière `ant_subject` pendant la semaine `global_week`, il ne doit pas en avoir dans la matière `con_subject`
 let enforce_not_having_implies_not_having(db: Db, student_id: StudentId, ant_subject: SubjectId, con_subject: SubjectId, global_week: GlobalWeek) -> Constraint =
     student_has_interrogation_in(db, student_id, con_subject, global_week)
-        <== student_has_interrogation_in(db, student_id, ant_subject, global_week);
+        <== student_max_interrogation_count_in(db, con_subject, global_week)
+            * student_has_interrogation_in(db, student_id, ant_subject, global_week);
 
 // --- Core dispatch for one pairing rule ---
 
