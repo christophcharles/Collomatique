@@ -140,6 +140,10 @@ pub const MODULES: &[(&str, &str)] = &[
         "collomatique_students_per_group_for_subject",
         include_str!("scripts/collomatique_students_per_group_for_subject.collo-ml"),
     ),
+    (
+        "collomatique_pairings",
+        include_str!("scripts/collomatique_pairings.collo-ml"),
+    ),
 ];
 
 pub const MAIN_MODULE: &str = include_str!("scripts/main.collo-ml");

@@ -36,6 +36,8 @@ pub enum Op {
     GroupList(GroupListOp),
     /// Operation on settings
     Settings(SettingsOp),
+    /// Operation on pairings
+    Pairing(PairingOp),
     /// Operation on balancing
     Balancing(BalancingOp),
     /// Operation on main script
@@ -194,6 +196,20 @@ pub enum SettingsOp {
     Update(settings::Settings),
 }
 
+/// Pairing rule operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// pairing rules we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PairingOp {
+    /// Add a pairing rule
+    Add(pairings::PairingRule),
+    /// Remove an existing pairing rule
+    Remove(PairingRuleId),
+    /// Update an existing pairing rule
+    Update(PairingRuleId, pairings::PairingRule),
+}
+
 /// Balancing operation enumeration
 ///
 /// This is the list of all possible operations related to the
@@ -279,6 +295,8 @@ pub enum AnnotatedOp {
     GroupList(AnnotatedGroupListOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
+    /// Operation on pairings
+    Pairing(AnnotatedPairingOp),
     /// Operation on balancing
     Balancing(AnnotatedBalancingOp),
     /// Operation on main script
@@ -340,6 +358,12 @@ impl From<AnnotatedIncompatOp> for AnnotatedOp {
 impl From<AnnotatedGroupListOp> for AnnotatedOp {
     fn from(value: AnnotatedGroupListOp) -> Self {
         AnnotatedOp::GroupList(value)
+    }
+}
+
+impl From<AnnotatedPairingOp> for AnnotatedOp {
+    fn from(value: AnnotatedPairingOp) -> Self {
+        AnnotatedOp::Pairing(value)
     }
 }
 
@@ -543,6 +567,24 @@ pub enum AnnotatedGroupListOp {
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
 
+/// Pairing rule annotated operation enumeration
+///
+/// Compared to [PairingOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedPairingOp {
+    /// Add a pairing rule
+    /// First parameter is the pairing rule id for the new rule
+    Add(PairingRuleId, pairings::PairingRule),
+    /// Remove an existing pairing rule
+    Remove(PairingRuleId),
+    /// Update an existing pairing rule
+    Update(PairingRuleId, pairings::PairingRule),
+}
+
 /// Settings operation enumeration
 ///
 /// Compared to [SettingsOp], this is a annotated operation,
@@ -672,6 +714,10 @@ impl AnnotatedOp {
             }
             Op::GroupList(group_list_op) => {
                 let (op, id) = AnnotatedGroupListOp::annotate(group_list_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Pairing(pairing_op) => {
+                let (op, id) = AnnotatedPairingOp::annotate(pairing_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
             Op::Settings(settings_op) => {
@@ -899,6 +945,25 @@ impl AnnotatedGroupListOp {
                 AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id),
                 None,
             ),
+        }
+    }
+}
+
+impl AnnotatedPairingOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [PairingOp].
+    fn annotate(
+        pairing_op: PairingOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedPairingOp, Option<PairingRuleId>) {
+        match pairing_op {
+            PairingOp::Add(rule) => {
+                let new_id = id_issuer.get_pairing_rule_id();
+                (AnnotatedPairingOp::Add(new_id, rule), Some(new_id))
+            }
+            PairingOp::Remove(id) => (AnnotatedPairingOp::Remove(id), None),
+            PairingOp::Update(id, rule) => (AnnotatedPairingOp::Update(id, rule), None),
         }
     }
 }

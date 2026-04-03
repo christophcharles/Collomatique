@@ -18,17 +18,19 @@ pub mod ids;
 use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
-    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId, TeacherId,
+    WeekPatternId,
 };
 pub mod ops;
 use ops::{
-    AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPeriodOp,
-    AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
+    AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPairingOp,
+    AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
     AnnotatedWeekPatternOp,
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
-    MainScriptOp, Op, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    MainScriptOp, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp,
+    WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -41,6 +43,7 @@ pub mod colloscopes;
 pub mod export_config;
 pub mod group_lists;
 pub mod incompats;
+pub mod pairings;
 pub mod periods;
 pub mod settings;
 pub mod slots;
@@ -266,6 +269,10 @@ pub enum PeriodError {
     /// The slot in colloscope is incompatible with the new period
     #[error("slot {0:?} in colloscope is not compatible with the new period")]
     NotCompatibleSlotInColloscope(SlotId),
+
+    /// The period is referenced by a pairing rule
+    #[error("period id ({0:?}) is referenced by pairing rule {1:?}")]
+    PeriodIsReferencedByPairingRule(PeriodId, PairingRuleId),
 }
 
 /// Errors for subject operations
@@ -330,6 +337,10 @@ pub enum SubjectError {
     /// The subject still has balancing options
     #[error("subject id {0:?} still has balancing options")]
     SubjectStillHasBalancingOptions(SubjectId),
+
+    /// The subject is referenced by a pairing rule
+    #[error("subject id ({0:?}) is referenced by pairing rule {1:?}")]
+    SubjectIsReferencedByPairingRule(SubjectId, PairingRuleId),
 }
 
 /// Errors for teacher operations
@@ -595,6 +606,32 @@ pub enum BalancingError {
     SubjectHasNoInterrogation(SubjectId),
 }
 
+/// Errors for pairing rule operations
+///
+/// These errors can be returned when trying to modify [Data] with a pairing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PairingError {
+    /// A pairing rule id is invalid
+    #[error("invalid pairing rule id ({0:?})")]
+    InvalidPairingRuleId(PairingRuleId),
+
+    /// The pairing rule id already exists
+    #[error("pairing rule id ({0:?}) already exists")]
+    PairingRuleIdAlreadyExists(PairingRuleId),
+
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Antecedent and consequent subjects are the same
+    #[error("antecedent and consequent subjects are the same ({0:?})")]
+    SameSubjectInBothParts(SubjectId),
+}
+
 /// Errors for main script operations
 ///
 /// These errors can be returned when trying to modify [Data] with a main script op.
@@ -694,6 +731,8 @@ pub enum Error {
     #[error(transparent)]
     Settings(#[from] SettingsError),
     #[error(transparent)]
+    Pairing(#[from] PairingError),
+    #[error(transparent)]
     Balancing(#[from] BalancingError),
     #[error(transparent)]
     MainScript(#[from] MainScriptError),
@@ -738,6 +777,7 @@ pub enum NewId {
     SlotId(SlotId),
     IncompatId(IncompatId),
     GroupListId(GroupListId),
+    PairingRuleId(PairingRuleId),
 }
 
 impl From<StudentId> for NewId {
@@ -785,6 +825,12 @@ impl From<IncompatId> for NewId {
 impl From<GroupListId> for NewId {
     fn from(value: GroupListId) -> Self {
         NewId::GroupListId(value)
+    }
+}
+
+impl From<PairingRuleId> for NewId {
+    fn from(value: PairingRuleId) -> Self {
+        NewId::PairingRuleId(value)
     }
 }
 
@@ -837,6 +883,8 @@ pub enum InvariantError {
     InvalidSubjectIdInBalancing,
     #[error("balancing options given for subject without interrogations")]
     BalancingForSubjectWithoutInterrogations,
+    #[error("invalid pairing rule")]
+    InvalidPairingRule,
 }
 
 impl InMemoryData for Data {
@@ -877,6 +925,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => {
                 Ok(AnnotatedOp::Incompat(self.build_rev_incompat(incompat_op)?))
             }
+            AnnotatedOp::Pairing(pairing_op) => {
+                Ok(AnnotatedOp::Pairing(self.build_rev_pairing(pairing_op)?))
+            }
             AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
                 self.build_rev_group_list(group_list_op)?,
             )),
@@ -912,6 +963,7 @@ impl InMemoryData for Data {
             }
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
+            AnnotatedOp::Pairing(pairing_op) => self.apply_pairing(pairing_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::Balancing(balancing_op) => self.apply_balancing(balancing_op)?,
@@ -1275,6 +1327,14 @@ impl Data {
                     }
                 }
 
+                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedByPairingRule(
+                            *period_id, *rule_id,
+                        ));
+                    }
+                }
+
                 let period_assignments = self
                     .inner_data
                     .params
@@ -1517,6 +1577,14 @@ impl Data {
 
                 if self.inner_data.params.balancing.subjects.contains_key(id) {
                     return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
+                }
+
+                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                    if rule.antecedent.subject_id == *id || rule.consequent.subject_id == *id {
+                        return Err(SubjectError::SubjectIsReferencedByPairingRule(
+                            *id, *rule_id,
+                        ));
+                    }
                 }
 
                 for (period_id, subject_map) in
@@ -2326,6 +2394,64 @@ impl Data {
                 };
 
                 *incompat = new_incompat.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Apply pairing rule operations
+    fn apply_pairing(
+        &mut self,
+        pairing_op: &AnnotatedPairingOp,
+    ) -> std::result::Result<(), PairingError> {
+        match pairing_op {
+            AnnotatedPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .contains_key(new_id)
+                {
+                    return Err(PairingError::PairingRuleIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_pairing_rule(rule)?;
+
+                self.inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .insert(*new_id, rule.clone());
+
+                Ok(())
+            }
+            AnnotatedPairingOp::Remove(id) => {
+                if !self
+                    .inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .contains_key(id)
+                {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                }
+
+                self.inner_data.params.pairings.pairing_rule_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedPairingOp::Update(id, new_rule) => {
+                self.inner_data.params.validate_pairing_rule(new_rule)?;
+
+                let Some(rule) = self.inner_data.params.pairings.pairing_rule_map.get_mut(id)
+                else {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                };
+
+                *rule = new_rule.clone();
 
                 Ok(())
             }
@@ -3364,6 +3490,34 @@ impl Data {
                     *incompat_id,
                     old_incompat.clone(),
                 ))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a pairing rule operation
+    fn build_rev_pairing(
+        &self,
+        pairing_op: &AnnotatedPairingOp,
+    ) -> std::result::Result<AnnotatedPairingOp, PairingError> {
+        match pairing_op {
+            AnnotatedPairingOp::Add(new_id, _rule) => Ok(AnnotatedPairingOp::Remove(*new_id)),
+            AnnotatedPairingOp::Remove(id) => {
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
+                else {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedPairingOp::Add(*id, old_rule.clone()))
+            }
+            AnnotatedPairingOp::Update(id, _new_rule) => {
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
+                else {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedPairingOp::Update(*id, old_rule.clone()))
             }
         }
     }

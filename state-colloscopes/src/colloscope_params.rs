@@ -3,7 +3,8 @@
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
 use crate::ids::{
-    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId, TeacherId,
+    WeekPatternId,
 };
 
 use super::*;
@@ -30,6 +31,8 @@ pub struct Parameters {
     pub incompats: incompats::Incompats,
     pub group_lists: group_lists::GroupLists,
     pub settings: settings::Settings,
+    #[serde(default)]
+    pub pairings: pairings::Pairings,
     #[serde(default)]
     pub balancing: balancing::Balancing,
     pub main_script: Option<String>,
@@ -197,6 +200,7 @@ impl Parameters {
             });
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
+        let pairing_rule_ids = self.pairings.pairing_rule_map.keys().map(|x| x.inner());
 
         student_ids
             .chain(period_ids)
@@ -206,6 +210,7 @@ impl Parameters {
             .chain(slot_ids)
             .chain(incompat_ids)
             .chain(group_list_ids)
+            .chain(pairing_rule_ids)
     }
 
     /// USED INTERNALLY
@@ -704,6 +709,72 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
+    /// Checks that a pairing rule is valid
+    fn validate_pairing_rule_internal(
+        rule: &pairings::PairingRule,
+        subject_ids: &BTreeSet<SubjectId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), PairingError> {
+        if rule.antecedent.subject_id == rule.consequent.subject_id {
+            return Err(PairingError::SameSubjectInBothParts(
+                rule.antecedent.subject_id,
+            ));
+        }
+        if !subject_ids.contains(&rule.antecedent.subject_id) {
+            return Err(PairingError::InvalidSubjectId(rule.antecedent.subject_id));
+        }
+        if !subject_ids.contains(&rule.consequent.subject_id) {
+            return Err(PairingError::InvalidSubjectId(rule.consequent.subject_id));
+        }
+        for period_id in &rule.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(PairingError::InvalidPeriodId(*period_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a pairing rule before commiting a pairing op
+    pub(crate) fn validate_pairing_rule(
+        &self,
+        rule: &pairings::PairingRule,
+    ) -> Result<(), PairingError> {
+        let subject_ids = self.build_subject_ids();
+        let period_ids = self.build_period_ids();
+
+        Self::validate_pairing_rule_internal(rule, &subject_ids, &period_ids)
+    }
+
+    /// Promotes an u64 to a [PairingRuleId] if it is valid
+    pub fn validate_pairing_rule_id(&self, id: u64) -> Option<PairingRuleId> {
+        let temp_id = unsafe { PairingRuleId::new(id) };
+        if self.pairings.pairing_rule_map.contains_key(&temp_id) {
+            return Some(temp_id);
+        }
+
+        None
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in pairings data
+    fn check_pairings_data_consistency(
+        &self,
+        subject_ids: &BTreeSet<SubjectId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
+        for rule in self.pairings.pairing_rule_map.values() {
+            if Self::validate_pairing_rule_internal(rule, subject_ids, period_ids).is_err() {
+                return Err(InvariantError::InvalidPairingRule);
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
     /// checks all the invariants in balancing data
     fn check_balancing_data_consistency(&self) -> Result<(), InvariantError> {
         match self.validate_balancing(&self.balancing) {
@@ -841,6 +912,7 @@ impl Parameters {
         self.check_assignments_data_consistency(&period_ids)?;
         self.check_slots_data_consistency(&week_pattern_ids)?;
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
+        self.check_pairings_data_consistency(&subject_ids, &period_ids)?;
         self.check_group_lists_data_consistency()?;
         self.check_settings_data_consistency()?;
         self.check_balancing_data_consistency()?;

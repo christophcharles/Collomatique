@@ -195,6 +195,13 @@ impl Id for IncompatId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GroupListId(u64);
 
+/// This type represents an ID for a pairing rule
+///
+/// Every pairing rule gets a unique ID. IDs then identify pairing rules
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct PairingRuleId(u64);
+
 impl Id for GroupListId {
     fn inner(&self) -> u64 {
         self.0
@@ -207,6 +214,21 @@ impl Id for GroupListId {
     /// call this function directly
     unsafe fn new(value: u64) -> GroupListId {
         GroupListId(value)
+    }
+}
+
+impl Id for PairingRuleId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
+    unsafe fn new(value: u64) -> PairingRuleId {
+        PairingRuleId(value)
     }
 }
 
@@ -270,5 +292,10 @@ impl IdIssuer {
     /// Get a new unused ID for a group list
     pub fn get_group_list_id(&mut self) -> GroupListId {
         GroupListId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a pairing rule
+    pub fn get_pairing_rule_id(&mut self) -> PairingRuleId {
+        PairingRuleId(self.helper.get_new_id().inner())
     }
 }

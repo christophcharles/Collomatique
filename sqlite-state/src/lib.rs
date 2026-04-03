@@ -8,14 +8,15 @@ use std::num::NonZeroU32;
 
 use collomatique_state_colloscopes::{
     InnerData, PersonWithContact, assignments, balancing, colloscope_params, colloscopes,
-    export_config, group_lists, ids, incompats, periods, settings, slots, soft_param, students,
-    subjects, teachers, week_patterns,
+    export_config, group_lists, ids, incompats, pairings, periods, settings, slots, soft_param,
+    students, subjects, teachers, week_patterns,
 };
 use collomatique_time::{
     NonZeroMinutes, SlotStart, SlotWithDuration, WeekStart, Weekday, WholeMinuteTime,
 };
 use ids::{
-    GroupListId, Id, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
+    GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId, TeacherId,
+    WeekPatternId,
 };
 use sqlx::{Row, SqlitePool};
 use thiserror::Error;
@@ -148,6 +149,9 @@ pub async fn inner_data_to_sqlite(pool: &SqlitePool, data: &InnerData) -> Result
 
     // Insert balancing
     insert_balancing(&mut tx, &data.params.balancing).await?;
+
+    // Insert pairings
+    insert_pairings(&mut tx, &data.params.pairings).await?;
 
     // Insert colloscope data
     insert_colloscope(&mut tx, &data.colloscope, &data.params).await?;
@@ -870,6 +874,41 @@ async fn insert_balancing(
     Ok(())
 }
 
+async fn insert_pairings(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    pairings: &pairings::Pairings,
+) -> Result<(), Error> {
+    for (rule_id, rule) in &pairings.pairing_rule_map {
+        let id = rule_id.inner() as i64;
+
+        sqlx::query(
+            "INSERT INTO pairing_rules (id, antecedent_subject_id, antecedent_should_have, consequent_subject_id, consequent_should_have, soft)
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(rule.antecedent.subject_id.inner() as i64)
+        .bind(rule.antecedent.should_have as i64)
+        .bind(rule.consequent.subject_id.inner() as i64)
+        .bind(rule.consequent.should_have as i64)
+        .bind(rule.soft as i64)
+        .execute(&mut **tx)
+        .await?;
+
+        for period_id in &rule.excluded_periods {
+            sqlx::query(
+                "INSERT INTO pairing_rule_excluded_periods (pairing_rule_id, period_id)
+                 VALUES (?, ?)",
+            )
+            .bind(id)
+            .bind(period_id.inner() as i64)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    Ok(())
+}
+
 async fn insert_colloscope(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     colloscope: &colloscopes::Colloscope,
@@ -1250,6 +1289,7 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
     let assignments = read_assignments(pool).await?;
     let settings = read_settings(pool).await?;
     let balancing = read_balancing(pool).await?;
+    let pairings = read_pairings(pool).await?;
     let main_script = read_main_script(pool).await?;
 
     Ok(colloscope_params::Parameters {
@@ -1263,6 +1303,7 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
         incompats,
         group_lists,
         settings,
+        pairings,
         balancing,
         main_script,
     })
@@ -1961,8 +2002,21 @@ async fn read_settings(pool: &SqlitePool) -> Result<settings::Settings, Error> {
     })
 }
 
-type BalancingGlobalRow = (Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>);
-type BalancingSubjectRow = (i64, Option<i64>, Option<i64>, Option<i64>, Option<i64>, Option<i64>);
+type BalancingGlobalRow = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+type BalancingSubjectRow = (
+    i64,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
 
 async fn read_balancing(pool: &SqlitePool) -> Result<balancing::Balancing, Error> {
     let global_row: Option<BalancingGlobalRow> = sqlx::query_as(
@@ -2004,6 +2058,49 @@ async fn read_balancing(pool: &SqlitePool) -> Result<balancing::Balancing, Error
     }
 
     Ok(balancing::Balancing { global, subjects })
+}
+
+async fn read_pairings(pool: &SqlitePool) -> Result<pairings::Pairings, Error> {
+    let rule_rows: Vec<(i64, i64, i64, i64, i64, i64)> = sqlx::query_as(
+        "SELECT id, antecedent_subject_id, antecedent_should_have, consequent_subject_id, consequent_should_have, soft
+         FROM pairing_rules",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut pairing_rule_map = BTreeMap::new();
+
+    for (rule_id, ant_subject, ant_should_have, con_subject, con_should_have, soft) in rule_rows {
+        let excluded_rows: Vec<(i64,)> = sqlx::query_as(
+            "SELECT period_id FROM pairing_rule_excluded_periods WHERE pairing_rule_id = ?",
+        )
+        .bind(rule_id)
+        .fetch_all(pool)
+        .await?;
+
+        let excluded_periods: BTreeSet<PeriodId> = excluded_rows
+            .into_iter()
+            .map(|(pid,)| unsafe { PeriodId::new(pid as u64) })
+            .collect();
+
+        let rule = pairings::PairingRule {
+            antecedent: pairings::RulePart {
+                subject_id: unsafe { SubjectId::new(ant_subject as u64) },
+                should_have: ant_should_have != 0,
+            },
+            consequent: pairings::RulePart {
+                subject_id: unsafe { SubjectId::new(con_subject as u64) },
+                should_have: con_should_have != 0,
+            },
+            excluded_periods,
+            soft: soft != 0,
+        };
+
+        let id = unsafe { PairingRuleId::new(rule_id as u64) };
+        pairing_rule_map.insert(id, rule);
+    }
+
+    Ok(pairings::Pairings { pairing_rule_map })
 }
 
 async fn read_main_script(pool: &SqlitePool) -> Result<Option<String>, Error> {

@@ -27,6 +27,10 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::PeriodId,
     ),
     LooseBalancingOptionsForSubject(collomatique_state_colloscopes::SubjectId),
+    LoosePairingRulesForSubject(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PairingRuleId,
+    ),
 }
 
 impl SubjectsUpdateWarning {
@@ -189,6 +193,21 @@ impl SubjectsUpdateWarning {
                 };
                 Some(format!(
                     "Perte des paramètres d'équilibrage pour la matière \"{}\"",
+                    subject.parameters.name,
+                ))
+            }
+            Self::LoosePairingRulesForSubject(subject_id, _rule_id) => {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Suppression d'un appariement référençant la matière \"{}\"",
                     subject.parameters.name,
                 ))
             }
@@ -676,6 +695,26 @@ impl SubjectsUpdateOp {
                             *subject_id,
                         )),
                     });
+                }
+
+                for (rule_id, rule) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                {
+                    if rule.antecedent.subject_id == *subject_id
+                        || rule.consequent.subject_id == *subject_id
+                    {
+                        return Some(CleaningOp {
+                            warning: SubjectsUpdateWarning::LoosePairingRulesForSubject(
+                                *subject_id,
+                                *rule_id,
+                            ),
+                            op: UpdateOp::Pairings(PairingsUpdateOp::DeletePairingRule(*rule_id)),
+                        });
+                    }
                 }
 
                 None
