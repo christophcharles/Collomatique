@@ -208,18 +208,18 @@ impl Rule {
         let ant_desc = self.slot_desc(&self.data.rule.antecedent.slot_id);
         let con_desc = self.slot_desc(&self.data.rule.consequent.slot_id);
         let ant_cond = if self.data.rule.antecedent.should_have {
-            "Utilisé"
+            "utilisé"
         } else {
-            "Non utilisé"
+            "non utilisé"
         };
         let con_cond = if self.data.rule.consequent.should_have {
-            "Utilisé"
+            "utilisé"
         } else {
-            "Non utilisé"
+            "non utilisé"
         };
         let soft_text = if self.data.rule.soft { " (souple)" } else { "" };
         format!(
-            "{} [{}] \u{27F9} {} [{}]{}",
+            "[{}] {} \u{27F9} [{}] {}{}",
             ant_cond, ant_desc, con_cond, con_desc, soft_text
         )
     }
