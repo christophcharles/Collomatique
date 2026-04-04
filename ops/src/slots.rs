@@ -3,6 +3,10 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SlotsUpdateWarning {
     LooseColloscopeDataForSlot(collomatique_state_colloscopes::SlotId),
+    LooseSlotPairingRulesForSlot(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::SlotPairingRuleId,
+    ),
 }
 
 impl SlotsUpdateWarning {
@@ -61,6 +65,10 @@ impl SlotsUpdateWarning {
                     slot.start_time.start_time.into_inner(),
                 ))
             }
+            Self::LooseSlotPairingRulesForSlot(_slot_id, _rule_id) => Some(
+                "Suppression de l'appariement de créneaux référençant le créneau supprimé"
+                    .to_string(),
+            ),
         }
     }
 }
@@ -295,6 +303,25 @@ impl SlotsUpdateOp {
                                 )),
                             });
                         }
+                    }
+                }
+
+                for (rule_id, rule) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                {
+                    if rule.antecedent.slot_id == *slot_id || rule.consequent.slot_id == *slot_id {
+                        return Some(CleaningOp {
+                            warning: SlotsUpdateWarning::LooseSlotPairingRulesForSlot(
+                                *slot_id, *rule_id,
+                            ),
+                            op: UpdateOp::SlotPairings(
+                                SlotPairingsUpdateOp::DeleteSlotPairingRule(*rule_id),
+                            ),
+                        });
                     }
                 }
 

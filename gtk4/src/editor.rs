@@ -41,6 +41,7 @@ mod main_script;
 mod pairings;
 mod run_second_instance;
 mod settings;
+mod slot_pairings;
 mod slots;
 mod students;
 mod subjects;
@@ -129,16 +130,17 @@ enum PanelNumbers {
     Teachers = 2,
     WeekPatterns = 3,
     Slots = 4,
-    Incompats = 5,
-    Students = 6,
-    Assignments = 7,
-    GroupLists = 8,
-    Pairings = 9,
-    Balancing = 10,
-    ExtraSettings = 11,
-    MainScript = 12,
-    Colloscope = 13,
-    Export = 14,
+    SlotPairings = 5,
+    Incompats = 6,
+    Students = 7,
+    Assignments = 8,
+    GroupLists = 9,
+    Pairings = 10,
+    Balancing = 11,
+    ExtraSettings = 12,
+    MainScript = 13,
+    Colloscope = 14,
+    Export = 15,
 }
 
 impl PanelNumbers {
@@ -149,6 +151,7 @@ impl PanelNumbers {
             PanelNumbers::Teachers,
             PanelNumbers::WeekPatterns,
             PanelNumbers::Slots,
+            PanelNumbers::SlotPairings,
             PanelNumbers::Incompats,
             PanelNumbers::Students,
             PanelNumbers::Assignments,
@@ -172,6 +175,7 @@ impl PanelNumbers {
             PanelNumbers::Students => "students",
             PanelNumbers::Assignments => "assignments",
             PanelNumbers::Slots => "slots",
+            PanelNumbers::SlotPairings => "slot_pairings",
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
             PanelNumbers::Pairings => "pairings",
@@ -192,9 +196,10 @@ impl PanelNumbers {
             PanelNumbers::Students => "Élèves",
             PanelNumbers::Assignments => "Inscriptions dans les matières",
             PanelNumbers::Slots => "Créneaux de colles",
+            PanelNumbers::SlotPairings => "Appariements de créneaux",
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
-            PanelNumbers::Pairings => "Appariements",
+            PanelNumbers::Pairings => "Appariements des matières",
             PanelNumbers::Balancing => "Équilibrage",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
             PanelNumbers::MainScript => "Script ColloML (avancé)",
@@ -237,6 +242,7 @@ pub struct EditorPanel {
     assignments: Controller<assignments::Assignments>,
     week_patterns: Controller<week_patterns::WeekPatterns>,
     slots: Controller<slots::Slots>,
+    slot_pairings: Controller<slot_pairings::SlotPairings>,
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
     pairings: Controller<pairings::Pairings>,
@@ -397,6 +403,31 @@ impl EditorPanel {
                 self.data.get_data().get_inner_data().params.slots.clone(),
             ))
             .unwrap();
+        self.slot_pairings
+            .sender()
+            .send(slot_pairings::SlotPairingsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .clone(),
+                self.data.get_data().get_inner_data().params.slots.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slot_pairings
+                    .clone(),
+                self.data.get_data().get_inner_data().params.periods.clone(),
+            ))
+            .unwrap();
         self.incompats
             .sender()
             .send(incompats::IncompatsInput::Update(
@@ -553,6 +584,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::Pairings => Some(PanelNumbers::Pairings),
+            collomatique_ops::OpCategory::SlotPairings => Some(PanelNumbers::SlotPairings),
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
@@ -794,6 +826,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Slots(op))
             });
 
+        let slot_pairings = slot_pairings::SlotPairings::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::SlotPairings(op))
+            });
+
         let incompats = incompats::Incompats::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
@@ -914,6 +952,7 @@ impl Component for EditorPanel {
             assignments,
             week_patterns,
             slots,
+            slot_pairings,
             incompats,
             group_lists,
             pairings,
@@ -937,6 +976,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Students => model.students.widget().clone().upcast(),
                 PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
                 PanelNumbers::Slots => model.slots.widget().clone().upcast(),
+                PanelNumbers::SlotPairings => model.slot_pairings.widget().clone().upcast(),
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
                 PanelNumbers::Pairings => model.pairings.widget().clone().upcast(),

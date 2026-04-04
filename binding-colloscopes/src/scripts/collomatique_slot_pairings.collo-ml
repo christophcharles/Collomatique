@@ -1,0 +1,352 @@
+import "collomatique_db" as *;
+import "collomatique_vars" as *;
+import "collomatique_types" as *;
+import "collomatique_queries" as *;
+
+// --- Week iteration helper ---
+
+query subject_weeks_in_range(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> [GlobalWeek] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+    AND NOT EXISTS (
+        SELECT 1 FROM subject_excluded_periods sep
+        WHERE sep.subject_id = ?1 AND sep.period_id = pw.period_id
+    )
+)
+SELECT global_week_number AS id FROM ordered_weeks
+WHERE global_week_number >= ?2 AND global_week_number <= ?3
+";
+
+// --- Per-week queries (internal) ---
+
+query slot_count_in_week_internal(db: Db, subject_id: SubjectId, slot_id: SlotId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM ordered_weeks ow
+JOIN slots s ON s.id = ?2
+WHERE s.subject_id = ?1
+AND ow.global_week_number = ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+query teacher_count_in_week_internal(db: Db, subject_id: SubjectId, teacher_id: TeacherId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?1
+AND s.teacher_id = ?2
+AND ow.global_week_number = ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+query tot_count_in_week_internal(db: Db, subject_id: SubjectId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?1
+AND ow.global_week_number = ?2
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+// --- Per-week public functions ---
+
+pub let slot_count_in_week(db: Db, subject_id: SubjectId, slot_id: SlotId, week: GlobalWeek) -> Int =
+    slot_count_in_week_internal(db, subject_id, slot_id, week) ?? 0;
+
+pub let teacher_count_in_week(db: Db, subject_id: SubjectId, teacher_id: TeacherId, week: GlobalWeek) -> Int =
+    teacher_count_in_week_internal(db, subject_id, teacher_id, week) ?? 0;
+
+pub let tot_count_in_week(db: Db, subject_id: SubjectId, week: GlobalWeek) -> Int =
+    tot_count_in_week_internal(db, subject_id, week) ?? 0;
+
+// --- Range functions (composed from per-week) ---
+
+pub let nb_teach(db: Db, subject_id: SubjectId, teacher_id: TeacherId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        teacher_count_in_week(db, subject_id, teacher_id, week)
+    };
+
+pub let nb_tot(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        tot_count_in_week(db, subject_id, week)
+    };
+
+pub let nb_slot(db: Db, subject_id: SubjectId, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        slot_count_in_week(db, subject_id, slot_id, week)
+    };
+
+// ============================================================================
+// Slot pairing constraints
+// ============================================================================
+
+// --- Types ---
+
+type SlotPairingRuleData = {
+    slot_pairing_rule_id: Int,
+    antecedent_slot_id: SlotId,
+    antecedent_should_have: Int,
+    consequent_slot_id: SlotId,
+    consequent_should_have: Int,
+    global_week: ?GlobalWeek,
+    groups_per_interrogation_max: Int,
+};
+
+// --- Queries ---
+
+/// Get all (rule, week) tuples where a hard slot pairing rule applies.
+/// Only returns weeks where BOTH slots are active.
+query get_hard_slot_pairing_data(db: Db) -> [SlotPairingRuleData] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT
+    spr.id AS slot_pairing_rule_id,
+    spr.antecedent_slot_id,
+    spr.antecedent_should_have,
+    spr.consequent_slot_id,
+    spr.consequent_should_have,
+    ow.global_week_number AS global_week,
+    sip.groups_per_interrogation_max
+FROM slot_pairing_rules spr
+JOIN slots s_ant ON s_ant.id = spr.antecedent_slot_id
+JOIN slots s_con ON s_con.id = spr.consequent_slot_id
+JOIN subject_interrogation_params sip ON sip.subject_id = s_ant.subject_id
+CROSS JOIN ordered_weeks ow
+WHERE spr.soft = 0
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s_ant.subject_id AND sep.period_id = ow.period_id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM slot_pairing_rule_excluded_periods sprep
+    WHERE sprep.slot_pairing_rule_id = spr.id AND sprep.period_id = ow.period_id
+)
+AND (
+    s_ant.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s_ant.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND (
+    s_con.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s_con.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+";
+
+/// Get all (rule, week) tuples where a soft slot pairing rule applies.
+query get_soft_slot_pairing_data(db: Db) -> [SlotPairingRuleData] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT
+    spr.id AS slot_pairing_rule_id,
+    spr.antecedent_slot_id,
+    spr.antecedent_should_have,
+    spr.consequent_slot_id,
+    spr.consequent_should_have,
+    ow.global_week_number AS global_week,
+    sip.groups_per_interrogation_max
+FROM slot_pairing_rules spr
+JOIN slots s_ant ON s_ant.id = spr.antecedent_slot_id
+JOIN slots s_con ON s_con.id = spr.consequent_slot_id
+JOIN subject_interrogation_params sip ON sip.subject_id = s_ant.subject_id
+CROSS JOIN ordered_weeks ow
+WHERE spr.soft = 1
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s_ant.subject_id AND sep.period_id = ow.period_id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM slot_pairing_rule_excluded_periods sprep
+    WHERE sprep.slot_pairing_rule_id = spr.id AND sprep.period_id = ow.period_id
+)
+AND (
+    s_ant.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s_ant.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND (
+    s_con.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s_con.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+";
+
+// --- LinExpr helper ---
+
+/// Count of groups registered for a slot on a given week.
+/// 0 if unused, >= 1 if used.
+let slot_group_count(db: Db, slot_id: SlotId, global_week: GlobalWeek) -> LinExpr =
+    sum group in groups_for_interrogation(db, slot_id, global_week) {
+        $GroupInInterrogation(slot_id, global_week, group)
+    };
+
+// --- Individual constraint forms ---
+
+/// Si le créneau `ant_slot` est utilisé pendant la semaine `global_week`, le créneau `con_slot` doit aussi être utilisé
+let enforce_used_implies_used(db: Db, ant_slot: SlotId, con_slot: SlotId, global_week: GlobalWeek, max: Int) -> Constraint =
+    slot_group_count(db, ant_slot, global_week)
+        <== max * slot_group_count(db, con_slot, global_week);
+
+/// Si le créneau `ant_slot` est utilisé pendant la semaine `global_week`, le créneau `con_slot` ne doit pas être utilisé
+let enforce_used_implies_not_used(db: Db, ant_slot: SlotId, con_slot: SlotId, global_week: GlobalWeek, max: Int) -> Constraint =
+    if max == 1 {
+        slot_group_count(db, con_slot, global_week)
+            <== max * (1 - slot_group_count(db, ant_slot, global_week))
+    } else {
+        slot_group_count(db, con_slot, global_week)
+            <== max * (1 - $InterrogationHasGroups(db, ant_slot, global_week))
+    };
+
+/// Si le créneau `ant_slot` n'est pas utilisé pendant la semaine `global_week`, le créneau `con_slot` doit être utilisé
+let enforce_not_used_implies_used(db: Db, ant_slot: SlotId, con_slot: SlotId, global_week: GlobalWeek) -> Constraint =
+    slot_group_count(db, ant_slot, global_week)
+        + slot_group_count(db, con_slot, global_week) >== 1;
+
+/// Si le créneau `ant_slot` n'est pas utilisé pendant la semaine `global_week`, le créneau `con_slot` ne doit pas être utilisé non plus
+let enforce_not_used_implies_not_used(db: Db, ant_slot: SlotId, con_slot: SlotId, global_week: GlobalWeek, max: Int) -> Constraint =
+    slot_group_count(db, con_slot, global_week)
+        <== max * slot_group_count(db, ant_slot, global_week);
+
+// --- Core dispatch ---
+
+let enforce_slot_pairing_rule(db: Db, data: SlotPairingRuleData) -> Constraint =
+    let global_week = data.global_week cast! GlobalWeek {
+    let max = data.groups_per_interrogation_max {
+        if data.antecedent_should_have == 1 {
+            if data.consequent_should_have == 1 {
+                enforce_used_implies_used(db, data.antecedent_slot_id, data.consequent_slot_id, global_week, max)
+            } else {
+                enforce_used_implies_not_used(db, data.antecedent_slot_id, data.consequent_slot_id, global_week, max)
+            }
+        } else {
+            if data.consequent_should_have == 1 {
+                enforce_not_used_implies_used(db, data.antecedent_slot_id, data.consequent_slot_id, global_week)
+            } else {
+                enforce_not_used_implies_not_used(db, data.antecedent_slot_id, data.consequent_slot_id, global_week, max)
+            }
+        }
+    }};
+
+// --- Public constraint and objective ---
+
+pub let constraint(db: Db) -> Constraint =
+    forall data in get_hard_slot_pairing_data(db) {
+        enforce_slot_pairing_rule(db, data)
+    };
+
+pub let objective(db: Db) -> [Constraint] =
+    [enforce_slot_pairing_rule(db, data)
+     for data in get_soft_slot_pairing_data(db)];

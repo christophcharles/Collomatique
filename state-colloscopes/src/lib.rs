@@ -18,19 +18,19 @@ pub mod ids;
 use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
-    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId, TeacherId,
-    WeekPatternId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    SubjectId, TeacherId, WeekPatternId,
 };
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPairingOp,
-    AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
-    AnnotatedWeekPatternOp,
+    AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedSlotPairingOp, AnnotatedStudentOp,
+    AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
-    MainScriptOp, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp,
-    WeekPatternOp,
+    MainScriptOp, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp,
+    TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -46,6 +46,7 @@ pub mod incompats;
 pub mod pairings;
 pub mod periods;
 pub mod settings;
+pub mod slot_pairings;
 pub mod slots;
 pub mod soft_param;
 pub mod students;
@@ -273,6 +274,10 @@ pub enum PeriodError {
     /// The period is referenced by a pairing rule
     #[error("period id ({0:?}) is referenced by pairing rule {1:?}")]
     PeriodIsReferencedByPairingRule(PeriodId, PairingRuleId),
+
+    /// The period is referenced by a slot pairing rule
+    #[error("period id ({0:?}) is referenced by slot pairing rule {1:?}")]
+    PeriodIsReferencedBySlotPairingRule(PeriodId, SlotPairingRuleId),
 }
 
 /// Errors for subject operations
@@ -481,6 +486,10 @@ pub enum SlotError {
     /// The slot in colloscope is incomaptible with the new week pattern
     #[error("slot {0:?} in colloscope is not compatible with the new week pattern {1:?}")]
     NotCompatibleSlotInColloscope(SlotId, Option<WeekPatternId>),
+
+    /// The slot is referenced by a slot pairing rule
+    #[error("slot id ({0:?}) is referenced by a slot pairing rule ({1:?})")]
+    SlotIsReferencedBySlotPairingRule(SlotId, SlotPairingRuleId),
 }
 
 /// Errors for schedule incompatibility operations
@@ -632,6 +641,25 @@ pub enum PairingError {
     SameSubjectInBothParts(SubjectId),
 }
 
+/// Errors for slot pairing rule operations
+///
+/// These errors can be returned when trying to modify [Data] with a slot pairing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotPairingError {
+    #[error("invalid slot pairing rule id ({0:?})")]
+    InvalidSlotPairingRuleId(SlotPairingRuleId),
+    #[error("slot pairing rule id ({0:?}) already exists")]
+    SlotPairingRuleIdAlreadyExists(SlotPairingRuleId),
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+    #[error("same slot in both parts ({0:?})")]
+    SameSlotInBothParts(SlotId),
+    #[error("slots {0:?} and {1:?} do not belong to the same subject")]
+    SlotsNotInSameSubject(SlotId, SlotId),
+}
+
 /// Errors for main script operations
 ///
 /// These errors can be returned when trying to modify [Data] with a main script op.
@@ -733,6 +761,8 @@ pub enum Error {
     #[error(transparent)]
     Pairing(#[from] PairingError),
     #[error(transparent)]
+    SlotPairing(#[from] SlotPairingError),
+    #[error(transparent)]
     Balancing(#[from] BalancingError),
     #[error(transparent)]
     MainScript(#[from] MainScriptError),
@@ -778,6 +808,7 @@ pub enum NewId {
     IncompatId(IncompatId),
     GroupListId(GroupListId),
     PairingRuleId(PairingRuleId),
+    SlotPairingRuleId(SlotPairingRuleId),
 }
 
 impl From<StudentId> for NewId {
@@ -834,6 +865,12 @@ impl From<PairingRuleId> for NewId {
     }
 }
 
+impl From<SlotPairingRuleId> for NewId {
+    fn from(value: SlotPairingRuleId) -> Self {
+        NewId::SlotPairingRuleId(value)
+    }
+}
+
 /// Errors for students operations
 ///
 /// These errors can be returned when trying to modify [Data] with a student op.
@@ -885,6 +922,8 @@ pub enum InvariantError {
     BalancingForSubjectWithoutInterrogations,
     #[error("invalid pairing rule")]
     InvalidPairingRule,
+    #[error("invalid slot pairing rule")]
+    InvalidSlotPairingRule,
 }
 
 impl InMemoryData for Data {
@@ -928,6 +967,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Pairing(pairing_op) => {
                 Ok(AnnotatedOp::Pairing(self.build_rev_pairing(pairing_op)?))
             }
+            AnnotatedOp::SlotPairing(slot_pairing_op) => Ok(AnnotatedOp::SlotPairing(
+                self.build_rev_slot_pairing(slot_pairing_op)?,
+            )),
             AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
                 self.build_rev_group_list(group_list_op)?,
             )),
@@ -964,6 +1006,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::Pairing(pairing_op) => self.apply_pairing(pairing_op)?,
+            AnnotatedOp::SlotPairing(slot_pairing_op) => {
+                self.apply_slot_pairing(slot_pairing_op)?
+            }
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::Balancing(balancing_op) => self.apply_balancing(balancing_op)?,
@@ -1330,6 +1375,14 @@ impl Data {
                 for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByPairingRule(
+                            *period_id, *rule_id,
+                        ));
+                    }
+                }
+
+                for (rule_id, rule) in &self.inner_data.params.slot_pairings.slot_pairing_rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedBySlotPairingRule(
                             *period_id, *rule_id,
                         ));
                     }
@@ -2276,6 +2329,12 @@ impl Data {
                     }
                 }
 
+                for (rule_id, rule) in &self.inner_data.params.slot_pairings.slot_pairing_rule_map {
+                    if rule.antecedent.slot_id == *id || rule.consequent.slot_id == *id {
+                        return Err(SlotError::SlotIsReferencedBySlotPairingRule(*id, *rule_id));
+                    }
+                }
+
                 let subject_slots = self
                     .inner_data
                     .params
@@ -2456,6 +2515,68 @@ impl Data {
                 Ok(())
             }
         }
+    }
+
+    fn apply_slot_pairing(
+        &mut self,
+        slot_pairing_op: &AnnotatedSlotPairingOp,
+    ) -> Result<(), SlotPairingError> {
+        match slot_pairing_op {
+            AnnotatedSlotPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .contains_key(new_id)
+                {
+                    return Err(SlotPairingError::SlotPairingRuleIdAlreadyExists(*new_id));
+                }
+
+                self.inner_data.params.validate_slot_pairing_rule(rule)?;
+
+                self.inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .insert(*new_id, rule.clone());
+            }
+            AnnotatedSlotPairingOp::Remove(id) => {
+                if !self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .contains_key(id)
+                {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                }
+
+                self.inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .remove(id);
+            }
+            AnnotatedSlotPairingOp::Update(id, new_rule) => {
+                self.inner_data
+                    .params
+                    .validate_slot_pairing_rule(new_rule)?;
+
+                let Some(rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .get_mut(id)
+                else {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                };
+
+                *rule = new_rule.clone();
+            }
+        }
+        Ok(())
     }
 
     /// Used internally
@@ -3518,6 +3639,41 @@ impl Data {
                 };
 
                 Ok(AnnotatedPairingOp::Update(*id, old_rule.clone()))
+            }
+        }
+    }
+
+    fn build_rev_slot_pairing(
+        &self,
+        slot_pairing_op: &AnnotatedSlotPairingOp,
+    ) -> Result<AnnotatedSlotPairingOp, SlotPairingError> {
+        match slot_pairing_op {
+            AnnotatedSlotPairingOp::Add(id, _rule) => Ok(AnnotatedSlotPairingOp::Remove(*id)),
+            AnnotatedSlotPairingOp::Remove(id) => {
+                let Some(old_rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .get(id)
+                else {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedSlotPairingOp::Add(*id, old_rule.clone()))
+            }
+            AnnotatedSlotPairingOp::Update(id, _new_rule) => {
+                let Some(old_rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .get(id)
+                else {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedSlotPairingOp::Update(*id, old_rule.clone()))
             }
         }
     }

@@ -38,6 +38,8 @@ pub enum Op {
     Settings(SettingsOp),
     /// Operation on pairings
     Pairing(PairingOp),
+    /// Operation on slot pairings
+    SlotPairing(SlotPairingOp),
     /// Operation on balancing
     Balancing(BalancingOp),
     /// Operation on main script
@@ -210,6 +212,20 @@ pub enum PairingOp {
     Update(PairingRuleId, pairings::PairingRule),
 }
 
+/// Slot pairing rule operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// slot pairing rules we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotPairingOp {
+    /// Add a new slot pairing rule
+    Add(slot_pairings::SlotPairingRule),
+    /// Remove a slot pairing rule
+    Remove(SlotPairingRuleId),
+    /// Update an existing slot pairing rule
+    Update(SlotPairingRuleId, slot_pairings::SlotPairingRule),
+}
+
 /// Balancing operation enumeration
 ///
 /// This is the list of all possible operations related to the
@@ -297,6 +313,8 @@ pub enum AnnotatedOp {
     Settings(AnnotatedSettingsOp),
     /// Operation on pairings
     Pairing(AnnotatedPairingOp),
+    /// Operation on slot pairings
+    SlotPairing(AnnotatedSlotPairingOp),
     /// Operation on balancing
     Balancing(AnnotatedBalancingOp),
     /// Operation on main script
@@ -364,6 +382,12 @@ impl From<AnnotatedGroupListOp> for AnnotatedOp {
 impl From<AnnotatedPairingOp> for AnnotatedOp {
     fn from(value: AnnotatedPairingOp) -> Self {
         AnnotatedOp::Pairing(value)
+    }
+}
+
+impl From<AnnotatedSlotPairingOp> for AnnotatedOp {
+    fn from(value: AnnotatedSlotPairingOp) -> Self {
+        AnnotatedOp::SlotPairing(value)
     }
 }
 
@@ -585,6 +609,24 @@ pub enum AnnotatedPairingOp {
     Update(PairingRuleId, pairings::PairingRule),
 }
 
+/// Slot pairing rule annotated operation enumeration
+///
+/// Compared to [SlotPairingOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedSlotPairingOp {
+    /// Add a slot pairing rule
+    /// First parameter is the slot pairing rule id for the new rule
+    Add(SlotPairingRuleId, slot_pairings::SlotPairingRule),
+    /// Remove an existing slot pairing rule
+    Remove(SlotPairingRuleId),
+    /// Update an existing slot pairing rule
+    Update(SlotPairingRuleId, slot_pairings::SlotPairingRule),
+}
+
 /// Settings operation enumeration
 ///
 /// Compared to [SettingsOp], this is a annotated operation,
@@ -718,6 +760,10 @@ impl AnnotatedOp {
             }
             Op::Pairing(pairing_op) => {
                 let (op, id) = AnnotatedPairingOp::annotate(pairing_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::SlotPairing(slot_pairing_op) => {
+                let (op, id) = AnnotatedSlotPairingOp::annotate(slot_pairing_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
             Op::Settings(settings_op) => {
@@ -964,6 +1010,25 @@ impl AnnotatedPairingOp {
             }
             PairingOp::Remove(id) => (AnnotatedPairingOp::Remove(id), None),
             PairingOp::Update(id, rule) => (AnnotatedPairingOp::Update(id, rule), None),
+        }
+    }
+}
+
+impl AnnotatedSlotPairingOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [SlotPairingOp].
+    fn annotate(
+        slot_pairing_op: SlotPairingOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedSlotPairingOp, Option<SlotPairingRuleId>) {
+        match slot_pairing_op {
+            SlotPairingOp::Add(rule) => {
+                let new_id = id_issuer.get_slot_pairing_rule_id();
+                (AnnotatedSlotPairingOp::Add(new_id, rule), Some(new_id))
+            }
+            SlotPairingOp::Remove(id) => (AnnotatedSlotPairingOp::Remove(id), None),
+            SlotPairingOp::Update(id, rule) => (AnnotatedSlotPairingOp::Update(id, rule), None),
         }
     }
 }
