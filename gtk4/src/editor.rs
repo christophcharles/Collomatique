@@ -553,6 +553,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::Pairings => Some(PanelNumbers::Pairings),
+            collomatique_ops::OpCategory::SlotPairings => None,
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),

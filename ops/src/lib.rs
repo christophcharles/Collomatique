@@ -36,6 +36,8 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod pairings;
 pub use pairings::*;
+pub mod slot_pairings;
+pub use slot_pairings::*;
 pub mod group_lists;
 pub use group_lists::*;
 pub mod settings;
@@ -63,6 +65,7 @@ pub enum OpCategory {
     Slots,
     Incompatibilities,
     Pairings,
+    SlotPairings,
     GroupLists,
     Settings,
     Balancing,
@@ -82,6 +85,7 @@ pub enum UpdateOp {
     Slots(SlotsUpdateOp),
     Incompatibilities(IncompatibilitiesUpdateOp),
     Pairings(PairingsUpdateOp),
+    SlotPairings(SlotPairingsUpdateOp),
     GroupLists(GroupListsUpdateOp),
     Settings(SettingsUpdateOp),
     Balancing(BalancingUpdateOp),
@@ -111,6 +115,8 @@ pub enum UpdateError {
     #[error(transparent)]
     Pairings(#[from] PairingsUpdateError),
     #[error(transparent)]
+    SlotPairings(#[from] SlotPairingsUpdateError),
+    #[error(transparent)]
     GroupLists(#[from] GroupListsUpdateError),
     #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
@@ -135,6 +141,7 @@ pub enum UpdateWarning {
     Slots(SlotsUpdateWarning),
     Incompatibilities(IncompatibilitiesUpdateWarning),
     Pairings(PairingsUpdateWarning),
+    SlotPairings(SlotPairingsUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
     Settings(SettingsUpdateWarning),
     Balancing(BalancingUpdateWarning),
@@ -197,6 +204,12 @@ impl From<PairingsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<SlotPairingsUpdateWarning> for UpdateWarning {
+    fn from(value: SlotPairingsUpdateWarning) -> Self {
+        UpdateWarning::SlotPairings(value)
+    }
+}
+
 impl From<GroupListsUpdateWarning> for UpdateWarning {
     fn from(value: GroupListsUpdateWarning) -> Self {
         UpdateWarning::GroupLists(value)
@@ -248,6 +261,7 @@ impl UpdateWarning {
             UpdateWarning::Slots(w) => w.build_desc_from_data(data),
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
             UpdateWarning::Pairings(w) => w.build_desc_from_data(data),
+            UpdateWarning::SlotPairings(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
             UpdateWarning::Balancing(w) => w.build_desc_from_data(data),
@@ -323,6 +337,9 @@ impl UpdateOp {
             UpdateOp::Pairings(pairing_op) => {
                 CleaningOp::downcast(pairing_op.get_next_cleaning_op(data))
             }
+            UpdateOp::SlotPairings(slot_pairing_op) => {
+                CleaningOp::downcast(slot_pairing_op.get_next_cleaning_op(data))
+            }
             UpdateOp::GroupLists(group_list_op) => {
                 CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
@@ -383,6 +400,10 @@ impl UpdateOp {
             }
             UpdateOp::Pairings(pairing_op) => {
                 let result = pairing_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::SlotPairings(slot_pairing_op) => {
+                let result = slot_pairing_op.apply_no_cleaning(data)?;
                 Ok(result.map(|x| x.into()))
             }
             UpdateOp::GroupLists(group_list_op) => {
@@ -447,6 +468,7 @@ impl UpdateOp {
             UpdateOp::Slots(slot_op) => slot_op.get_desc(),
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
             UpdateOp::Pairings(pairing_op) => pairing_op.get_desc(),
+            UpdateOp::SlotPairings(slot_pairing_op) => slot_pairing_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
             UpdateOp::Balancing(balancing_op) => balancing_op.get_desc(),
