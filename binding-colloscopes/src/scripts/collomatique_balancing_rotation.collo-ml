@@ -3,6 +3,7 @@ import "collomatique_vars" as *;
 import "collomatique_types" as *;
 import "collomatique_queries" as queries;
 import "collomatique_balancing_helpers" as bal_helpers;
+import "collomatique_slot_pairings" as slot_pairings;
 
 type NullableIntRow = {
     value: ?Int | String | Bool,
@@ -38,75 +39,6 @@ WHERE pw.has_interrogations = 1
 AND NOT EXISTS (
     SELECT 1 FROM subject_excluded_periods sep
     WHERE sep.subject_id = ? AND sep.period_id = pw.period_id
-)
-";
-
-// --- Slot-week counts for teacher rotation bound ---
-
-query nb_teach_internal(db: Db, subject_id: SubjectId, teacher_id: TeacherId, first_week: GlobalWeek, last_week: GlobalWeek) -> ?Int = "
-WITH ordered_weeks AS (
-    SELECT pw.period_id, pw.week_index,
-        (SELECT COUNT(*) FROM period_weeks pw2
-         JOIN periods p2 ON p2.id = pw2.period_id
-         JOIN periods p ON p.id = pw.period_id
-         WHERE (p2.position < p.position)
-            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
-        ) AS global_week_number
-    FROM period_weeks pw
-    WHERE pw.has_interrogations = 1
-)
-SELECT COUNT(*) AS total
-FROM slots s
-CROSS JOIN ordered_weeks ow
-WHERE s.subject_id = ?1
-AND s.teacher_id = ?2
-AND ow.global_week_number >= ?3 AND ow.global_week_number <= ?4
-AND (
-    s.week_pattern_id IS NULL
-    OR NOT EXISTS (
-        SELECT 1 FROM week_pattern_disabled_weeks wpdw
-        WHERE wpdw.week_pattern_id = s.week_pattern_id
-          AND wpdw.period_id = ow.period_id
-          AND wpdw.week_index = ow.week_index
-    )
-)
-AND NOT EXISTS (
-    SELECT 1 FROM subject_excluded_periods sep
-    WHERE sep.subject_id = s.subject_id
-      AND sep.period_id = ow.period_id
-)
-";
-
-query nb_tot_internal(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> ?Int = "
-WITH ordered_weeks AS (
-    SELECT pw.period_id, pw.week_index,
-        (SELECT COUNT(*) FROM period_weeks pw2
-         JOIN periods p2 ON p2.id = pw2.period_id
-         JOIN periods p ON p.id = pw.period_id
-         WHERE (p2.position < p.position)
-            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
-        ) AS global_week_number
-    FROM period_weeks pw
-    WHERE pw.has_interrogations = 1
-)
-SELECT COUNT(*) AS total
-FROM slots s
-CROSS JOIN ordered_weeks ow
-WHERE s.subject_id = ?1
-AND ow.global_week_number >= ?2 AND ow.global_week_number <= ?3
-AND (
-    s.week_pattern_id IS NULL
-    OR NOT EXISTS (
-        SELECT 1 FROM week_pattern_disabled_weeks wpdw
-        WHERE wpdw.week_pattern_id = s.week_pattern_id
-          AND wpdw.period_id = ow.period_id
-          AND wpdw.week_index = ow.week_index
-    )
-)
-AND NOT EXISTS (
-    SELECT 1 FROM subject_excluded_periods sep
-    WHERE sep.subject_id = s.subject_id
-      AND sep.period_id = ow.period_id
 )
 ";
 
@@ -186,13 +118,13 @@ let enforce_ceiling_for_window(db: Db, student_id: StudentId, subject_id: Subjec
         <== (nt * nb_interr + ntot - 1) / ntot;
 
 let enforce_rotation_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek, nb_interr: Int) -> Constraint =
-    let ntot = nb_tot_internal(db, subject_id, first_week, last_week) cast! Int {
+    let ntot = slot_pairings::nb_tot(db, subject_id, first_week, last_week) {
         if ntot == 0 {
             trivial
         } else {
             forall student in students_for_subject(db, subject_id) {
                 forall teacher in teachers_for_subject(db, subject_id) {
-                    let nt = nb_teach_internal(db, subject_id, teacher, first_week, last_week) cast! Int {
+                    let nt = slot_pairings::nb_teach(db, subject_id, teacher, first_week, last_week) {
                         enforce_ceiling_for_window(db, student, subject_id, teacher, first_week, last_week, nt, nb_interr, ntot)
                     }
                 }
