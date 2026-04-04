@@ -19,6 +19,7 @@ import "collomatique_balancing_avoid_twice_in_a_row" as balancing_avoid_twice;
 import "collomatique_balancing_year_rotation" as balancing_year_rotation;
 import "collomatique_balancing_period_rotation" as balancing_period_rotation;
 import "collomatique_pairings" as pairings;
+import "collomatique_slot_pairings" as slot_pairings;
 
 pub let default_constraint(db: Db) -> Constraint =
     one_interrogation_at_once::constraint(db) and
@@ -39,7 +40,8 @@ pub let default_constraint(db: Db) -> Constraint =
     balancing_avoid_twice::constraint(db) and
     balancing_year_rotation::constraint(db) and
     balancing_period_rotation::constraint(db) and
-    pairings::constraint(db);
+    pairings::constraint(db) and
+    slot_pairings::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
     limits::objective(db) + [interrogation_cost::objective(db)]
@@ -48,6 +50,7 @@ pub let default_objective(db: Db) -> [Constraint | LinExpr] =
     + balancing_avoid_twice::objective(db)
     + balancing_year_rotation::objective(db)
     + balancing_period_rotation::objective(db)
-    + pairings::objective(db);
+    + pairings::objective(db)
+    + slot_pairings::objective(db);
 
 
