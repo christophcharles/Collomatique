@@ -17,7 +17,7 @@ CREATE TABLE all_ids (
     entity_type TEXT NOT NULL CHECK (entity_type IN (
         'student', 'teacher', 'subject', 'period',
         'slot', 'week_pattern', 'incompat', 'group_list',
-        'pairing_rule'
+        'pairing_rule', 'slot_pairing_rule'
     ))
 );
 
@@ -360,6 +360,25 @@ CREATE TABLE pairing_rule_excluded_periods (
 );
 
 -- ============================================================================
+-- 13c. Slot Pairing Rules
+-- ============================================================================
+
+CREATE TABLE slot_pairing_rules (
+    id INTEGER NOT NULL PRIMARY KEY,
+    antecedent_slot_id INTEGER NOT NULL REFERENCES slots(id),
+    antecedent_should_have INTEGER NOT NULL CHECK (antecedent_should_have IN (0, 1)),
+    consequent_slot_id INTEGER NOT NULL REFERENCES slots(id),
+    consequent_should_have INTEGER NOT NULL CHECK (consequent_should_have IN (0, 1)),
+    soft INTEGER NOT NULL CHECK (soft IN (0, 1))
+);
+
+CREATE TABLE slot_pairing_rule_excluded_periods (
+    slot_pairing_rule_id INTEGER NOT NULL REFERENCES slot_pairing_rules(id) ON DELETE CASCADE,
+    period_id INTEGER NOT NULL REFERENCES periods(id) ON DELETE RESTRICT,
+    PRIMARY KEY (slot_pairing_rule_id, period_id)
+);
+
+-- ============================================================================
 -- 14. Colloscope (Schedule Data)
 -- ============================================================================
 
@@ -551,6 +570,24 @@ WHEN OLD.id != NEW.id
 BEGIN
     DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'pairing_rule';
     INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'pairing_rule');
+END;
+
+-- SLOT_PAIRING_RULES
+CREATE TRIGGER slot_pairing_rule_id_insert AFTER INSERT ON slot_pairing_rules
+BEGIN
+    INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'slot_pairing_rule');
+END;
+
+CREATE TRIGGER slot_pairing_rule_id_delete AFTER DELETE ON slot_pairing_rules
+BEGIN
+    DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'slot_pairing_rule';
+END;
+
+CREATE TRIGGER slot_pairing_rule_id_update AFTER UPDATE OF id ON slot_pairing_rules
+WHEN OLD.id != NEW.id
+BEGIN
+    DELETE FROM all_ids WHERE id = OLD.id AND entity_type = 'slot_pairing_rule';
+    INSERT INTO all_ids (id, entity_type) VALUES (NEW.id, 'slot_pairing_rule');
 END;
 
 -- ============================================================================

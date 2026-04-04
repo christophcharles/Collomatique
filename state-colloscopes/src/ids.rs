@@ -232,6 +232,28 @@ impl Id for PairingRuleId {
     }
 }
 
+/// This type represents an ID for a slot pairing rule
+///
+/// Every slot pairing rule gets a unique ID. IDs then identify slot pairing rules
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct SlotPairingRuleId(u64);
+
+impl Id for SlotPairingRuleId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    /// # Safety
+    ///
+    /// `value` should be a valid ID. If not, you might get inconsistent data.
+    /// Collomatique assumes consistent data everywhere. Generally, you should not
+    /// call this function directly
+    unsafe fn new(value: u64) -> SlotPairingRuleId {
+        SlotPairingRuleId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -297,5 +319,10 @@ impl IdIssuer {
     /// Get a new unused ID for a pairing rule
     pub fn get_pairing_rule_id(&mut self) -> PairingRuleId {
         PairingRuleId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a slot pairing rule
+    pub fn get_slot_pairing_rule_id(&mut self) -> SlotPairingRuleId {
+        SlotPairingRuleId(self.helper.get_new_id().inner())
     }
 }

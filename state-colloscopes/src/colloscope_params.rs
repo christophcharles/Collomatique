@@ -3,8 +3,8 @@
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
 use crate::ids::{
-    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId, TeacherId,
-    WeekPatternId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    SubjectId, TeacherId, WeekPatternId,
 };
 
 use super::*;
@@ -33,6 +33,8 @@ pub struct Parameters {
     pub settings: settings::Settings,
     #[serde(default)]
     pub pairings: pairings::Pairings,
+    #[serde(default)]
+    pub slot_pairings: slot_pairings::SlotPairings,
     #[serde(default)]
     pub balancing: balancing::Balancing,
     pub main_script: Option<String>,
@@ -201,6 +203,11 @@ impl Parameters {
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
         let pairing_rule_ids = self.pairings.pairing_rule_map.keys().map(|x| x.inner());
+        let slot_pairing_rule_ids = self
+            .slot_pairings
+            .slot_pairing_rule_map
+            .keys()
+            .map(|x| x.inner());
 
         student_ids
             .chain(period_ids)
@@ -211,6 +218,7 @@ impl Parameters {
             .chain(incompat_ids)
             .chain(group_list_ids)
             .chain(pairing_rule_ids)
+            .chain(slot_pairing_rule_ids)
     }
 
     /// USED INTERNALLY
@@ -757,6 +765,95 @@ impl Parameters {
         None
     }
 
+    /// Builds a map from SlotId to SubjectId for all slots
+    fn build_slot_subject_map(&self) -> BTreeMap<SlotId, SubjectId> {
+        let mut map = BTreeMap::new();
+        for (subject_id, subject_slots) in &self.slots.subject_map {
+            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                map.insert(*slot_id, *subject_id);
+            }
+        }
+        map
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a slot pairing rule is valid
+    fn validate_slot_pairing_rule_internal(
+        rule: &slot_pairings::SlotPairingRule,
+        slot_subject_map: &BTreeMap<SlotId, SubjectId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), SlotPairingError> {
+        if rule.antecedent.slot_id == rule.consequent.slot_id {
+            return Err(SlotPairingError::SameSlotInBothParts(
+                rule.antecedent.slot_id,
+            ));
+        }
+        let Some(ant_subject) = slot_subject_map.get(&rule.antecedent.slot_id) else {
+            return Err(SlotPairingError::InvalidSlotId(rule.antecedent.slot_id));
+        };
+        let Some(con_subject) = slot_subject_map.get(&rule.consequent.slot_id) else {
+            return Err(SlotPairingError::InvalidSlotId(rule.consequent.slot_id));
+        };
+        if ant_subject != con_subject {
+            return Err(SlotPairingError::SlotsNotInSameSubject(
+                rule.antecedent.slot_id,
+                rule.consequent.slot_id,
+            ));
+        }
+        for period_id in &rule.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(SlotPairingError::InvalidPeriodId(*period_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a slot pairing rule before commiting a slot pairing op
+    pub(crate) fn validate_slot_pairing_rule(
+        &self,
+        rule: &slot_pairings::SlotPairingRule,
+    ) -> Result<(), SlotPairingError> {
+        let slot_subject_map = self.build_slot_subject_map();
+        let period_ids: BTreeSet<PeriodId> = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        Self::validate_slot_pairing_rule_internal(rule, &slot_subject_map, &period_ids)
+    }
+
+    /// Promotes an u64 to a [SlotPairingRuleId] if it is valid
+    pub fn validate_slot_pairing_rule_id(&self, id: u64) -> Option<SlotPairingRuleId> {
+        let id = unsafe { SlotPairingRuleId::new(id) };
+        if self.slot_pairings.slot_pairing_rule_map.contains_key(&id) {
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in slot pairings data
+    fn check_slot_pairings_data_consistency(
+        &self,
+        slot_subject_map: &BTreeMap<SlotId, SubjectId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
+        for rule in self.slot_pairings.slot_pairing_rule_map.values() {
+            if Self::validate_slot_pairing_rule_internal(rule, slot_subject_map, period_ids)
+                .is_err()
+            {
+                return Err(InvariantError::InvalidSlotPairingRule);
+            }
+        }
+        Ok(())
+    }
+
     /// USED INTERNALLY
     ///
     /// checks all the invariants in pairings data
@@ -913,6 +1010,8 @@ impl Parameters {
         self.check_slots_data_consistency(&week_pattern_ids)?;
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
         self.check_pairings_data_consistency(&subject_ids, &period_ids)?;
+        let slot_subject_map = self.build_slot_subject_map();
+        self.check_slot_pairings_data_consistency(&slot_subject_map, &period_ids)?;
         self.check_group_lists_data_consistency()?;
         self.check_settings_data_consistency()?;
         self.check_balancing_data_consistency()?;
