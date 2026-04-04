@@ -1,6 +1,6 @@
 use anyhow::anyhow;
+use collomatique_rpc::InternalDataStream;
 use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
-use collomatique_state_colloscopes::ColloscopeOp;
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
     let encoded_msg = EncodedMsg::receive()?;
@@ -41,7 +41,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         .await
         .map_err(|e| anyhow!("Error creating DB connection: {}", e))?;
 
-    let colloscope = inner_data.colloscope;
+    let export_config = inner_data.export_config;
     let env = inner_data.params;
     let main_script = env
         .main_script
@@ -75,33 +75,15 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         collomatique_binding_colloscopes::convert::build_colloscope(&env, &config_data)
             .expect("Config data should be compatible with colloscope parameters");
 
-    println!("Sending update ops...");
-    let update_ops = colloscope
-        .update_ops(new_colloscope)
-        .expect("New and old colloscopes should be compatible");
-
-    for op in update_ops {
-        let dressed_op = match op {
-            ColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
-                collomatique_ops::ColloscopeUpdateOp::UpdateColloscopeGroupList(
-                    group_list_id,
-                    group_list,
-                )
-            }
-            ColloscopeOp::UpdateInterrogation(period_id, slot_id, week, interrogation) => {
-                collomatique_ops::ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                    period_id,
-                    slot_id,
-                    week,
-                    interrogation,
-                )
-            }
-        };
-        EncodedMsg::send_rpc(CmdMsg::Update(collomatique_ops::UpdateOp::Colloscope(
-            dressed_op,
-        )))
-        .map_err(|e| anyhow!("Error on UpdateOp: {}", e))?;
-    }
+    println!("Sending updated data...");
+    let new_inner_data = collomatique_state_colloscopes::InnerData {
+        params: env,
+        colloscope: new_colloscope,
+        export_config,
+    };
+    let data_stream = InternalDataStream::from(&new_inner_data);
+    EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
+        .map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
     println!("Done.");
 

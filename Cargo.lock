@@ -509,7 +509,6 @@ dependencies = [
  "anyhow",
  "collomatique-binding-colloscopes",
  "collomatique-ilp",
- "collomatique-ops",
  "collomatique-python",
  "collomatique-rpc",
  "collomatique-sqlite-state",
