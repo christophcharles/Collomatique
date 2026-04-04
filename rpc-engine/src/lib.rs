@@ -103,8 +103,34 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
 
     match init_msg {
         InitMsg::RunPythonScript(script) => {
+            eprintln!("Receiving file data...");
+            let data_msg = EncodedMsg::send_rpc(CmdMsg::GetData)
+                .map_err(|e| anyhow!("Error on GetData: {}", e))?;
+            let inner_data = match data_msg {
+                ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
+                _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
+            };
+            let data = collomatique_state_colloscopes::Data::from_inner_data(inner_data)
+                .map_err(|e| anyhow!("Error building Data: {}", e))?;
+            let app_state = collomatique_state::AppState::new(data);
+            let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
+
+            eprintln!("Running Python script...");
             collomatique_python::initialize();
-            collomatique_python::run_python_script(script)?;
+            collomatique_python::run_python_script(script, Some(shared.clone()))?;
+
+            // Send back if modified
+            {
+                use collomatique_state::traits::Manager;
+                let state = shared.lock().unwrap();
+                if state.can_undo() {
+                    eprintln!("Sending final file data...");
+                    let inner_data = state.get_data().get_inner_data();
+                    let data_stream = InternalDataStream::from(inner_data);
+                    EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
+                        .map_err(|e| anyhow!("Error on SetData: {}", e))?;
+                }
+            }
         }
         InitMsg::SolveColloscope => {
             let rt = tokio::runtime::Runtime::new().unwrap();
