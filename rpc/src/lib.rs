@@ -47,6 +47,7 @@ pub enum ResultMsg {
     AckGui(GuiAnswer),
     Data(InternalDataStream),
     Error(collomatique_ops::UpdateError),
+    GlobalError(String),
 }
 
 impl ResultMsg {

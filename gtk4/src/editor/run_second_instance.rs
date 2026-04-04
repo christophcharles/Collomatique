@@ -138,7 +138,7 @@ impl Component for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: !model.is_running && !model.commands.is_empty(),
+                        set_sensitive: !model.is_running && model.has_modifications(),
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -160,7 +160,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && !model.commands.is_empty(),
+                        set_visible: !model.is_running && !model.end_with_error && model.has_modifications(),
                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -174,7 +174,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && model.commands.is_empty(),
+                        set_visible: !model.is_running && !model.end_with_error && !model.has_modifications(),
                         gtk::Image::from_icon_name("dialog-warning-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -390,6 +390,35 @@ impl Component for Dialog {
                             self.handle_gui_request(sender, gui_cmd);
                             return;
                         }
+                        CmdMsg::SetData(data_stream) => {
+                            let inner_data: collomatique_state_colloscopes::InnerData =
+                                data_stream.into();
+                            let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner_data);
+                            let desc = (
+                                collomatique_ops::OpCategory::None,
+                                String::from("Mise à jour globale"),
+                            );
+                            match collomatique_state::traits::Manager::apply(app_session, op, desc)
+                            {
+                                Ok(_) => {
+                                    self.rpc_logger
+                                        .sender()
+                                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(
+                                            None,
+                                        )))
+                                        .unwrap();
+                                }
+                                Err(e) => {
+                                    self.rpc_logger
+                                        .sender()
+                                        .send(rpc_server::RpcLoggerInput::SendMsg(
+                                            ResultMsg::GlobalError(e.to_string()),
+                                        ))
+                                        .unwrap();
+                                }
+                            }
+                            return;
+                        }
                         CmdMsg::Update(update_msg) => update_msg,
                     };
 
@@ -480,6 +509,10 @@ impl Component for Dialog {
 }
 
 impl Dialog {
+    fn has_modifications(&self) -> bool {
+        self.app_session.as_ref().map_or(false, |s| s.can_undo())
+    }
+
     fn add_command(&mut self, sender: ComponentSender<Self>, data: msg_display::EntryData) {
         self.commands.guard().push_back(data);
         sender.oneshot_command(async move {

@@ -48,6 +48,8 @@ pub enum Op {
     Colloscope(ColloscopeOp),
     /// Operation on export configuration
     ExportConfig(ExportConfigOp),
+    /// Global update of all data at once
+    GlobalUpdate(super::InnerData),
 }
 
 impl Operation for Op {}
@@ -323,6 +325,8 @@ pub enum AnnotatedOp {
     Colloscope(AnnotatedColloscopeOp),
     /// Operation on export configuration
     ExportConfig(AnnotatedExportConfigOp),
+    /// Global update of all data at once
+    GlobalUpdate(super::InnerData),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -785,6 +789,15 @@ impl AnnotatedOp {
             Op::ExportConfig(export_config_op) => {
                 let op = AnnotatedExportConfigOp::annotate(export_config_op);
                 (op.into(), None)
+            }
+            Op::GlobalUpdate(inner_data) => {
+                if let Some(max_id) = inner_data.ids().max() {
+                    id_issuer.skip_to_id(max_id + 1).expect(
+                        "GlobalUpdate: ID space exhausted. \
+                         This is either a critical bug or a malicious data payload.",
+                    );
+                }
+                (AnnotatedOp::GlobalUpdate(inner_data), None)
             }
         }
     }

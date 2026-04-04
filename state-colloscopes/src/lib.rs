@@ -770,6 +770,8 @@ pub enum Error {
     Colloscope(#[from] ColloscopeError),
     #[error(transparent)]
     ExportConfig(#[from] ExportConfigError),
+    #[error(transparent)]
+    GlobalUpdate(#[from] InnerDataError),
 }
 
 /// Errors for IDs
@@ -990,6 +992,7 @@ impl InMemoryData for Data {
             AnnotatedOp::ExportConfig(export_config_op) => Ok(AnnotatedOp::ExportConfig(
                 self.build_rev_export_config(export_config_op),
             )),
+            AnnotatedOp::GlobalUpdate(_) => Ok(AnnotatedOp::GlobalUpdate(self.inner_data.clone())),
         }
     }
 
@@ -1016,6 +1019,10 @@ impl InMemoryData for Data {
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
             AnnotatedOp::ExportConfig(export_config_op) => {
                 self.apply_export_config(export_config_op)?
+            }
+            AnnotatedOp::GlobalUpdate(new_inner_data) => {
+                new_inner_data.check_invariants()?;
+                self.inner_data = new_inner_data.clone();
             }
         }
         self.check_invariants();

@@ -276,6 +276,11 @@ impl IdIssuer {
         self.helper.get_internal_counter()
     }
 
+    /// Advance the counter to at least `next_id`
+    pub fn skip_to_id(&mut self, next_id: u64) -> Result<(), tools::IdError> {
+        self.helper.skip_to_id(next_id)
+    }
+
     /// Get a new unused ID for a student
     pub fn get_student_id(&mut self) -> StudentId {
         StudentId(self.helper.get_new_id().inner())
