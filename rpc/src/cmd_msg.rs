@@ -8,7 +8,6 @@ pub use save_file_dialog::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
-    Update(collomatique_ops::UpdateOp),
     GuiRequest(GuiMsg),
     GetData,
     SetData(super::InternalDataStream),

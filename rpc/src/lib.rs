@@ -46,7 +46,6 @@ pub enum ResultMsg {
     Ack(Option<collomatique_state_colloscopes::NewId>),
     AckGui(GuiAnswer),
     Data(InternalDataStream),
-    Error(collomatique_ops::UpdateError),
     GlobalError(String),
 }
 

@@ -376,7 +376,7 @@ impl Component for Dialog {
                         .expect("there should be some current state to accept");
                     let data = app_session.get_data();
 
-                    let update_op = match cmd_msg {
+                    match cmd_msg {
                         CmdMsg::GetData => {
                             self.rpc_logger
                                 .sender()
@@ -384,11 +384,9 @@ impl Component for Dialog {
                                     ResultMsg::generate_data_msg(data),
                                 ))
                                 .unwrap();
-                            return;
                         }
                         CmdMsg::GuiRequest(gui_cmd) => {
                             self.handle_gui_request(sender, gui_cmd);
-                            return;
                         }
                         CmdMsg::SetData(data_stream) => {
                             let inner_data: collomatique_state_colloscopes::InnerData =
@@ -417,28 +415,6 @@ impl Component for Dialog {
                                         .unwrap();
                                 }
                             }
-                            return;
-                        }
-                        CmdMsg::Update(update_msg) => update_msg,
-                    };
-
-                    match update_op.apply(app_session) {
-                        Ok(new_id) => {
-                            self.add_command(
-                                sender,
-                                msg_display::EntryData::Success(update_op.get_desc().1),
-                            );
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(new_id)))
-                                .unwrap();
-                        }
-                        Err(e) => {
-                            self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(e)))
-                                .unwrap();
                         }
                     }
                 }
