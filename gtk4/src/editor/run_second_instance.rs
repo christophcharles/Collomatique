@@ -15,8 +15,8 @@ use std::path::PathBuf;
 
 mod confirm_dialog;
 mod error_dialog;
+mod error_display;
 mod input_dialog;
-mod msg_display;
 mod ok_dialog;
 mod warning_running;
 
@@ -31,7 +31,7 @@ pub struct Dialog {
     confirm_dialog: Controller<confirm_dialog::Dialog>,
     input_dialog: Controller<input_dialog::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
-    commands: FactoryVecDeque<msg_display::Entry>,
+    errors: FactoryVecDeque<error_display::Entry>,
     adjust_scrolling: bool,
     app_session: Option<AppSession<AppState<Data, Desc>, Desc>>,
 }
@@ -200,42 +200,35 @@ impl Component for Dialog {
                     gtk::Label {
                         set_margin_all: 5,
                         set_halign: gtk::Align::Start,
-                        set_label: "Opérations effectuées :",
+                        set_label: "Erreurs de communications avec le sous-processus :",
+                        #[watch]
+                        set_visible: !model.errors.is_empty(),
                     },
-                    gtk::Paned {
+                    #[name(scrolled_window)]
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                         set_margin_all: 5,
+                        #[watch]
+                        set_visible: !model.errors.is_empty(),
+                        #[local_ref]
+                        errors_listbox -> gtk::ListBox {
+                            set_hexpand: true,
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
+                        }
+                    },
+                    gtk::Box {
+                        set_margin_all: 5,
+                        set_hexpand: true,
+                        set_vexpand: true,
                         set_orientation: gtk::Orientation::Vertical,
-                        #[wrap(Some)]
-                        set_start_child = &gtk::Box {
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Vertical,
-                            #[name(scrolled_window)]
-                            gtk::ScrolledWindow {
-                                set_hexpand: true,
-                                set_vexpand: true,
-                                set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                                set_margin_all: 5,
-                                #[local_ref]
-                                cmds_listbox -> gtk::ListBox {
-                                    set_hexpand: true,
-                                    add_css_class: "boxed-list",
-                                    set_selection_mode: gtk::SelectionMode::None,
-                                }
-                            },
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_label: "Informations de débogage :",
                         },
-                        #[wrap(Some)]
-                        set_end_child = &gtk::Box {
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Vertical,
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "Informations de débogage :",
-                            },
-                            append = model.rpc_logger.widget(),
-                        },
+                        append = model.rpc_logger.widget(),
                     },
                     gtk::Label {
                         set_margin_all: 5,
@@ -307,7 +300,7 @@ impl Component for Dialog {
                 RpcLoggerOutput::Error(e) => DialogInput::Error(e),
             });
 
-        let commands = FactoryVecDeque::builder()
+        let errors = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
             .detach();
 
@@ -322,12 +315,12 @@ impl Component for Dialog {
             rpc_logger,
             is_running: false,
             end_with_error: false,
-            commands,
+            errors,
             adjust_scrolling: false,
             app_session: None,
         };
 
-        let cmds_listbox = model.commands.widget();
+        let errors_listbox = model.errors.widget();
 
         let widgets = view_output!();
 
@@ -341,7 +334,7 @@ impl Component for Dialog {
                 self.hidden = false;
                 self.run_type = run_type;
                 self.app_session = Some(AppSession::new(app_state));
-                self.commands.guard().clear();
+                self.errors.guard().clear();
                 self.is_running = true;
                 self.end_with_error = false;
                 self.rpc_logger
@@ -420,7 +413,7 @@ impl Component for Dialog {
                 }
                 Err(e) => {
                     if !e.is_empty() {
-                        self.add_command(sender, msg_display::EntryData::Invalid(e));
+                        self.add_error(sender, e);
                     }
                     self.rpc_logger
                         .sender()
@@ -489,8 +482,8 @@ impl Dialog {
         self.app_session.as_ref().map_or(false, |s| s.can_undo())
     }
 
-    fn add_command(&mut self, sender: ComponentSender<Self>, data: msg_display::EntryData) {
-        self.commands.guard().push_back(data);
+    fn add_error(&mut self, sender: ComponentSender<Self>, data: String) {
+        self.errors.guard().push_back(data);
         sender.oneshot_command(async move {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             DialogCmdOutput::AdjustScrolling
