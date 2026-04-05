@@ -81,6 +81,20 @@ impl IdIssuerHelper {
         self.next_available_id
     }
 
+    /// Advance the counter to at least `next_id`
+    ///
+    /// If the current counter is already at or above `next_id`, this is a no-op.
+    /// Returns an error if `next_id` is too large (EndOfTheUniverse).
+    pub fn skip_to_id(&mut self, next_id: u64) -> Result<(), IdError> {
+        if next_id > (u64::MAX >> 1) {
+            return Err(IdError::EndOfTheUniverse);
+        }
+        if next_id > self.next_available_id {
+            self.next_available_id = next_id;
+        }
+        Ok(())
+    }
+
     /// Generates a new (untyped) id
     ///
     /// This function generates a new ID.

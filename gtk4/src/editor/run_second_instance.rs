@@ -15,8 +15,8 @@ use std::path::PathBuf;
 
 mod confirm_dialog;
 mod error_dialog;
+mod error_display;
 mod input_dialog;
-mod msg_display;
 mod ok_dialog;
 mod warning_running;
 
@@ -31,7 +31,7 @@ pub struct Dialog {
     confirm_dialog: Controller<confirm_dialog::Dialog>,
     input_dialog: Controller<input_dialog::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
-    commands: FactoryVecDeque<msg_display::Entry>,
+    errors: FactoryVecDeque<error_display::Entry>,
     adjust_scrolling: bool,
     app_session: Option<AppSession<AppState<Data, Desc>, Desc>>,
 }
@@ -138,7 +138,7 @@ impl Component for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: !model.is_running && !model.commands.is_empty(),
+                        set_sensitive: !model.is_running && model.has_modifications(),
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -160,7 +160,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && !model.commands.is_empty(),
+                        set_visible: !model.is_running && !model.end_with_error && model.has_modifications(),
                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -174,7 +174,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && model.commands.is_empty(),
+                        set_visible: !model.is_running && !model.end_with_error && !model.has_modifications(),
                         gtk::Image::from_icon_name("dialog-warning-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -200,42 +200,35 @@ impl Component for Dialog {
                     gtk::Label {
                         set_margin_all: 5,
                         set_halign: gtk::Align::Start,
-                        set_label: "Opérations effectuées :",
+                        set_label: "Erreurs de communications avec le sous-processus :",
+                        #[watch]
+                        set_visible: !model.errors.is_empty(),
                     },
-                    gtk::Paned {
+                    #[name(scrolled_window)]
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                         set_margin_all: 5,
+                        #[watch]
+                        set_visible: !model.errors.is_empty(),
+                        #[local_ref]
+                        errors_listbox -> gtk::ListBox {
+                            set_hexpand: true,
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
+                        }
+                    },
+                    gtk::Box {
+                        set_margin_all: 5,
+                        set_hexpand: true,
+                        set_vexpand: true,
                         set_orientation: gtk::Orientation::Vertical,
-                        #[wrap(Some)]
-                        set_start_child = &gtk::Box {
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Vertical,
-                            #[name(scrolled_window)]
-                            gtk::ScrolledWindow {
-                                set_hexpand: true,
-                                set_vexpand: true,
-                                set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                                set_margin_all: 5,
-                                #[local_ref]
-                                cmds_listbox -> gtk::ListBox {
-                                    set_hexpand: true,
-                                    add_css_class: "boxed-list",
-                                    set_selection_mode: gtk::SelectionMode::None,
-                                }
-                            },
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_label: "Informations de débogage :",
                         },
-                        #[wrap(Some)]
-                        set_end_child = &gtk::Box {
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Vertical,
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "Informations de débogage :",
-                            },
-                            append = model.rpc_logger.widget(),
-                        },
+                        append = model.rpc_logger.widget(),
                     },
                     gtk::Label {
                         set_margin_all: 5,
@@ -307,7 +300,7 @@ impl Component for Dialog {
                 RpcLoggerOutput::Error(e) => DialogInput::Error(e),
             });
 
-        let commands = FactoryVecDeque::builder()
+        let errors = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
             .detach();
 
@@ -322,12 +315,12 @@ impl Component for Dialog {
             rpc_logger,
             is_running: false,
             end_with_error: false,
-            commands,
+            errors,
             adjust_scrolling: false,
             app_session: None,
         };
 
-        let cmds_listbox = model.commands.widget();
+        let errors_listbox = model.errors.widget();
 
         let widgets = view_output!();
 
@@ -341,7 +334,7 @@ impl Component for Dialog {
                 self.hidden = false;
                 self.run_type = run_type;
                 self.app_session = Some(AppSession::new(app_state));
-                self.commands.guard().clear();
+                self.errors.guard().clear();
                 self.is_running = true;
                 self.end_with_error = false;
                 self.rpc_logger
@@ -376,7 +369,7 @@ impl Component for Dialog {
                         .expect("there should be some current state to accept");
                     let data = app_session.get_data();
 
-                    let update_op = match cmd_msg {
+                    match cmd_msg {
                         CmdMsg::GetData => {
                             self.rpc_logger
                                 .sender()
@@ -384,38 +377,43 @@ impl Component for Dialog {
                                     ResultMsg::generate_data_msg(data),
                                 ))
                                 .unwrap();
-                            return;
                         }
                         CmdMsg::GuiRequest(gui_cmd) => {
                             self.handle_gui_request(sender, gui_cmd);
-                            return;
                         }
-                        CmdMsg::Update(update_msg) => update_msg,
-                    };
-
-                    match update_op.apply(app_session) {
-                        Ok(new_id) => {
-                            self.add_command(
-                                sender,
-                                msg_display::EntryData::Success(update_op.get_desc().1),
+                        CmdMsg::SetData(data_stream) => {
+                            let inner_data: collomatique_state_colloscopes::InnerData =
+                                data_stream.into();
+                            let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner_data);
+                            let desc = (
+                                collomatique_ops::OpCategory::None,
+                                String::from("Mise à jour globale"),
                             );
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(new_id)))
-                                .unwrap();
-                        }
-                        Err(e) => {
-                            self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(e)))
-                                .unwrap();
+                            match collomatique_state::traits::Manager::apply(app_session, op, desc)
+                            {
+                                Ok(_) => {
+                                    self.rpc_logger
+                                        .sender()
+                                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(
+                                            None,
+                                        )))
+                                        .unwrap();
+                                }
+                                Err(e) => {
+                                    self.rpc_logger
+                                        .sender()
+                                        .send(rpc_server::RpcLoggerInput::SendMsg(
+                                            ResultMsg::GlobalError(e.to_string()),
+                                        ))
+                                        .unwrap();
+                                }
+                            }
                         }
                     }
                 }
                 Err(e) => {
                     if !e.is_empty() {
-                        self.add_command(sender, msg_display::EntryData::Invalid(e));
+                        self.add_error(sender, e);
                     }
                     self.rpc_logger
                         .sender()
@@ -480,8 +478,12 @@ impl Component for Dialog {
 }
 
 impl Dialog {
-    fn add_command(&mut self, sender: ComponentSender<Self>, data: msg_display::EntryData) {
-        self.commands.guard().push_back(data);
+    fn has_modifications(&self) -> bool {
+        self.app_session.as_ref().map_or(false, |s| s.can_undo())
+    }
+
+    fn add_error(&mut self, sender: ComponentSender<Self>, data: String) {
+        self.errors.guard().push_back(data);
         sender.oneshot_command(async move {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             DialogCmdOutput::AdjustScrolling

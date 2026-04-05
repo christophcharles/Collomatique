@@ -485,6 +485,7 @@ dependencies = [
  "chrono",
  "collomatique-ops",
  "collomatique-rpc",
+ "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
  "non-empty-string",
@@ -496,7 +497,6 @@ name = "collomatique-rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "collomatique-ops",
  "collomatique-state-colloscopes",
  "serde",
  "serde_json",
@@ -513,6 +513,7 @@ dependencies = [
  "collomatique-python",
  "collomatique-rpc",
  "collomatique-sqlite-state",
+ "collomatique-state",
  "collomatique-state-colloscopes",
  "sqlx",
  "tokio",
