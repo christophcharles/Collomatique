@@ -155,6 +155,7 @@
 //! assert_eq!(config.get("y21"), Some(1.0));
 //! ```
 
+pub mod int_linexpr;
 pub mod linexpr;
 pub mod mat_repr;
 pub mod objectives;
@@ -166,6 +167,7 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
+pub use int_linexpr::{IntConstraint, IntLinExpr, NonIntegerError};
 pub use linexpr::{Constraint, LinExpr};
 pub use objectives::{Objective, ObjectiveSense};
 
