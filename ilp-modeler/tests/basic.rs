@@ -56,12 +56,16 @@ async fn referenced_extra_runs() {
     let ran2 = Arc::clone(&ran);
     let mut m = fresh();
     // Extra `s` is defined as a + b (via constraint s = a + b).
-    m.declare_extra_sync("s".to_string(), Variable::integer(), move |_f, e| {
-        *ran2.lock().unwrap() = true;
-        let lhs = LinExpr::var(ExtraVar::Extra(e));
-        let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
-        Ok(vec![lhs.eq(&rhs)])
-    });
+    m.declare_extra_sync(
+        "s".to_string(),
+        Variable::integer(),
+        move |_f, _kinds, e| {
+            *ran2.lock().unwrap() = true;
+            let lhs = LinExpr::var(ExtraVar::Extra(e));
+            let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
+            Ok(vec![lhs.eq(&rhs)])
+        },
+    );
     // User constraint references s.
     m.add_constraint(
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
@@ -86,10 +90,14 @@ async fn unreferenced_extra_does_not_run() {
     let ran = Arc::new(Mutex::new(false));
     let ran2 = Arc::clone(&ran);
     let mut m = fresh();
-    m.declare_extra_sync("dead".to_string(), Variable::integer(), move |_f, _e| {
-        *ran2.lock().unwrap() = true;
-        Ok(vec![])
-    });
+    m.declare_extra_sync(
+        "dead".to_string(),
+        Variable::integer(),
+        move |_f, _kinds, _e| {
+            *ran2.lock().unwrap() = true;
+            Ok(vec![])
+        },
+    );
     m.add_constraint(
         LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
         "trivial".into(),
@@ -102,19 +110,19 @@ async fn unreferenced_extra_does_not_run() {
 async fn extra_chain() {
     let mut m = fresh();
     // c = b
-    m.declare_extra_sync("c".to_string(), Variable::integer(), |_f, e| {
+    m.declare_extra_sync("c".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
         ])
     });
     // bx = c (chains through c)
-    m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, e| {
+    m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("c"))),
         ])
     });
     // ax = bx (chains through bx)
-    m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, e| {
+    m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("bx"))),
         ])
@@ -148,7 +156,7 @@ async fn undeclared_extra() {
 #[tokio::test]
 async fn extra_returns_error() {
     let mut m = fresh();
-    m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _e| {
+    m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _kinds, _e| {
         Err("boom".to_string())
     });
     m.add_constraint(
@@ -169,11 +177,11 @@ async fn extra_returns_error() {
 async fn helpers_namespaced_per_extra() {
     let mut m = fresh();
     // Two extras each mint their own helper.
-    m.declare_extra_sync("e1".to_string(), Variable::integer(), |f, e| {
+    m.declare_extra_sync("e1".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
     });
-    m.declare_extra_sync("e2".to_string(), Variable::integer(), |f, e| {
+    m.declare_extra_sync("e2".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
     });
@@ -204,12 +212,12 @@ async fn helpers_namespaced_per_extra() {
 #[tokio::test]
 async fn cyclic_extras() {
     let mut m = fresh();
-    m.declare_extra_sync("a1".to_string(), Variable::integer(), |_f, e| {
+    m.declare_extra_sync("a1".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a2"))),
         ])
     });
-    m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, e| {
+    m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a1"))),
         ])
@@ -235,23 +243,31 @@ async fn helper_smuggling_detected() {
     let stash1 = Arc::clone(&stash);
     let stash2 = Arc::clone(&stash);
     let mut m = fresh();
-    m.declare_extra_sync("donor".to_string(), Variable::integer(), move |f, e| {
-        let h = f.new_helper(Variable::binary());
-        if let ExtraVar::Helper(hid) = &h {
-            *stash1.lock().unwrap() = Some(hid.clone());
-        }
-        Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
-    });
-    m.declare_extra_sync("thief".to_string(), Variable::integer(), move |_f, e| {
-        let stolen = stash2
-            .lock()
-            .unwrap()
-            .clone()
-            .expect("donor must run first");
-        Ok(vec![
-            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ExtraVar::Helper(stolen))),
-        ])
-    });
+    m.declare_extra_sync(
+        "donor".to_string(),
+        Variable::integer(),
+        move |f, _kinds, e| {
+            let h = f.new_helper(Variable::binary());
+            if let ExtraVar::Helper(hid) = &h {
+                *stash1.lock().unwrap() = Some(hid.clone());
+            }
+            Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
+        },
+    );
+    m.declare_extra_sync(
+        "thief".to_string(),
+        Variable::integer(),
+        move |_f, _kinds, e| {
+            let stolen = stash2
+                .lock()
+                .unwrap()
+                .clone()
+                .expect("donor must run first");
+            Ok(vec![
+                LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ExtraVar::Helper(stolen))),
+            ])
+        },
+    );
     // Reference donor first so its closure runs and stashes the id,
     // then reference thief. Using two separate constraints makes the
     // root-discovery order deterministic (it follows insertion order

@@ -20,6 +20,9 @@ use collomatique_ilp::{
     Constraint, LinExpr, Objective, ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
 };
 
+pub mod bundle;
+pub use bundle::{ConstraintBundle, ExtraEntry, IntConstraintBundle};
+
 /// Boxed future returned by extra-definition closures.
 ///
 /// Aliased to avoid pulling in `futures` as a dependency.
@@ -133,6 +136,14 @@ impl<B, E> HelperFactory<B, E> {
         self.declared.insert(id.clone(), kind);
         ExtraVar::Helper(id)
     }
+
+    /// Look up the kind of a helper that was minted by *this*
+    /// factory. Returns `None` for unknown ids (e.g. ones cloned
+    /// in from another factory's closure — the same condition
+    /// the smuggling check in `build` catches).
+    pub fn kind_of(&self, id: &HelperId) -> Option<&Variable> {
+        self.declared.get(id)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -172,12 +183,63 @@ where
 // Modeler
 // ---------------------------------------------------------------------------
 
-type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
+pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
         &'a Db,
         &'a mut HelperFactory<B, E>,
+        &'a VarKinds<'a, B, E>,
         E,
     ) -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
     + 'm;
+
+// ---------------------------------------------------------------------------
+// VarKinds
+// ---------------------------------------------------------------------------
+
+/// Read-only view of base + extra variable kinds, available
+/// inside an extra-definition closure.
+///
+/// Built fresh by [`Modeler::build`] before each closure call.
+/// Reflects every declared base variable and every declared
+/// extra (including ones not yet expanded).
+///
+/// Helper kinds are *not* in this view: they are owned by the
+/// [`HelperFactory`] the same closure already has access to,
+/// and can be looked up there via [`HelperFactory::kind_of`].
+/// This split avoids a borrow conflict between the factory
+/// (which mutates its declared set) and the kinds view.
+pub struct VarKinds<'a, B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    base: &'a HashMap<B, Variable>,
+    extras: &'a HashMap<E, Variable>,
+}
+
+impl<'a, B, E> VarKinds<'a, B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    /// Look up the kind of a base variable.
+    pub fn base(&self, b: &B) -> Option<&Variable> {
+        self.base.get(b)
+    }
+
+    /// Look up the kind of a declared extra variable.
+    pub fn extra(&self, e: &E) -> Option<&Variable> {
+        self.extras.get(e)
+    }
+
+    /// Look up the kind of a base or extra reference. Helper
+    /// references go through [`HelperFactory::kind_of`] instead.
+    pub fn get(&self, var: &Var<B, E>) -> Option<&Variable> {
+        match var {
+            Var::Base(b) => self.base.get(b),
+            Var::Extra(e) => self.extras.get(e),
+        }
+    }
+}
 
 struct ExtraDef<'m, B, E, Db, Err>
 where
@@ -251,6 +313,7 @@ where
         F: for<'a> FnOnce(
                 &'a Db,
                 &'a mut HelperFactory<B, E>,
+                &'a VarKinds<'a, B, E>,
                 E,
             )
                 -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
@@ -269,17 +332,34 @@ where
     /// Most callers' extras don't actually need async; this avoids
     /// forcing them to wrap their definition in
     /// `Box::pin(async move { ... })`.
+    /// Insert an already-boxed `DefineFn`. Used by
+    /// `Modeler::apply_bundle` to drop bundle entries directly
+    /// into the extras map without re-wrapping the closure.
+    pub(crate) fn declare_extra_boxed(
+        &mut self,
+        name: E,
+        kind: Variable,
+        define: Box<DefineFn<'m, B, E, Db, Err>>,
+    ) {
+        self.extras.insert(name, ExtraDef { kind, define });
+    }
+
     pub fn declare_extra_sync<F>(&mut self, name: E, kind: Variable, define: F)
     where
-        F: FnOnce(&mut HelperFactory<B, E>, E) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err> + 'm,
+        F: for<'a> FnOnce(
+                &'a mut HelperFactory<B, E>,
+                &'a VarKinds<'a, B, E>,
+                E,
+            ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
+            + 'm,
     {
         // Smuggle the FnOnce into a closure shape that matches
         // declare_extra. We need an Option dance because the inner
         // closure must be FnOnce-callable through a `for<'a>` HRTB.
         let mut slot: Option<F> = Some(define);
-        self.declare_extra(name, kind, move |_db, factory, e| {
+        self.declare_extra(name, kind, move |_db, factory, kinds, e| {
             let f = slot.take().expect("define called more than once");
-            let result = f(factory, e);
+            let result = f(factory, kinds, e);
             Box::pin(async move { result })
         });
     }
@@ -374,16 +454,23 @@ where
             path: Vec::new(),
         };
 
-        // Move extras out of self into a HashMap we can drain.
+        // Move extras and base_vars out of self. extras is drained
+        // as extras are expanded; base_vars and extras_kinds are
+        // borrowed read-only during expansion via VarKinds.
         let mut extras = std::mem::take(&mut self.extras);
+        let base_vars = std::mem::take(&mut self.base_vars);
+        let extras_kinds: HashMap<E, Variable> = extras
+            .iter()
+            .map(|(name, def)| (name.clone(), def.kind.clone()))
+            .collect();
 
         for root in roots {
-            expand(&mut state, &mut extras, db, root).await?;
+            expand(&mut state, &mut extras, &base_vars, &extras_kinds, db, root).await?;
         }
 
         // Step 4: feed everything into ProblemBuilder.
         let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
-        for (b, kind) in self.base_vars {
+        for (b, kind) in base_vars {
             all_vars.insert(InternalVar::Base(b), kind);
         }
         for (v, kind) in state.out_vars {
@@ -402,6 +489,8 @@ where
 fn expand<'s, 'm, B, E, C, Db, Err>(
     state: &'s mut BuildState<B, E, C>,
     extras: &'s mut HashMap<E, ExtraDef<'m, B, E, Db, Err>>,
+    base_vars: &'s HashMap<B, Variable>,
+    extras_kinds: &'s HashMap<E, Variable>,
     db: &'s Db,
     e: E,
 ) -> BoxFuture<'s, Result<(), BuildError<B, E, C, Err>>>
@@ -432,9 +521,15 @@ where
         state.path.push(e.clone());
 
         let mut factory: HelperFactory<B, E> = HelperFactory::default();
-        let constraints = (def.define)(db, &mut factory, e.clone())
-            .await
-            .map_err(|err| BuildError::ExtraError(e.clone(), err))?;
+        let constraints = {
+            let kinds = VarKinds {
+                base: base_vars,
+                extras: extras_kinds,
+            };
+            (def.define)(db, &mut factory, &kinds, e.clone())
+                .await
+                .map_err(|err| BuildError::ExtraError(e.clone(), err))?
+        };
 
         // Smuggling check.
         for c in &constraints {
@@ -497,7 +592,7 @@ where
 
         // Recurse into deps.
         for d in deps {
-            expand(state, extras, db, d).await?;
+            expand(state, extras, base_vars, extras_kinds, db, d).await?;
         }
 
         state.in_progress.remove(&e);
