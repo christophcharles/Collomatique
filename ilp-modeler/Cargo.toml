@@ -1,0 +1,13 @@
+[package]
+name = "collomatique-ilp-modeler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-ilp = { path = "../ilp", default-features = false }
+thiserror.workspace = true
+
+[dev-dependencies]
+collomatique-ilp = { path = "../ilp" }
+tokio = { workspace = true, features = ["rt", "macros"] }

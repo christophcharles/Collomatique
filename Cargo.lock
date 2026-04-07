@@ -458,6 +458,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-ilp-modeler"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "collomatique-mps"
 version = "0.1.0"
 dependencies = [
