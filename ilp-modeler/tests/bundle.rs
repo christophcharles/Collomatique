@@ -8,7 +8,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    ConstraintBundle, ExtraEntry, ExtraVar, IntConstraintBundle, InternalVar, Modeler, Var,
+    BuildError, ConstraintBundle, ExtraEntry, ExtraVar, IntConstraintBundle, InternalVar, Modeler,
+    ReifyError, Var,
 };
 
 type B = String;
@@ -183,6 +184,128 @@ async fn int_bundle_into_general_unwraps() {
     // The unwrapped constraint matches the int constraint's
     // underlying representation.
     assert_eq!(&general.constraints[0].0, c1.as_constraint());
+}
+
+// ----- Reify tests ---------------------------------------------------
+
+/// Wrapper error type implementing `From<ReifyError<B, E>>`,
+/// required by `IntConstraintBundle::reify`.
+#[derive(Debug)]
+enum TestErr {
+    Reify(ReifyError<B, E>),
+}
+
+impl From<ReifyError<B, E>> for TestErr {
+    fn from(e: ReifyError<B, E>) -> Self {
+        TestErr::Reify(e)
+    }
+}
+
+fn fresh_reify<'m>() -> Modeler<'m, B, E, C, (), TestErr> {
+    let mut vars = HashMap::new();
+    vars.insert("a".to_string(), Variable::binary());
+    vars.insert("b".to_string(), Variable::binary());
+    Modeler::new(vars)
+}
+
+#[tokio::test]
+async fn reify_empty_bundle_pins_indicator_to_one() {
+    // An empty IntConstraintBundle, when reified, produces a
+    // bundle whose only contribution is a single extra (the
+    // indicator) constrained to 1.
+    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new();
+    let reified = int_bundle.reify("ind".to_string());
+    assert_eq!(reified.constraints.len(), 0);
+    assert_eq!(reified.objectives.len(), 0);
+    assert_eq!(reified.extras.len(), 1);
+    assert_eq!(reified.extras[0].name, "ind");
+    assert_eq!(reified.extras[0].kind, Variable::binary());
+
+    // Apply and build; the resulting problem should require ind=1.
+    let mut m = fresh_reify();
+    m.apply_bundle(reified);
+    // Force expansion of `ind` by referencing it.
+    m.add_constraint(
+        LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
+        "ref ind".into(),
+    );
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
+            .unwrap(),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn reify_and_with_solver() {
+    // Reify {a + b <= 1, a + b >= 1} into `is_one`. The
+    // indicator is 1 iff a + b == 1. For binary a, b, that
+    // means is_one == 1 iff exactly one of {a, b} is 1.
+    //
+    // We then maximise is_one and verify the solver picks an
+    // assignment with a + b = 1, and is_one = 1.
+    let a = IntLinExpr::var(base("a"));
+    let b = IntLinExpr::var(base("b"));
+    let c1 = (&a + &b).leq(&IntLinExpr::constant(1));
+    let c2 = (&a + &b).geq(&IntLinExpr::constant(1));
+    let int_bundle = IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![
+        (c1, "a+b<=1".into()),
+        (c2, "a+b>=1".into()),
+    ]);
+    let reified = int_bundle.reify("is_one".to_string());
+
+    let mut m = fresh_reify();
+    m.apply_bundle(reified);
+    // Maximise is_one.
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("is_one")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let is_one = cfg
+        .get(InternalVar::<B, E>::Extra("is_one".to_string()))
+        .unwrap();
+    let av = cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap();
+    let bv = cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap();
+    assert_eq!(is_one, 1.0);
+    assert_eq!(av + bv, 1.0);
+}
+
+#[tokio::test]
+async fn reify_continuous_var_errors() {
+    // Reify a constraint over a *continuous* base variable. The
+    // discreteness check inside reify_and_inner should fire and
+    // surface as BuildError::ExtraError.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::default()); // continuous
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let c = x.leq(&IntLinExpr::constant(0));
+    let int_bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=0".into())]);
+    let reified = int_bundle.reify("ind".to_string());
+    m.apply_bundle(reified);
+    // Force expansion.
+    m.add_constraint(
+        LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
+        "ref ind".into(),
+    );
+
+    let err = m.build(&()).await.unwrap_err();
+    match err {
+        BuildError::ExtraError(name, TestErr::Reify(ReifyError::NonDiscreteVariable(_))) => {
+            assert_eq!(name, "ind");
+        }
+        other => panic!(
+            "expected ExtraError(_, NonDiscreteVariable), got {:?}",
+            other
+        ),
+    }
 }
 
 #[tokio::test]
