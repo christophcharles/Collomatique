@@ -405,3 +405,129 @@ async fn reify_duplicate_variable_fails() {
         Ok(_) => panic!("expected DuplicateVariable, got Ok"),
     }
 }
+
+// ----- Reification coverage tests ----------------------------------------
+
+#[tokio::test]
+async fn reify_equality_constraint() {
+    // Reify { x == 3 } into indicator `eq_ind`.
+    // Maximize eq_ind: solver should set x = 3, eq_ind = 1.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let c = x.eq(&IntLinExpr::constant(3));
+    let int_bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x==3".into())]);
+    let reified = int_bundle.reify("eq_ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let eq_ind = cfg
+        .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
+        .unwrap();
+    let xv = cfg.get(InternalVar::<B, E>::Base("x".to_string())).unwrap();
+    assert_eq!(eq_ind, 1.0);
+    assert_eq!(xv, 3.0);
+}
+
+#[tokio::test]
+async fn reify_equality_constraint_forced_false() {
+    // Reify { x == 3 } but force x >= 4. eq_ind must be 0.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let c = x.eq(&IntLinExpr::constant(3));
+    let int_bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x==3".into())]);
+    let reified = int_bundle.reify("eq_ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    // Force x >= 4, so x == 3 can't be satisfied.
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(4.0)),
+        "x>=4".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let eq_ind = cfg
+        .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
+        .unwrap();
+    assert_eq!(eq_ind, 0.0);
+}
+
+#[tokio::test]
+async fn reify_non_binary_integer_variable() {
+    // Reify { x <= 2 } into indicator `le_ind`.
+    // Maximize 10 * le_ind + x: solver should pick x = 2, le_ind = 1
+    // (score 12) over x = 5, le_ind = 0 (score 5).
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let c = x.leq(&IntLinExpr::constant(2));
+    let int_bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=2".into())]);
+    let reified = int_bundle.reify("le_ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    m.add_objective(
+        10.0,
+        Objective::new(LinExpr::var(xtra("le_ind")), ObjectiveSense::Maximize),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(base("x")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let le_ind = cfg
+        .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
+        .unwrap();
+    let xv = cfg.get(InternalVar::<B, E>::Base("x".to_string())).unwrap();
+    assert_eq!(le_ind, 1.0);
+    assert_eq!(xv, 2.0);
+}
+
+#[tokio::test]
+async fn reify_non_binary_integer_variable_forced_false() {
+    // Reify { x <= 2 } but force x >= 3. le_ind must be 0.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let c = x.leq(&IntLinExpr::constant(2));
+    let int_bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=2".into())]);
+    let reified = int_bundle.reify("le_ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(3.0)),
+        "x>=3".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("le_ind")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let le_ind = cfg
+        .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
+        .unwrap();
+    assert_eq!(le_ind, 0.0);
+}
