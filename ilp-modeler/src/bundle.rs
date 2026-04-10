@@ -296,6 +296,21 @@ where
     InfiniteLhsRange,
 }
 
+/// Errors detectable eagerly at the [`IntConstraintBundle::reify`]
+/// or [`IntConstraintBundle::reify_with_epsilon`] call site,
+/// as opposed to [`ReifyError`] which surfaces lazily at build
+/// time.
+#[derive(Debug, thiserror::Error)]
+pub enum EagerReifyError<E: UsableData> {
+    /// The epsilon value is out of the valid range `(0, 1)`.
+    #[error("epsilon {0} is out of range (must be 0 < epsilon < 1)")]
+    InvalidEpsilon(f64),
+    /// The reification variable name conflicts with an existing
+    /// extra already queued in the bundle.
+    #[error("reification variable `{0:?}` conflicts with an existing extra in the bundle")]
+    DuplicateVariable(E),
+}
+
 /// Look up the kind of any [`ExtraVar`] reference reachable
 /// from inside an extra-definition closure. Helpers are routed
 /// through the factory; base/extra refs through `kinds`.
@@ -324,11 +339,14 @@ fn reify_and_inner<B, E>(
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
     kinds: &VarKinds<B, E>,
+    epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
     B: UsableData,
     E: UsableData,
 {
+    debug_assert!(epsilon > 0.0 && epsilon < 1.0);
+
     // Empty list: the AND is trivially true; pin the indicator
     // to 1.
     if constraints.is_empty() {
@@ -337,7 +355,7 @@ where
     }
     // Single constraint: skip the AND-combine encoding.
     if constraints.len() == 1 {
-        return reify_single(&constraints[0], indicator, factory, kinds);
+        return reify_single(&constraints[0], indicator, factory, kinds, epsilon);
     }
 
     // General case: reify each sub-constraint into its own
@@ -349,7 +367,7 @@ where
     for c in constraints {
         let h = factory.new_helper(Variable::binary());
         helpers.push(h.clone());
-        output.extend(reify_single(c, h, factory, kinds)?);
+        output.extend(reify_single(c, h, factory, kinds, epsilon)?);
     }
 
     let var_expr = LinExpr::var(indicator.clone());
@@ -368,16 +386,24 @@ where
 /// Reify a single constraint into the given binary indicator.
 /// Direct port of `collo-ml/src/problem/builder.rs:461`
 /// (`reify_single_constraint`).
+///
+/// `epsilon` must satisfy `0 < epsilon < 1`. It is used as slack
+/// in the big-M linearization. Correctness relies on all
+/// referenced variables being integer: with integrality, an
+/// integer expression `<= epsilon` is equivalent to `<= 0`.
 fn reify_single<B, E>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
     kinds: &VarKinds<B, E>,
+    epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
     B: UsableData,
     E: UsableData,
 {
+    debug_assert!(epsilon > 0.0 && epsilon < 1.0);
+
     use std::collections::HashSet;
 
     let vars: HashSet<ExtraVar<B, E>> = constraint.variables();
@@ -448,11 +474,11 @@ where
                 return Err(ReifyError::InfiniteLhsRange);
             }
             let one = LinExpr::constant(1.0);
-            let epsilon = LinExpr::constant(0.1);
+            let eps = LinExpr::constant(epsilon);
             let v = LinExpr::var(indicator);
             Ok(vec![
-                lin_expr.leq(&(max * (&one - &v) + &epsilon)),
-                lin_expr.geq(&((min - 1.0) * &v + &one - &epsilon)),
+                lin_expr.leq(&(max * (&one - &v) + &eps)),
+                lin_expr.geq(&((min - 1.0) * &v + &one - &eps)),
             ])
         }
         EqSymbol::Equals => {
@@ -465,8 +491,8 @@ where
             let zero = LinExpr::constant(0.0);
             let c1 = lin_expr.leq(&zero);
             let c2 = lin_expr.geq(&zero);
-            let mut out = reify_single(&c1, v1.clone(), factory, kinds)?;
-            out.extend(reify_single(&c2, v2.clone(), factory, kinds)?);
+            let mut out = reify_single(&c1, v1.clone(), factory, kinds, epsilon)?;
+            out.extend(reify_single(&c2, v2.clone(), factory, kinds, epsilon)?);
             let v1e = LinExpr::var(v1);
             let v2e = LinExpr::var(v2);
             let v = LinExpr::var(indicator);
@@ -490,23 +516,30 @@ where
     Db: 'm,
     Err: Debug + 'static + From<ReifyError<B, E>>,
 {
-    /// Reify the bundle's `constraints` field into a binary
-    /// indicator named `var`. Returns a new
-    /// [`ConstraintBundle`] whose:
+    /// Reify with a custom epsilon. See
+    /// [`IntConstraintBundle::reify`] for the general contract.
     ///
-    /// - `constraints` is empty (the linearization lives inside
-    ///   the new extra's body, not at top level),
-    /// - `objectives` is a pass-through copy of self's,
-    /// - `extras` is `self.extras` unchanged plus one new
-    ///   `ExtraEntry` for `var` with kind binary.
+    /// `epsilon` must satisfy `0 < epsilon < 1`. It controls the
+    /// slack in the big-M linearization; correctness relies on
+    /// all referenced variables being integer.
     ///
-    /// The reification closure cannot fail at the call site;
-    /// any [`ReifyError`] surfaces lazily as
-    /// `BuildError::ExtraError(var, _)` when the modeler
-    /// expands the new extra. Hence the `Err: From<ReifyError>`
-    /// bound — only callers that actually invoke `reify` need
-    /// to satisfy it.
-    pub fn reify(self, var: E) -> ConstraintBundle<'m, B, E, C, Db, Err> {
+    /// Returns `Err` eagerly if `epsilon` is out of range or if
+    /// `var` conflicts with an extra already in the bundle.
+    /// Lazy [`ReifyError`]s (undeclared variables, non-integer
+    /// variables, infinite ranges) still surface later as
+    /// `BuildError::ExtraError`.
+    pub fn reify_with_epsilon(
+        self,
+        var: E,
+        epsilon: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+        if !(epsilon > 0.0 && epsilon < 1.0) {
+            return Err(EagerReifyError::InvalidEpsilon(epsilon));
+        }
+        if self.extras.iter().any(|e| e.name == var) {
+            return Err(EagerReifyError::DuplicateVariable(var));
+        }
+
         // Capture inputs by move into the closure.
         let int_constraints: Vec<Constraint<ExtraVar<B, E>>> = self
             .constraints
@@ -523,8 +556,13 @@ where
             move |_db, factory, kinds, e| {
                 let int_constraints = int_constraints; // move
                 Box::pin(async move {
-                    let result =
-                        reify_and_inner(&int_constraints, ExtraVar::Extra(e), factory, kinds);
+                    let result = reify_and_inner(
+                        &int_constraints,
+                        ExtraVar::Extra(e),
+                        factory,
+                        kinds,
+                        epsilon,
+                    );
                     result.map_err(Err::from)
                 })
             },
@@ -533,11 +571,33 @@ where
         let mut extras = self.extras;
         extras.push(entry);
 
-        ConstraintBundle {
+        Ok(ConstraintBundle {
             constraints: Vec::new(),
             objectives: self.objectives,
             extras,
             _phantom: PhantomData,
-        }
+        })
+    }
+
+    /// Reify the bundle's `constraints` field into a binary
+    /// indicator named `var` using the default epsilon of 0.1.
+    ///
+    /// Returns a new [`ConstraintBundle`] whose:
+    ///
+    /// - `constraints` is empty (the linearization lives inside
+    ///   the new extra's body, not at top level),
+    /// - `objectives` is a pass-through copy of self's,
+    /// - `extras` is `self.extras` unchanged plus one new
+    ///   `ExtraEntry` for `var` with kind binary.
+    ///
+    /// Returns `Err` if `var` conflicts with an extra already
+    /// in the bundle. Lazy [`ReifyError`]s surface later as
+    /// `BuildError::ExtraError(var, _)` when the modeler
+    /// expands the new extra.
+    pub fn reify(
+        self,
+        var: E,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+        self.reify_with_epsilon(var, 0.1)
     }
 }

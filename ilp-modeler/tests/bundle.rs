@@ -8,8 +8,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, ConstraintBundle, ExtraEntry, ExtraVar, IntConstraintBundle, InternalVar, Modeler,
-    ReifyError, Var,
+    BuildError, ConstraintBundle, EagerReifyError, ExtraEntry, ExtraVar, IntConstraintBundle,
+    InternalVar, Modeler, ReifyError, Var,
 };
 
 type B = String;
@@ -214,7 +214,7 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
     // bundle whose only contribution is a single extra (the
     // indicator) constrained to 1.
     let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new();
-    let reified = int_bundle.reify("ind".to_string());
+    let reified = int_bundle.reify("ind".to_string()).unwrap();
     assert_eq!(reified.constraints.len(), 0);
     assert_eq!(reified.objectives.len(), 0);
     assert_eq!(reified.extras.len(), 1);
@@ -254,7 +254,7 @@ async fn reify_and_with_solver() {
         (c1, "a+b<=1".into()),
         (c2, "a+b>=1".into()),
     ]);
-    let reified = int_bundle.reify("is_one".to_string());
+    let reified = int_bundle.reify("is_one".to_string()).unwrap();
 
     let mut m = fresh_reify();
     m.apply_bundle(reified).unwrap();
@@ -288,7 +288,7 @@ async fn reify_continuous_var_errors() {
     let c = x.leq(&IntLinExpr::constant(0));
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=0".into())]);
-    let reified = int_bundle.reify("ind".to_string());
+    let reified = int_bundle.reify("ind".to_string()).unwrap();
     m.apply_bundle(reified).unwrap();
     // Force expansion.
     m.add_constraint(
@@ -370,4 +370,38 @@ async fn merged_bundles_duplicate_extra_fails() {
     let mut m = fresh();
     let err = m.apply_bundle(left).unwrap_err();
     assert_eq!(err.0, "s");
+}
+
+#[tokio::test]
+async fn reify_invalid_epsilon_fails() {
+    let a = IntLinExpr::var(base("a"));
+    let c = a.leq(&IntLinExpr::constant(1));
+    for bad_eps in [0.0, 1.0, -0.5, 1.5, f64::NAN] {
+        let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(
+            c.clone(),
+            "c".into(),
+        )]);
+        match bundle.reify_with_epsilon("ind".to_string(), bad_eps) {
+            Err(EagerReifyError::InvalidEpsilon(_)) => {}
+            Err(other) => panic!("expected InvalidEpsilon for {bad_eps}, got {other:?}"),
+            Ok(_) => panic!("expected InvalidEpsilon for {bad_eps}, got Ok"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn reify_duplicate_variable_fails() {
+    // Bundle already has an extra named "x"; reify("x") should fail.
+    let entry: ExtraEntry<B, E, (), TestErr> = ExtraEntry::new(
+        "x".to_string(),
+        Variable::integer(),
+        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+    );
+    let mut int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new();
+    int_bundle.extras.push(entry);
+    match int_bundle.reify("x".to_string()) {
+        Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "x"),
+        Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
+        Ok(_) => panic!("expected DuplicateVariable, got Ok"),
+    }
 }
