@@ -21,7 +21,7 @@ use std::marker::PhantomData;
 use collomatique_ilp::linexpr::EqSymbol;
 use collomatique_ilp::{Constraint, IntConstraint, LinExpr, Objective, UsableData, Variable};
 
-use crate::{DefineFn, ExtraVar, HelperFactory, Modeler, Var, VarKinds};
+use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, VarKinds};
 
 // ---------------------------------------------------------------------------
 // ExtraEntry
@@ -242,7 +242,10 @@ where
     /// push every weighted objective, and declare every extra.
     /// Equivalent to repeated `add_constraint` / `add_objective`
     /// / `declare_extra` calls in field-then-vec order.
-    pub fn apply_bundle(&mut self, bundle: ConstraintBundle<'m, B, E, C, Db, Err>) {
+    pub fn apply_bundle(
+        &mut self,
+        bundle: ConstraintBundle<'m, B, E, C, Db, Err>,
+    ) -> Result<(), DuplicateExtra<E>> {
         for (c, desc) in bundle.constraints {
             self.add_constraint(c, desc);
         }
@@ -253,8 +256,9 @@ where
             // The boxed `define` already matches DefineFn —
             // declare_extra_boxed (in lib.rs) inserts it
             // directly without re-wrapping.
-            self.declare_extra_boxed(entry.name, entry.kind, entry.define);
+            self.declare_extra_boxed(entry.name, entry.kind, entry.define)?;
         }
+        Ok(())
     }
 }
 

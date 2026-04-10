@@ -5,7 +5,9 @@ use collomatique_ilp::linexpr::LinExpr;
 use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
-use collomatique_ilp_modeler::{BuildError, ExtraVar, HelperId, InternalVar, Modeler, Var};
+use collomatique_ilp_modeler::{
+    BuildError, DuplicateExtra, ExtraVar, HelperId, InternalVar, Modeler, Var,
+};
 
 type B = String;
 type E = String;
@@ -65,7 +67,8 @@ async fn referenced_extra_runs() {
             let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
             Ok(vec![lhs.eq(&rhs)])
         },
-    );
+    )
+    .unwrap();
     // User constraint references s.
     m.add_constraint(
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
@@ -97,7 +100,8 @@ async fn unreferenced_extra_does_not_run() {
             *ran2.lock().unwrap() = true;
             Ok(vec![])
         },
-    );
+    )
+    .unwrap();
     m.add_constraint(
         LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
         "trivial".into(),
@@ -114,19 +118,22 @@ async fn extra_chain() {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
         ])
-    });
+    })
+    .unwrap();
     // bx = c (chains through c)
     m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("c"))),
         ])
-    });
+    })
+    .unwrap();
     // ax = bx (chains through bx)
     m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("bx"))),
         ])
-    });
+    })
+    .unwrap();
     m.add_constraint(
         LinExpr::var(xtra("ax")).eq(&LinExpr::constant(1.0)),
         "ax=1".into(),
@@ -158,7 +165,8 @@ async fn extra_returns_error() {
     let mut m = fresh();
     m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _kinds, _e| {
         Err("boom".to_string())
-    });
+    })
+    .unwrap();
     m.add_constraint(
         LinExpr::var(xtra("bad")).eq(&LinExpr::constant(0.0)),
         "use bad".into(),
@@ -180,11 +188,13 @@ async fn helpers_namespaced_per_extra() {
     m.declare_extra_sync("e1".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
-    });
+    })
+    .unwrap();
     m.declare_extra_sync("e2".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
-    });
+    })
+    .unwrap();
     m.add_constraint(
         (LinExpr::var(xtra("e1")) + LinExpr::var(xtra("e2"))).eq(&LinExpr::constant(1.0)),
         "use both".into(),
@@ -216,12 +226,14 @@ async fn cyclic_extras() {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a2"))),
         ])
-    });
+    })
+    .unwrap();
     m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, _kinds, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a1"))),
         ])
-    });
+    })
+    .unwrap();
     m.add_constraint(
         LinExpr::var(xtra("a1")).eq(&LinExpr::constant(0.0)),
         "use a1".into(),
@@ -253,7 +265,8 @@ async fn helper_smuggling_detected() {
             }
             Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
         },
-    );
+    )
+    .unwrap();
     m.declare_extra_sync(
         "thief".to_string(),
         Variable::integer(),
@@ -267,7 +280,8 @@ async fn helper_smuggling_detected() {
                 LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ExtraVar::Helper(stolen))),
             ])
         },
-    );
+    )
+    .unwrap();
     // Reference donor first so its closure runs and stashes the id,
     // then reference thief. Using two separate constraints makes the
     // root-discovery order deterministic (it follows insertion order
@@ -287,4 +301,19 @@ async fn helper_smuggling_detected() {
         }
         other => panic!("expected HelperLeak, got {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn duplicate_extra_fails() {
+    let mut m = fresh();
+    m.declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _kinds, _e| {
+        Ok(vec![])
+    })
+    .unwrap();
+    let DuplicateExtra(name) = m
+        .declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _kinds, _e| {
+            Ok(vec![])
+        })
+        .unwrap_err();
+    assert_eq!(name, "dup");
 }

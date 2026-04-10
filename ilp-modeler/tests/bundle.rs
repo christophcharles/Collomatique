@@ -37,7 +37,7 @@ fn empty_bundle<'m>() -> ConstraintBundle<'m, B, E, C, (), String> {
 #[tokio::test]
 async fn empty_bundle_apply_is_noop() {
     let mut m = fresh();
-    m.apply_bundle(empty_bundle());
+    m.apply_bundle(empty_bundle()).unwrap();
     let pb = m.build(&()).await.unwrap();
     assert_eq!(pb.get_constraints().len(), 0);
     // Two declared base variables, no extras, no helpers.
@@ -53,7 +53,7 @@ async fn bundle_only_constraints() {
         ((&a - &b).eq(&LinExpr::constant(0.0)), "a=b".into()),
     ]);
     let mut m = fresh();
-    m.apply_bundle(bundle);
+    m.apply_bundle(bundle).unwrap();
     let pb = m.build(&()).await.unwrap();
     assert_eq!(pb.get_constraints().len(), 2);
 }
@@ -70,7 +70,7 @@ async fn bundle_only_objectives() {
         .objectives
         .push((1.0, Objective::new(b.clone(), ObjectiveSense::Maximize)));
     let mut m = fresh();
-    m.apply_bundle(bundle);
+    m.apply_bundle(bundle).unwrap();
     // Should maximize 2a + b → both 1 (binary).
     let pb = m.build(&()).await.unwrap();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
@@ -103,7 +103,7 @@ async fn bundle_only_extras() {
     bundle.extras.push(entry);
 
     let mut m = fresh();
-    m.apply_bundle(bundle);
+    m.apply_bundle(bundle).unwrap();
     // Force expansion by referencing `s`.
     m.add_constraint(
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
@@ -223,7 +223,7 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
 
     // Apply and build; the resulting problem should require ind=1.
     let mut m = fresh_reify();
-    m.apply_bundle(reified);
+    m.apply_bundle(reified).unwrap();
     // Force expansion of `ind` by referencing it.
     m.add_constraint(
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
@@ -257,7 +257,7 @@ async fn reify_and_with_solver() {
     let reified = int_bundle.reify("is_one".to_string());
 
     let mut m = fresh_reify();
-    m.apply_bundle(reified);
+    m.apply_bundle(reified).unwrap();
     // Maximise is_one.
     m.add_objective(
         1.0,
@@ -289,7 +289,7 @@ async fn reify_continuous_var_errors() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=0".into())]);
     let reified = int_bundle.reify("ind".to_string());
-    m.apply_bundle(reified);
+    m.apply_bundle(reified).unwrap();
     // Force expansion.
     m.add_constraint(
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
@@ -326,4 +326,48 @@ async fn int_bundle_merge_concat() {
     assert_eq!(left.constraints.len(), 2);
     assert_eq!(left.constraints[0].1, "left");
     assert_eq!(left.constraints[1].1, "right");
+}
+
+#[tokio::test]
+async fn apply_bundle_duplicate_extra_fails() {
+    let mut m = fresh();
+    // Declare an extra directly on the modeler.
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, _e| {
+        Ok(vec![])
+    })
+    .unwrap();
+    // Then try to apply a bundle that defines the same extra.
+    let entry: ExtraEntry<B, E, (), String> = ExtraEntry::new(
+        "s".to_string(),
+        Variable::integer(),
+        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+    );
+    let mut bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
+    bundle.extras.push(entry);
+    let err = m.apply_bundle(bundle).unwrap_err();
+    assert_eq!(err.0, "s");
+}
+
+#[tokio::test]
+async fn merged_bundles_duplicate_extra_fails() {
+    // Two bundles each define extra "s"; merge them and apply.
+    let entry1: ExtraEntry<B, E, (), String> = ExtraEntry::new(
+        "s".to_string(),
+        Variable::integer(),
+        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+    );
+    let entry2: ExtraEntry<B, E, (), String> = ExtraEntry::new(
+        "s".to_string(),
+        Variable::integer(),
+        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+    );
+    let mut left: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
+    left.extras.push(entry1);
+    let mut right: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
+    right.extras.push(entry2);
+    left.merge(right);
+
+    let mut m = fresh();
+    let err = m.apply_bundle(left).unwrap_err();
+    assert_eq!(err.0, "s");
 }

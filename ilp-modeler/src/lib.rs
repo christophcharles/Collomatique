@@ -150,6 +150,11 @@ impl<B, E> HelperFactory<B, E> {
 // Errors
 // ---------------------------------------------------------------------------
 
+/// Attempted to declare two extras with the same name.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("extra `{0:?}` declared more than once")]
+pub struct DuplicateExtra<E: UsableData>(pub E);
+
 /// Errors surfaced by [`Modeler::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError<B, E, C, Err>
@@ -308,7 +313,12 @@ where
     /// actually referenced (directly or transitively) by a user
     /// constraint/objective or by another expanded extra's
     /// definition.
-    pub fn declare_extra<F>(&mut self, name: E, kind: Variable, define: F)
+    pub fn declare_extra<F>(
+        &mut self,
+        name: E,
+        kind: Variable,
+        define: F,
+    ) -> Result<(), DuplicateExtra<E>>
     where
         F: for<'a> FnOnce(
                 &'a Db,
@@ -319,6 +329,9 @@ where
                 -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
             + 'm,
     {
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
+        }
         self.extras.insert(
             name,
             ExtraDef {
@@ -326,6 +339,7 @@ where
                 define: Box::new(define),
             },
         );
+        Ok(())
     }
 
     /// Insert an already-boxed `DefineFn`. Used by
@@ -336,15 +350,24 @@ where
         name: E,
         kind: Variable,
         define: Box<DefineFn<'m, B, E, Db, Err>>,
-    ) {
+    ) -> Result<(), DuplicateExtra<E>> {
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
+        }
         self.extras.insert(name, ExtraDef { kind, define });
+        Ok(())
     }
 
     /// Synchronous convenience wrapper around [`declare_extra`].
     /// Most callers' extras don't actually need async; this avoids
     /// forcing them to wrap their definition in
     /// `Box::pin(async move { ... })`.
-    pub fn declare_extra_sync<F>(&mut self, name: E, kind: Variable, define: F)
+    pub fn declare_extra_sync<F>(
+        &mut self,
+        name: E,
+        kind: Variable,
+        define: F,
+    ) -> Result<(), DuplicateExtra<E>>
     where
         F: for<'a> FnOnce(
                 &'a mut HelperFactory<B, E>,
@@ -361,7 +384,7 @@ where
             let f = slot.take().expect("define called more than once");
             let result = f(factory, kinds, e);
             Box::pin(async move { result })
-        });
+        })
     }
 }
 
