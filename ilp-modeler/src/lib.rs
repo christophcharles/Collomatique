@@ -328,10 +328,6 @@ where
         );
     }
 
-    /// Synchronous convenience wrapper around [`declare_extra`].
-    /// Most callers' extras don't actually need async; this avoids
-    /// forcing them to wrap their definition in
-    /// `Box::pin(async move { ... })`.
     /// Insert an already-boxed `DefineFn`. Used by
     /// `Modeler::apply_bundle` to drop bundle entries directly
     /// into the extras map without re-wrapping the closure.
@@ -344,6 +340,10 @@ where
         self.extras.insert(name, ExtraDef { kind, define });
     }
 
+    /// Synchronous convenience wrapper around [`declare_extra`].
+    /// Most callers' extras don't actually need async; this avoids
+    /// forcing them to wrap their definition in
+    /// `Box::pin(async move { ... })`.
     pub fn declare_extra_sync<F>(&mut self, name: E, kind: Variable, define: F)
     where
         F: for<'a> FnOnce(
