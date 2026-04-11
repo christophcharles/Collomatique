@@ -675,18 +675,39 @@ where
         return objectify_single(&constraints[0], penalty);
     }
 
-    // Multiple constraints: create per-constraint lambdas.
     let n = constraints.len() as f64;
     let mut output = Vec::new();
-    let mut lambdas: Vec<ExtraVar<B, E>> = Vec::with_capacity(constraints.len());
 
+    if alpha == 1.0 {
+        // Pure L∞: penalty IS the global bound. Link each
+        // constraint's violation directly to penalty, no
+        // per-constraint helpers needed.
+        for c in constraints {
+            output.extend(objectify_single(c, penalty.clone()));
+        }
+        return output;
+    }
+
+    // Create per-constraint lambdas (needed for alpha < 1).
+    let mut lambdas: Vec<ExtraVar<B, E>> = Vec::with_capacity(constraints.len());
     for c in constraints {
         let lambda = factory.new_helper(Variable::non_negative());
         lambdas.push(lambda.clone());
         output.extend(objectify_single(c, lambda));
     }
 
-    // Global upper bound: Lambda >= lambda_i for all i.
+    if alpha == 0.0 {
+        // Pure L1: no global Lambda needed.
+        // penalty = (1/n) * sum(lambda_i)
+        let mut sum_expr: LinExpr<ExtraVar<B, E>> = LinExpr::constant(0.0);
+        for l in &lambdas {
+            sum_expr = sum_expr + LinExpr::var(l.clone());
+        }
+        output.push(LinExpr::var(penalty).eq(&((1.0 / n) * sum_expr)));
+        return output;
+    }
+
+    // General case (0 < alpha < 1): both lambdas and global bound.
     let lambda_global = factory.new_helper(Variable::non_negative());
     let lambda_global_expr = LinExpr::var(lambda_global);
     for l in &lambdas {
