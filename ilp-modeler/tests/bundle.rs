@@ -8,8 +8,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, ConstraintBundle, EagerReifyError, ExtraEntry, ExtraVar, IntConstraintBundle,
-    InternalVar, Modeler, ReifyError, Var,
+    BuildError, ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, ExtraVar,
+    IntConstraintBundle, InternalVar, Modeler, ReifyError, Var,
 };
 
 type B = String;
@@ -530,4 +530,190 @@ async fn reify_non_binary_integer_variable_forced_false() {
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
         .unwrap();
     assert_eq!(le_ind, 0.0);
+}
+
+// ----- Objectify tests ---------------------------------------------------
+
+#[tokio::test]
+async fn objectify_empty_bundle_errors() {
+    let bundle = ConstraintBundle::<B, E, C, (), String>::new();
+    match bundle.objectify("pen".to_string()) {
+        Err(EagerObjectifyError::EmptyConstraints) => {}
+        Err(other) => panic!("expected EmptyConstraints, got {other:?}"),
+        Ok(_) => panic!("expected EmptyConstraints, got Ok"),
+    }
+}
+
+#[tokio::test]
+async fn objectify_duplicate_variable_errors() {
+    let a = LinExpr::var(base("a"));
+    let mut bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+        a.leq(&LinExpr::constant(0.0)),
+        "c".into(),
+    )]);
+    let entry: ExtraEntry<B, E, (), String> = ExtraEntry::new(
+        "pen".to_string(),
+        Variable::integer(),
+        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+    );
+    bundle.extras.push(entry);
+    match bundle.objectify("pen".to_string()) {
+        Err(EagerObjectifyError::DuplicateVariable(name)) => assert_eq!(name, "pen"),
+        Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
+        Ok(_) => panic!("expected DuplicateVariable, got Ok"),
+    }
+}
+
+#[tokio::test]
+async fn objectify_invalid_balance_errors() {
+    let a = LinExpr::var(base("a"));
+    for bad_alpha in [-0.1, 1.1, f64::NAN] {
+        let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+            a.leq(&LinExpr::constant(0.0)),
+            "c".into(),
+        )]);
+        match bundle.objectify_with_balance("pen".to_string(), bad_alpha) {
+            Err(EagerObjectifyError::InvalidBalance(_)) => {}
+            Err(other) => panic!("expected InvalidBalance for {bad_alpha}, got {other:?}"),
+            Ok(_) => panic!("expected InvalidBalance for {bad_alpha}, got Ok"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn objectify_single_inequality() {
+    // x <= 3 on x in [0,5], force x = 5. Penalty = 2.0.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::non_negative().max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let x = LinExpr::var(base("x"));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+        x.leq(&LinExpr::constant(3.0)),
+        "x<=3".into(),
+    )]);
+    let objectified = bundle.objectify("pen".to_string()).unwrap();
+    m.apply_bundle(objectified).unwrap();
+    // Force x = 5.
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
+        "x>=5".into(),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let pen = cfg
+        .get(InternalVar::<B, E>::Extra("pen".to_string()))
+        .unwrap();
+    assert_eq!(pen, 2.0);
+}
+
+#[tokio::test]
+async fn objectify_single_equality() {
+    // x == 3 on x in [0,5], force x = 5. Penalty = |5-3| = 2.0.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::non_negative().max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let x = LinExpr::var(base("x"));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+        x.eq(&LinExpr::constant(3.0)),
+        "x==3".into(),
+    )]);
+    let objectified = bundle.objectify("pen".to_string()).unwrap();
+    m.apply_bundle(objectified).unwrap();
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
+        "x>=5".into(),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let pen = cfg
+        .get(InternalVar::<B, E>::Extra("pen".to_string()))
+        .unwrap();
+    assert_eq!(pen, 2.0);
+}
+
+/// Helper: build a two-constraint objectify problem with forced
+/// violations of 2 and 3, then return the penalty value.
+async fn objectify_two_constraints(alpha: f64) -> f64 {
+    // x <= 2 (violation 2 when x=4) and y <= 2 (violation 3 when y=5).
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::non_negative().max(5.0));
+    vars.insert("y".to_string(), Variable::non_negative().max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let x = LinExpr::var(base("x"));
+    let y = LinExpr::var(base("y"));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![
+        (x.leq(&LinExpr::constant(2.0)), "x<=2".into()),
+        (y.leq(&LinExpr::constant(2.0)), "y<=2".into()),
+    ]);
+    let objectified = bundle
+        .objectify_with_balance("pen".to_string(), alpha)
+        .unwrap();
+    m.apply_bundle(objectified).unwrap();
+    // Force x = 4, y = 5.
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(4.0)),
+        "x>=4".into(),
+    );
+    m.add_constraint(
+        LinExpr::var(base("y")).geq(&LinExpr::constant(5.0)),
+        "y>=5".into(),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    cfg.get(InternalVar::<B, E>::Extra("pen".to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn objectify_alpha_0_sum() {
+    // alpha=0: penalty = (1-0)/2 * (2+3) = 2.5
+    let pen = objectify_two_constraints(0.0).await;
+    assert_eq!(pen, 2.5);
+}
+
+#[tokio::test]
+async fn objectify_alpha_1_minimax() {
+    // alpha=1: penalty = 1*max(2,3) = 3.0
+    let pen = objectify_two_constraints(1.0).await;
+    assert_eq!(pen, 3.0);
+}
+
+#[tokio::test]
+async fn objectify_alpha_half_balanced() {
+    // alpha=0.5: penalty = 0.5*3 + 0.5/2*(2+3) = 1.5 + 1.25 = 2.75
+    let pen = objectify_two_constraints(0.5).await;
+    assert_eq!(pen, 2.75);
+}
+
+#[tokio::test]
+async fn objectify_int_bundle_convenience() {
+    // Verify IntConstraintBundle::objectify works.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("x".to_string(), Variable::non_negative().max(5.0));
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let x = IntLinExpr::var(base("x"));
+    let int_bundle = IntConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+        x.leq(&IntLinExpr::constant(3)),
+        "x<=3".into(),
+    )]);
+    let objectified = int_bundle.objectify("pen".to_string()).unwrap();
+    m.apply_bundle(objectified).unwrap();
+    m.add_constraint(
+        LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
+        "x>=5".into(),
+    );
+
+    let pb = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let pen = cfg
+        .get(InternalVar::<B, E>::Extra("pen".to_string()))
+        .unwrap();
+    assert_eq!(pen, 2.0);
 }
