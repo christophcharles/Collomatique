@@ -19,7 +19,9 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use collomatique_ilp::linexpr::EqSymbol;
-use collomatique_ilp::{Constraint, IntConstraint, LinExpr, Objective, UsableData, Variable};
+use collomatique_ilp::{
+    Constraint, IntConstraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
+};
 
 use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, VarKinds};
 
@@ -599,5 +601,227 @@ where
         var: E,
     ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
         self.reify_with_epsilon(var, 0.1)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Objectification
+// ---------------------------------------------------------------------------
+
+/// Errors detectable eagerly at the
+/// [`ConstraintBundle::objectify`] or
+/// [`ConstraintBundle::objectify_with_balance`] call site.
+#[derive(Debug, thiserror::Error)]
+pub enum EagerObjectifyError<E: UsableData> {
+    /// The penalty variable name conflicts with an existing extra
+    /// already queued in the bundle.
+    #[error("objectify variable `{0:?}` conflicts with an existing extra in the bundle")]
+    DuplicateVariable(E),
+    /// The bundle has no constraints to objectify.
+    #[error("cannot objectify an empty constraint set")]
+    EmptyConstraints,
+    /// The balance parameter is out of the valid range `[0, 1]`.
+    #[error("balance {0} is out of range (must be 0 <= alpha <= 1)")]
+    InvalidBalance(f64),
+}
+
+/// Link one constraint's violation to a target variable.
+///
+/// For `lhs <= 0`: returns `[lhs <= target]`.
+/// For `lhs == 0`: returns `[lhs <= target, lhs >= -target]`.
+///
+/// In both cases, minimizing `target` drives it toward the
+/// violation magnitude.
+fn objectify_single<B, E>(
+    constraint: &Constraint<ExtraVar<B, E>>,
+    target: ExtraVar<B, E>,
+) -> Vec<Constraint<ExtraVar<B, E>>>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    let lhs = constraint.get_lhs().clone();
+    let target_expr = LinExpr::var(target);
+    match constraint.get_symbol() {
+        EqSymbol::LessThan => {
+            vec![lhs.leq(&target_expr)]
+        }
+        EqSymbol::Equals => {
+            vec![lhs.leq(&target_expr), lhs.geq(&(-&target_expr))]
+        }
+    }
+}
+
+/// Build the full objectification for a set of constraints.
+///
+/// `alpha` in `[0, 1]` controls the balance between L1 (sum,
+/// alpha=0) and L∞ (minimax, alpha=1). For a single constraint
+/// alpha has no effect.
+fn objectify_inner<B, E>(
+    constraints: &[Constraint<ExtraVar<B, E>>],
+    penalty: ExtraVar<B, E>,
+    factory: &mut HelperFactory<B, E>,
+    alpha: f64,
+) -> Vec<Constraint<ExtraVar<B, E>>>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    debug_assert!(alpha >= 0.0 && alpha <= 1.0);
+    debug_assert!(!constraints.is_empty());
+
+    // Single constraint: penalty IS the lambda, alpha irrelevant.
+    if constraints.len() == 1 {
+        return objectify_single(&constraints[0], penalty);
+    }
+
+    // Multiple constraints: create per-constraint lambdas.
+    let n = constraints.len() as f64;
+    let mut output = Vec::new();
+    let mut lambdas: Vec<ExtraVar<B, E>> = Vec::with_capacity(constraints.len());
+
+    for c in constraints {
+        let lambda = factory.new_helper(Variable::non_negative());
+        lambdas.push(lambda.clone());
+        output.extend(objectify_single(c, lambda));
+    }
+
+    // Global upper bound: Lambda >= lambda_i for all i.
+    let lambda_global = factory.new_helper(Variable::non_negative());
+    let lambda_global_expr = LinExpr::var(lambda_global);
+    for l in &lambdas {
+        output.push(LinExpr::var(l.clone()).leq(&lambda_global_expr));
+    }
+
+    // penalty = alpha * Lambda_global + (1-alpha)/n * sum(lambda_i)
+    let mut penalty_expr: LinExpr<ExtraVar<B, E>> = alpha * &lambda_global_expr;
+    let per_lambda_weight = (1.0 - alpha) / n;
+    for l in &lambdas {
+        penalty_expr = penalty_expr + per_lambda_weight * LinExpr::var(l.clone());
+    }
+
+    output.push(LinExpr::var(penalty).eq(&penalty_expr));
+    output
+}
+
+// ---------------------------------------------------------------------------
+// ConstraintBundle::objectify
+// ---------------------------------------------------------------------------
+
+impl<'m, B, E, C, Db, Err> ConstraintBundle<'m, B, E, C, Db, Err>
+where
+    B: UsableData + 'm,
+    E: UsableData + 'm,
+    C: UsableData,
+    Db: 'm,
+    Err: Debug + 'static,
+{
+    /// Convert the bundle's constraints into a penalty variable
+    /// that captures how much those constraints are violated.
+    ///
+    /// `alpha` in `[0, 1]` controls the balance between L1 (sum
+    /// of violations, alpha=0) and L∞ (minimax / worst violation,
+    /// alpha=1).
+    ///
+    /// Consumes `self`. Returns a new [`ConstraintBundle`] whose:
+    /// - `constraints` is empty (absorbed into the extra's closure),
+    /// - `extras` is `self.extras` plus one new extra named `var`
+    ///   with kind `non_negative`,
+    /// - `objectives` is `self.objectives` plus a minimize term
+    ///   for `var`.
+    pub fn objectify_with_balance(
+        self,
+        var: E,
+        alpha: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        if self.constraints.is_empty() {
+            return Err(EagerObjectifyError::EmptyConstraints);
+        }
+        if !(alpha >= 0.0 && alpha <= 1.0) {
+            return Err(EagerObjectifyError::InvalidBalance(alpha));
+        }
+        if self.extras.iter().any(|e| e.name == var) {
+            return Err(EagerObjectifyError::DuplicateVariable(var));
+        }
+
+        // Capture constraints by move, lifting Var → ExtraVar.
+        let constraints: Vec<Constraint<ExtraVar<B, E>>> = self
+            .constraints
+            .into_iter()
+            .map(|(c, _desc)| c.transmute(|v| ExtraVar::from(v.clone())))
+            .collect();
+
+        let entry = ExtraEntry::new(
+            var.clone(),
+            Variable::non_negative(),
+            move |_db, factory, _kinds, e| {
+                let constraints = constraints; // move
+                Box::pin(async move {
+                    Ok(objectify_inner(
+                        &constraints,
+                        ExtraVar::Extra(e),
+                        factory,
+                        alpha,
+                    ))
+                })
+            },
+        );
+
+        let mut extras = self.extras;
+        extras.push(entry);
+
+        let mut objectives = self.objectives;
+        objectives.push((
+            1.0,
+            Objective::new(LinExpr::var(Var::Extra(var)), ObjectiveSense::Minimize),
+        ));
+
+        Ok(ConstraintBundle {
+            constraints: Vec::new(),
+            objectives,
+            extras,
+            _phantom: PhantomData,
+        })
+    }
+
+    /// Objectify with the default balance of 0.5 (equal weight
+    /// between L1 sum and L∞ minimax).
+    pub fn objectify(
+        self,
+        var: E,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.objectify_with_balance(var, 0.5)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IntConstraintBundle::objectify
+// ---------------------------------------------------------------------------
+
+impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+where
+    B: UsableData + 'm,
+    E: UsableData + 'm,
+    C: UsableData,
+    Db: 'm,
+    Err: Debug + 'static,
+{
+    /// Convenience wrapper: drops the int wrapping and delegates
+    /// to [`ConstraintBundle::objectify_with_balance`].
+    pub fn objectify_with_balance(
+        self,
+        var: E,
+        alpha: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.into_general().objectify_with_balance(var, alpha)
+    }
+
+    /// Convenience wrapper: drops the int wrapping and delegates
+    /// to [`ConstraintBundle::objectify`].
+    pub fn objectify(
+        self,
+        var: E,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.into_general().objectify(var)
     }
 }

@@ -21,7 +21,10 @@ use collomatique_ilp::{
 };
 
 pub mod bundle;
-pub use bundle::{ConstraintBundle, EagerReifyError, ExtraEntry, IntConstraintBundle, ReifyError};
+pub use bundle::{
+    ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, IntConstraintBundle,
+    ReifyError,
+};
 
 /// Boxed future returned by extra-definition closures.
 ///
