@@ -6,7 +6,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DuplicateExtra, ExtraVar, FixError, HelperId, InternalVar, Modeler, Var,
+    BuildError, DuplicateExtra, ExtraVar, FixError, HelperId, InternalVar, Modeler,
+    ReconstructionError, Var,
 };
 
 type B = String;
@@ -380,4 +381,114 @@ async fn fix_in_extra_closure() {
             .unwrap(),
         2.0
     );
+}
+
+// ----- reconstruction_problem tests --------------------------------------
+
+#[tokio::test]
+async fn reconstruction_basic() {
+    // Extra s = a + b. Solve main problem, then reconstruct
+    // with base values and verify s matches.
+    let mut m = fresh();
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e))
+                .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).await.unwrap();
+
+    // Solve the main problem.
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let av = cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap();
+    let bv = cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap();
+
+    // Reconstruct from base values.
+    let base_values = HashMap::from([("a".to_string(), av), ("b".to_string(), bv)]);
+    let recon_pb = model.reconstruction_problem(&base_values).unwrap();
+    let recon_cfg = CbcSolver::new().solve(&recon_pb).expect("solvable");
+    let sv = recon_cfg
+        .get(InternalVar::<B, E>::Extra("s".to_string()))
+        .unwrap();
+    assert_eq!(sv, av + bv);
+}
+
+#[tokio::test]
+async fn reconstruction_missing_var() {
+    let mut m = fresh();
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e))
+                .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    let model = m.build(&()).await.unwrap();
+
+    // Only provide "a", missing "b".
+    let base_values = HashMap::from([("a".to_string(), 1.0)]);
+    let ReconstructionError(missing) = model.reconstruction_problem(&base_values).unwrap_err();
+    assert_eq!(missing, "b");
+}
+
+#[tokio::test]
+async fn reconstruction_with_fixed_vars() {
+    // Extra s = a + c, where c is fixed to 1.
+    // After build, c is substituted out. Reconstruction only
+    // needs base var "a".
+    let mut m = fresh();
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
+                + LinExpr::var(ExtraVar::Base("c".to_string())))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(2.0)),
+        "s<=2".into(),
+    );
+    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
+        .unwrap();
+    let model = m.build(&()).await.unwrap();
+
+    // Reconstruct with a=1 only (c was fixed, not a base var).
+    let base_values = HashMap::from([("a".to_string(), 1.0)]);
+    let recon_pb = model.reconstruction_problem(&base_values).unwrap();
+    let recon_cfg = CbcSolver::new().solve(&recon_pb).expect("solvable");
+    let sv = recon_cfg
+        .get(InternalVar::<B, E>::Extra("s".to_string()))
+        .unwrap();
+    // s = a + c = 1 + 1 = 2
+    assert_eq!(sv, 2.0);
+}
+
+#[tokio::test]
+async fn reconstruction_no_extras() {
+    // Model with no extras. Reconstruction problem is trivial.
+    let mut m = fresh();
+    m.add_constraint(
+        LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
+        "a<=1".into(),
+    );
+    let model = m.build(&()).await.unwrap();
+
+    // No base vars appear in reconstruction (no extras exist).
+    let base_values: HashMap<B, f64> = HashMap::new();
+    let recon_pb = model.reconstruction_problem(&base_values).unwrap();
+    assert_eq!(recon_pb.get_constraints().len(), 0);
+    assert_eq!(recon_pb.get_variables().len(), 0);
 }

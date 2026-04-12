@@ -165,6 +165,11 @@ pub struct DuplicateExtra<E: UsableData>(pub E);
 #[error("variable `{0:?}` is a declared base variable and cannot be fixed")]
 pub struct FixError<B: UsableData>(pub B);
 
+/// A base variable required for reconstruction was not provided.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("base variable `{0:?}` is required for reconstruction but no value was provided")]
+pub struct ReconstructionError<B: UsableData>(pub B);
+
 /// Errors surfaced by [`Modeler::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError<B, E, C, Err>
@@ -229,6 +234,64 @@ where
     /// Consume the model and return the assembled problem.
     pub fn into_problem(self) -> Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
         self.problem
+    }
+
+    /// Build a reconstruction problem: given base variable values,
+    /// produce a [`Problem`] whose solution determines all
+    /// extra and helper variable values.
+    ///
+    /// Every base variable that appears in extra-defining
+    /// constraints must be present in `base_values`. Returns
+    /// [`ReconstructionError`] if any is missing.
+    ///
+    /// The returned problem has a trivial objective (minimize 0)
+    /// and only contains the defining constraints of extras, with
+    /// base variables substituted out.
+    pub fn reconstruction_problem(
+        &self,
+        base_values: &HashMap<B, f64>,
+    ) -> Result<Problem<InternalVar<B, E>, ConstraintSource<E, C>>, ReconstructionError<B>> {
+        // Completeness check.
+        for b in &self.base_variable_set {
+            if !base_values.contains_key(b) {
+                return Err(ReconstructionError(b.clone()));
+            }
+        }
+
+        // Convert base values to InternalVar keys.
+        let fixes: HashMap<InternalVar<B, E>, f64> = base_values
+            .iter()
+            .map(|(b, v)| (InternalVar::Base(b.clone()), *v))
+            .collect();
+
+        // Reduce reconstruction constraints with base values.
+        let reduced_constraints: Vec<_> = self
+            .reconstruction_constraints
+            .iter()
+            .map(|(c, src)| (c.reduce(&fixes), src.clone()))
+            .filter(|(c, _)| !c.is_trivially_true())
+            .collect();
+
+        // Collect only non-base variables for the reconstruction
+        // problem (extras + helpers).
+        let recon_vars: HashMap<InternalVar<B, E>, Variable> = self
+            .reconstruction_variables
+            .iter()
+            .filter(|(v, _)| !matches!(v, InternalVar::Base(_)))
+            .map(|(v, kind)| (v.clone(), kind.clone()))
+            .collect();
+
+        let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+            ProblemBuilder::new()
+                .set_variables(recon_vars)
+                .add_constraints(reduced_constraints)
+                .set_objective(Objective::new(
+                    LinExpr::constant(0.0),
+                    ObjectiveSense::Minimize,
+                ));
+        Ok(builder
+            .build()
+            .expect("reconstruction problem should always be valid"))
     }
 }
 
