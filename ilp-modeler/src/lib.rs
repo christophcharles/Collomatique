@@ -26,6 +26,9 @@ pub use bundle::{
     ReifyError,
 };
 
+mod source_var;
+pub use source_var::SourceVar;
+
 /// Boxed future returned by extra-definition closures.
 ///
 /// Aliased to avoid pulling in `futures` as a dependency.
@@ -563,6 +566,25 @@ where
             self.extras.insert(name, ExtraDef { kind, define });
         }
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SourceVar integration
+// ---------------------------------------------------------------------------
+
+impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+where
+    B: SourceVar<Db> + UsableData,
+    E: UsableData,
+    C: UsableData,
+    Err: Debug + 'static,
+{
+    /// Create a modeler by querying the data source for base variables
+    /// via [`SourceVar::vars`].
+    pub async fn from_source(db: &Db) -> Self {
+        let base_vars = B::vars(db).await;
+        Self::new(base_vars)
     }
 }
 

@@ -7,7 +7,7 @@ use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
     BuildError, DuplicateExtra, ExtraEntry, ExtraVar, FixError, HelperId, InternalVar, Modeler,
-    ReconstructionError, Var,
+    ReconstructionError, SourceVar, Var,
 };
 
 type B = String;
@@ -586,4 +586,37 @@ async fn declare_extras_conflicts_with_existing_fails() {
         )])
         .unwrap_err();
     assert_eq!(name, "exists");
+}
+
+// ----- from_source tests ----------------------------------------------------
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum TestVar {
+    X,
+    Y,
+}
+
+impl SourceVar<()> for TestVar {
+    async fn vars(_db: &()) -> HashMap<Self, Variable> {
+        HashMap::from([
+            (TestVar::X, Variable::binary()),
+            (TestVar::Y, Variable::binary()),
+        ])
+    }
+}
+
+#[tokio::test]
+async fn from_source_creates_modeler() {
+    let m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
+    // Add constraint and build to verify the base vars are set up.
+    let mut m = m;
+    let x = LinExpr::var(Var::Base(TestVar::X));
+    let y = LinExpr::var(Var::Base(TestVar::Y));
+    m.add_constraint((&x + &y).leq(&LinExpr::constant(1.0)), "x+y<=1".into());
+    m.add_objective(1.0, Objective::new(x + y, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let sum = cfg.get(InternalVar::Base(TestVar::X)).unwrap_or(0.0)
+        + cfg.get(InternalVar::Base(TestVar::Y)).unwrap_or(0.0);
+    assert_eq!(sum, 1.0);
 }
