@@ -8,8 +8,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, ExtraVar,
-    IntConstraintBundle, InternalVar, Modeler, ReifyError, Var,
+    BuildError, ConstraintBundle, DuplicateExtra, EagerObjectifyError, EagerReifyError, ExtraEntry,
+    ExtraVar, IntConstraintBundle, InternalVar, Modeler, ReifyError, Var,
 };
 
 type B = String;
@@ -125,15 +125,14 @@ async fn bundle_merge_concat() {
         "right".into(),
     )]);
 
-    let mut left = left;
-    left.merge(right);
+    let merged = left.merge(right).unwrap();
 
-    assert_eq!(left.constraints().len(), 2);
-    assert_eq!(left.objectives().len(), 1);
-    assert_eq!(left.extras().len(), 0);
+    assert_eq!(merged.constraints().len(), 2);
+    assert_eq!(merged.objectives().len(), 1);
+    assert_eq!(merged.extras().len(), 0);
     // Check order: left's constraint first, right's second.
-    assert_eq!(left.constraints()[0].1, "left");
-    assert_eq!(left.constraints()[1].1, "right");
+    assert_eq!(merged.constraints()[0].1, "left");
+    assert_eq!(merged.constraints()[1].1, "right");
 }
 
 #[tokio::test]
@@ -310,7 +309,7 @@ async fn int_bundle_merge_concat() {
     let b = IntLinExpr::var(base("b"));
     let c1: IntConstraint<Var<B, E>> = (&a + &b).leq(&IntLinExpr::constant(1));
     let c2: IntConstraint<Var<B, E>> = (&a - &b).eq(&IntLinExpr::constant(0));
-    let mut left = IntConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+    let left = IntConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
         c1.clone(),
         "left".into(),
     )]);
@@ -318,10 +317,10 @@ async fn int_bundle_merge_concat() {
         c2.clone(),
         "right".into(),
     )]);
-    left.merge(right);
-    assert_eq!(left.constraints().len(), 2);
-    assert_eq!(left.constraints()[0].1, "left");
-    assert_eq!(left.constraints()[1].1, "right");
+    let merged = left.merge(right).unwrap();
+    assert_eq!(merged.constraints().len(), 2);
+    assert_eq!(merged.constraints()[0].1, "left");
+    assert_eq!(merged.constraints()[1].1, "right");
 }
 
 #[tokio::test]
@@ -361,12 +360,10 @@ async fn merged_bundles_duplicate_extra_fails() {
         ConstraintBundle::new().with_extra(entry1).unwrap();
     let right: ConstraintBundle<B, E, C, (), String> =
         ConstraintBundle::new().with_extra(entry2).unwrap();
-    let mut merged = left;
-    merged.merge(right);
-
-    let mut m = fresh();
-    let err = m.apply_bundle(merged).unwrap_err();
-    assert_eq!(err.0, "s");
+    match left.merge(right) {
+        Err(DuplicateExtra(name)) => assert_eq!(name, "s"),
+        Ok(_) => panic!("expected DuplicateExtra, got Ok"),
+    }
 }
 
 #[tokio::test]

@@ -198,10 +198,18 @@ where
 
     /// Append all of `other`'s entries into `self`. Constraints,
     /// objectives, and extras concat in order; no arithmetic.
-    pub fn merge(&mut self, other: Self) {
+    /// Returns [`DuplicateExtra`] if any extra in `other` has
+    /// the same name as one already in `self`.
+    pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
+        for entry in &other.extras {
+            if self.extras.iter().any(|e| e.name == entry.name) {
+                return Err(DuplicateExtra(entry.name.clone()));
+            }
+        }
         self.constraints.extend(other.constraints);
         self.objectives.extend(other.objectives);
         self.extras.extend(other.extras);
+        Ok(self)
     }
 }
 
@@ -316,10 +324,18 @@ where
 
     /// Append all of `other`'s entries into `self`. Constraints,
     /// objectives, and extras concat in order; no arithmetic.
-    pub fn merge(&mut self, other: Self) {
+    /// Returns [`DuplicateExtra`] if any extra in `other` has
+    /// the same name as one already in `self`.
+    pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
+        for entry in &other.extras {
+            if self.extras.iter().any(|e| e.name == entry.name) {
+                return Err(DuplicateExtra(entry.name.clone()));
+            }
+        }
         self.constraints.extend(other.constraints);
         self.objectives.extend(other.objectives);
         self.extras.extend(other.extras);
+        Ok(self)
     }
 
     /// Drop the int wrapping. Each [`IntConstraint`] is unwrapped
