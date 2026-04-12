@@ -6,7 +6,7 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DuplicateExtra, ExtraVar, FixError, HelperId, InternalVar, Modeler,
+    BuildError, DuplicateExtra, ExtraEntry, ExtraVar, FixError, HelperId, InternalVar, Modeler,
     ReconstructionError, Var,
 };
 
@@ -508,4 +508,82 @@ async fn reconstruction_no_extras() {
     let recon_pb = model.reconstruction_problem(&base_values).unwrap();
     assert_eq!(recon_pb.get_constraints().len(), 0);
     assert_eq!(recon_pb.get_variables().len(), 0);
+}
+
+// ----- declare_extras tests ----------------------------------------------
+
+#[tokio::test]
+async fn declare_extras_batch() {
+    let mut m = fresh();
+    m.declare_extras(vec![
+        ExtraEntry::new(
+            "s1".to_string(),
+            Variable::integer(),
+            |_db, _f, _kinds, e| {
+                Box::pin(async move {
+                    Ok(vec![
+                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+                    ])
+                })
+            },
+        ),
+        ExtraEntry::new(
+            "s2".to_string(),
+            Variable::integer(),
+            |_db, _f, _kinds, e| {
+                Box::pin(async move {
+                    Ok(vec![
+                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+                    ])
+                })
+            },
+        ),
+    ])
+    .unwrap();
+    m.add_constraint(
+        (LinExpr::var(xtra("s1")) + LinExpr::var(xtra("s2"))).leq(&LinExpr::constant(1.0)),
+        "s1+s2<=1".into(),
+    );
+    let model = m.build(&()).await.unwrap();
+    // 2 base + 2 extras = 4 variables.
+    assert_eq!(model.problem().get_variables().len(), 4);
+}
+
+#[tokio::test]
+async fn declare_extras_internal_duplicate_fails() {
+    let mut m = fresh();
+    let DuplicateExtra(name) = m
+        .declare_extras(vec![
+            ExtraEntry::new(
+                "dup".to_string(),
+                Variable::integer(),
+                |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+            ),
+            ExtraEntry::new(
+                "dup".to_string(),
+                Variable::integer(),
+                |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+            ),
+        ])
+        .unwrap_err();
+    assert_eq!(name, "dup");
+}
+
+#[tokio::test]
+async fn declare_extras_conflicts_with_existing_fails() {
+    let mut m = fresh();
+    m.declare_extra_sync(
+        "exists".to_string(),
+        Variable::integer(),
+        |_f, _kinds, _e| Ok(vec![]),
+    )
+    .unwrap();
+    let DuplicateExtra(name) = m
+        .declare_extras(vec![ExtraEntry::new(
+            "exists".to_string(),
+            Variable::integer(),
+            |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+        )])
+        .unwrap_err();
+    assert_eq!(name, "exists");
 }

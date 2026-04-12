@@ -541,6 +541,29 @@ where
             Box::pin(async move { result })
         })
     }
+
+    /// Register multiple extras at once. Checks for duplicates
+    /// both within the batch and against already-declared extras.
+    pub fn declare_extras(
+        &mut self,
+        entries: impl IntoIterator<Item = ExtraEntry<'m, B, E, Db, Err>>,
+    ) -> Result<(), DuplicateExtra<E>> {
+        // Collect first to check for intra-batch duplicates
+        // before mutating self.
+        let entries: Vec<_> = entries.into_iter().collect();
+        let mut seen: HashSet<E> = HashSet::new();
+        for entry in &entries {
+            let name = entry.name();
+            if self.extras.contains_key(name) || !seen.insert(name.clone()) {
+                return Err(DuplicateExtra(name.clone()));
+            }
+        }
+        for entry in entries {
+            let (name, kind, define) = entry.into_parts();
+            self.extras.insert(name, ExtraDef { kind, define });
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
