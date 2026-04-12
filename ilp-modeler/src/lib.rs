@@ -10,6 +10,7 @@
 //! This file implements the lazy modeler core
 //! only. Reification helpers are intentionally out of scope.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::future::Future;
@@ -40,15 +41,14 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 pub type FixerFn<'m, B, Db> = dyn for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + 'm;
 
 // ---------------------------------------------------------------------------
-// Fix helpers (private)
+// HasBase (private trait for generic fix logic)
 // ---------------------------------------------------------------------------
 
 /// Extract a base-variable reference from a composite variable
 /// type. Implemented for [`Var`] and [`ExtraVar`] so that the
-/// fix functions are generic over both.
+/// fix methods on [`VarContext`] are generic over both.
 trait HasBase<B> {
     fn as_base(&self) -> Option<&B>;
-    fn from_base(b: B) -> Self;
 }
 
 impl<B, E> HasBase<B> for Var<B, E> {
@@ -57,9 +57,6 @@ impl<B, E> HasBase<B> for Var<B, E> {
             Var::Base(b) => Some(b),
             Var::Extra(_) => None,
         }
-    }
-    fn from_base(b: B) -> Self {
-        Var::Base(b)
     }
 }
 
@@ -70,85 +67,6 @@ impl<B, E> HasBase<B> for ExtraVar<B, E> {
             _ => None,
         }
     }
-    fn from_base(b: B) -> Self {
-        ExtraVar::Base(b)
-    }
-}
-
-/// Collect fix values for undeclared base variables referenced in
-/// `vars`. Each variable is checked against `base_vars` (declared
-/// base variables are never fixed). Fixers are called in order;
-/// the first to return `Some` wins.
-async fn resolve_fixes<'a, B: UsableData + 'a, Db>(
-    vars: impl Iterator<Item = &'a B>,
-    base_vars: &HashMap<B, Variable>,
-    fixers: &[Box<FixerFn<'_, B, Db>>],
-    db: &Db,
-) -> HashMap<B, f64> {
-    let mut fixes = HashMap::new();
-    for b in vars {
-        if !base_vars.contains_key(b) && !fixes.contains_key(b) {
-            for fixer in fixers {
-                if let Some(value) = fixer(b, db).await {
-                    fixes.insert(b.clone(), value);
-                    break;
-                }
-            }
-        }
-    }
-    fixes
-}
-
-/// Fix a constraint by resolving undeclared base variables through
-/// the fixer chain. Returns the reduced constraint and the fixes
-/// applied.
-async fn fix_constraint<V, B, E, Db>(
-    constraint: Constraint<V>,
-    base_vars: &HashMap<B, Variable>,
-    fixers: &[Box<FixerFn<'_, B, Db>>],
-    db: &Db,
-) -> (Constraint<V>, HashMap<B, f64>)
-where
-    V: HasBase<B> + UsableData,
-    B: UsableData,
-    E: UsableData,
-{
-    let base_refs = constraint.variable_refs().filter_map(|v| v.as_base());
-    let fixes = resolve_fixes(base_refs, base_vars, fixers, db).await;
-    if fixes.is_empty() {
-        return (constraint, fixes);
-    }
-    let fixes_v: HashMap<V, f64> = fixes
-        .iter()
-        .map(|(b, &val)| (V::from_base(b.clone()), val))
-        .collect();
-    (constraint.reduce(&fixes_v), fixes)
-}
-
-/// Fix a linear expression by resolving undeclared base variables
-/// through the fixer chain. Returns the reduced expression and
-/// the fixes applied.
-async fn fix_expr<V, B, E, Db>(
-    expr: LinExpr<V>,
-    base_vars: &HashMap<B, Variable>,
-    fixers: &[Box<FixerFn<'_, B, Db>>],
-    db: &Db,
-) -> (LinExpr<V>, HashMap<B, f64>)
-where
-    V: HasBase<B> + UsableData,
-    B: UsableData,
-    E: UsableData,
-{
-    let base_refs = expr.variable_refs().filter_map(|v| v.as_base());
-    let fixes = resolve_fixes(base_refs, base_vars, fixers, db).await;
-    if fixes.is_empty() {
-        return (expr, fixes);
-    }
-    let fixes_v: HashMap<V, f64> = fixes
-        .iter()
-        .map(|(b, &val)| (V::from_base(b.clone()), val))
-        .collect();
-    (expr.reduce(&fixes_v), fixes)
 }
 
 // ---------------------------------------------------------------------------
@@ -413,30 +331,34 @@ where
 // ---------------------------------------------------------------------------
 
 pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
-        &'a Db,
         &'a mut HelperFactory<B, E>,
-        &'a VarKinds<'a, B, E, Db>,
+        &'a VarContext<'a, B, E, Db>,
         E,
     ) -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
     + 'm;
 
 // ---------------------------------------------------------------------------
-// VarKinds
+// VarContext
 // ---------------------------------------------------------------------------
 
-/// Read-only view of base + extra variable kinds and fix
-/// capabilities, available inside an extra-definition closure.
+/// Build-time context for variable kinds and cached fix resolution,
+/// available inside extra-definition closures.
 ///
-/// Built fresh by [`Modeler::build`] before each closure call.
-/// Reflects every declared base variable and every declared
-/// extra (including ones not yet expanded).
+/// Constructed once at the start of [`Modeler::build`] and shared
+/// (via reconstruction) across all extra expansion calls. The fix
+/// cache persists for the duration of the build, so each undeclared
+/// base variable is resolved at most once through the fixer chain.
 ///
 /// Helper kinds are *not* in this view: they are owned by the
 /// [`HelperFactory`] the same closure already has access to,
 /// and can be looked up there via [`HelperFactory::kind_of`].
 /// This split avoids a borrow conflict between the factory
-/// (which mutates its declared set) and the kinds view.
-pub struct VarKinds<'a, B, E, Db>
+/// (which mutates its declared set) and the context view.
+///
+/// Fix methods use interior mutability ([`RefCell`]) for the cache,
+/// allowing `VarContext` to be passed as a shared reference through
+/// the HRTB-based closure signature while still caching results.
+pub struct VarContext<'a, B, E, Db>
 where
     B: UsableData,
     E: UsableData,
@@ -444,13 +366,20 @@ where
     base: &'a HashMap<B, Variable>,
     extras: &'a HashMap<E, Variable>,
     fixers: &'a [Box<FixerFn<'a, B, Db>>],
+    db: &'a Db,
+    cache: &'a RefCell<HashMap<B, Option<f64>>>,
 }
 
-impl<'a, B, E, Db> VarKinds<'a, B, E, Db>
+impl<'a, B, E, Db> VarContext<'a, B, E, Db>
 where
     B: UsableData,
     E: UsableData,
 {
+    /// Access the data source.
+    pub fn db(&self) -> &Db {
+        self.db
+    }
+
     /// Look up the kind of a base variable.
     pub fn base(&self, b: &B) -> Option<&Variable> {
         self.base.get(b)
@@ -470,15 +399,60 @@ where
         }
     }
 
+    /// Resolve fix for a single base variable. Checks cache first,
+    /// then calls fixers in order. Caches both `Some` and `None`
+    /// results so a variable is never queried twice.
+    async fn resolve_fix(&self, b: &B) -> Option<f64> {
+        if self.base.contains_key(b) {
+            return None;
+        }
+        if let Some(&cached) = self.cache.borrow().get(b) {
+            return cached;
+        }
+        let mut result = None;
+        for fixer in self.fixers {
+            if let Some(value) = fixer(b, self.db).await {
+                result = Some(value);
+                break;
+            }
+        }
+        self.cache.borrow_mut().insert(b.clone(), result);
+        result
+    }
+
+    /// Collect fix values for a set of base variable references.
+    /// Deduplicates and uses the cache.
+    async fn resolve_fixes<'b>(&self, base_refs: impl Iterator<Item = &'b B>) -> HashMap<B, f64>
+    where
+        B: 'b,
+    {
+        let mut fixes = HashMap::new();
+        for b in base_refs {
+            if !fixes.contains_key(b) {
+                if let Some(val) = self.resolve_fix(b).await {
+                    fixes.insert(b.clone(), val);
+                }
+            }
+        }
+        fixes
+    }
+
     /// Fix a single constraint by resolving undeclared base
-    /// variables through the fixer chain. `db` is passed
-    /// explicitly to make the async nature visible.
+    /// variables through the fixer chain.
     pub async fn fix_constraint(
         &self,
         constraint: Constraint<ExtraVar<B, E>>,
-        db: &Db,
     ) -> (Constraint<ExtraVar<B, E>>, HashMap<B, f64>) {
-        fix_constraint::<ExtraVar<B, E>, B, E, Db>(constraint, self.base, self.fixers, db).await
+        let base_refs = constraint.variable_refs().filter_map(|v| v.as_base());
+        let fixes = self.resolve_fixes(base_refs).await;
+        if fixes.is_empty() {
+            return (constraint, fixes);
+        }
+        let fixes_v: HashMap<ExtraVar<B, E>, f64> = fixes
+            .iter()
+            .map(|(b, &val)| (ExtraVar::Base(b.clone()), val))
+            .collect();
+        (constraint.reduce(&fixes_v), fixes)
     }
 
     /// Fix a single linear expression by resolving undeclared base
@@ -486,24 +460,31 @@ where
     pub async fn fix_expr(
         &self,
         expr: LinExpr<ExtraVar<B, E>>,
-        db: &Db,
     ) -> (LinExpr<ExtraVar<B, E>>, HashMap<B, f64>) {
-        fix_expr::<ExtraVar<B, E>, B, E, Db>(expr, self.base, self.fixers, db).await
+        let base_refs = expr.variable_refs().filter_map(|v| v.as_base());
+        let fixes = self.resolve_fixes(base_refs).await;
+        if fixes.is_empty() {
+            return (expr, fixes);
+        }
+        let fixes_v: HashMap<ExtraVar<B, E>, f64> = fixes
+            .iter()
+            .map(|(b, &val)| (ExtraVar::Base(b.clone()), val))
+            .collect();
+        (expr.reduce(&fixes_v), fixes)
     }
 
-    /// Fix a batch of constraints by resolving all undeclared base
-    /// variables across the batch in one pass, then reducing each
-    /// constraint. Trivially-true constraints are filtered out.
+    /// Fix a batch of constraints. Resolves all undeclared base
+    /// variables across the batch, then reduces each constraint.
+    /// Trivially-true constraints are filtered out.
     pub async fn fix_constraints(
         &self,
         constraints: Vec<Constraint<ExtraVar<B, E>>>,
-        db: &Db,
     ) -> (Vec<Constraint<ExtraVar<B, E>>>, HashMap<B, f64>) {
         let base_refs = constraints
             .iter()
             .flat_map(|c| c.variable_refs())
             .filter_map(|v| v.as_base());
-        let fixes = resolve_fixes(base_refs, self.base, self.fixers, db).await;
+        let fixes = self.resolve_fixes(base_refs).await;
         if fixes.is_empty() {
             return (constraints, fixes);
         }
@@ -618,9 +599,8 @@ where
     ) -> Result<(), DuplicateExtra<E>>
     where
         F: for<'a> FnOnce(
-                &'a Db,
                 &'a mut HelperFactory<B, E>,
-                &'a VarKinds<'a, B, E, Db>,
+                &'a VarContext<'a, B, E, Db>,
                 E,
             )
                 -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
@@ -668,7 +648,7 @@ where
     where
         F: for<'a> FnOnce(
                 &'a mut HelperFactory<B, E>,
-                &'a VarKinds<'a, B, E, Db>,
+                &'a VarContext<'a, B, E, Db>,
                 E,
             ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
             + 'm,
@@ -677,9 +657,9 @@ where
         // declare_extra. We need an Option dance because the inner
         // closure must be FnOnce-callable through a `for<'a>` HRTB.
         let mut slot: Option<F> = Some(define);
-        self.declare_extra(name, kind, move |_db, factory, kinds, e| {
+        self.declare_extra(name, kind, move |factory, ctx, e| {
             let f = slot.take().expect("define called more than once");
-            let result = f(factory, kinds, e);
+            let result = f(factory, ctx, e);
             Box::pin(async move { result })
         })
     }
@@ -761,26 +741,55 @@ where
     /// [`Model`]. `db` is passed to every extra-definition
     /// closure and to the fixer chain.
     pub async fn build(mut self, db: &Db) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        // Move data out of self for the build scope.
+        let mut extras = std::mem::take(&mut self.extras);
+        let base_vars = std::mem::take(&mut self.base_vars);
+        let fixers = std::mem::take(&mut self.fixers);
+        let extras_kinds: HashMap<E, Variable> = extras
+            .iter()
+            .map(|(name, def)| (name.clone(), def.kind.clone()))
+            .collect();
+
+        // Shared fix cache for the entire build.
+        let fix_cache: RefCell<HashMap<B, Option<f64>>> = RefCell::new(HashMap::new());
+
+        let ctx = VarContext {
+            base: &base_vars,
+            extras: &extras_kinds,
+            fixers: &fixers,
+            db,
+            cache: &fix_cache,
+        };
+
         // Step 0: lazily resolve fixes for user constraints and
-        // objectives. Collect all undeclared base variable refs,
-        // run them through the fixer chain, then reduce.
+        // objectives via the VarContext cache.
         {
-            let all_base_refs = self
-                .constraints
-                .iter()
-                .flat_map(|(c, _)| c.variable_refs())
-                .chain(
-                    self.objectives
-                        .iter()
-                        .flat_map(|(_, o)| o.get_function().variable_refs()),
-                )
-                .filter_map(|v| v.as_base());
-            let fixes = resolve_fixes(all_base_refs, &self.base_vars, &self.fixers, db).await;
-            if !fixes.is_empty() {
-                let fixes_var: HashMap<Var<B, E>, f64> = fixes
-                    .iter()
-                    .map(|(b, &v)| (Var::Base(b.clone()), v))
-                    .collect();
+            let mut all_undeclared: HashSet<B> = HashSet::new();
+            for (c, _) in &self.constraints {
+                for v in c.variable_refs() {
+                    if let Var::Base(b) = v {
+                        if !base_vars.contains_key(b) {
+                            all_undeclared.insert(b.clone());
+                        }
+                    }
+                }
+            }
+            for (_, obj) in &self.objectives {
+                for v in obj.get_function().variable_refs() {
+                    if let Var::Base(b) = v {
+                        if !base_vars.contains_key(b) {
+                            all_undeclared.insert(b.clone());
+                        }
+                    }
+                }
+            }
+            let mut fixes_var: HashMap<Var<B, E>, f64> = HashMap::new();
+            for b in all_undeclared {
+                if let Some(val) = ctx.resolve_fix(&b).await {
+                    fixes_var.insert(Var::Base(b), val);
+                }
+            }
+            if !fixes_var.is_empty() {
                 for (c, _) in &mut self.constraints {
                     *c = c.reduce(&fixes_var);
                 }
@@ -847,17 +856,6 @@ where
             path: Vec::new(),
         };
 
-        // Move extras and base_vars out of self. extras is drained
-        // as extras are expanded; base_vars and extras_kinds are
-        // borrowed read-only during expansion via VarKinds.
-        let mut extras = std::mem::take(&mut self.extras);
-        let base_vars = std::mem::take(&mut self.base_vars);
-        let fixers = std::mem::take(&mut self.fixers);
-        let extras_kinds: HashMap<E, Variable> = extras
-            .iter()
-            .map(|(name, def)| (name.clone(), def.kind.clone()))
-            .collect();
-
         for root in roots {
             expand(
                 &mut state,
@@ -866,6 +864,7 @@ where
                 &extras_kinds,
                 &fixers,
                 db,
+                &fix_cache,
                 root,
             )
             .await?;
@@ -928,6 +927,7 @@ fn expand<'s, 'm, B, E, C, Db, Err>(
     extras_kinds: &'s HashMap<E, Variable>,
     fixers: &'s [Box<FixerFn<'m, B, Db>>],
     db: &'s Db,
+    fix_cache: &'s RefCell<HashMap<B, Option<f64>>>,
     e: E,
 ) -> BoxFuture<'s, Result<(), BuildError<B, E, C, Err>>>
 where
@@ -942,8 +942,6 @@ where
             return Ok(());
         }
         if state.in_progress.contains(&e) {
-            // Build the cycle chain: from the first occurrence of
-            // `e` in `path` to the end, plus `e` itself.
             let start = state.path.iter().position(|x| *x == e).unwrap_or(0);
             let mut cycle: Vec<E> = state.path[start..].to_vec();
             cycle.push(e);
@@ -958,12 +956,14 @@ where
 
         let mut factory: HelperFactory<B, E> = HelperFactory::default();
         let constraints = {
-            let kinds = VarKinds {
+            let ctx = VarContext {
                 base: base_vars,
                 extras: extras_kinds,
                 fixers,
+                db,
+                cache: fix_cache,
             };
-            (def.define)(db, &mut factory, &kinds, e.clone())
+            (def.define)(&mut factory, &ctx, e.clone())
                 .await
                 .map_err(|err| BuildError::ExtraError(e.clone(), err))?
         };
@@ -983,13 +983,15 @@ where
         }
 
         // Safety-net fix: resolve undeclared base variables in
-        // closure output via the fixer chain.
-        let kinds = VarKinds {
+        // closure output via the VarContext cache.
+        let ctx = VarContext {
             base: base_vars,
             extras: extras_kinds,
             fixers,
+            db,
+            cache: fix_cache,
         };
-        let (constraints, _fixes) = kinds.fix_constraints(constraints, db).await;
+        let (constraints, _fixes) = ctx.fix_constraints(constraints).await;
 
         // Register the extra itself and its helpers as variables.
         state
@@ -1038,7 +1040,17 @@ where
 
         // Recurse into deps.
         for d in deps {
-            expand(state, extras, base_vars, extras_kinds, fixers, db, d).await?;
+            expand(
+                state,
+                extras,
+                base_vars,
+                extras_kinds,
+                fixers,
+                db,
+                fix_cache,
+                d,
+            )
+            .await?;
         }
 
         state.in_progress.remove(&e);

@@ -23,7 +23,7 @@ use collomatique_ilp::{
     Constraint, IntConstraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
 };
 
-use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, VarKinds};
+use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, VarContext};
 
 // ---------------------------------------------------------------------------
 // ExtraEntry
@@ -53,9 +53,8 @@ where
     pub fn new<F>(name: E, kind: Variable, define: F) -> Self
     where
         F: for<'a> FnOnce(
-                &'a Db,
                 &'a mut crate::HelperFactory<B, E>,
-                &'a crate::VarKinds<'a, B, E, Db>,
+                &'a crate::VarContext<'a, B, E, Db>,
                 E,
             ) -> crate::BoxFuture<
                 'a,
@@ -426,13 +425,13 @@ where
     E: UsableData,
 {
     /// A variable referenced in the constraints being reified
-    /// is not declared as integer in the current `VarKinds`.
+    /// is not declared as integer in the current `VarContext`.
     /// Reification with epsilon-slack only soundly works on
     /// discrete (integer) variables.
     #[error("variable {0:?} is not discrete (integer); cannot reify")]
     NonDiscreteVariable(ExtraVar<B, E>),
     /// A variable referenced in the constraints being reified
-    /// has no kind known to the current `VarKinds` /
+    /// has no kind known to the current `VarContext` /
     /// `HelperFactory`.
     #[error("variable {0:?} has no declared kind; cannot reify")]
     UndeclaredVariable(ExtraVar<B, E>),
@@ -470,7 +469,7 @@ pub enum EagerReifyError<E: UsableData> {
 /// through the factory; base/extra refs through `kinds`.
 fn lookup_kind<'a, B, E, Db>(
     var: &ExtraVar<B, E>,
-    kinds: &'a VarKinds<'a, B, E, Db>,
+    kinds: &'a VarContext<'a, B, E, Db>,
     factory: &'a HelperFactory<B, E>,
 ) -> Option<&'a Variable>
 where
@@ -492,7 +491,7 @@ fn reify_and_inner<B, E, Db>(
     constraints: &[Constraint<ExtraVar<B, E>>],
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarKinds<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Db>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -549,7 +548,7 @@ fn reify_single<B, E, Db>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarKinds<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Db>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -707,13 +706,13 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::binary(),
-            move |db, factory: &mut HelperFactory<B, E>, kinds, e| {
+            move |factory: &mut HelperFactory<B, E>, ctx, e| {
                 let int_constraints = int_constraints; // move
                 Box::pin(async move {
                     // Reduce captured constraints with fixed variable
                     // values before reification inspects them (for
                     // range computation, variable kind checks, etc.).
-                    let (reduced, fixes) = kinds.fix_constraints(int_constraints, db).await;
+                    let (reduced, fixes) = ctx.fix_constraints(int_constraints).await;
 
                     // Integrality check: reification requires integer
                     // fixed values.
@@ -727,7 +726,7 @@ where
                     }
 
                     let result =
-                        reify_and_inner(&reduced, ExtraVar::Extra(e), factory, kinds, epsilon);
+                        reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon);
                     result.map_err(Err::from)
                 })
             },
@@ -938,12 +937,12 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::non_negative(),
-            move |db, factory: &mut HelperFactory<B, E>, kinds, e| {
+            move |factory: &mut HelperFactory<B, E>, ctx, e| {
                 let constraints = constraints; // move
                 Box::pin(async move {
                     // Reduce captured constraints with fixed variable
                     // values before objectification processes them.
-                    let (reduced, _fixes) = kinds.fix_constraints(constraints, db).await;
+                    let (reduced, _fixes) = ctx.fix_constraints(constraints).await;
                     Ok(objectify_inner(
                         &reduced,
                         ExtraVar::Extra(e),

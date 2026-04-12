@@ -59,16 +59,12 @@ async fn referenced_extra_runs() {
     let ran2 = Arc::clone(&ran);
     let mut m = fresh();
     // Extra `s` is defined as a + b (via constraint s = a + b).
-    m.declare_extra_sync(
-        "s".to_string(),
-        Variable::integer(),
-        move |_f, _kinds, e| {
-            *ran2.lock().unwrap() = true;
-            let lhs = LinExpr::var(ExtraVar::Extra(e));
-            let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
-            Ok(vec![lhs.eq(&rhs)])
-        },
-    )
+    m.declare_extra_sync("s".to_string(), Variable::integer(), move |_f, _ctx, e| {
+        *ran2.lock().unwrap() = true;
+        let lhs = LinExpr::var(ExtraVar::Extra(e));
+        let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
+        Ok(vec![lhs.eq(&rhs)])
+    })
     .unwrap();
     // User constraint references s.
     m.add_constraint(
@@ -97,7 +93,7 @@ async fn unreferenced_extra_does_not_run() {
     m.declare_extra_sync(
         "dead".to_string(),
         Variable::integer(),
-        move |_f, _kinds, _e| {
+        move |_f, _ctx, _e| {
             *ran2.lock().unwrap() = true;
             Ok(vec![])
         },
@@ -115,21 +111,21 @@ async fn unreferenced_extra_does_not_run() {
 async fn extra_chain() {
     let mut m = fresh();
     // c = b
-    m.declare_extra_sync("c".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("c".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
         ])
     })
     .unwrap();
     // bx = c (chains through c)
-    m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("c"))),
         ])
     })
     .unwrap();
     // ax = bx (chains through bx)
-    m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("bx"))),
         ])
@@ -164,7 +160,7 @@ async fn undeclared_extra() {
 #[tokio::test]
 async fn extra_returns_error() {
     let mut m = fresh();
-    m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _kinds, _e| {
+    m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Err("boom".to_string())
     })
     .unwrap();
@@ -225,13 +221,13 @@ async fn helpers_namespaced_per_extra() {
 #[tokio::test]
 async fn cyclic_extras() {
     let mut m = fresh();
-    m.declare_extra_sync("a1".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("a1".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a2"))),
         ])
     })
     .unwrap();
-    m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a1"))),
         ])
@@ -273,7 +269,7 @@ async fn helper_smuggling_detected() {
     m.declare_extra_sync(
         "thief".to_string(),
         Variable::integer(),
-        move |_f, _kinds, e| {
+        move |_f, _ctx, e| {
             let stolen = stash2
                 .lock()
                 .unwrap()
@@ -309,12 +305,12 @@ async fn helper_smuggling_detected() {
 #[tokio::test]
 async fn duplicate_extra_fails() {
     let mut m = fresh();
-    m.declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _kinds, _e| {
+    m.declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Ok(vec![])
     })
     .unwrap();
     let DuplicateExtra(name) = m
-        .declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _kinds, _e| {
+        .declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
             Ok(vec![])
         })
         .unwrap_err();
@@ -375,7 +371,7 @@ async fn fix_in_extra_closure() {
     // Extra's closure references undeclared "c"; fixer returns 1.0.
     // s = a + c, with c fixed to 1 → s = a + 1.
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
                 + LinExpr::var(ExtraVar::Base("c".to_string())))),
@@ -411,7 +407,7 @@ async fn reconstruction_basic() {
     // Extra s = a + b. Solve main problem, then reconstruct
     // with base values and verify s matches.
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e))
                 .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
@@ -446,7 +442,7 @@ async fn reconstruction_basic() {
 #[tokio::test]
 async fn reconstruction_missing_var() {
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e))
                 .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
@@ -471,7 +467,7 @@ async fn reconstruction_with_fixed_vars() {
     // After build, c is substituted out. Reconstruction only
     // needs base var "a".
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
                 + LinExpr::var(ExtraVar::Base("c".to_string())))),
@@ -522,28 +518,20 @@ async fn reconstruction_no_extras() {
 async fn declare_extras_batch() {
     let mut m = fresh();
     m.declare_extras(vec![
-        ExtraEntry::new(
-            "s1".to_string(),
-            Variable::integer(),
-            |_db, _f, _kinds, e| {
-                Box::pin(async move {
-                    Ok(vec![
-                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
-                    ])
-                })
-            },
-        ),
-        ExtraEntry::new(
-            "s2".to_string(),
-            Variable::integer(),
-            |_db, _f, _kinds, e| {
-                Box::pin(async move {
-                    Ok(vec![
-                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
-                    ])
-                })
-            },
-        ),
+        ExtraEntry::new("s1".to_string(), Variable::integer(), |_f, _ctx, e| {
+            Box::pin(async move {
+                Ok(vec![
+                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+                ])
+            })
+        }),
+        ExtraEntry::new("s2".to_string(), Variable::integer(), |_f, _ctx, e| {
+            Box::pin(async move {
+                Ok(vec![
+                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+                ])
+            })
+        }),
     ])
     .unwrap();
     m.add_constraint(
@@ -560,16 +548,12 @@ async fn declare_extras_internal_duplicate_fails() {
     let mut m = fresh();
     let DuplicateExtra(name) = m
         .declare_extras(vec![
-            ExtraEntry::new(
-                "dup".to_string(),
-                Variable::integer(),
-                |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-            ),
-            ExtraEntry::new(
-                "dup".to_string(),
-                Variable::integer(),
-                |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-            ),
+            ExtraEntry::new("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
+                Box::pin(async move { Ok(vec![]) })
+            }),
+            ExtraEntry::new("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
+                Box::pin(async move { Ok(vec![]) })
+            }),
         ])
         .unwrap_err();
     assert_eq!(name, "dup");
@@ -578,17 +562,15 @@ async fn declare_extras_internal_duplicate_fails() {
 #[tokio::test]
 async fn declare_extras_conflicts_with_existing_fails() {
     let mut m = fresh();
-    m.declare_extra_sync(
-        "exists".to_string(),
-        Variable::integer(),
-        |_f, _kinds, _e| Ok(vec![]),
-    )
+    m.declare_extra_sync("exists".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        Ok(vec![])
+    })
     .unwrap();
     let DuplicateExtra(name) = m
         .declare_extras(vec![ExtraEntry::new(
             "exists".to_string(),
             Variable::integer(),
-            |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+            |_f, _ctx, _e| Box::pin(async move { Ok(vec![]) }),
         )])
         .unwrap_err();
     assert_eq!(name, "exists");

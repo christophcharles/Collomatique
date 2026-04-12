@@ -83,18 +83,15 @@ async fn bundle_only_objectives() {
 #[tokio::test]
 async fn bundle_only_extras() {
     // Bundle declares one extra `s = a + b` and nothing else.
-    let entry: ExtraEntry<B, E, (), String> = ExtraEntry::new(
-        "s".to_string(),
-        Variable::integer(),
-        |_db, _f, _kinds, e| {
+    let entry: ExtraEntry<B, E, (), String> =
+        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, e| {
             Box::pin(async move {
                 let lhs = LinExpr::var(ExtraVar::Extra(e));
                 let rhs = LinExpr::var(ExtraVar::Base("a".to_string()))
                     + LinExpr::var(ExtraVar::Base("b".to_string()));
                 Ok(vec![lhs.eq(&rhs)])
             })
-        },
-    );
+        });
     let bundle: ConstraintBundle<B, E, C, (), String> =
         ConstraintBundle::new().with_extra(entry).unwrap();
 
@@ -327,16 +324,15 @@ async fn int_bundle_merge_concat() {
 async fn apply_bundle_duplicate_extra_fails() {
     let mut m = fresh();
     // Declare an extra directly on the modeler.
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, _e| {
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Ok(vec![])
     })
     .unwrap();
     // Then try to apply a bundle that defines the same extra.
-    let entry: ExtraEntry<B, E, (), String> = ExtraEntry::new(
-        "s".to_string(),
-        Variable::integer(),
-        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-    );
+    let entry: ExtraEntry<B, E, (), String> =
+        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+            Box::pin(async move { Ok(vec![]) })
+        });
     let bundle: ConstraintBundle<B, E, C, (), String> =
         ConstraintBundle::new().with_extra(entry).unwrap();
     let err = m.apply_bundle(bundle).unwrap_err();
@@ -346,16 +342,14 @@ async fn apply_bundle_duplicate_extra_fails() {
 #[tokio::test]
 async fn merged_bundles_duplicate_extra_fails() {
     // Two bundles each define extra "s"; merge them and apply.
-    let entry1: ExtraEntry<B, E, (), String> = ExtraEntry::new(
-        "s".to_string(),
-        Variable::integer(),
-        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-    );
-    let entry2: ExtraEntry<B, E, (), String> = ExtraEntry::new(
-        "s".to_string(),
-        Variable::integer(),
-        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-    );
+    let entry1: ExtraEntry<B, E, (), String> =
+        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+            Box::pin(async move { Ok(vec![]) })
+        });
+    let entry2: ExtraEntry<B, E, (), String> =
+        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+            Box::pin(async move { Ok(vec![]) })
+        });
     let left: ConstraintBundle<B, E, C, (), String> =
         ConstraintBundle::new().with_extra(entry1).unwrap();
     let right: ConstraintBundle<B, E, C, (), String> =
@@ -386,11 +380,10 @@ async fn reify_invalid_epsilon_fails() {
 #[tokio::test]
 async fn reify_duplicate_variable_fails() {
     // Bundle already has an extra named "x"; reify("x") should fail.
-    let entry: ExtraEntry<B, E, (), TestErr> = ExtraEntry::new(
-        "x".to_string(),
-        Variable::integer(),
-        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-    );
+    let entry: ExtraEntry<B, E, (), TestErr> =
+        ExtraEntry::new("x".to_string(), Variable::integer(), |_f, _ctx, _e| {
+            Box::pin(async move { Ok(vec![]) })
+        });
     let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> =
         IntConstraintBundle::new().with_extra(entry).unwrap();
     match int_bundle.reify("x".to_string()) {
@@ -548,7 +541,7 @@ async fn objectify_duplicate_variable_errors() {
     .with_extra(ExtraEntry::new(
         "pen".to_string(),
         Variable::integer(),
-        |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
+        |_f, _ctx, _e| Box::pin(async move { Ok(vec![]) }),
     ))
     .unwrap();
     match bundle.objectify("pen".to_string()) {
