@@ -345,10 +345,27 @@ async fn fix_undeclared_variable() {
 #[tokio::test]
 async fn fix_declared_variable_fails() {
     let mut m = fresh();
-    let FixError(name) = m
+    match m
         .fix_variables(HashMap::from([("a".to_string(), 1.0)]))
-        .unwrap_err();
-    assert_eq!(name, "a");
+        .unwrap_err()
+    {
+        FixError::DeclaredVariable(name) => assert_eq!(name, "a"),
+        other => panic!("expected DeclaredVariable, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn fix_same_variable_twice_fails() {
+    let mut m = fresh();
+    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
+        .unwrap();
+    match m
+        .fix_variables(HashMap::from([("c".to_string(), 2.0)]))
+        .unwrap_err()
+    {
+        FixError::AlreadyFixed(name) => assert_eq!(name, "c"),
+        other => panic!("expected AlreadyFixed, got {:?}", other),
+    }
 }
 
 #[tokio::test]

@@ -158,12 +158,19 @@ impl<B, E> HelperFactory<B, E> {
 #[error("extra `{0:?}` declared more than once")]
 pub struct DuplicateExtra<E: UsableData>(pub E);
 
-/// Attempted to fix a variable that is already declared as a
-/// base variable. Fixed variables must be undeclared — they are
-/// named constants, not decision variables.
+/// Errors from [`Modeler::fix_variables`].
 #[derive(Debug, Clone, thiserror::Error)]
-#[error("variable `{0:?}` is a declared base variable and cannot be fixed")]
-pub struct FixError<B: UsableData>(pub B);
+pub enum FixError<B: UsableData> {
+    /// The variable is a declared base variable. Fixed variables
+    /// must be undeclared — they are named constants, not
+    /// decision variables.
+    #[error("variable `{0:?}` is a declared base variable and cannot be fixed")]
+    DeclaredVariable(B),
+    /// The variable has already been fixed (possibly with a
+    /// different value).
+    #[error("variable `{0:?}` has already been fixed")]
+    AlreadyFixed(B),
+}
 
 /// A base variable required for reconstruction was not provided.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -436,7 +443,10 @@ where
     pub fn fix_variables(&mut self, fixes: HashMap<B, f64>) -> Result<(), FixError<B>> {
         for key in fixes.keys() {
             if self.base_vars.contains_key(key) {
-                return Err(FixError(key.clone()));
+                return Err(FixError::DeclaredVariable(key.clone()));
+            }
+            if self.fixed_variables.contains_key(key) {
+                return Err(FixError::AlreadyFixed(key.clone()));
             }
         }
         self.fixed_variables.extend(fixes);
