@@ -436,6 +436,16 @@ where
         self.objectives.push((coef, objective));
     }
 
+    /// Add a weighted minimization objective.
+    pub fn minimize(&mut self, coef: f64, expr: LinExpr<Var<B, E>>) {
+        self.add_objective(coef, Objective::new(expr, ObjectiveSense::Minimize));
+    }
+
+    /// Add a weighted maximization objective.
+    pub fn maximize(&mut self, coef: f64, expr: LinExpr<Var<B, E>>) {
+        self.add_objective(coef, Objective::new(expr, ObjectiveSense::Maximize));
+    }
+
     /// Fix undeclared variables to known values. These must NOT
     /// be declared base variables — they are named constants that
     /// appear in constraint expressions and will be substituted

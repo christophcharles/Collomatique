@@ -779,3 +779,49 @@ async fn fix_non_integer_in_reify_fails() {
         ),
     }
 }
+
+// ----- objective helper tests --------------------------------------------
+
+#[tokio::test]
+async fn bundle_with_maximize() {
+    let a = LinExpr::var(base("a"));
+    let b = LinExpr::var(base("b"));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::new()
+        .with_maximize(2.0, a)
+        .with_maximize(1.0, b);
+    let mut m = fresh();
+    m.apply_bundle(bundle).unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    // Maximize 2a + b → both 1 (binary).
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
+        1.0
+    );
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap(),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn bundle_with_minimize() {
+    let a = LinExpr::var(base("a"));
+    let b = LinExpr::var(base("b"));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::new()
+        .with_minimize(1.0, a)
+        .with_minimize(1.0, b);
+    let mut m = fresh();
+    m.apply_bundle(bundle).unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    // Minimize a + b → both 0 (binary).
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
+        0.0
+    );
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap(),
+        0.0
+    );
+}

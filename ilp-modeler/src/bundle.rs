@@ -167,6 +167,16 @@ where
         self
     }
 
+    /// Add a weighted minimization objective.
+    pub fn with_minimize(self, coef: f64, expr: LinExpr<Var<B, E>>) -> Self {
+        self.with_objective(coef, Objective::new(expr, ObjectiveSense::Minimize))
+    }
+
+    /// Add a weighted maximization objective.
+    pub fn with_maximize(self, coef: f64, expr: LinExpr<Var<B, E>>) -> Self {
+        self.with_objective(coef, Objective::new(expr, ObjectiveSense::Maximize))
+    }
+
     /// Add an extra-variable definition. Returns
     /// [`DuplicateExtra`] if an extra with the same name
     /// already exists in this bundle.
@@ -291,6 +301,16 @@ where
     pub fn with_objective(mut self, coef: f64, objective: Objective<Var<B, E>>) -> Self {
         self.objectives.push((coef, objective));
         self
+    }
+
+    /// Add a weighted minimization objective.
+    pub fn with_minimize(self, coef: f64, expr: LinExpr<Var<B, E>>) -> Self {
+        self.with_objective(coef, Objective::new(expr, ObjectiveSense::Minimize))
+    }
+
+    /// Add a weighted maximization objective.
+    pub fn with_maximize(self, coef: f64, expr: LinExpr<Var<B, E>>) -> Self {
+        self.with_objective(coef, Objective::new(expr, ObjectiveSense::Maximize))
     }
 
     /// Add an extra-variable definition. Returns
