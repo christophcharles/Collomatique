@@ -55,7 +55,7 @@ where
         F: for<'a> FnOnce(
                 &'a Db,
                 &'a mut crate::HelperFactory<B, E>,
-                &'a crate::VarKinds<'a, B, E>,
+                &'a crate::VarKinds<'a, B, E, Db>,
                 E,
             ) -> crate::BoxFuture<
                 'a,
@@ -468,9 +468,9 @@ pub enum EagerReifyError<E: UsableData> {
 /// Look up the kind of any [`ExtraVar`] reference reachable
 /// from inside an extra-definition closure. Helpers are routed
 /// through the factory; base/extra refs through `kinds`.
-fn lookup_kind<'a, B, E>(
+fn lookup_kind<'a, B, E, Db>(
     var: &ExtraVar<B, E>,
-    kinds: &'a VarKinds<'a, B, E>,
+    kinds: &'a VarKinds<'a, B, E, Db>,
     factory: &'a HelperFactory<B, E>,
 ) -> Option<&'a Variable>
 where
@@ -488,11 +488,11 @@ where
 /// indicator. Direct port of
 /// `collo-ml/src/problem/builder.rs:582` (`reify_constraint`)
 /// generalised to operate on `ExtraVar<B, E>`.
-fn reify_and_inner<B, E>(
+fn reify_and_inner<B, E, Db>(
     constraints: &[Constraint<ExtraVar<B, E>>],
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarKinds<B, E>,
+    kinds: &VarKinds<'_, B, E, Db>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -545,11 +545,11 @@ where
 /// in the big-M linearization. Correctness relies on all
 /// referenced variables being integer: with integrality, an
 /// integer expression `<= epsilon` is equivalent to `<= 0`.
-fn reify_single<B, E>(
+fn reify_single<B, E, Db>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarKinds<B, E>,
+    kinds: &VarKinds<'_, B, E, Db>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -707,44 +707,25 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::binary(),
-            move |_db, factory: &mut HelperFactory<B, E>, kinds, e| {
+            move |db, factory: &mut HelperFactory<B, E>, kinds, e| {
                 let int_constraints = int_constraints; // move
                 Box::pin(async move {
                     // Reduce captured constraints with fixed variable
                     // values before reification inspects them (for
                     // range computation, variable kind checks, etc.).
-                    let fixes: HashMap<ExtraVar<B, E>, f64> = kinds
-                        .fixes()
-                        .iter()
-                        .map(|(b, v)| (ExtraVar::Base(b.clone()), *v))
-                        .collect();
-                    let reduced: Vec<_> = if fixes.is_empty() {
-                        int_constraints
-                    } else {
-                        // Integrality check: reification requires
-                        // integer values.
-                        for c in &int_constraints {
-                            for v in c.variable_refs() {
-                                if let ExtraVar::Base(b) = v {
-                                    if let Some(&val) = kinds.fixes().get(b) {
-                                        if val != val.round() {
-                                            return Err(Err::from(
-                                                ReifyError::NonIntegerFixValue {
-                                                    variable: v.clone(),
-                                                    value: val,
-                                                },
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
+                    let (reduced, fixes) = kinds.fix_constraints(int_constraints, db).await;
+
+                    // Integrality check: reification requires integer
+                    // fixed values.
+                    for (b, &val) in &fixes {
+                        if val != val.round() {
+                            return Err(Err::from(ReifyError::NonIntegerFixValue {
+                                variable: ExtraVar::Base(b.clone()),
+                                value: val,
+                            }));
                         }
-                        int_constraints
-                            .into_iter()
-                            .map(|c| c.reduce(&fixes))
-                            .filter(|c| !c.is_trivially_true())
-                            .collect()
-                    };
+                    }
+
                     let result =
                         reify_and_inner(&reduced, ExtraVar::Extra(e), factory, kinds, epsilon);
                     result.map_err(Err::from)
@@ -957,25 +938,12 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::non_negative(),
-            move |_db, factory: &mut HelperFactory<B, E>, kinds, e| {
+            move |db, factory: &mut HelperFactory<B, E>, kinds, e| {
                 let constraints = constraints; // move
                 Box::pin(async move {
                     // Reduce captured constraints with fixed variable
                     // values before objectification processes them.
-                    let fixes: HashMap<ExtraVar<B, E>, f64> = kinds
-                        .fixes()
-                        .iter()
-                        .map(|(b, v)| (ExtraVar::Base(b.clone()), *v))
-                        .collect();
-                    let reduced: Vec<_> = if fixes.is_empty() {
-                        constraints
-                    } else {
-                        constraints
-                            .into_iter()
-                            .map(|c| c.reduce(&fixes))
-                            .filter(|c| !c.is_trivially_true())
-                            .collect()
-                    };
+                    let (reduced, _fixes) = kinds.fix_constraints(constraints, db).await;
                     Ok(objectify_inner(
                         &reduced,
                         ExtraVar::Extra(e),

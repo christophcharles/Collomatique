@@ -712,7 +712,7 @@ async fn objectify_int_bundle_convenience() {
     assert_eq!(pen, 2.0);
 }
 
-// ----- fix_variables + reify/objectify tests -----------------------------
+// ----- fixer + reify/objectify tests -------------------------------------
 
 #[tokio::test]
 async fn fix_in_reify_closure() {
@@ -735,8 +735,10 @@ async fn fix_in_reify_closure() {
         1.0,
         Objective::new(LinExpr::var(xtra("ind")), ObjectiveSense::Maximize),
     );
-    m.fix_variables(HashMap::from([("c".to_string(), 0.0)]))
-        .unwrap();
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(0.0) } else { None } })
+    });
     let model = m.build(&()).await.unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
@@ -766,8 +768,10 @@ async fn fix_non_integer_in_reify_fails() {
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
         "ref ind".into(),
     );
-    m.fix_variables(HashMap::from([("c".to_string(), 0.5)]))
-        .unwrap();
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(0.5) } else { None } })
+    });
     let err = m.build(&()).await.unwrap_err();
     match err {
         BuildError::ExtraError(name, TestErr::Reify(ReifyError::NonIntegerFixValue { .. })) => {

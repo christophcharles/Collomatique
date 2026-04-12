@@ -34,6 +34,123 @@ pub use source_var::SourceVar;
 /// Aliased to avoid pulling in `futures` as a dependency.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
+/// Async fixer closure. Called lazily at build time for undeclared
+/// base variables found in constraints/objectives. The first fixer
+/// in the chain to return `Some(_)` wins.
+pub type FixerFn<'m, B, Db> = dyn for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + 'm;
+
+// ---------------------------------------------------------------------------
+// Fix helpers (private)
+// ---------------------------------------------------------------------------
+
+/// Extract a base-variable reference from a composite variable
+/// type. Implemented for [`Var`] and [`ExtraVar`] so that the
+/// fix functions are generic over both.
+trait HasBase<B> {
+    fn as_base(&self) -> Option<&B>;
+    fn from_base(b: B) -> Self;
+}
+
+impl<B, E> HasBase<B> for Var<B, E> {
+    fn as_base(&self) -> Option<&B> {
+        match self {
+            Var::Base(b) => Some(b),
+            Var::Extra(_) => None,
+        }
+    }
+    fn from_base(b: B) -> Self {
+        Var::Base(b)
+    }
+}
+
+impl<B, E> HasBase<B> for ExtraVar<B, E> {
+    fn as_base(&self) -> Option<&B> {
+        match self {
+            ExtraVar::Base(b) => Some(b),
+            _ => None,
+        }
+    }
+    fn from_base(b: B) -> Self {
+        ExtraVar::Base(b)
+    }
+}
+
+/// Collect fix values for undeclared base variables referenced in
+/// `vars`. Each variable is checked against `base_vars` (declared
+/// base variables are never fixed). Fixers are called in order;
+/// the first to return `Some` wins.
+async fn resolve_fixes<'a, B: UsableData + 'a, Db>(
+    vars: impl Iterator<Item = &'a B>,
+    base_vars: &HashMap<B, Variable>,
+    fixers: &[Box<FixerFn<'_, B, Db>>],
+    db: &Db,
+) -> HashMap<B, f64> {
+    let mut fixes = HashMap::new();
+    for b in vars {
+        if !base_vars.contains_key(b) && !fixes.contains_key(b) {
+            for fixer in fixers {
+                if let Some(value) = fixer(b, db).await {
+                    fixes.insert(b.clone(), value);
+                    break;
+                }
+            }
+        }
+    }
+    fixes
+}
+
+/// Fix a constraint by resolving undeclared base variables through
+/// the fixer chain. Returns the reduced constraint and the fixes
+/// applied.
+async fn fix_constraint<V, B, E, Db>(
+    constraint: Constraint<V>,
+    base_vars: &HashMap<B, Variable>,
+    fixers: &[Box<FixerFn<'_, B, Db>>],
+    db: &Db,
+) -> (Constraint<V>, HashMap<B, f64>)
+where
+    V: HasBase<B> + UsableData,
+    B: UsableData,
+    E: UsableData,
+{
+    let base_refs = constraint.variable_refs().filter_map(|v| v.as_base());
+    let fixes = resolve_fixes(base_refs, base_vars, fixers, db).await;
+    if fixes.is_empty() {
+        return (constraint, fixes);
+    }
+    let fixes_v: HashMap<V, f64> = fixes
+        .iter()
+        .map(|(b, &val)| (V::from_base(b.clone()), val))
+        .collect();
+    (constraint.reduce(&fixes_v), fixes)
+}
+
+/// Fix a linear expression by resolving undeclared base variables
+/// through the fixer chain. Returns the reduced expression and
+/// the fixes applied.
+async fn fix_expr<V, B, E, Db>(
+    expr: LinExpr<V>,
+    base_vars: &HashMap<B, Variable>,
+    fixers: &[Box<FixerFn<'_, B, Db>>],
+    db: &Db,
+) -> (LinExpr<V>, HashMap<B, f64>)
+where
+    V: HasBase<B> + UsableData,
+    B: UsableData,
+    E: UsableData,
+{
+    let base_refs = expr.variable_refs().filter_map(|v| v.as_base());
+    let fixes = resolve_fixes(base_refs, base_vars, fixers, db).await;
+    if fixes.is_empty() {
+        return (expr, fixes);
+    }
+    let fixes_v: HashMap<V, f64> = fixes
+        .iter()
+        .map(|(b, &val)| (V::from_base(b.clone()), val))
+        .collect();
+    (expr.reduce(&fixes_v), fixes)
+}
+
 // ---------------------------------------------------------------------------
 // Variable references
 // ---------------------------------------------------------------------------
@@ -160,20 +277,6 @@ impl<B, E> HelperFactory<B, E> {
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("extra `{0:?}` declared more than once")]
 pub struct DuplicateExtra<E: UsableData>(pub E);
-
-/// Errors from [`Modeler::fix_variables`].
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum FixError<B: UsableData> {
-    /// The variable is a declared base variable. Fixed variables
-    /// must be undeclared — they are named constants, not
-    /// decision variables.
-    #[error("variable `{0:?}` is a declared base variable and cannot be fixed")]
-    DeclaredVariable(B),
-    /// The variable has already been fixed (possibly with a
-    /// different value).
-    #[error("variable `{0:?}` has already been fixed")]
-    AlreadyFixed(B),
-}
 
 /// A base variable required for reconstruction was not provided.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -312,7 +415,7 @@ where
 pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
         &'a Db,
         &'a mut HelperFactory<B, E>,
-        &'a VarKinds<'a, B, E>,
+        &'a VarKinds<'a, B, E, Db>,
         E,
     ) -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
     + 'm;
@@ -321,8 +424,8 @@ pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
 // VarKinds
 // ---------------------------------------------------------------------------
 
-/// Read-only view of base + extra variable kinds, available
-/// inside an extra-definition closure.
+/// Read-only view of base + extra variable kinds and fix
+/// capabilities, available inside an extra-definition closure.
 ///
 /// Built fresh by [`Modeler::build`] before each closure call.
 /// Reflects every declared base variable and every declared
@@ -333,17 +436,17 @@ pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
 /// and can be looked up there via [`HelperFactory::kind_of`].
 /// This split avoids a borrow conflict between the factory
 /// (which mutates its declared set) and the kinds view.
-pub struct VarKinds<'a, B, E>
+pub struct VarKinds<'a, B, E, Db>
 where
     B: UsableData,
     E: UsableData,
 {
     base: &'a HashMap<B, Variable>,
     extras: &'a HashMap<E, Variable>,
-    fixes: &'a HashMap<B, f64>,
+    fixers: &'a [Box<FixerFn<'a, B, Db>>],
 }
 
-impl<'a, B, E> VarKinds<'a, B, E>
+impl<'a, B, E, Db> VarKinds<'a, B, E, Db>
 where
     B: UsableData,
     E: UsableData,
@@ -367,11 +470,53 @@ where
         }
     }
 
-    /// Fixed (undeclared) variable values. Closures that inspect
-    /// their captured constraints (e.g. reification) should reduce
-    /// them with these values before processing.
-    pub fn fixes(&self) -> &HashMap<B, f64> {
-        self.fixes
+    /// Fix a single constraint by resolving undeclared base
+    /// variables through the fixer chain. `db` is passed
+    /// explicitly to make the async nature visible.
+    pub async fn fix_constraint(
+        &self,
+        constraint: Constraint<ExtraVar<B, E>>,
+        db: &Db,
+    ) -> (Constraint<ExtraVar<B, E>>, HashMap<B, f64>) {
+        fix_constraint::<ExtraVar<B, E>, B, E, Db>(constraint, self.base, self.fixers, db).await
+    }
+
+    /// Fix a single linear expression by resolving undeclared base
+    /// variables through the fixer chain.
+    pub async fn fix_expr(
+        &self,
+        expr: LinExpr<ExtraVar<B, E>>,
+        db: &Db,
+    ) -> (LinExpr<ExtraVar<B, E>>, HashMap<B, f64>) {
+        fix_expr::<ExtraVar<B, E>, B, E, Db>(expr, self.base, self.fixers, db).await
+    }
+
+    /// Fix a batch of constraints by resolving all undeclared base
+    /// variables across the batch in one pass, then reducing each
+    /// constraint. Trivially-true constraints are filtered out.
+    pub async fn fix_constraints(
+        &self,
+        constraints: Vec<Constraint<ExtraVar<B, E>>>,
+        db: &Db,
+    ) -> (Vec<Constraint<ExtraVar<B, E>>>, HashMap<B, f64>) {
+        let base_refs = constraints
+            .iter()
+            .flat_map(|c| c.variable_refs())
+            .filter_map(|v| v.as_base());
+        let fixes = resolve_fixes(base_refs, self.base, self.fixers, db).await;
+        if fixes.is_empty() {
+            return (constraints, fixes);
+        }
+        let fixes_extra: HashMap<ExtraVar<B, E>, f64> = fixes
+            .iter()
+            .map(|(b, &val)| (ExtraVar::Base(b.clone()), val))
+            .collect();
+        let reduced = constraints
+            .into_iter()
+            .map(|c| c.reduce(&fixes_extra))
+            .filter(|c| !c.is_trivially_true())
+            .collect();
+        (reduced, fixes)
     }
 }
 
@@ -403,7 +548,7 @@ where
     constraints: Vec<(Constraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
     extras: HashMap<E, ExtraDef<'m, B, E, Db, Err>>,
-    fixed_variables: HashMap<B, f64>,
+    fixers: Vec<Box<FixerFn<'m, B, Db>>>,
 }
 
 impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
@@ -422,7 +567,7 @@ where
             constraints: Vec::new(),
             objectives: Vec::new(),
             extras: HashMap::new(),
-            fixed_variables: HashMap::new(),
+            fixers: Vec::new(),
         }
     }
 
@@ -449,21 +594,15 @@ where
         self.add_objective(coef, Objective::new(expr, ObjectiveSense::Maximize));
     }
 
-    /// Fix undeclared variables to known values. These must NOT
-    /// be declared base variables — they are named constants that
-    /// appear in constraint expressions and will be substituted
-    /// out during [`Modeler::build`].
-    pub fn fix_variables(&mut self, fixes: HashMap<B, f64>) -> Result<(), FixError<B>> {
-        for key in fixes.keys() {
-            if self.base_vars.contains_key(key) {
-                return Err(FixError::DeclaredVariable(key.clone()));
-            }
-            if self.fixed_variables.contains_key(key) {
-                return Err(FixError::AlreadyFixed(key.clone()));
-            }
-        }
-        self.fixed_variables.extend(fixes);
-        Ok(())
+    /// Register an async fixer closure. At build time, for every
+    /// undeclared base variable found in constraints/objectives,
+    /// fixers are called in registration order; the first to return
+    /// `Some(value)` wins and that variable is substituted out.
+    pub fn add_fixer<F>(&mut self, fixer: F)
+    where
+        F: for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + 'm,
+    {
+        self.fixers.push(Box::new(fixer));
     }
 
     /// Register an extra. The definition closure is only invoked
@@ -481,7 +620,7 @@ where
         F: for<'a> FnOnce(
                 &'a Db,
                 &'a mut HelperFactory<B, E>,
-                &'a VarKinds<'a, B, E>,
+                &'a VarKinds<'a, B, E, Db>,
                 E,
             )
                 -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
@@ -529,7 +668,7 @@ where
     where
         F: for<'a> FnOnce(
                 &'a mut HelperFactory<B, E>,
-                &'a VarKinds<'a, B, E>,
+                &'a VarKinds<'a, B, E, Db>,
                 E,
             ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
             + 'm,
@@ -616,24 +755,35 @@ where
 {
     /// Run the lazy expansion fixpoint and return the assembled
     /// [`Model`]. `db` is passed to every extra-definition
-    /// closure that runs.
+    /// closure and to the fixer chain.
     pub async fn build(mut self, db: &Db) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
-        // Step 0: reduce user constraints/objectives with fixed
-        // variable values. Fixed variables are undeclared named
-        // constants — substituting them out ensures they don't
-        // reach ProblemBuilder (which would reject them).
-        let fixes_var: HashMap<Var<B, E>, f64> = self
-            .fixed_variables
-            .iter()
-            .map(|(b, v)| (Var::Base(b.clone()), *v))
-            .collect();
-        if !fixes_var.is_empty() {
-            for (c, _) in &mut self.constraints {
-                *c = c.reduce(&fixes_var);
-            }
-            self.constraints.retain(|(c, _)| !c.is_trivially_true());
-            for (_, obj) in &mut self.objectives {
-                *obj = obj.reduce(&fixes_var);
+        // Step 0: lazily resolve fixes for user constraints and
+        // objectives. Collect all undeclared base variable refs,
+        // run them through the fixer chain, then reduce.
+        {
+            let all_base_refs = self
+                .constraints
+                .iter()
+                .flat_map(|(c, _)| c.variable_refs())
+                .chain(
+                    self.objectives
+                        .iter()
+                        .flat_map(|(_, o)| o.get_function().variable_refs()),
+                )
+                .filter_map(|v| v.as_base());
+            let fixes = resolve_fixes(all_base_refs, &self.base_vars, &self.fixers, db).await;
+            if !fixes.is_empty() {
+                let fixes_var: HashMap<Var<B, E>, f64> = fixes
+                    .iter()
+                    .map(|(b, &v)| (Var::Base(b.clone()), v))
+                    .collect();
+                for (c, _) in &mut self.constraints {
+                    *c = c.reduce(&fixes_var);
+                }
+                self.constraints.retain(|(c, _)| !c.is_trivially_true());
+                for (_, obj) in &mut self.objectives {
+                    *obj = obj.reduce(&fixes_var);
+                }
             }
         }
 
@@ -698,7 +848,7 @@ where
         // borrowed read-only during expansion via VarKinds.
         let mut extras = std::mem::take(&mut self.extras);
         let base_vars = std::mem::take(&mut self.base_vars);
-        let fixed_variables = std::mem::take(&mut self.fixed_variables);
+        let fixers = std::mem::take(&mut self.fixers);
         let extras_kinds: HashMap<E, Variable> = extras
             .iter()
             .map(|(name, def)| (name.clone(), def.kind.clone()))
@@ -710,7 +860,7 @@ where
                 &mut extras,
                 &base_vars,
                 &extras_kinds,
-                &fixed_variables,
+                &fixers,
                 db,
                 root,
             )
@@ -772,7 +922,7 @@ fn expand<'s, 'm, B, E, C, Db, Err>(
     extras: &'s mut HashMap<E, ExtraDef<'m, B, E, Db, Err>>,
     base_vars: &'s HashMap<B, Variable>,
     extras_kinds: &'s HashMap<E, Variable>,
-    fixed_variables: &'s HashMap<B, f64>,
+    fixers: &'s [Box<FixerFn<'m, B, Db>>],
     db: &'s Db,
     e: E,
 ) -> BoxFuture<'s, Result<(), BuildError<B, E, C, Err>>>
@@ -807,7 +957,7 @@ where
             let kinds = VarKinds {
                 base: base_vars,
                 extras: extras_kinds,
-                fixes: fixed_variables,
+                fixers,
             };
             (def.define)(db, &mut factory, &kinds, e.clone())
                 .await
@@ -828,22 +978,14 @@ where
             }
         }
 
-        // Reduce closure output with fixed variable values
-        // (safety net for user-defined closures that don't
-        // reduce internally).
-        let fixes_extra: HashMap<ExtraVar<B, E>, f64> = fixed_variables
-            .iter()
-            .map(|(b, v)| (ExtraVar::Base(b.clone()), *v))
-            .collect();
-        let constraints: Vec<_> = if fixes_extra.is_empty() {
-            constraints
-        } else {
-            constraints
-                .into_iter()
-                .map(|c| c.reduce(&fixes_extra))
-                .filter(|c| !c.is_trivially_true())
-                .collect()
+        // Safety-net fix: resolve undeclared base variables in
+        // closure output via the fixer chain.
+        let kinds = VarKinds {
+            base: base_vars,
+            extras: extras_kinds,
+            fixers,
         };
+        let (constraints, _fixes) = kinds.fix_constraints(constraints, db).await;
 
         // Register the extra itself and its helpers as variables.
         state
@@ -892,16 +1034,7 @@ where
 
         // Recurse into deps.
         for d in deps {
-            expand(
-                state,
-                extras,
-                base_vars,
-                extras_kinds,
-                fixed_variables,
-                db,
-                d,
-            )
-            .await?;
+            expand(state, extras, base_vars, extras_kinds, fixers, db, d).await?;
         }
 
         state.in_progress.remove(&e);

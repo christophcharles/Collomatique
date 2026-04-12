@@ -6,7 +6,7 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DuplicateExtra, ExtraEntry, ExtraVar, FixError, HelperId, InternalVar, Modeler,
+    BuildError, DuplicateExtra, ExtraEntry, ExtraVar, HelperId, InternalVar, Modeler,
     ReconstructionError, SourceVar, Var,
 };
 
@@ -321,19 +321,21 @@ async fn duplicate_extra_fails() {
     assert_eq!(name, "dup");
 }
 
-// ----- fix_variables tests -----------------------------------------------
+// ----- add_fixer tests ---------------------------------------------------
 
 #[tokio::test]
 async fn fix_undeclared_variable() {
-    // Constraint references undeclared "c"; fix it to 1.0.
+    // Constraint references undeclared "c"; fixer returns 1.0 for it.
     // a + c <= 1, with c fixed to 1 → a <= 0 → a = 0.
     let mut m = fresh();
     let a = LinExpr::var(base("a"));
     let c = LinExpr::var(base("c"));
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
-    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
-        .unwrap();
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
+    });
     let model = m.build(&()).await.unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
@@ -343,34 +345,34 @@ async fn fix_undeclared_variable() {
 }
 
 #[tokio::test]
-async fn fix_declared_variable_fails() {
+async fn fixer_chain_first_wins() {
+    // Two fixers: first returns Some(1.0) for "c", second returns
+    // Some(0.0). First should win.
     let mut m = fresh();
-    match m
-        .fix_variables(HashMap::from([("a".to_string(), 1.0)]))
-        .unwrap_err()
-    {
-        FixError::DeclaredVariable(name) => assert_eq!(name, "a"),
-        other => panic!("expected DeclaredVariable, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn fix_same_variable_twice_fails() {
-    let mut m = fresh();
-    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
-        .unwrap();
-    match m
-        .fix_variables(HashMap::from([("c".to_string(), 2.0)]))
-        .unwrap_err()
-    {
-        FixError::AlreadyFixed(name) => assert_eq!(name, "c"),
-        other => panic!("expected AlreadyFixed, got {:?}", other),
-    }
+    let a = LinExpr::var(base("a"));
+    let c = LinExpr::var(base("c"));
+    m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
+    });
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(0.0) } else { None } })
+    });
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    // c fixed to 1.0 by first fixer → a <= 0 → a = 0
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
+        0.0
+    );
 }
 
 #[tokio::test]
 async fn fix_in_extra_closure() {
-    // Extra's closure references undeclared "c"; fix "c" to 1.0.
+    // Extra's closure references undeclared "c"; fixer returns 1.0.
     // s = a + c, with c fixed to 1 → s = a + 1.
     let mut m = fresh();
     m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
@@ -388,8 +390,10 @@ async fn fix_in_extra_closure() {
         1.0,
         Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
     );
-    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
-        .unwrap();
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
+    });
     let model = m.build(&()).await.unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     // s = a + 1, s <= 2, maximize s → a = 1, s = 2.
@@ -478,8 +482,10 @@ async fn reconstruction_with_fixed_vars() {
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(2.0)),
         "s<=2".into(),
     );
-    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
-        .unwrap();
+    m.add_fixer(|b: &String, _db: &()| {
+        let b = b.clone();
+        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
+    });
     let model = m.build(&()).await.unwrap();
 
     // Reconstruct with a=1 only (c was fixed, not a base var).
