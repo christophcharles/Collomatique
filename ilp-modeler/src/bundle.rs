@@ -36,9 +36,9 @@ where
     B: UsableData,
     E: UsableData,
 {
-    pub name: E,
-    pub kind: Variable,
-    pub define: Box<DefineFn<'m, B, E, Db, Err>>,
+    name: E,
+    kind: Variable,
+    define: Box<DefineFn<'m, B, E, Db, Err>>,
 }
 
 impl<'m, B, E, Db, Err> ExtraEntry<'m, B, E, Db, Err>
@@ -68,6 +68,21 @@ where
             define: Box::new(define),
         }
     }
+
+    /// The extra's name.
+    pub fn name(&self) -> &E {
+        &self.name
+    }
+
+    /// The extra's variable kind.
+    pub fn kind(&self) -> &Variable {
+        &self.kind
+    }
+
+    /// Consume the entry and return its parts.
+    pub(crate) fn into_parts(self) -> (E, Variable, Box<DefineFn<'m, B, E, Db, Err>>) {
+        (self.name, self.kind, self.define)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,18 +100,9 @@ where
     E: UsableData,
     C: UsableData,
 {
-    /// Eager user constraints.
-    pub constraints: Vec<(Constraint<Var<B, E>>, C)>,
-    /// Weighted objective contributions. Mirrors the modeler's
-    /// internal `objectives` vec — merging two bundles is
-    /// concat, no arithmetic, all weights preserved.
-    pub objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    /// Lazy extra-variable definitions. Each entry is exactly
-    /// what `declare_extra` would receive: a name, a kind, and
-    /// a definition closure. Stored as closures because there is
-    /// no way to flatten an extra back into top-level
-    /// constraints.
-    pub extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
+    constraints: Vec<(Constraint<Var<B, E>>, C)>,
+    objectives: Vec<(f64, Objective<Var<B, E>>)>,
+    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
     _phantom: PhantomData<Db>,
 }
 
@@ -138,6 +144,58 @@ where
         }
     }
 
+    /// Construct from a list of weighted objectives.
+    pub fn from_objectives<I>(objectives: I) -> Self
+    where
+        I: IntoIterator<Item = (f64, Objective<Var<B, E>>)>,
+    {
+        ConstraintBundle {
+            objectives: objectives.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Add a constraint with description.
+    pub fn with_constraint(mut self, constraint: Constraint<Var<B, E>>, desc: C) -> Self {
+        self.constraints.push((constraint, desc));
+        self
+    }
+
+    /// Add a weighted objective.
+    pub fn with_objective(mut self, coef: f64, objective: Objective<Var<B, E>>) -> Self {
+        self.objectives.push((coef, objective));
+        self
+    }
+
+    /// Add an extra-variable definition. Returns
+    /// [`DuplicateExtra`] if an extra with the same name
+    /// already exists in this bundle.
+    pub fn with_extra(
+        mut self,
+        entry: ExtraEntry<'m, B, E, Db, Err>,
+    ) -> Result<Self, DuplicateExtra<E>> {
+        if self.extras.iter().any(|e| e.name == entry.name) {
+            return Err(DuplicateExtra(entry.name));
+        }
+        self.extras.push(entry);
+        Ok(self)
+    }
+
+    /// Read-only access to the constraints.
+    pub fn constraints(&self) -> &[(Constraint<Var<B, E>>, C)] {
+        &self.constraints
+    }
+
+    /// Read-only access to the objectives.
+    pub fn objectives(&self) -> &[(f64, Objective<Var<B, E>>)] {
+        &self.objectives
+    }
+
+    /// Read-only access to the extra definitions.
+    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+        &self.extras
+    }
+
     /// Append all of `other`'s entries into `self`. Constraints,
     /// objectives, and extras concat in order; no arithmetic.
     pub fn merge(&mut self, other: Self) {
@@ -160,9 +218,9 @@ where
     E: UsableData,
     C: UsableData,
 {
-    pub constraints: Vec<(IntConstraint<Var<B, E>>, C)>,
-    pub objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    pub extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
+    constraints: Vec<(IntConstraint<Var<B, E>>, C)>,
+    objectives: Vec<(f64, Objective<Var<B, E>>)>,
+    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
     _phantom: PhantomData<Db>,
 }
 
@@ -202,6 +260,58 @@ where
             constraints: constraints.into_iter().collect(),
             ..Self::default()
         }
+    }
+
+    /// Construct from a list of weighted objectives.
+    pub fn from_objectives<I>(objectives: I) -> Self
+    where
+        I: IntoIterator<Item = (f64, Objective<Var<B, E>>)>,
+    {
+        IntConstraintBundle {
+            objectives: objectives.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Add a constraint with description.
+    pub fn with_constraint(mut self, constraint: IntConstraint<Var<B, E>>, desc: C) -> Self {
+        self.constraints.push((constraint, desc));
+        self
+    }
+
+    /// Add a weighted objective.
+    pub fn with_objective(mut self, coef: f64, objective: Objective<Var<B, E>>) -> Self {
+        self.objectives.push((coef, objective));
+        self
+    }
+
+    /// Add an extra-variable definition. Returns
+    /// [`DuplicateExtra`] if an extra with the same name
+    /// already exists in this bundle.
+    pub fn with_extra(
+        mut self,
+        entry: ExtraEntry<'m, B, E, Db, Err>,
+    ) -> Result<Self, DuplicateExtra<E>> {
+        if self.extras.iter().any(|e| e.name == entry.name) {
+            return Err(DuplicateExtra(entry.name));
+        }
+        self.extras.push(entry);
+        Ok(self)
+    }
+
+    /// Read-only access to the constraints.
+    pub fn constraints(&self) -> &[(IntConstraint<Var<B, E>>, C)] {
+        &self.constraints
+    }
+
+    /// Read-only access to the objectives.
+    pub fn objectives(&self) -> &[(f64, Objective<Var<B, E>>)] {
+        &self.objectives
+    }
+
+    /// Read-only access to the extra definitions.
+    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+        &self.extras
     }
 
     /// Append all of `other`'s entries into `self`. Constraints,
@@ -255,10 +365,8 @@ where
             self.add_objective(coef, obj);
         }
         for entry in bundle.extras {
-            // The boxed `define` already matches DefineFn —
-            // declare_extra_boxed (in lib.rs) inserts it
-            // directly without re-wrapping.
-            self.declare_extra_boxed(entry.name, entry.kind, entry.define)?;
+            let (name, kind, define) = entry.into_parts();
+            self.declare_extra_boxed(name, kind, define)?;
         }
         Ok(())
     }

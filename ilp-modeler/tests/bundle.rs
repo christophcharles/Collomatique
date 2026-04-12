@@ -62,13 +62,9 @@ async fn bundle_only_constraints() {
 async fn bundle_only_objectives() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
-    let mut bundle = ConstraintBundle::<B, E, C, (), String>::new();
-    bundle
-        .objectives
-        .push((2.0, Objective::new(a.clone(), ObjectiveSense::Maximize)));
-    bundle
-        .objectives
-        .push((1.0, Objective::new(b.clone(), ObjectiveSense::Maximize)));
+    let bundle = ConstraintBundle::<B, E, C, (), String>::new()
+        .with_objective(2.0, Objective::new(a.clone(), ObjectiveSense::Maximize))
+        .with_objective(1.0, Objective::new(b.clone(), ObjectiveSense::Maximize));
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
     // Should maximize 2a + b → both 1 (binary).
@@ -99,8 +95,8 @@ async fn bundle_only_extras() {
             })
         },
     );
-    let mut bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
-    bundle.extras.push(entry);
+    let bundle: ConstraintBundle<B, E, C, (), String> =
+        ConstraintBundle::new().with_extra(entry).unwrap();
 
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
@@ -118,26 +114,26 @@ async fn bundle_only_extras() {
 async fn bundle_merge_concat() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
-    let mut left = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+    let left = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
         (&a + &b).leq(&LinExpr::constant(1.0)),
         "left".into(),
-    )]);
-    left.objectives
-        .push((1.0, Objective::new(a.clone(), ObjectiveSense::Maximize)));
+    )])
+    .with_objective(1.0, Objective::new(a.clone(), ObjectiveSense::Maximize));
 
     let right = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
         (&a - &b).eq(&LinExpr::constant(0.0)),
         "right".into(),
     )]);
 
+    let mut left = left;
     left.merge(right);
 
-    assert_eq!(left.constraints.len(), 2);
-    assert_eq!(left.objectives.len(), 1);
-    assert_eq!(left.extras.len(), 0);
+    assert_eq!(left.constraints().len(), 2);
+    assert_eq!(left.objectives().len(), 1);
+    assert_eq!(left.extras().len(), 0);
     // Check order: left's constraint first, right's second.
-    assert_eq!(left.constraints[0].1, "left");
-    assert_eq!(left.constraints[1].1, "right");
+    assert_eq!(left.constraints()[0].1, "left");
+    assert_eq!(left.constraints()[1].1, "right");
 }
 
 #[tokio::test]
@@ -150,9 +146,9 @@ async fn constraint_bundle_from_constraints_roundtrip() {
         (c1.clone(), "c1".into()),
         (c2.clone(), "c2".into()),
     ]);
-    assert_eq!(bundle.constraints.len(), 2);
-    assert_eq!(bundle.constraints[0].0, c1);
-    assert_eq!(bundle.constraints[1].0, c2);
+    assert_eq!(bundle.constraints().len(), 2);
+    assert_eq!(bundle.constraints()[0].0, c1);
+    assert_eq!(bundle.constraints()[1].0, c2);
 }
 
 #[tokio::test]
@@ -165,9 +161,9 @@ async fn int_bundle_from_constraints_roundtrip() {
         (c1.clone(), "c1".into()),
         (c2.clone(), "c2".into()),
     ]);
-    assert_eq!(bundle.constraints.len(), 2);
-    assert_eq!(bundle.constraints[0].0, c1);
-    assert_eq!(bundle.constraints[1].0, c2);
+    assert_eq!(bundle.constraints().len(), 2);
+    assert_eq!(bundle.constraints()[0].0, c1);
+    assert_eq!(bundle.constraints()[1].0, c2);
 }
 
 #[tokio::test]
@@ -180,10 +176,10 @@ async fn int_bundle_into_general_unwraps() {
         "c1".into(),
     )]);
     let general = int_bundle.into_general();
-    assert_eq!(general.constraints.len(), 1);
+    assert_eq!(general.constraints().len(), 1);
     // The unwrapped constraint matches the int constraint's
     // underlying representation.
-    assert_eq!(&general.constraints[0].0, c1.as_constraint());
+    assert_eq!(&general.constraints()[0].0, c1.as_constraint());
 }
 
 // ----- Reify tests ---------------------------------------------------
@@ -215,11 +211,11 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
     // indicator) constrained to 1.
     let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new();
     let reified = int_bundle.reify("ind".to_string()).unwrap();
-    assert_eq!(reified.constraints.len(), 0);
-    assert_eq!(reified.objectives.len(), 0);
-    assert_eq!(reified.extras.len(), 1);
-    assert_eq!(reified.extras[0].name, "ind");
-    assert_eq!(reified.extras[0].kind, Variable::binary());
+    assert_eq!(reified.constraints().len(), 0);
+    assert_eq!(reified.objectives().len(), 0);
+    assert_eq!(reified.extras().len(), 1);
+    assert_eq!(*reified.extras()[0].name(), "ind");
+    assert_eq!(*reified.extras()[0].kind(), Variable::binary());
 
     // Apply and build; the resulting problem should require ind=1.
     let mut m = fresh_reify();
@@ -323,9 +319,9 @@ async fn int_bundle_merge_concat() {
         "right".into(),
     )]);
     left.merge(right);
-    assert_eq!(left.constraints.len(), 2);
-    assert_eq!(left.constraints[0].1, "left");
-    assert_eq!(left.constraints[1].1, "right");
+    assert_eq!(left.constraints().len(), 2);
+    assert_eq!(left.constraints()[0].1, "left");
+    assert_eq!(left.constraints()[1].1, "right");
 }
 
 #[tokio::test]
@@ -342,8 +338,8 @@ async fn apply_bundle_duplicate_extra_fails() {
         Variable::integer(),
         |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
     );
-    let mut bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
-    bundle.extras.push(entry);
+    let bundle: ConstraintBundle<B, E, C, (), String> =
+        ConstraintBundle::new().with_extra(entry).unwrap();
     let err = m.apply_bundle(bundle).unwrap_err();
     assert_eq!(err.0, "s");
 }
@@ -361,14 +357,15 @@ async fn merged_bundles_duplicate_extra_fails() {
         Variable::integer(),
         |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
     );
-    let mut left: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
-    left.extras.push(entry1);
-    let mut right: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new();
-    right.extras.push(entry2);
-    left.merge(right);
+    let left: ConstraintBundle<B, E, C, (), String> =
+        ConstraintBundle::new().with_extra(entry1).unwrap();
+    let right: ConstraintBundle<B, E, C, (), String> =
+        ConstraintBundle::new().with_extra(entry2).unwrap();
+    let mut merged = left;
+    merged.merge(right);
 
     let mut m = fresh();
-    let err = m.apply_bundle(left).unwrap_err();
+    let err = m.apply_bundle(merged).unwrap_err();
     assert_eq!(err.0, "s");
 }
 
@@ -397,8 +394,8 @@ async fn reify_duplicate_variable_fails() {
         Variable::integer(),
         |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
     );
-    let mut int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new();
-    int_bundle.extras.push(entry);
+    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> =
+        IntConstraintBundle::new().with_extra(entry).unwrap();
     match int_bundle.reify("x".to_string()) {
         Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "x"),
         Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
@@ -547,16 +544,16 @@ async fn objectify_empty_bundle_errors() {
 #[tokio::test]
 async fn objectify_duplicate_variable_errors() {
     let a = LinExpr::var(base("a"));
-    let mut bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+    let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
         a.leq(&LinExpr::constant(0.0)),
         "c".into(),
-    )]);
-    let entry: ExtraEntry<B, E, (), String> = ExtraEntry::new(
+    )])
+    .with_extra(ExtraEntry::new(
         "pen".to_string(),
         Variable::integer(),
         |_db, _f, _kinds, _e| Box::pin(async move { Ok(vec![]) }),
-    );
-    bundle.extras.push(entry);
+    ))
+    .unwrap();
     match bundle.objectify("pen".to_string()) {
         Err(EagerObjectifyError::DuplicateVariable(name)) => assert_eq!(name, "pen"),
         Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
