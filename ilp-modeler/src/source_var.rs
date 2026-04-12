@@ -23,4 +23,12 @@ pub trait SourceVar<Db>: UsableData {
     ///
     /// Variables that should be fixed must NOT be included in the result.
     fn vars(db: &Db) -> impl Future<Output = HashMap<Self, Variable>>;
+
+    /// Return a fixed value for this variable instance, if it should
+    /// be fixed. Called lazily at build time for undeclared base
+    /// variables found in constraints/objectives.
+    ///
+    /// * `None` — this variable is free (a decision variable)
+    /// * `Some(value)` — substitute this constant value
+    fn fix(&self, db: &Db) -> impl Future<Output = Option<f64>>;
 }

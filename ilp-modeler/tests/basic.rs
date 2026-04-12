@@ -600,21 +600,30 @@ async fn declare_extras_conflicts_with_existing_fails() {
 enum TestVar {
     X,
     Y,
+    /// Undeclared variable used to test fix().
+    Z,
 }
 
 impl SourceVar<()> for TestVar {
     async fn vars(_db: &()) -> HashMap<Self, Variable> {
+        // Z is intentionally excluded — it is fixed, not a decision variable.
         HashMap::from([
             (TestVar::X, Variable::binary()),
             (TestVar::Y, Variable::binary()),
         ])
+    }
+
+    async fn fix(&self, _db: &()) -> Option<f64> {
+        match self {
+            TestVar::Z => Some(1.0),
+            _ => None,
+        }
     }
 }
 
 #[tokio::test]
 async fn from_source_creates_modeler() {
     let m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
-    // Add constraint and build to verify the base vars are set up.
     let mut m = m;
     let x = LinExpr::var(Var::Base(TestVar::X));
     let y = LinExpr::var(Var::Base(TestVar::Y));
@@ -625,4 +634,38 @@ async fn from_source_creates_modeler() {
     let sum = cfg.get(InternalVar::Base(TestVar::X)).unwrap_or(0.0)
         + cfg.get(InternalVar::Base(TestVar::Y)).unwrap_or(0.0);
     assert_eq!(sum, 1.0);
+}
+
+#[tokio::test]
+async fn from_source_auto_fixes_via_source_var() {
+    // Constraint references Z (undeclared). from_source registers
+    // SourceVar::fix as a fixer, which returns Some(1.0) for Z.
+    // x + Z <= 1, Z fixed to 1 → x <= 0 → x = 0.
+    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
+    let x = LinExpr::var(Var::Base(TestVar::X));
+    let z = LinExpr::var(Var::Base(TestVar::Z));
+    m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
+    m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
+}
+
+#[tokio::test]
+async fn from_source_additional_fixer_composes() {
+    // from_source registers SourceVar::fix, then we add another fixer
+    // for a different variable W (not in the enum). The additional
+    // fixer should compose with the SourceVar one.
+    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
+    let x = LinExpr::var(Var::Base(TestVar::X));
+    let z = LinExpr::var(Var::Base(TestVar::Z));
+    // x + Z <= 1, Z fixed to 1 by SourceVar::fix → x = 0.
+    m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
+    m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
+    // Add a second fixer that doesn't handle Z (returns None for all).
+    // Shouldn't break anything — the SourceVar fixer handles Z.
+    m.add_fixer(|_b: &TestVar, _db: &()| Box::pin(async move { None }));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
 }

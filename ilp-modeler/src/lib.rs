@@ -714,16 +714,20 @@ where
 
 impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
 where
-    B: SourceVar<Db> + UsableData,
+    B: SourceVar<Db> + UsableData + 'm,
+    Db: 'm,
     E: UsableData,
     C: UsableData,
     Err: Debug + 'static,
 {
     /// Create a modeler by querying the data source for base variables
-    /// via [`SourceVar::vars`].
+    /// via [`SourceVar::vars`], and register [`SourceVar::fix`] as the
+    /// first fixer in the chain.
     pub async fn from_source(db: &Db) -> Self {
         let base_vars = B::vars(db).await;
-        Self::new(base_vars)
+        let mut modeler = Self::new(base_vars);
+        modeler.add_fixer(|b: &B, db: &Db| Box::pin(b.fix(db)));
+        modeler
     }
 }
 
