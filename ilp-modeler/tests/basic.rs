@@ -6,7 +6,7 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DuplicateExtra, ExtraVar, HelperId, InternalVar, Modeler, Var,
+    BuildError, DuplicateExtra, ExtraVar, FixError, HelperId, InternalVar, Modeler, Var,
 };
 
 type B = String;
@@ -318,4 +318,66 @@ async fn duplicate_extra_fails() {
         })
         .unwrap_err();
     assert_eq!(name, "dup");
+}
+
+// ----- fix_variables tests -----------------------------------------------
+
+#[tokio::test]
+async fn fix_undeclared_variable() {
+    // Constraint references undeclared "c"; fix it to 1.0.
+    // a + c <= 1, with c fixed to 1 → a <= 0 → a = 0.
+    let mut m = fresh();
+    let a = LinExpr::var(base("a"));
+    let c = LinExpr::var(base("c"));
+    m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
+        .unwrap();
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
+        0.0
+    );
+}
+
+#[tokio::test]
+async fn fix_declared_variable_fails() {
+    let mut m = fresh();
+    let FixError(name) = m
+        .fix_variables(HashMap::from([("a".to_string(), 1.0)]))
+        .unwrap_err();
+    assert_eq!(name, "a");
+}
+
+#[tokio::test]
+async fn fix_in_extra_closure() {
+    // Extra's closure references undeclared "c"; fix "c" to 1.0.
+    // s = a + c, with c fixed to 1 → s = a + 1.
+    let mut m = fresh();
+    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _kinds, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
+                + LinExpr::var(ExtraVar::Base("c".to_string())))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(2.0)),
+        "s<=2".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
+    );
+    m.fix_variables(HashMap::from([("c".to_string(), 1.0)]))
+        .unwrap();
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    // s = a + 1, s <= 2, maximize s → a = 1, s = 2.
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Extra("s".to_string()))
+            .unwrap(),
+        2.0
+    );
 }

@@ -717,3 +717,71 @@ async fn objectify_int_bundle_convenience() {
         .unwrap();
     assert_eq!(pen, 2.0);
 }
+
+// ----- fix_variables + reify/objectify tests -----------------------------
+
+#[tokio::test]
+async fn fix_in_reify_closure() {
+    // Reify {a + c <= 1} where c is fixed to 0.
+    // With c=0, constraint becomes a <= 1, which is always true
+    // for binary a. The indicator should be 1.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("a".to_string(), Variable::binary());
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let a = IntLinExpr::var(base("a"));
+    let c = IntLinExpr::var(Var::Base("c".to_string()));
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(
+        (&a + &c).leq(&IntLinExpr::constant(1)),
+        "a+c<=1".into(),
+    )]);
+    let reified = bundle.reify("ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("ind")), ObjectiveSense::Maximize),
+    );
+    m.fix_variables(HashMap::from([("c".to_string(), 0.0)]))
+        .unwrap();
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
+            .unwrap(),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn fix_non_integer_in_reify_fails() {
+    // Reify a constraint where a fixed variable has value 0.5.
+    // Should fail with NonIntegerFixValue.
+    let mut vars: HashMap<B, Variable> = HashMap::new();
+    vars.insert("a".to_string(), Variable::binary());
+    let mut m: Modeler<'_, B, E, C, (), TestErr> = Modeler::new(vars);
+
+    let a = IntLinExpr::var(base("a"));
+    let c = IntLinExpr::var(Var::Base("c".to_string()));
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(
+        (&a + &c).leq(&IntLinExpr::constant(1)),
+        "a+c<=1".into(),
+    )]);
+    let reified = bundle.reify("ind".to_string()).unwrap();
+    m.apply_bundle(reified).unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
+        "ref ind".into(),
+    );
+    m.fix_variables(HashMap::from([("c".to_string(), 0.5)]))
+        .unwrap();
+    let err = m.build(&()).await.unwrap_err();
+    match err {
+        BuildError::ExtraError(name, TestErr::Reify(ReifyError::NonIntegerFixValue { .. })) => {
+            assert_eq!(name, "ind");
+        }
+        other => panic!(
+            "expected ExtraError(_, NonIntegerFixValue), got {:?}",
+            other
+        ),
+    }
+}

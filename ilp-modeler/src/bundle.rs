@@ -296,6 +296,14 @@ where
     /// (infinite) range. Big-M linearization needs finite bounds.
     #[error("constraint LHS has an unbounded range; cannot reify")]
     InfiniteLhsRange,
+    /// A fixed variable substituted into a reified constraint has
+    /// a non-integer value. The big-M epsilon encoding requires
+    /// all values to be integers.
+    #[error("fixed variable {variable:?} has non-integer value {value}; cannot reify")]
+    NonIntegerFixValue {
+        variable: ExtraVar<B, E>,
+        value: f64,
+    },
 }
 
 /// Errors detectable eagerly at the [`IntConstraintBundle::reify`]
@@ -555,16 +563,46 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::binary(),
-            move |_db, factory, kinds, e| {
+            move |_db, factory: &mut HelperFactory<B, E>, kinds, e| {
                 let int_constraints = int_constraints; // move
                 Box::pin(async move {
-                    let result = reify_and_inner(
-                        &int_constraints,
-                        ExtraVar::Extra(e),
-                        factory,
-                        kinds,
-                        epsilon,
-                    );
+                    // Reduce captured constraints with fixed variable
+                    // values before reification inspects them (for
+                    // range computation, variable kind checks, etc.).
+                    let fixes: HashMap<ExtraVar<B, E>, f64> = kinds
+                        .fixes()
+                        .iter()
+                        .map(|(b, v)| (ExtraVar::Base(b.clone()), *v))
+                        .collect();
+                    let reduced: Vec<_> = if fixes.is_empty() {
+                        int_constraints
+                    } else {
+                        // Integrality check: reification requires
+                        // integer values.
+                        for c in &int_constraints {
+                            for v in c.variable_refs() {
+                                if let ExtraVar::Base(b) = v {
+                                    if let Some(&val) = kinds.fixes().get(b) {
+                                        if val != val.round() {
+                                            return Err(Err::from(
+                                                ReifyError::NonIntegerFixValue {
+                                                    variable: v.clone(),
+                                                    value: val,
+                                                },
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        int_constraints
+                            .into_iter()
+                            .map(|c| c.reduce(&fixes))
+                            .filter(|c| !c.is_trivially_true())
+                            .collect()
+                    };
+                    let result =
+                        reify_and_inner(&reduced, ExtraVar::Extra(e), factory, kinds, epsilon);
                     result.map_err(Err::from)
                 })
             },
@@ -775,11 +813,27 @@ where
         let entry = ExtraEntry::new(
             var.clone(),
             Variable::non_negative(),
-            move |_db, factory, _kinds, e| {
+            move |_db, factory: &mut HelperFactory<B, E>, kinds, e| {
                 let constraints = constraints; // move
                 Box::pin(async move {
+                    // Reduce captured constraints with fixed variable
+                    // values before objectification processes them.
+                    let fixes: HashMap<ExtraVar<B, E>, f64> = kinds
+                        .fixes()
+                        .iter()
+                        .map(|(b, v)| (ExtraVar::Base(b.clone()), *v))
+                        .collect();
+                    let reduced: Vec<_> = if fixes.is_empty() {
+                        constraints
+                    } else {
+                        constraints
+                            .into_iter()
+                            .map(|c| c.reduce(&fixes))
+                            .filter(|c| !c.is_trivially_true())
+                            .collect()
+                    };
                     Ok(objectify_inner(
-                        &constraints,
+                        &reduced,
                         ExtraVar::Extra(e),
                         factory,
                         alpha,
