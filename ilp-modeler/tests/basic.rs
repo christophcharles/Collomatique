@@ -6,8 +6,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DuplicateExtra, ExtraEntry, ExtraVar, HelperId, InternalVar, Modeler,
-    ReconstructionError, SourceVar, Var,
+    BuildError, DescribeVar, DuplicateExtra, ExtraEntry, ExtraVar, HelperId, InternalVar, LoadEnv,
+    Modeler, ReconstructionError, SourceVar, Var,
 };
 
 type B = String;
@@ -650,4 +650,85 @@ async fn from_source_additional_fixer_composes() {
     let model = m.build(&()).await.unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
+}
+
+// ----- DescribeVar + LoadEnv + from_described tests -------------------------
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum DescVar {
+    A,
+    B,
+    /// Undeclared variable, fixed to 1.0.
+    C,
+}
+
+struct DescEnv {
+    c_value: f64,
+}
+
+impl LoadEnv<()> for DescEnv {
+    async fn load(_db: &()) -> Self {
+        DescEnv { c_value: 1.0 }
+    }
+}
+
+impl DescribeVar for DescVar {
+    type Env = DescEnv;
+
+    fn enumerate(_env: &DescEnv) -> HashMap<Self, Variable> {
+        HashMap::from([
+            (DescVar::A, Variable::binary()),
+            (DescVar::B, Variable::binary()),
+        ])
+    }
+
+    fn check_fix(&self, env: &DescEnv) -> Option<f64> {
+        match self {
+            DescVar::C => Some(env.c_value),
+            _ => None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn from_described_creates_modeler() {
+    let mut m: Modeler<'_, DescVar, String, String, (), String> =
+        Modeler::from_described(&()).await;
+    let a = LinExpr::var(Var::Base(DescVar::A));
+    let b = LinExpr::var(Var::Base(DescVar::B));
+    m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
+    m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let sum = cfg.get(InternalVar::Base(DescVar::A)).unwrap_or(0.0)
+        + cfg.get(InternalVar::Base(DescVar::B)).unwrap_or(0.0);
+    assert_eq!(sum, 1.0);
+}
+
+#[tokio::test]
+async fn from_described_fixes_via_env() {
+    // a + C <= 1, C fixed to 1 via check_fix → a <= 0 → a = 0.
+    let mut m: Modeler<'_, DescVar, String, String, (), String> =
+        Modeler::from_described(&()).await;
+    let a = LinExpr::var(Var::Base(DescVar::A));
+    let c = LinExpr::var(Var::Base(DescVar::C));
+    m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
+}
+
+#[tokio::test]
+async fn blanket_source_var_from_describe_var() {
+    // DescVar + LoadEnv<()> gives SourceVar<()> via blanket impl.
+    // from_source should work (less optimal, but correct).
+    let mut m: Modeler<'_, DescVar, String, String, (), String> = Modeler::from_source(&()).await;
+    let a = LinExpr::var(Var::Base(DescVar::A));
+    let c = LinExpr::var(Var::Base(DescVar::C));
+    m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }

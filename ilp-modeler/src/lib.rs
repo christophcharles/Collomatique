@@ -27,6 +27,12 @@ pub use bundle::{
     ReifyError,
 };
 
+mod describe_var;
+pub use describe_var::DescribeVar;
+
+mod load_env;
+pub use load_env::LoadEnv;
+
 mod source_var;
 pub use source_var::SourceVar;
 
@@ -707,6 +713,32 @@ where
         let base_vars = B::vars(db).await;
         let mut modeler = Self::new(base_vars);
         modeler.add_fixer(|b: &B, db: &Db| Box::pin(b.fix(db)));
+        modeler
+    }
+}
+
+impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+where
+    B: DescribeVar + UsableData + 'm,
+    B::Env: LoadEnv<Db>,
+    Db: 'm,
+    E: UsableData,
+    C: UsableData,
+    Err: Debug + 'static,
+{
+    /// Create a modeler from a [`DescribeVar`] type, loading the
+    /// environment once via [`LoadEnv`]. More efficient than
+    /// [`from_source`](Self::from_source) for `DescribeVar` types
+    /// because the env is loaded once and captured by the fixer
+    /// closure.
+    pub async fn from_described(db: &Db) -> Self {
+        let env = B::Env::load(db).await;
+        let base_vars = B::enumerate(&env);
+        let mut modeler = Self::new(base_vars);
+        modeler.add_fixer(move |b: &B, _db: &Db| {
+            let result = b.check_fix(&env);
+            Box::pin(async move { result })
+        });
         modeler
     }
 }

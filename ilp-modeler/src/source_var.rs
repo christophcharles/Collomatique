@@ -3,6 +3,8 @@ use std::future::Future;
 
 use collomatique_ilp::{UsableData, Variable};
 
+use crate::{DescribeVar, LoadEnv};
+
 /// Trait for types that can enumerate ILP base variables from a data source.
 ///
 /// Both methods are async: variable enumeration and fixing may require
@@ -31,4 +33,24 @@ pub trait SourceVar<Db>: UsableData {
     /// * `None` — this variable is free (a decision variable)
     /// * `Some(value)` — substitute this constant value
     fn fix(&self, db: &Db) -> impl Future<Output = Option<f64>>;
+}
+
+// ---------------------------------------------------------------------------
+// Blanket impl: DescribeVar + LoadEnv → SourceVar
+// ---------------------------------------------------------------------------
+
+impl<T, Db> SourceVar<Db> for T
+where
+    T: DescribeVar,
+    T::Env: LoadEnv<Db>,
+{
+    async fn vars(db: &Db) -> HashMap<Self, Variable> {
+        let env = T::Env::load(db).await;
+        Self::enumerate(&env)
+    }
+
+    async fn fix(&self, db: &Db) -> Option<f64> {
+        let env = T::Env::load(db).await;
+        self.check_fix(&env)
+    }
 }
