@@ -38,7 +38,7 @@ fn empty_bundle<'m>() -> ConstraintBundle<'m, B, E, C, (), String> {
 async fn empty_bundle_apply_is_noop() {
     let mut m = fresh();
     m.apply_bundle(empty_bundle()).unwrap();
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     assert_eq!(pb.get_constraints().len(), 0);
     // Two declared base variables, no extras, no helpers.
     assert_eq!(pb.get_variables().len(), 2);
@@ -54,7 +54,7 @@ async fn bundle_only_constraints() {
     ]);
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     assert_eq!(pb.get_constraints().len(), 2);
 }
 
@@ -72,7 +72,7 @@ async fn bundle_only_objectives() {
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
     // Should maximize 2a + b → both 1 (binary).
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
@@ -109,7 +109,7 @@ async fn bundle_only_extras() {
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
         "s<=1".into(),
     );
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     // Three vars: a, b, s.
     assert_eq!(pb.get_variables().len(), 3);
 }
@@ -229,7 +229,7 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
         "ref ind".into(),
     );
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
@@ -264,7 +264,7 @@ async fn reify_and_with_solver() {
         Objective::new(LinExpr::var(xtra("is_one")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let is_one = cfg
         .get(InternalVar::<B, E>::Extra("is_one".to_string()))
@@ -427,7 +427,7 @@ async fn reify_equality_constraint() {
         Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
@@ -460,7 +460,7 @@ async fn reify_equality_constraint_forced_false() {
         Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
@@ -492,7 +492,7 @@ async fn reify_non_binary_integer_variable() {
         Objective::new(LinExpr::var(base("x")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
@@ -524,7 +524,7 @@ async fn reify_non_binary_integer_variable_forced_false() {
         Objective::new(LinExpr::var(xtra("le_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
@@ -600,7 +600,7 @@ async fn objectify_single_inequality() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
@@ -627,7 +627,7 @@ async fn objectify_single_equality() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
@@ -664,7 +664,7 @@ async fn objectify_two_constraints(alpha: f64) -> f64 {
         "y>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     cfg.get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap()
@@ -710,7 +710,7 @@ async fn objectify_int_bundle_convenience() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap();
+    let pb = m.build(&()).await.unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))

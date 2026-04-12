@@ -188,6 +188,44 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
+
+/// The output of [`Modeler::build`]. Wraps the assembled
+/// [`Problem`] and carries data needed to build a
+/// reconstruction problem (for computing extra/helper values
+/// from a known base-variable assignment).
+#[derive(Debug)]
+pub struct Model<B, E, C>
+where
+    B: UsableData,
+    E: UsableData,
+    C: UsableData,
+{
+    problem: Problem<InternalVar<B, E>, ConstraintSource<E, C>>,
+    reconstruction_constraints: Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
+    reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
+    base_variable_set: HashSet<B>,
+}
+
+impl<B, E, C> Model<B, E, C>
+where
+    B: UsableData,
+    E: UsableData,
+    C: UsableData,
+{
+    /// Access the assembled problem for solving.
+    pub fn problem(&self) -> &Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
+        &self.problem
+    }
+
+    /// Consume the model and return the assembled problem.
+    pub fn into_problem(self) -> Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
+        self.problem
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Modeler
 // ---------------------------------------------------------------------------
 
@@ -418,12 +456,9 @@ where
     Err: Debug + 'static,
 {
     /// Run the lazy expansion fixpoint and return the assembled
-    /// [`Problem`]. `db` is passed to every extra-definition
+    /// [`Model`]. `db` is passed to every extra-definition
     /// closure that runs.
-    pub async fn build(
-        mut self,
-        db: &Db,
-    ) -> Result<Problem<InternalVar<B, E>, ConstraintSource<E, C>>, BuildError<B, E, C, Err>> {
+    pub async fn build(mut self, db: &Db) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
         // Step 1: transmute user constraints/objectives to InternalVar.
         let user_constraints: Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)> = self
             .constraints
@@ -494,21 +529,53 @@ where
             expand(&mut state, &mut extras, &base_vars, &extras_kinds, db, root).await?;
         }
 
-        // Step 4: feed everything into ProblemBuilder.
+        // Step 4: partition constraints for reconstruction.
         let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
-        for (b, kind) in base_vars {
-            all_vars.insert(InternalVar::Base(b), kind);
+        for (b, kind) in &base_vars {
+            all_vars.insert(InternalVar::Base(b.clone()), kind.clone());
         }
         for (v, kind) in state.out_vars {
             all_vars.insert(v, kind);
         }
 
+        let reconstruction_constraints: Vec<_> = state
+            .out_constraints
+            .iter()
+            .filter(|(_, src)| matches!(src, ConstraintSource::DefiningExtra { .. }))
+            .cloned()
+            .collect();
+
+        let mut reconstruction_variables: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
+        for (c, _) in &reconstruction_constraints {
+            for v in c.variable_refs() {
+                if let Some(kind) = all_vars.get(v) {
+                    reconstruction_variables.insert(v.clone(), kind.clone());
+                }
+            }
+        }
+
+        let base_variable_set: HashSet<B> = reconstruction_variables
+            .keys()
+            .filter_map(|v| match v {
+                InternalVar::Base(b) => Some(b.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // Step 5: feed everything into ProblemBuilder.
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
                 .set_variables(all_vars)
                 .add_constraints(state.out_constraints)
                 .set_objective(folded_obj);
-        builder.build().map_err(BuildError::Ilp)
+        let problem = builder.build().map_err(BuildError::Ilp)?;
+
+        Ok(Model {
+            problem,
+            reconstruction_constraints,
+            reconstruction_variables,
+            base_variable_set,
+        })
     }
 }
 

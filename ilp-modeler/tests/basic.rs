@@ -40,9 +40,9 @@ async fn trivial_problem() {
     let b = LinExpr::var(base("b"));
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
-    let pb = m.build(&()).await.unwrap();
+    let model = m.build(&()).await.unwrap();
     let solver = CbcSolver::new();
-    let cfg = solver.solve(&pb).expect("solvable");
+    let cfg = solver.solve(model.problem()).expect("solvable");
     let sum = cfg
         .get(InternalVar::<B, E>::Base("a".to_string()))
         .unwrap_or(0.0)
@@ -78,9 +78,9 @@ async fn referenced_extra_runs() {
         1.0,
         Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
     );
-    let pb = m.build(&()).await.unwrap();
+    let model = m.build(&()).await.unwrap();
     assert!(*ran.lock().unwrap());
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("s".to_string()))
             .unwrap(),
@@ -138,8 +138,8 @@ async fn extra_chain() {
         LinExpr::var(xtra("ax")).eq(&LinExpr::constant(1.0)),
         "ax=1".into(),
     );
-    let pb = m.build(&()).await.unwrap();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap(),
         1.0
@@ -199,15 +199,17 @@ async fn helpers_namespaced_per_extra() {
         (LinExpr::var(xtra("e1")) + LinExpr::var(xtra("e2"))).eq(&LinExpr::constant(1.0)),
         "use both".into(),
     );
-    let pb = m.build(&()).await.unwrap();
-    let helper_count = pb
+    let model = m.build(&()).await.unwrap();
+    let helper_count = model
+        .problem()
         .get_variables()
         .keys()
         .filter(|v| matches!(v, InternalVar::Helper { .. }))
         .count();
     assert_eq!(helper_count, 2);
     // Verify the two helpers have distinct owners.
-    let mut owners: Vec<_> = pb
+    let mut owners: Vec<_> = model
+        .problem()
         .get_variables()
         .keys()
         .filter_map(|v| match v {
