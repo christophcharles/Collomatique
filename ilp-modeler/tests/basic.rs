@@ -732,3 +732,136 @@ async fn blanket_source_var_from_describe_var() {
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }
+
+// ----- #[derive(DescribeVar)] tests -----------------------------------------
+
+struct DeriveEnv {
+    max_slot: i32,
+}
+
+impl LoadEnv<()> for DeriveEnv {
+    async fn load(_db: &()) -> Self {
+        DeriveEnv { max_slot: 3 }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, DescribeVar)]
+#[env(DeriveEnv)]
+enum DeriveVar {
+    Slot {
+        #[range(0..env.max_slot)]
+        slot: i32,
+    },
+    Flag {
+        active: bool,
+    },
+}
+
+#[tokio::test]
+async fn derive_enumerate() {
+    let env = DeriveEnv { max_slot: 3 };
+    let vars = DeriveVar::enumerate(&env);
+    // 3 slots + 2 bools = 5 variables
+    assert_eq!(vars.len(), 5);
+    assert!(vars.contains_key(&DeriveVar::Slot { slot: 0 }));
+    assert!(vars.contains_key(&DeriveVar::Slot { slot: 2 }));
+    assert!(!vars.contains_key(&DeriveVar::Slot { slot: 3 }));
+    assert!(vars.contains_key(&DeriveVar::Flag { active: true }));
+    assert!(vars.contains_key(&DeriveVar::Flag { active: false }));
+}
+
+#[tokio::test]
+async fn derive_check_fix() {
+    let env = DeriveEnv { max_slot: 3 };
+    assert_eq!(DeriveVar::Slot { slot: 0 }.check_fix(&env), None);
+    assert_eq!(DeriveVar::Slot { slot: 2 }.check_fix(&env), None);
+    assert_eq!(DeriveVar::Slot { slot: 3 }.check_fix(&env), Some(0.0));
+    assert_eq!(DeriveVar::Slot { slot: 100 }.check_fix(&env), Some(0.0));
+    assert_eq!(DeriveVar::Flag { active: true }.check_fix(&env), None);
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, DescribeVar)]
+#[env(DeriveEnv)]
+#[fix_with(5.0)]
+enum DeriveVarCustomFix {
+    #[var(Variable::integer())]
+    Slot {
+        #[range(0..env.max_slot)]
+        slot: i32,
+    },
+}
+
+#[tokio::test]
+async fn derive_custom_fix_with_and_var_type() {
+    let env = DeriveEnv { max_slot: 2 };
+    let vars = DeriveVarCustomFix::enumerate(&env);
+    assert_eq!(vars.len(), 2);
+    assert_eq!(
+        *vars.get(&DeriveVarCustomFix::Slot { slot: 0 }).unwrap(),
+        Variable::integer()
+    );
+    assert_eq!(
+        DeriveVarCustomFix::Slot { slot: 99 }.check_fix(&env),
+        Some(5.0)
+    );
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, DescribeVar)]
+#[env(DeriveEnv)]
+enum DeriveVarDeferFix {
+    #[defer_fix(if *slot >= 2 { Some(0.0) } else { None })]
+    Slot {
+        #[range(0..env.max_slot)]
+        slot: i32,
+    },
+}
+
+#[tokio::test]
+async fn derive_defer_fix() {
+    let env = DeriveEnv { max_slot: 5 };
+    let vars = DeriveVarDeferFix::enumerate(&env);
+    // defer_fix filters: slots 0,1 are free; slots 2,3,4 are fixed
+    assert_eq!(vars.len(), 2);
+    assert!(vars.contains_key(&DeriveVarDeferFix::Slot { slot: 0 }));
+    assert!(vars.contains_key(&DeriveVarDeferFix::Slot { slot: 1 }));
+    assert!(!vars.contains_key(&DeriveVarDeferFix::Slot { slot: 2 }));
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, DescribeVar)]
+#[env(DeriveEnv)]
+enum DeriveVarOption {
+    Slot {
+        #[range(0..env.max_slot)]
+        slot: Option<i32>,
+    },
+}
+
+#[tokio::test]
+async fn derive_option_field() {
+    let env = DeriveEnv { max_slot: 2 };
+    let vars = DeriveVarOption::enumerate(&env);
+    // None + Some(0) + Some(1) = 3 variables
+    assert_eq!(vars.len(), 3);
+    assert!(vars.contains_key(&DeriveVarOption::Slot { slot: None }));
+    assert!(vars.contains_key(&DeriveVarOption::Slot { slot: Some(0) }));
+    assert!(vars.contains_key(&DeriveVarOption::Slot { slot: Some(1) }));
+}
+
+#[tokio::test]
+async fn derive_integration_from_described() {
+    let mut m: Modeler<'_, DeriveVar, String, String, (), String> =
+        Modeler::from_described(&()).await;
+    let s0 = LinExpr::var(Var::Base(DeriveVar::Slot { slot: 0 }));
+    let s1 = LinExpr::var(Var::Base(DeriveVar::Slot { slot: 1 }));
+    m.add_constraint((&s0 + &s1).leq(&LinExpr::constant(1.0)), "s0+s1<=1".into());
+    m.add_objective(1.0, Objective::new(s0 + s1, ObjectiveSense::Maximize));
+    let model = m.build(&()).await.unwrap();
+    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let sum = cfg
+        .get(InternalVar::Base(DeriveVar::Slot { slot: 0 }))
+        .unwrap_or(0.0)
+        + cfg
+            .get(InternalVar::Base(DeriveVar::Slot { slot: 1 }))
+            .unwrap_or(0.0);
+    assert_eq!(sum, 1.0);
+}

@@ -462,8 +462,18 @@ name = "collomatique-ilp-modeler"
 version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
+ "collomatique-ilp-modeler-derive",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "collomatique-ilp-modeler-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

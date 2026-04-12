@@ -30,6 +30,11 @@ pub use bundle::{
 mod describe_var;
 pub use describe_var::DescribeVar;
 
+/// Re-export the derive macro so users can write
+/// `#[derive(DescribeVar)]` after `use collomatique_ilp_modeler::DescribeVar`.
+#[cfg(feature = "derive")]
+pub use collomatique_ilp_modeler_derive::DescribeVar;
+
 mod load_env;
 pub use load_env::LoadEnv;
 
