@@ -270,7 +270,7 @@ impl<
                     continue;
                 };
                 let v = v.clone();
-                let Some(value) = v.fix(eval_data.env) else {
+                let Some(value) = v.check_fix(eval_data.env) else {
                     continue;
                 };
                 fixed_variables.insert(var, value);
@@ -289,7 +289,7 @@ impl<
                 continue;
             };
             let v = v.clone();
-            let Some(value) = v.fix(eval_data.env) else {
+            let Some(value) = v.check_fix(eval_data.env) else {
                 continue;
             };
             fixed_variables.insert(var, value);
@@ -355,7 +355,7 @@ impl<
             ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
             ProblemVar::Base(b) => match self.vars_desc.get(v) {
                 Some(def) => def.clone(),
-                None => match b.fix(self.env) {
+                None => match b.check_fix(self.env) {
                     Some(val) => {
                         let new_var = Variable::integer().min(val).max(val);
                         if !new_var.checks_value(val) {
@@ -798,7 +798,7 @@ impl<
             (constraint_results, objective_results, var_def)
         };
 
-        let original_var_list: HashMap<V, Variable> = V::vars(env).into_iter().collect();
+        let original_var_list: HashMap<V, Variable> = V::enumerate(env).into_iter().collect();
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
                 return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));

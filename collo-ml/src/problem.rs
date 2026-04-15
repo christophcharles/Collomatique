@@ -26,6 +26,8 @@ pub use crate::eval::CompileError;
 
 // Re-exports for test compatibility (tests use `super::*`)
 #[cfg(test)]
+pub(crate) use crate::DescribeVar;
+#[cfg(test)]
 pub(crate) use crate::EvalVar;
 #[cfg(test)]
 pub(crate) use crate::database::DatabaseConnection;

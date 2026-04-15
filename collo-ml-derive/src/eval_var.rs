@@ -34,11 +34,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 
     // Generate the implementations
-    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info, &env_type);
+    let describe_var_impl = generate_describe_var_impl(enum_name, &variant_info, &env_type);
+    let eval_var_impl = generate_eval_var_impl(enum_name, &variant_info);
     let try_from_impl = generate_try_from_impl(enum_name, &variant_info);
 
     // Combine everything
     let expanded = quote! {
+        #describe_var_impl
         #eval_var_impl
         #try_from_impl
     };
@@ -253,12 +255,51 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
     }
 }
 
-fn generate_eval_var_impl(
+fn generate_describe_var_impl(
     enum_name: &syn::Ident,
     variants: &[VariantInfo],
     env_type: &syn::Type,
 ) -> proc_macro2::TokenStream {
-    // Generate field_schema implementation
+    // Generate enumerate implementation (was vars)
+    let vars_generation = generate_vars_impl(enum_name, variants);
+
+    // Generate check_fix implementation (was fix)
+    let fix_arms = variants.iter().map(|info| {
+        let variant_name = &info.variant_name;
+        let (pattern, checks_and_output) = generate_fix_pattern_and_checks_and_output(info);
+
+        quote! {
+            #enum_name::#variant_name #pattern => {
+                #checks_and_output
+            }
+        }
+    });
+
+    let env_ty = env_type;
+
+    quote! {
+        impl ::collo_ml::DescribeVar for #enum_name {
+            type Env = #env_ty;
+
+            fn enumerate(
+                env: &#env_ty
+            ) -> ::std::collections::HashMap<Self, ::collomatique_ilp::Variable> {
+                #vars_generation
+            }
+
+            fn check_fix(&self, env: &#env_ty) -> Option<f64> {
+                match self {
+                    #(#fix_arms,)*
+                }
+            }
+        }
+    }
+}
+
+fn generate_eval_var_impl(
+    enum_name: &syn::Ident,
+    variants: &[VariantInfo],
+) -> proc_macro2::TokenStream {
     let field_schema_entries = variants.iter().map(|info| {
         let dsl_name = &info.dsl_name;
         let field_types = info
@@ -274,45 +315,12 @@ fn generate_eval_var_impl(
         }
     });
 
-    // Generate vars implementation
-    let vars_generation = generate_vars_impl(enum_name, variants);
-
-    // Generate fix implementation
-    let fix_arms = variants.iter().map(|info| {
-        let variant_name = &info.variant_name;
-
-        // Generate pattern matching for fields
-        let (pattern, checks_and_output) = generate_fix_pattern_and_checks_and_output(info);
-
-        quote! {
-            #enum_name::#variant_name #pattern => {
-                #checks_and_output
-            }
-        }
-    });
-
-    let env_ty = env_type;
-
     quote! {
         impl ::collo_ml::EvalVar for #enum_name {
-            type Env = #env_ty;
-
             fn field_schema() -> ::std::collections::HashMap<String, Vec<::collo_ml::ExprType>> {
                 let mut schema = ::std::collections::HashMap::new();
                 #(#field_schema_entries)*
                 schema
-            }
-
-            fn vars(
-                env: &#env_ty
-            ) -> ::std::collections::HashMap<Self, ::collomatique_ilp::Variable> {
-                #vars_generation
-            }
-
-            fn fix(&self, env: &#env_ty) -> Option<f64> {
-                match self {
-                    #(#fix_arms,)*
-                }
             }
         }
     }
@@ -450,7 +458,7 @@ fn generate_field_iterations(
     let mut inner_code = if defered_fix {
         quote! {
             let new_var = #variant_construction;
-            if new_var.fix(env).is_some() {
+            if new_var.check_fix(env).is_some() {
                 continue;
             }
             vars.insert(new_var, #var_type);

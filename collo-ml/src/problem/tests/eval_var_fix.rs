@@ -9,13 +9,19 @@ async fn test_fix_forces_variable_values() {
         V(i32), // Parameter from 0 to 9
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
+            // Only include variables that are not fixed
+            // In this case, only V(7) is not fixed
+            vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
+            vars
         }
 
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::V(i) => {
                     // Fix all variables to 0 except V(7)
@@ -23,13 +29,11 @@ async fn test_fix_forces_variable_values() {
                 }
             }
         }
+    }
 
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            let mut vars = HashMap::new();
-            // Only include variables that are not fixed
-            // In this case, only V(7) is not fixed
-            vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
-            vars
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
         }
     }
 

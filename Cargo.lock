@@ -376,6 +376,7 @@ dependencies = [
  "base64",
  "collo-ml-derive",
  "collomatique-ilp",
+ "collomatique-ilp-modeler",
  "derivative",
  "lazy_static",
  "ordered-float",

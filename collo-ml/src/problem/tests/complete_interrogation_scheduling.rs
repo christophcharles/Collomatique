@@ -22,20 +22,31 @@ async fn complete_interrogations_scheduling() {
         },
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([(
-                "StudentWithTeacher".to_string(),
-                vec![
-                    SimpleType::Int.into(),
-                    SimpleType::Int.into(),
-                    SimpleType::Int.into(),
-                ],
-            )])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
+            // Only create variables for valid combinations
+            for student in 0..11 {
+                for teacher in 0..12 {
+                    for week in 0..3 {
+                        vars.insert(
+                            Var::StudentWithTeacher {
+                                student,
+                                teacher,
+                                week,
+                            },
+                            collomatique_ilp::Variable::binary(),
+                        );
+                    }
+                }
+            }
+            vars
         }
 
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::StudentWithTeacher {
                     student,
@@ -56,25 +67,18 @@ async fn complete_interrogations_scheduling() {
                 }
             }
         }
+    }
 
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            let mut vars = HashMap::new();
-            // Only create variables for valid combinations
-            for student in 0..11 {
-                for teacher in 0..12 {
-                    for week in 0..3 {
-                        vars.insert(
-                            Var::StudentWithTeacher {
-                                student,
-                                teacher,
-                                week,
-                            },
-                            collomatique_ilp::Variable::binary(),
-                        );
-                    }
-                }
-            }
-            vars
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([(
+                "StudentWithTeacher".to_string(),
+                vec![
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                ],
+            )])
         }
     }
 

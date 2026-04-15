@@ -9,6 +9,7 @@ mod semantics;
 pub mod traits;
 pub use ast::AstError;
 pub use collo_ml_derive::EvalVar;
+pub use collomatique_ilp_modeler::DescribeVar;
 pub use database::{
     DatabaseConnection, DatabaseDriver, DbType, SqliteDatabaseConnection, SqliteDatabaseDriver,
 };
