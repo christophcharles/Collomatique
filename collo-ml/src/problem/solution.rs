@@ -84,8 +84,16 @@ impl<D: DatabaseConnection, V: EvalVar> Problem<D, V> {
         let recon_sol = solver
             .solve(&recon_problem)
             .expect("There should always be a (unique!) solution to the reconstruction problem");
-        let inner_data = recon_sol.get_values();
-        let new_config_data = ConfigData::from(inner_data);
+
+        // Merge base variable values with extra/helper values from reconstruction.
+        // reconstruction_problem only includes non-base variables, so we need to
+        // add the base values back to create a complete config.
+        let mut complete_values: HashMap<ProblemInternalVar<D, V>, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
 
         Some(
             self.solution_from_complete_data(new_config_data)
