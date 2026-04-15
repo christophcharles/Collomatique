@@ -54,7 +54,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
             return Ok(());
         }
     };
-    let problem = match b.build(&env, Some(db_conn)).await {
+    let problem = match b.build(&pool, Some(db_conn)).await {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Script panic: {}", e);

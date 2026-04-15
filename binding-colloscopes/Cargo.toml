@@ -8,6 +8,8 @@ authors.workspace = true
 collo-ml = { path = "../collo-ml" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ilp = { path = "../ilp" }
+collomatique-ilp-modeler = { path = "../ilp-modeler", default-features = false }
+sqlx.workspace = true
 collomatique-time = { path = "../time" }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 pest.workspace = true

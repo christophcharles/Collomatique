@@ -787,7 +787,7 @@ impl Colloscope {
                     .map_err(|e| format!("{}", e))?;
 
                 let problem = builder
-                    .build(&env, Some(db_conn))
+                    .build(&pool, Some(db_conn))
                     .await
                     .map_err(|e| format!("{}", e))?;
                 Ok(IlpProblem { env, problem })

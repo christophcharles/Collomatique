@@ -213,14 +213,15 @@ impl<
         Ok(())
     }
 
-    pub async fn build(
+    pub async fn build<Db>(
         self,
-        env: &V::Env,
+        db: &Db,
         db_connection: Option<D::Connection>,
     ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>>
     where
         V: 'static,
-        V::Env: Sync + 'static,
+        V::Env: collomatique_ilp_modeler::LoadEnv<Db> + Send + Sync + 'static,
+        Db: Sync,
     {
         // Phase 1: DSL evaluation (unchanged)
         let (constraint_results, objective_results, var_def) = {
@@ -311,31 +312,23 @@ impl<
             (constraint_results, objective_results, var_def)
         };
 
-        // Phase 2: Create Modeler
-        let original_var_list: HashMap<V, Variable> = V::enumerate(env).into_iter().collect();
+        // Phase 2: Create Modeler via from_described (loads env, enumerates, registers fixer)
+        type C<D> = Option<Origin<D>>;
+        type MyModeler<'m, D, V, Db> =
+            Modeler<'m, V, ReifiedVar<D>, C<D>, Db, ReifyError<V, ReifiedVar<D>>>;
+
+        let mut modeler: MyModeler<'_, D::Connection, V, Db> = Modeler::from_described(db).await;
+
+        let original_var_list: HashMap<V, Variable> = modeler
+            .base_vars()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
                 return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
             }
         }
-
-        type C<D> = Option<Origin<D>>;
-        type MyModeler<'m, D, V> = Modeler<
-            'm,
-            V,
-            ReifiedVar<D>,
-            C<D>,
-            <V as crate::DescribeVar>::Env,
-            ReifyError<V, ReifiedVar<D>>,
-        >;
-
-        let mut modeler: MyModeler<'_, D::Connection, V> = Modeler::new(original_var_list.clone());
-
-        // Register fixer
-        modeler.add_fixer(|b: &V, env: &V::Env| {
-            let result = b.check_fix(env);
-            Box::pin(async move { result })
-        });
 
         // Phase 3: Add user constraints
         for (_module, _fn_name, constraints_expr) in constraint_results {
@@ -582,7 +575,7 @@ impl<
 
         // Phase 6: Build
         let model = modeler
-            .build(env)
+            .build(db)
             .await
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
 

@@ -405,11 +405,13 @@ dependencies = [
  "chrono",
  "collo-ml",
  "collomatique-ilp",
+ "collomatique-ilp-modeler",
  "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
  "const_format",
  "pest",
+ "sqlx",
  "tokio",
 ]
 

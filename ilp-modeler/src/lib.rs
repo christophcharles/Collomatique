@@ -565,6 +565,11 @@ where
         }
     }
 
+    /// Read-only access to the declared base variables.
+    pub fn base_vars(&self) -> &HashMap<B, Variable> {
+        &self.base_vars
+    }
+
     /// Add a user constraint with a description.
     pub fn add_constraint(&mut self, constraint: Constraint<Var<B, E>>, desc: C) {
         self.constraints.push((constraint, desc));

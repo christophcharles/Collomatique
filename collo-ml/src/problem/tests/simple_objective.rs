@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 use collomatique_ilp::ObjectiveSense;
 
