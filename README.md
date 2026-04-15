@@ -1,6 +1,6 @@
 # Collomatique
 
-Programme de construction automatique de colloscopes (planning de colles pour les classes CPGE).
+Collomatique est un outil de construction automatique de **colloscopes** — les plannings de colles en classes préparatoires (CPGE). Il modélise le problème comme un **programme linéaire en nombres entiers** (ILP) et le résout avec un solveur (actuellement COIN-CBC).
 
 ## Avertissement
 
@@ -93,9 +93,11 @@ Le projet est un workspace Rust composé des crates suivantes :
 
 | Crate | Rôle |
 |---|---|
-| `collo-ml/` | Parseur et vérificateur de types pour le langage ColloML (utilise Pest) |
-| `collo-ml-derive/` | Macros dérivées pour collo-ml |
-| `ilp/` | Modélisation et résolution ILP (COIN-CBC, good_lp) |
+| `ilp/` | Primitives ILP : expressions linéaires, contraintes, objectifs, variables, construction de problèmes, interface solveur |
+| `ilp-modeler/` | Modéliseur ILP générique, indépendant du langage : expansion paresseuse de variables, réification, objectification, composition par bundles |
+| `ilp-modeler-derive/` | Macros dérivées pour ilp-modeler (`#[derive(DescribeVar)]`) |
+| `collo-ml/` | Interpréteur ColloML (parseur, vérificateur de types, évaluateur) |
+| `collo-ml-derive/` | Macros dérivées pour collo-ml (`#[derive(EvalVar)]`) |
 | `binding-colloscopes/` | Pont entre les données du colloscope et le solveur ; contient les scripts par défaut ColloML |
 | `state/` et `state-colloscopes/` | Traits et structures d'état de l'application |
 | `sqlite-state/` | Persistance SQLite (SQLx) |
@@ -105,3 +107,5 @@ Le projet est un workspace Rust composé des crates suivantes :
 | `rpc/` et `rpc-engine/` | Protocole RPC pour la communication entre processus |
 | `time/` | Types pour représenter les jours, heures, etc dans Collomatique |
 | `ops/` | Opérations de haut-niveau (GUI et Python) sur l'état de l'application |
+| `xlsx/` | Export du colloscope au format xlsx |
+| `mps/` | Export de problèmes ILP au format MPS |
