@@ -278,11 +278,11 @@ async fn let_expr_with_constraint_value() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(5))],
             )))
-            .eq(&LinExpr::constant(1.));
+            .eq(&IntLinExpr::constant(1));
 
             assert!(constraints.contains(&constraint));
         }
@@ -311,11 +311,11 @@ async fn let_expr_with_linexpr_arithmetic() {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
 
-            let constraint = (LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint = (IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
-            ))) + LinExpr::constant(5.))
-            .eq(&LinExpr::constant(10.));
+            ))) + IntLinExpr::constant(5))
+            .eq(&IntLinExpr::constant(10));
 
             assert!(constraints.contains(&constraint));
         }
@@ -345,13 +345,13 @@ async fn let_expr_with_constraint_combination() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let var = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let var = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(7))],
             )));
 
-            let constraint_eq = var.clone().eq(&LinExpr::constant(1.));
-            let constraint_le = var.leq(&LinExpr::constant(10.));
+            let constraint_eq = var.clone().eq(&IntLinExpr::constant(1));
+            let constraint_le = var.leq(&IntLinExpr::constant(10));
 
             assert!(constraints.contains(&constraint_eq));
             assert!(constraints.contains(&constraint_le));

@@ -191,9 +191,9 @@ async fn match_int_to_linexpr_conversion() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // After conversion, i is LinExpr(5.0), so $V(LinExpr(5.0))
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
+                vec![Arc::new(ExprValue::LinExpr(IntLinExpr::constant(5)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -231,9 +231,9 @@ async fn match_int_branch_with_conversion_in_body() {
 
     match result_int {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
+                vec![Arc::new(ExprValue::LinExpr(IntLinExpr::constant(5)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -378,9 +378,9 @@ async fn match_where_with_original_variable() {
 
     match result_positive {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
+                vec![Arc::new(ExprValue::LinExpr(IntLinExpr::constant(5)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -394,7 +394,7 @@ async fn match_where_with_original_variable() {
 
     match result_negative {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])));
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -733,9 +733,9 @@ async fn match_returning_linexpr() {
 
     match result_int {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
+                vec![Arc::new(ExprValue::LinExpr(IntLinExpr::constant(5)))],
             )));
             assert_eq!(lin_expr, expected);
         }
@@ -749,7 +749,7 @@ async fn match_returning_linexpr() {
 
     match result_bool {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])));
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -781,11 +781,11 @@ async fn match_returning_constraint() {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
-            let var_expr = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let var_expr = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
-                vec![Arc::new(ExprValue::LinExpr(LinExpr::constant(5.)))],
+                vec![Arc::new(ExprValue::LinExpr(IntLinExpr::constant(5)))],
             )));
-            let expected = var_expr.eq(&LinExpr::constant(0.));
+            let expected = var_expr.eq(&IntLinExpr::constant(0));
             assert!(constraints.contains(&expected));
         }
         _ => panic!("Expected Constraint"),

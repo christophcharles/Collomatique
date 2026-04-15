@@ -11,3 +11,10 @@ pub trait LoadEnv<Db>: Sized {
     /// Load the environment from the data source.
     fn load(db: &Db) -> impl Future<Output = Self>;
 }
+
+/// Identity impl: if you already have the environment, clone it.
+impl<E: Clone + Send> LoadEnv<E> for E {
+    async fn load(db: &E) -> E {
+        db.clone()
+    }
+}

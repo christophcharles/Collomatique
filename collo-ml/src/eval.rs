@@ -35,6 +35,6 @@ pub use variables::{
 #[cfg(test)]
 pub(crate) use crate::semantics::{ExprType, SimpleType};
 #[cfg(test)]
-pub(crate) use collomatique_ilp::LinExpr;
+pub(crate) use collomatique_ilp::IntLinExpr;
 #[cfg(test)]
 pub(crate) use std::collections::HashMap;

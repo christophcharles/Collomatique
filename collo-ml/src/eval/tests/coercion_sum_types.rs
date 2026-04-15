@@ -366,7 +366,7 @@ async fn conversion_int_to_linexpr_in_sum() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(5.));
+            assert_eq!(lin_expr, IntLinExpr::constant(5));
         }
         _ => panic!("Expected LinExpr"),
     }

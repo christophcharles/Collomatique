@@ -10,7 +10,7 @@ use super::database::DatabaseHandle;
 use super::variables::{ConstraintWithOrigin, HashedIlpVar, Origin};
 use crate::database::DatabaseConnection;
 use crate::semantics::{ConcreteType, ExprType, SimpleType};
-use collomatique_ilp::{Constraint, LinExpr};
+use collomatique_ilp::{IntConstraint, IntLinExpr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ pub enum ExprValue<D: DatabaseConnection> {
     None,
     Int(i32),
     Bool(bool),
-    LinExpr(LinExpr<HashedIlpVar<D>>),
+    LinExpr(IntLinExpr<HashedIlpVar<D>>),
     Constraint(Vec<ConstraintWithOrigin<D>>),
     String(String),
     List(Vec<Arc<ExprValue<D>>>),
@@ -64,7 +64,7 @@ impl<D: DatabaseConnection> std::fmt::Display for ExprValue<D> {
             ExprValue::None => write!(f, "none"),
             ExprValue::Int(v) => write!(f, "{}", v),
             ExprValue::Bool(v) => write!(f, "{}", v),
-            ExprValue::LinExpr(lin_expr) => write!(f, "{}", lin_expr),
+            ExprValue::LinExpr(lin_expr) => write!(f, "{}", lin_expr.as_linexpr()),
             ExprValue::Constraint(c_with_o) => {
                 let strs: Vec<_> = c_with_o.iter().map(|x| x.constraint.to_string()).collect();
                 write!(f, "{}", strs.join(", "))
@@ -126,14 +126,14 @@ impl<D: DatabaseConnection> From<bool> for ExprValue<D> {
     }
 }
 
-impl<D: DatabaseConnection> From<LinExpr<HashedIlpVar<D>>> for ExprValue<D> {
-    fn from(value: LinExpr<HashedIlpVar<D>>) -> Self {
+impl<D: DatabaseConnection> From<IntLinExpr<HashedIlpVar<D>>> for ExprValue<D> {
+    fn from(value: IntLinExpr<HashedIlpVar<D>>) -> Self {
         ExprValue::LinExpr(value)
     }
 }
 
-impl<D: DatabaseConnection> From<Constraint<HashedIlpVar<D>>> for ExprValue<D> {
-    fn from(value: Constraint<HashedIlpVar<D>>) -> Self {
+impl<D: DatabaseConnection> From<IntConstraint<HashedIlpVar<D>>> for ExprValue<D> {
+    fn from(value: IntConstraint<HashedIlpVar<D>>) -> Self {
         ExprValue::Constraint(Vec::from([ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -415,7 +415,9 @@ impl<D: DatabaseConnection> ExprValue<D> {
                         .collect(),
                 )
             }
-            (Self::Int(val), SimpleType::LinExpr) => Self::LinExpr(LinExpr::constant(*val as f64)),
+            (Self::Int(val), SimpleType::LinExpr) => {
+                Self::LinExpr(IntLinExpr::constant(*val as i64))
+            }
             // Conversion to string
             (Self::String(v), SimpleType::String) => Self::String(v.clone()),
             (v, SimpleType::String) => Self::String(v.convert_to_string()),

@@ -17,7 +17,9 @@ use crate::semantics::ArgsType;
 use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
 use collomatique_ilp::linexpr::EqSymbol;
-use collomatique_ilp::{Constraint, LinExpr, Objective, ObjectiveSense, Variable};
+use collomatique_ilp::{
+    Constraint, IntConstraint, IntLinExpr, LinExpr, Objective, ObjectiveSense, Variable,
+};
 use derivative::Derivative;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -683,16 +685,16 @@ impl<
 
     fn clean_constraint(
         &self,
-        constraint: &Constraint<HashedIlpVar<D::Connection>>,
+        constraint: &IntConstraint<HashedIlpVar<D::Connection>>,
     ) -> Constraint<HashedProblemVar<D::Connection, V>> {
-        constraint.transmute(|v| self.clean_var(v))
+        constraint.as_constraint().transmute(|v| self.clean_var(v))
     }
 
     fn clean_lin_expr(
         &self,
-        lin_expr: &LinExpr<HashedIlpVar<D::Connection>>,
+        lin_expr: &IntLinExpr<HashedIlpVar<D::Connection>>,
     ) -> LinExpr<HashedProblemVar<D::Connection, V>> {
-        lin_expr.transmute(|v| self.clean_var(v))
+        lin_expr.as_linexpr().transmute(|v| self.clean_var(v))
     }
 
     fn update_origin(
@@ -908,7 +910,7 @@ impl<
             let (var_module, var_name, var_args) = hashed_key.into_inner();
             let cleaned_constraints: Vec<_> = constraints
                 .into_iter()
-                .map(|c: Constraint<HashedIlpVar<D::Connection>>| eval_data.clean_constraint(&c))
+                .map(|c: IntConstraint<HashedIlpVar<D::Connection>>| eval_data.clean_constraint(&c))
                 .collect();
 
             let reified_var = ReifiedVar {

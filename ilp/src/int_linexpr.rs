@@ -214,6 +214,19 @@ impl<V: UsableData> std::ops::Mul<IntLinExpr<V>> for i64 {
     }
 }
 
+// AddAssign
+impl<V: UsableData> std::ops::AddAssign<&IntLinExpr<V>> for IntLinExpr<V> {
+    fn add_assign(&mut self, rhs: &IntLinExpr<V>) {
+        self.0 += &rhs.0;
+    }
+}
+
+impl<V: UsableData> std::ops::AddAssign<IntLinExpr<V>> for IntLinExpr<V> {
+    fn add_assign(&mut self, rhs: IntLinExpr<V>) {
+        *self += &rhs;
+    }
+}
+
 // i32 * IntLinExpr (for convenience)
 impl<V: UsableData> std::ops::Mul<&IntLinExpr<V>> for i32 {
     type Output = IntLinExpr<V>;
