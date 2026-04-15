@@ -74,7 +74,7 @@ async fn single_constraint_problem() {
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "Wrong value for solution!"
     );
@@ -188,17 +188,17 @@ async fn multiple_constraints_in_script() {
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(1.0),
         "X should be 1"
     );
@@ -300,12 +300,12 @@ async fn multiple_function_calls() {
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );
@@ -417,12 +417,12 @@ async fn constraints_from_different_modules() {
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );

@@ -3,8 +3,8 @@
 //! This module provides the problem building system for creating ILP problems
 //! from ColloML programs. It is organized into the following submodules:
 //!
-//! - `types`: Type definitions (ReifiedVar, ProblemVar, ConstraintDesc, ProblemError)
-//! - `builder`: Problem builder and evaluation data
+//! - `types`: Type definitions (ReifiedVar, ProblemError)
+//! - `builder`: Problem builder
 //! - `solution`: Problem, Solution, and FeasableSolution types
 
 mod builder;
@@ -16,10 +16,13 @@ mod tests;
 
 // Re-export public types
 pub use builder::ProblemBuilder;
-pub use solution::{FeasableSolution, Problem, Solution};
-pub use types::{
-    ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemError, ProblemVar, ReifiedVar,
+pub use solution::{
+    FeasableSolution, Problem, ProblemConstraintSource, ProblemInternalVar, Solution,
 };
+pub use types::{ProblemError, ReifiedVar};
+
+// Re-export from ilp-modeler for convenience
+pub use collomatique_ilp_modeler::{ConstraintSource, InternalVar};
 
 // Re-export CompileError from eval for convenience
 pub use crate::eval::CompileError;

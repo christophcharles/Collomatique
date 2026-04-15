@@ -110,12 +110,12 @@ async fn constraints_and_objectives_same_call() {
     // Objective: Maximize V
     // Should select V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );

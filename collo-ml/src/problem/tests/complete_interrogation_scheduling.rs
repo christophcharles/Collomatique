@@ -203,7 +203,7 @@ async fn complete_interrogations_scheduling() {
         for week in 0..3 {
             let mut count = 0;
             for teacher in 0..12 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -227,7 +227,7 @@ async fn complete_interrogations_scheduling() {
         let mut subject0_count = 0;
         for teacher in 0..4 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -248,7 +248,7 @@ async fn complete_interrogations_scheduling() {
         let mut subject1_count = 0;
         for teacher in 4..8 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -269,7 +269,7 @@ async fn complete_interrogations_scheduling() {
         let mut subject2_count = 0;
         for teacher in 8..12 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -292,7 +292,7 @@ async fn complete_interrogations_scheduling() {
         for week in 0..3 {
             let mut count = 0;
             for student in 0..11 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,

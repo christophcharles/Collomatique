@@ -2,24 +2,20 @@
 //!
 //! This module defines:
 //! - `ProblemBuilder`: Builder pattern for constructing optimization problems
-//! - `EvalData`: Internal data structure for evaluation
 
 use super::solution::Problem;
-use super::types::{
-    ConstraintDesc, ExtraDesc, HashedProblemVar, ProblemError, ProblemVar, ReifiedVar,
-};
-use crate::Hashed;
+use super::types::{ProblemError, ReifiedVar};
 use crate::database::DatabaseDriver;
 use crate::eval::{
-    CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, ScriptVar,
+    CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, Origin,
+    ScriptVar,
 };
 use crate::semantics::ArgsType;
 use crate::traits::VarConversionError;
 use crate::{EvalVar, ExprType, SemWarning, SimpleType};
-use collomatique_ilp::linexpr::EqSymbol;
-use collomatique_ilp::{
-    Constraint, IntConstraint, IntLinExpr, LinExpr, Objective, ObjectiveSense, Variable,
-};
+use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
+use collomatique_ilp_modeler::bundle::{IntConstraintBundle, ReifyError};
+use collomatique_ilp_modeler::{Modeler, Var};
 use derivative::Derivative;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -59,43 +55,6 @@ pub struct ProblemBuilder<
     )>,
 
     phantom: std::marker::PhantomData<V>,
-}
-
-pub(crate) struct EvalData<
-    'a,
-    D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
-> {
-    pub(crate) builder: ProblemBuilder<D, V>,
-
-    /// Reference to the evaluation environment
-    pub(crate) env: &'a V::Env,
-
-    /// List of constraints incrementally built (populated during build())
-    pub(crate) constraints: Vec<(
-        Constraint<HashedProblemVar<D::Connection, V>>,
-        ConstraintDesc<D::Connection>,
-    )>,
-
-    /// Objective function (populated during build())
-    pub(crate) objective: Objective<HashedProblemVar<D::Connection, V>>,
-
-    /// Internal ID.
-    ///
-    /// When reifying variables, we might need intermediate variables.
-    /// In that case, we define a numbered variable with [ProblemVar::Helper].
-    /// This variable keeps track of the next id to use.
-    current_helper_id: u64,
-
-    /// Definition of all the variables used.
-    ///
-    /// This starts with the variables from V.
-    /// Then reified variables as well as
-    /// helpers variables are added as needed.
-    pub(crate) vars_desc: HashMap<HashedProblemVar<D::Connection, V>, Variable>,
-
-    /// base variables list
-    pub(crate) original_var_list: HashMap<V, Variable>,
 }
 
 impl<
@@ -258,478 +217,31 @@ impl<
         self,
         env: &V::Env,
         db_connection: Option<D::Connection>,
-    ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>> {
-        // Evaluate all pending constraints and objectives
-        let mut eval_data = EvalData::new(self, env, db_connection).await?;
-
-        for (constraint, _desc) in eval_data.constraints.iter_mut() {
-            let mut fixed_variables = HashMap::new();
-            for var in constraint.variables() {
-                if fixed_variables.contains_key(&var) {
-                    continue;
-                }
-                let ProblemVar::Base(v) = &*var else {
-                    continue;
-                };
-                let v = v.clone();
-                let Some(value) = v.check_fix(eval_data.env) else {
-                    continue;
-                };
-                fixed_variables.insert(var, value);
-            }
-            if fixed_variables.is_empty() {
-                continue;
-            }
-            *constraint = constraint.reduce(&fixed_variables);
-        }
-        let mut fixed_variables = HashMap::new();
-        for var in eval_data.objective.get_function().variables() {
-            if fixed_variables.contains_key(&var) {
-                continue;
-            }
-            let ProblemVar::Base(v) = &*var else {
-                continue;
-            };
-            let v = v.clone();
-            let Some(value) = v.check_fix(eval_data.env) else {
-                continue;
-            };
-            fixed_variables.insert(var, value);
-        }
-        if !fixed_variables.is_empty() {
-            eval_data.objective = eval_data.objective.reduce(&fixed_variables);
-        }
-        eval_data
-            .constraints
-            .retain(|(c, _d)| !c.is_trivially_true());
-
-        let reification_constraints: Vec<_> = eval_data
-            .constraints
-            .iter()
-            .filter_map(|(c, d)| match d {
-                ConstraintDesc::InScript { .. } => None,
-                ConstraintDesc::Objectify => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
-                ConstraintDesc::Reified { .. } => Some((c.clone(), ExtraDesc::Orig(d.clone()))),
-            })
-            .collect();
-
-        let mut problem_builder = collomatique_ilp::ProblemBuilder::new()
-            .set_variables(eval_data.vars_desc.clone())
-            .add_constraints(eval_data.constraints);
-        problem_builder = problem_builder.set_objective(eval_data.objective);
-
-        let reification_problem_builder = collomatique_ilp::ProblemBuilder::new()
-            .set_variables(eval_data.vars_desc)
-            .add_constraints(reification_constraints);
-
-        Ok(Problem::new(
-            problem_builder.build().expect("Problem should be valid"),
-            reification_problem_builder,
-            eval_data.original_var_list,
-        ))
-    }
-}
-
-impl<
-    'a,
-    D: DatabaseDriver,
-    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D::Connection>, Error = VarConversionError>,
-> EvalData<'a, D, V>
-{
-    fn generate_helper_var(&mut self) -> HashedProblemVar<D::Connection, V> {
-        let new_var = Hashed::new(ProblemVar::Helper(self.current_helper_id));
-        self.vars_desc
-            .insert(new_var.clone(), collomatique_ilp::Variable::binary());
-        self.current_helper_id += 1;
-        new_var
-    }
-
-    fn generate_helper_continuous_var(&mut self) -> HashedProblemVar<D::Connection, V> {
-        let new_var = Hashed::new(ProblemVar::Helper(self.current_helper_id));
-        self.vars_desc
-            .insert(new_var.clone(), collomatique_ilp::Variable::continuous());
-        self.current_helper_id += 1;
-        new_var
-    }
-
-    fn get_variable_type(&self, v: &HashedProblemVar<D::Connection, V>) -> Variable {
-        match &**v {
-            ProblemVar::Helper(_) | ProblemVar::Reified(_) => Variable::binary(),
-            ProblemVar::Base(b) => match self.vars_desc.get(v) {
-                Some(def) => def.clone(),
-                None => match b.check_fix(self.env) {
-                    Some(val) => {
-                        let new_var = Variable::integer().min(val).max(val);
-                        if !new_var.checks_value(val) {
-                            panic!("Variable {:?} has a non-integer fixed value! ({})", b, val);
-                        }
-                        new_var
-                    }
-                    None => panic!("Unknown unfixed variable!"),
-                },
-            },
-        }
-    }
-
-    fn objectify_single_constraint(
-        constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
-        constraint_desc: ConstraintDesc<D::Connection>,
-        var: HashedProblemVar<D::Connection, V>,
-    ) -> (
-        Objective<HashedProblemVar<D::Connection, V>>,
-        Vec<(
-            Constraint<HashedProblemVar<D::Connection, V>>,
-            ConstraintDesc<D::Connection>,
-        )>,
-    ) {
-        match constraint.get_symbol() {
-            EqSymbol::LessThan => {
-                let var = LinExpr::var(var);
-                let lin_expr = constraint.get_lhs().clone();
-                let c1 = lin_expr.leq(&var);
-                let c2 = var.geq(&LinExpr::constant(0.));
-                let constraints =
-                    vec![(c1, constraint_desc.clone()), (c2, constraint_desc.clone())];
-                let objective = Objective::new(var, ObjectiveSense::Minimize);
-                (objective, constraints)
-            }
-            EqSymbol::Equals => {
-                let var = LinExpr::var(var);
-                let lin_expr = constraint.get_lhs().clone();
-                let c1 = lin_expr.leq(&var);
-                let c2 = lin_expr.geq(&(-&var));
-                let constraints =
-                    vec![(c1, constraint_desc.clone()), (c2, constraint_desc.clone())];
-                let objective = Objective::new(var, ObjectiveSense::Minimize);
-                (objective, constraints)
-            }
-        }
-    }
-
-    /// Takes a list of constraints and generate a linear expression
-    /// to optimize as an objective. Returns the objective and the
-    /// necessary constraints to enforce define the helper variables.
-    fn objectify_constraints<'b>(
-        &mut self,
-        mut constraints: impl ExactSizeIterator<
-            Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
-        >,
-        constraint_desc: ConstraintDesc<D::Connection>,
-    ) -> (
-        Objective<HashedProblemVar<D::Connection, V>>,
-        Vec<(
-            Constraint<HashedProblemVar<D::Connection, V>>,
-            ConstraintDesc<D::Connection>,
-        )>,
-    )
+    ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>>
     where
-        D::Connection: 'b,
-        V: 'b,
+        V: 'static,
+        V::Env: 'static,
     {
-        // If there is no constraints, we can have a trivial linear expression
-        if constraints.len() == 0 {
-            let objective = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
-            return (objective, vec![]);
-        }
-        // With a single constraint, we can just defer to objectify_single_constraint
-        if constraints.len() == 1 {
-            let var = self.generate_helper_continuous_var();
-            return Self::objectify_single_constraint(
-                constraints.next().unwrap(),
-                constraint_desc,
-                var,
-            );
-        }
-
-        let c_count = constraints.len() as f64;
-
-        let global_var = self.generate_helper_continuous_var();
-        let global_var = LinExpr::var(global_var);
-        let mut obj = Objective::new(c_count * global_var.clone(), ObjectiveSense::Minimize);
-        let mut output = vec![];
-        for constraint in constraints {
-            let var = self.generate_helper_continuous_var();
-            let lin_expr = LinExpr::var(var.clone());
-            output.push((lin_expr.leq(&global_var), constraint_desc.clone()));
-            let (c_obj, c_constraints) =
-                Self::objectify_single_constraint(constraint, constraint_desc.clone(), var);
-            obj = obj + c_obj;
-            output.extend(c_constraints);
-        }
-        obj = (0.5 / c_count) * obj; // the global weight should be one
-        (obj, output)
-    }
-
-    fn reify_single_constraint(
-        &mut self,
-        constraint: &Constraint<HashedProblemVar<D::Connection, V>>,
-        constraint_desc: ConstraintDesc<D::Connection>,
-        var: HashedProblemVar<D::Connection, V>,
-    ) -> Vec<(
-        Constraint<HashedProblemVar<D::Connection, V>>,
-        ConstraintDesc<D::Connection>,
-    )> {
-        let vars = constraint.get_lhs().variables();
-        // Handle special cases with 0 or 1 variable in the lin_expr.
-        match vars.len() {
-            0 => {
-                // If there are no variables, we can simply check if the constraint is satisfied
-                // and fix the variable accordingly
-                let var = LinExpr::var(var);
-                let c = if constraint.is_trivially_true() {
-                    let one = LinExpr::constant(1.);
-                    var.eq(&one)
-                } else {
-                    let zero = LinExpr::constant(0.);
-                    var.eq(&zero)
-                };
-                return vec![(c, constraint_desc)];
-            }
-            1 => {
-                let single_var = vars
-                    .into_iter()
-                    .next()
-                    .expect("There is one variable in this branch");
-                let var_type = self.get_variable_type(&single_var);
-
-                // If the variable is binary, we can check if the constraint is satisfied in each case
-                // and construct a corresponding matching constraint
-                if var_type == Variable::binary() {
-                    let f = |val: bool| {
-                        let reduced = constraint.reduce(&HashMap::from([(
-                            single_var.clone(),
-                            if val { 1.0 } else { 0.0 },
-                        )]));
-                        reduced
-                            .trivially_eval()
-                            .expect("Constraint should be trivial")
-                    };
-                    let orig_var = LinExpr::var(single_var.clone());
-                    let var = LinExpr::var(var);
-                    let one = LinExpr::constant(1.);
-                    let zero = LinExpr::constant(0.);
-                    let c = match (f(true), f(false)) {
-                        (true, true) => var.eq(&one),
-                        (false, false) => var.eq(&zero),
-                        (true, false) => var.eq(&orig_var),
-                        (false, true) => var.eq(&(&one - &orig_var)),
-                    };
-                    return vec![(c, constraint_desc)];
-                }
-            }
-            _ => {} // Generic case
-        }
-
-        match constraint.get_symbol() {
-            EqSymbol::LessThan => {
-                let lin_expr = constraint.get_lhs().clone();
-                let range = lin_expr.compute_range_with(|v| Some(self.get_variable_type(v)));
-                let min = *range.start();
-                let max = *range.end();
-                assert!(
-                    min.is_finite() && max.is_finite(),
-                    "Linear expression from ColloML should always have finite ranges. But this expression is unbounded: {:?} (found range: {:?})",
-                    lin_expr,
-                    range,
-                );
-                let one = LinExpr::constant(1.);
-                let epsilon = LinExpr::constant(0.1);
-                let var = LinExpr::var(var);
-                let constraints = vec![
-                    (
-                        lin_expr.leq(&(max * (&one - &var) + &epsilon)),
-                        constraint_desc.clone(),
-                    ),
-                    (
-                        lin_expr.geq(&((min - 1.) * &var + &one - &epsilon)),
-                        constraint_desc,
-                    ),
-                ];
-                constraints
-            }
-            EqSymbol::Equals => {
-                // For equality, the constraint is lin_expr === 0
-                // we turn that into lin_expr <== 0 && lin_expr >== 0
-                // and combine the two reified variables
-                let v1 = self.generate_helper_var();
-                let v2 = self.generate_helper_var();
-                let lin_expr = constraint.get_lhs().clone();
-                let c1 = lin_expr.leq(&LinExpr::constant(0.));
-                let c2 = lin_expr.geq(&LinExpr::constant(0.));
-                let mut constraints =
-                    self.reify_single_constraint(&c1, constraint_desc.clone(), v1.clone());
-                constraints.extend(self.reify_single_constraint(
-                    &c2,
-                    constraint_desc.clone(),
-                    v2.clone(),
-                ));
-                // Encode var as an AND between v1 and v2
-                let v1 = LinExpr::var(v1);
-                let v2 = LinExpr::var(v2);
-                let var = LinExpr::var(var);
-                constraints.push((var.leq(&v1), constraint_desc.clone()));
-                constraints.push((var.leq(&v2), constraint_desc.clone()));
-                constraints.push((
-                    (&v1 + &v2).leq(&(&var + &LinExpr::constant(1.))),
-                    constraint_desc,
-                ));
-                constraints
-            }
-        }
-    }
-
-    /// Takes a list of constraints and reify them into a single
-    /// a binary variable. Returns the necessary constraints
-    /// to enforce this.
-    fn reify_constraint<'b>(
-        &mut self,
-        mut constraints: impl ExactSizeIterator<
-            Item = &'b Constraint<HashedProblemVar<D::Connection, V>>,
-        >,
-        constraint_desc: ConstraintDesc<D::Connection>,
-        var: HashedProblemVar<D::Connection, V>,
-    ) -> Vec<(
-        Constraint<HashedProblemVar<D::Connection, V>>,
-        ConstraintDesc<D::Connection>,
-    )>
-    where
-        D::Connection: 'b,
-        V: 'b,
-    {
-        // If there is no constraints, they are always satisfied
-        // and the variable should be always 1
-        if constraints.len() == 0 {
-            let var = LinExpr::var(var);
-            return vec![(var.eq(&LinExpr::constant(1.)), constraint_desc)];
-        }
-        if constraints.len() == 1 {
-            return self.reify_single_constraint(constraints.next().unwrap(), constraint_desc, var);
-        }
-
-        // We reify each constraint with helper variables
-        let mut output = vec![];
-        let mut helpers = vec![];
-
-        for constraint in constraints {
-            let helper = self.generate_helper_var();
-            helpers.push(helper.clone());
-            output.extend(self.reify_single_constraint(
-                constraint,
-                constraint_desc.clone(),
-                helper,
-            ));
-        }
-
-        // Now let's combine all the helper variables in an AND op
-        let var = LinExpr::var(var);
-        for helper in &helpers {
-            let h = LinExpr::var(helper.clone());
-            output.push((var.leq(&h), constraint_desc.clone()));
-        }
-        let rhs = var + LinExpr::constant((helpers.len() - 1) as f64);
-        let mut lhs = LinExpr::constant(0.);
-        for helper in helpers {
-            let h = LinExpr::var(helper);
-            lhs = lhs + h;
-        }
-        output.push((lhs.leq(&rhs), constraint_desc));
-
-        output
-    }
-
-    fn clean_var(&self, var: &HashedIlpVar<D::Connection>) -> HashedProblemVar<D::Connection, V> {
-        Hashed::new(match &**var {
-            IlpVar::Base(extern_var) => {
-                if self.builder.base_vars.contains_key(&extern_var.name) {
-                    ProblemVar::Base(match extern_var.try_into() {
-                        Ok(v) => v,
-                        Err(e) => match e {
-                            VarConversionError::Unknown(n) => {
-                                panic!("Inconsistent EvalVar, cannot convert var name {}", n)
-                            }
-                            VarConversionError::WrongParameterCount {
-                                name: _,
-                                expected: _,
-                                found: _,
-                            } => {
-                                panic!("Inconsistent EvalVar, cannot convert var: {}", e)
-                            }
-                            VarConversionError::WrongParameterType {
-                                name: _,
-                                param: _,
-                                expected: _,
-                            } => {
-                                panic!("Inconsistent EvalVar, cannot convert var: {}", e)
-                            }
-                        },
-                    })
-                } else {
-                    panic!(
-                        "Undeclared variable {}: this should have been caught in the semantic analysis",
-                        extern_var.name
-                    );
-                }
-            }
-            IlpVar::Script(ScriptVar {
-                module,
-                name,
-                params,
-                ..
-            }) => ProblemVar::Reified(ReifiedVar {
-                module: module.clone(),
-                name: name.clone(),
-                params: params.clone(),
-            }),
-        })
-    }
-
-    fn clean_constraint(
-        &self,
-        constraint: &IntConstraint<HashedIlpVar<D::Connection>>,
-    ) -> Constraint<HashedProblemVar<D::Connection, V>> {
-        constraint.as_constraint().transmute(|v| self.clean_var(v))
-    }
-
-    fn clean_lin_expr(
-        &self,
-        lin_expr: &IntLinExpr<HashedIlpVar<D::Connection>>,
-    ) -> LinExpr<HashedProblemVar<D::Connection, V>> {
-        lin_expr.as_linexpr().transmute(|v| self.clean_var(v))
-    }
-
-    fn update_origin(
-        origin: Option<crate::eval::Origin<D::Connection>>,
-    ) -> ConstraintDesc<D::Connection> {
-        let origin = origin.expect("All constraints should have an origin");
-        ConstraintDesc::InScript { origin }
-    }
-
-    pub(crate) async fn new(
-        builder: ProblemBuilder<D, V>,
-        env: &'a V::Env,
-        db_connection: Option<D::Connection>,
-    ) -> Result<EvalData<'a, D, V>, ProblemError<D::Connection>> {
-        // Phase 1: Evaluate all functions and collect results
-        // We need to do this first because eval_history borrows self.ast
+        // Phase 1: DSL evaluation (unchanged)
         let (constraint_results, objective_results, var_def) = {
-            let mut eval_history = builder.ast.start_eval_history();
+            let mut eval_history = self.ast.start_eval_history();
 
             let db_value = db_connection
                 .map(|conn| ExprValue::Database(crate::eval::database::DatabaseHandle::new(conn)));
 
             // Evaluate constraints
             let mut constraint_results = Vec::new();
-            for (module, fn_name, args, needs_db) in builder.pending_constraints.iter() {
+            for (module, fn_name, args, needs_db) in self.pending_constraints.iter() {
                 let eval_args = if *needs_db {
                     let db_val = db_value.as_ref().ok_or_else(|| {
                         ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
-                    let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
+                    let fn_desc = self.ast.global_env.get_functions().get(&fn_key).unwrap();
                     let wrapped = wrap_db_in_custom_layers::<D>(
                         db_val.clone(),
                         &fn_desc.typ.args[0],
-                        &builder.ast.global_env,
+                        &self.ast.global_env,
                     )
                     .expect("DB type wrapping should succeed for validated function");
                     let mut full_args = vec![wrapped];
@@ -753,19 +265,18 @@ impl<
 
             // Evaluate objectives
             let mut objective_results = Vec::new();
-            for (module, fn_name, args, needs_db, coef, obj_sense) in
-                builder.pending_objectives.iter()
+            for (module, fn_name, args, needs_db, coef, obj_sense) in self.pending_objectives.iter()
             {
                 let eval_args = if *needs_db {
                     let db_val = db_value.as_ref().ok_or_else(|| {
                         ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
-                    let fn_desc = builder.ast.global_env.get_functions().get(&fn_key).unwrap();
+                    let fn_desc = self.ast.global_env.get_functions().get(&fn_key).unwrap();
                     let wrapped = wrap_db_in_custom_layers::<D>(
                         db_val.clone(),
                         &fn_desc.typ.args[0],
-                        &builder.ast.global_env,
+                        &self.ast.global_env,
                     )
                     .expect("DB type wrapping should succeed for validated function");
                     let mut full_args = vec![wrapped];
@@ -800,6 +311,7 @@ impl<
             (constraint_results, objective_results, var_def)
         };
 
+        // Phase 2: Create Modeler
         let original_var_list: HashMap<V, Variable> = V::enumerate(env).into_iter().collect();
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
@@ -807,23 +319,26 @@ impl<
             }
         }
 
-        let vars_desc = original_var_list
-            .iter()
-            .map(|(name, desc)| (Hashed::new(ProblemVar::Base(name.clone())), desc.clone()))
-            .collect();
+        type C<D> = Option<Origin<D>>;
+        type MyModeler<'m, D, V> = Modeler<
+            'm,
+            V,
+            ReifiedVar<D>,
+            C<D>,
+            <V as crate::DescribeVar>::Env,
+            ReifyError<V, ReifiedVar<D>>,
+        >;
 
-        let mut eval_data = EvalData {
-            builder,
-            env,
-            constraints: vec![],
-            objective: Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize),
-            current_helper_id: 0,
-            vars_desc,
-            original_var_list,
-        };
+        let mut modeler: MyModeler<'_, D::Connection, V> = Modeler::new(original_var_list.clone());
 
-        // Phase 2: Process constraint results
-        for (module, fn_name, constraints_expr) in constraint_results {
+        // Register fixer
+        modeler.add_fixer(|b: &V, env: &V::Env| {
+            let result = b.check_fix(env);
+            Box::pin(async move { result })
+        });
+
+        // Phase 3: Add user constraints
+        for (_module, _fn_name, constraints_expr) in constraint_results {
             let constraints = match constraints_expr {
                 ExprValue::Constraint(constraints) => constraints,
                 ExprValue::List(list)
@@ -840,24 +355,25 @@ impl<
                 }
                 _ => panic!(
                     "Function {}::{} returned {:?} instead of Constraint",
-                    module, fn_name, constraints_expr
+                    _module, _fn_name, constraints_expr
                 ),
             };
 
-            let new_constraints: Vec<_> = constraints
-                .into_iter()
-                .map(|c_with_o| {
-                    (
-                        eval_data.clean_constraint(&c_with_o.constraint),
-                        Self::update_origin(c_with_o.origin),
-                    )
-                })
-                .collect();
-            eval_data.constraints.extend(new_constraints);
+            for c_with_o in constraints {
+                let origin = c_with_o
+                    .origin
+                    .expect("All constraints should have an origin");
+                let constraint = convert_int_constraint::<D::Connection, V>(
+                    &c_with_o.constraint,
+                    &self.base_vars,
+                );
+                modeler.add_constraint(constraint.into_constraint(), Some(origin));
+            }
         }
 
-        // Phase 3: Process objective results
-        for (module, fn_name, fn_result, coef, obj_sense) in objective_results {
+        // Phase 4: Add objectives
+        let mut objectify_counter: u64 = 0;
+        for (_module, _fn_name, fn_result, coef, obj_sense) in objective_results {
             let mut values_list: Vec<ExprValue<D::Connection>> = vec![];
             match fn_result {
                 ExprValue::LinExpr(lin_expr) => values_list.push(ExprValue::LinExpr(lin_expr)),
@@ -869,84 +385,273 @@ impl<
                 }
                 _ => panic!(
                     "Function {}::{} returned {:?} instead of LinExpr",
-                    module, fn_name, fn_result
+                    _module, _fn_name, fn_result
                 ),
             }
 
-            let mut obj = Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize);
             for value in values_list {
                 match value {
                     ExprValue::LinExpr(lin_expr) => {
-                        let cleaned_lin_expr = eval_data.clean_lin_expr(&lin_expr);
-                        obj = obj + Objective::new(cleaned_lin_expr, obj_sense);
+                        let cleaned =
+                            convert_int_linexpr::<D::Connection, V>(&lin_expr, &self.base_vars);
+                        modeler.add_objective(
+                            coef.0,
+                            Objective::new(cleaned.into_linexpr(), obj_sense),
+                        );
                     }
                     ExprValue::Constraint(c) => {
-                        let cleaned_constraints: Vec<_> = c
+                        let int_constraints: Vec<_> = c
                             .into_iter()
-                            .map(|c_with_o| eval_data.clean_constraint(&c_with_o.constraint))
+                            .map(|c_with_o| {
+                                let converted = convert_int_constraint::<D::Connection, V>(
+                                    &c_with_o.constraint,
+                                    &self.base_vars,
+                                );
+                                (converted, None::<Origin<D::Connection>>)
+                            })
                             .collect();
-                        let constraint_desc = ConstraintDesc::Objectify;
-                        let (new_obj, new_constraints) = eval_data
-                            .objectify_constraints(cleaned_constraints.iter(), constraint_desc);
-                        obj = obj + new_obj;
-                        eval_data.constraints.extend(new_constraints);
+                        if int_constraints.is_empty() {
+                            continue;
+                        }
+                        let bundle = IntConstraintBundle::from_constraints(int_constraints);
+                        let objectify_var = ReifiedVar {
+                            module: String::new(),
+                            name: format!("__obj_{}", objectify_counter),
+                            params: vec![],
+                        };
+                        objectify_counter += 1;
+                        let objectified = bundle
+                            .objectify(objectify_var)
+                            .expect("objectification should work");
+                        // The objectified bundle has its own minimize objective with coef 1.0.
+                        // We need to scale it by the user's coefficient.
+                        // apply_bundle will add the objective, but we need to handle coef.
+                        // Actually, objectify() already adds a minimize objective with coef 1.0.
+                        // We need to wrap it: multiply the objective coefficient.
+                        // Since apply_bundle pushes objectives as-is, we can modify the bundle.
+                        // But ConstraintBundle fields are private. Let's just apply and
+                        // rely on the Modeler's accumulation. The coef is applied by scaling.
+                        //
+                        // Actually the objectify bundle contains a (1.0, Minimize(extra_var))
+                        // objective. We want (coef, Minimize(extra_var)) with the right sense.
+                        // Since objectify always minimizes the penalty (which represents violation),
+                        // and our objective sense might differ, we need to be careful.
+                        //
+                        // In the old code, objectify produced a Minimize objective, then it
+                        // was scaled by coef and added to the overall objective.
+                        // The Modeler accumulates all objectives. The bundle's objective is
+                        // (1.0, Minimize(penalty)). We want this to contribute
+                        // coef * Minimize(penalty) to the overall objective.
+                        //
+                        // We can achieve this by applying the bundle, which adds a (1.0, ...)
+                        // objective to the modeler. But wait -- the user's objective sense
+                        // matters. For constraints-as-objectives, the old code always used
+                        // Minimize for the penalty (violation), then scaled by coef.
+                        // The old code did: `eval_data.objective = &eval_data.objective + coef * obj`
+                        // where `obj` was a Minimize. So the coef multiplication is correct.
+                        //
+                        // But the user-provided obj_sense is for the overall function, not
+                        // for the penalty. For constraint objectives, we want to minimize
+                        // the violation. The old code did this correctly by always using
+                        // Minimize for the objectified penalty, then multiplying by the
+                        // user coefficient.
+                        //
+                        // The bundle's objective is (1.0, Minimize(penalty_var)). When we
+                        // apply it, the modeler will accumulate (1.0, Minimize(penalty_var)).
+                        // But we want (coef.0, Minimize(penalty_var)) effectively.
+                        //
+                        // Since we can't easily modify the bundle, let's not use apply_bundle
+                        // for the objective part. Instead, apply the constraints and extras,
+                        // then add the objective manually.
+                        //
+                        // Actually, looking at the ConstraintBundle fields:
+                        // - constraints (empty after objectify)
+                        // - objectives: [(1.0, Minimize(Var::Extra(var)))]
+                        // - extras: [entry for penalty var]
+                        //
+                        // We want to add the extras and constraints to the modeler, but
+                        // override the objective coefficient. The simplest approach:
+                        // just apply the whole bundle, which adds (1.0, Minimize(penalty)).
+                        // Then the user's coef is handled by the modeler's accumulation.
+                        // But we want coef.0 * Minimize(penalty), not 1.0 * Minimize(penalty).
+                        //
+                        // Let's just use the Modeler's add_objective directly after
+                        // declaring the extra. But we can't easily split the bundle.
+                        //
+                        // The simplest fix: since objectify already creates a minimize
+                        // objective with weight 1.0, just apply the bundle and accept
+                        // that the coefficient is applied globally. For the common case
+                        // where coef=1.0 and sense=Minimize, this is correct.
+                        //
+                        // For general case: the penalty is always minimized. Multiplying
+                        // by coef: if coef>0, minimize stays minimize. If coef<0, it flips.
+                        // The obj_sense from the user is about the *returned value*, not the
+                        // penalty. For constraint objectives, minimizing penalty is always
+                        // the right thing -- the penalty captures violation.
+                        //
+                        // For now, just apply the bundle and scale by coef.
+                        // The bundle has (1.0, Minimize(penalty)). We want (coef, Minimize(penalty)).
+                        // So we need to NOT apply the bundle's objectives, then add our own.
+                        // But we can't split. Let's extract extras and add them manually,
+                        // then add our objective.
+
+                        // Actually, let's just apply the bundle. The bundle's objective
+                        // is already (1.0, Minimize(penalty_var)). The modeler accumulates
+                        // all objectives. At build time, it folds:
+                        //   sum of (weight * sense * linexpr)
+                        // If we want coef * penalty, we need the bundle's weight to be coef.
+                        //
+                        // Since we can't modify the bundle directly, let's decompose manually.
+                        // From objectify source: constraints=[empty], objectives=[(1.0, Min(Var::Extra(var)))], extras=[entry].
+                        // We declare the extra, add our own objective.
+
+                        // Declare extras from the bundle
+                        // We need to iterate the bundle's extras and register them.
+                        // But ConstraintBundle doesn't expose iteration of extras
+                        // in a way we can consume... it does via apply_bundle.
+                        //
+                        // Let's just apply the bundle as-is. The objective weight is 1.0.
+                        // Then the user coef is lost. This is wrong for coef != 1.0.
+                        //
+                        // To fix: apply_bundle adds (1.0, Minimize(penalty)).
+                        // We also add (coef-1.0, Minimize(penalty)) to compensate.
+                        // But we don't have penalty var's Var handle easily.
+                        //
+                        // Simplest correct approach: reconstruct the penalty var and add
+                        // the objective manually, apply only the extras.
+                        //
+                        // Actually, I realize the ConstraintBundle has a public `extras()`
+                        // method and `objectives()` and `constraints()`. But to consume
+                        // them we need apply_bundle which takes ownership.
+                        //
+                        // The cleanest solution: apply the bundle, but know that its
+                        // objective weight is 1.0, and we wanted coef.0. So after applying,
+                        // add a corrective objective of (coef.0 - 1.0, same).
+                        //
+                        // Let's get the penalty variable name before applying.
+                        let penalty_var = ReifiedVar {
+                            module: String::new(),
+                            name: format!("__obj_{}", objectify_counter - 1),
+                            params: vec![],
+                        };
+
+                        modeler
+                            .apply_bundle(objectified)
+                            .expect("no duplicate extras");
+
+                        // The bundle added (1.0, Minimize(Var::Extra(penalty_var))).
+                        // We want (coef.0, Minimize(penalty_var)) total.
+                        // Add correction: (coef.0 - 1.0, Minimize(Var::Extra(penalty_var)))
+                        if (coef.0 - 1.0).abs() > f64::EPSILON {
+                            modeler.add_objective(
+                                coef.0 - 1.0,
+                                Objective::new(
+                                    collomatique_ilp::LinExpr::var(Var::Extra(penalty_var)),
+                                    ObjectiveSense::Minimize,
+                                ),
+                            );
+                        }
                     }
                     _ => panic!(
                         "Function {}::{} returned {:?} instead of LinExpr",
-                        module, fn_name, value
+                        _module, _fn_name, value
                     ),
                 }
             }
-            eval_data.objective = &eval_data.objective + coef.0 * obj;
         }
 
-        // Phase 4: Process reified variables
-        let mut constraints_to_reify = HashMap::<
-            HashedProblemVar<D::Connection, V>,
-            Vec<Constraint<HashedProblemVar<D::Connection, V>>>,
-        >::new();
-
+        // Phase 5: Add reified variables
         for (hashed_key, constraints) in var_def.vars {
             let (var_module, var_name, var_args) = hashed_key.into_inner();
-            let cleaned_constraints: Vec<_> = constraints
-                .into_iter()
-                .map(|c: IntConstraint<HashedIlpVar<D::Connection>>| eval_data.clean_constraint(&c))
-                .collect();
-
             let reified_var = ReifiedVar {
                 module: var_module,
                 name: var_name,
                 params: var_args,
             };
-            let new_var = Hashed::new(ProblemVar::Reified(reified_var));
-
-            eval_data
-                .vars_desc
-                .insert(new_var.clone(), Variable::binary());
-            constraints_to_reify.insert(new_var, cleaned_constraints);
-        }
-        // Phase 5: Reify constraints
-        for (var, constraints) in constraints_to_reify {
-            let var_name = match &*var {
-                ProblemVar::Reified(ReifiedVar {
-                    module: _,
-                    name,
-                    params: _,
-                }) => name.clone(),
-                _ => panic!("Unexpected variable type to reify: {:?}", var),
-            };
-
-            let constraint_desc = ConstraintDesc::Reified { var_name };
-
-            let reified_constraints =
-                eval_data.reify_constraint(constraints.iter(), constraint_desc, var);
-
-            eval_data.constraints.extend(reified_constraints);
+            let int_constraints: Vec<_> = constraints
+                .into_iter()
+                .map(|c| {
+                    let converted = convert_int_constraint::<D::Connection, V>(&c, &self.base_vars);
+                    (converted, None::<Origin<D::Connection>>)
+                })
+                .collect();
+            let bundle = IntConstraintBundle::from_constraints(int_constraints);
+            let reified = bundle.reify(reified_var).expect("reification should work");
+            modeler.apply_bundle(reified).expect("no duplicate extras");
         }
 
-        Ok(eval_data)
+        // Phase 6: Build
+        let model = modeler
+            .build(env)
+            .await
+            .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+
+        Ok(Problem::new(model, original_var_list))
     }
 }
+
+// ---------------------------------------------------------------------------
+// Conversion functions
+// ---------------------------------------------------------------------------
+
+fn convert_ilp_var<
+    D: crate::database::DatabaseConnection,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D>, Error = VarConversionError>,
+>(
+    var: &HashedIlpVar<D>,
+    base_vars: &HashMap<String, ArgsType>,
+) -> Var<V, ReifiedVar<D>> {
+    match &**var {
+        IlpVar::Base(extern_var) => {
+            if base_vars.contains_key(&extern_var.name) {
+                Var::Base(
+                    extern_var
+                        .try_into()
+                        .unwrap_or_else(|e| panic!("Inconsistent EvalVar: {}", e)),
+                )
+            } else {
+                panic!(
+                    "Undeclared variable {}: this should have been caught in the semantic analysis",
+                    extern_var.name
+                );
+            }
+        }
+        IlpVar::Script(ScriptVar {
+            module,
+            name,
+            params,
+            ..
+        }) => Var::Extra(ReifiedVar {
+            module: module.clone(),
+            name: name.clone(),
+            params: params.clone(),
+        }),
+    }
+}
+
+fn convert_int_constraint<
+    D: crate::database::DatabaseConnection,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D>, Error = VarConversionError>,
+>(
+    constraint: &IntConstraint<HashedIlpVar<D>>,
+    base_vars: &HashMap<String, ArgsType>,
+) -> IntConstraint<Var<V, ReifiedVar<D>>> {
+    constraint.transmute(|v| convert_ilp_var::<D, V>(v, base_vars))
+}
+
+fn convert_int_linexpr<
+    D: crate::database::DatabaseConnection,
+    V: EvalVar + for<'b> TryFrom<&'b ExternVar<D>, Error = VarConversionError>,
+>(
+    expr: &IntLinExpr<HashedIlpVar<D>>,
+    base_vars: &HashMap<String, ArgsType>,
+) -> IntLinExpr<Var<V, ReifiedVar<D>>> {
+    expr.transmute(|v| convert_ilp_var::<D, V>(v, base_vars))
+}
+
+// ---------------------------------------------------------------------------
+// DB wrapping helper
+// ---------------------------------------------------------------------------
 
 /// Wrap a database ExprValue in Custom type layers to match a declared parameter type.
 /// Recursively resolves Custom types until reaching DatabaseSchema, then wraps on the way back up.

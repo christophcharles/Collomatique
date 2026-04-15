@@ -102,7 +102,7 @@ async fn test_fix_forces_variable_values() {
 
     // V(7) should be 1, all others should be 0
     for i in 0..10 {
-        let val = sol.get(ProblemVar::Base(Var::V(i))).unwrap_or(0.0);
+        let val = sol.get(InternalVar::Base(Var::V(i))).unwrap_or(0.0);
         if i == 7 {
             assert_eq!(
                 val, 1.0,

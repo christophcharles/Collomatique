@@ -91,12 +91,12 @@ async fn constraint_list_return_type() {
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );

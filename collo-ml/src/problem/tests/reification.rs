@@ -124,17 +124,17 @@ async fn internal_reification() {
     // R1 + R2 + R3 === 1 with R2 === 1 means R1 === 0 and R3 === 0
     // Therefore V === 0 and X === 0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(0.0),
         "V should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0"
     );
@@ -255,12 +255,12 @@ async fn private_reification_does_not_leak() {
     // Second module: R === 0 means W === 1 must NOT hold, so W === 0
     // If private reifications leaked, these would conflict
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (from first module's private R)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0 (from second module's private R)"
     );
@@ -394,12 +394,12 @@ async fn three_module_chain_define_reify_use() {
     // exactly_one_true forces $VIsOne + $WIsOne === 1
     // Since $VIsOne === 1, we need $WIsOne === 0, so W === 0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (from reified variable chain)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0 (from exactly_one_true constraint)"
     );

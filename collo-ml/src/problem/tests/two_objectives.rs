@@ -143,24 +143,24 @@ async fn two_objectives_same_script() {
 
     // First objective maximizes V -> V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
 
     // Second objective minimizes X -> X=0, Y=1
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );
@@ -319,24 +319,24 @@ async fn two_objectives_different_scripts() {
 
     // First objective maximizes V -> V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
 
     // Second objective minimizes X -> X=0, Y=1
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );
@@ -489,22 +489,22 @@ async fn objectives_with_different_senses() {
 
     // The combined objective Maximize(V - X) is maximized when V=1, X=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );
