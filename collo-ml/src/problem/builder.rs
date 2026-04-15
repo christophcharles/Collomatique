@@ -220,7 +220,7 @@ impl<
     ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>>
     where
         V: 'static,
-        V::Env: 'static,
+        V::Env: Sync + 'static,
     {
         // Phase 1: DSL evaluation (unchanged)
         let (constraint_results, objective_results, var_def) = {

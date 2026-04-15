@@ -59,7 +59,8 @@ where
             ) -> crate::BoxFuture<
                 'a,
                 Result<Vec<Constraint<crate::ExtraVar<B, E>>>, Err>,
-            > + 'm,
+            > + Send
+            + 'm,
     {
         ExtraEntry {
             name,
@@ -383,7 +384,7 @@ where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Err: Debug + Send + 'static,
 {
     /// Apply a bundle to the modeler: push every constraint,
     /// push every weighted objective, and declare every extra.
@@ -666,8 +667,8 @@ where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: 'm,
-    Err: Debug + 'static + From<ReifyError<B, E>>,
+    Db: Sync + 'm,
+    Err: Debug + Send + 'static + From<ReifyError<B, E>>,
 {
     /// Reify with a custom epsilon. See
     /// [`IntConstraintBundle::reify`] for the general contract.
@@ -896,8 +897,8 @@ where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: 'm,
-    Err: Debug + 'static,
+    Db: Sync + 'm,
+    Err: Debug + Send + 'static,
 {
     /// Convert the bundle's constraints into a penalty variable
     /// that captures how much those constraints are violated.
@@ -989,8 +990,8 @@ where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: 'm,
-    Err: Debug + 'static,
+    Db: Sync + 'm,
+    Err: Debug + Send + 'static,
 {
     /// Convenience wrapper: drops the int wrapping and delegates
     /// to [`ConstraintBundle::objectify_with_balance`].

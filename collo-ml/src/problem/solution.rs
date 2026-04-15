@@ -22,7 +22,12 @@ pub type ProblemConstraintSource<D> = ConstraintSource<ReifiedVar<D>, Option<Ori
 pub type ProblemInternalVar<D, V> = InternalVar<V, ReifiedVar<D>>;
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
 pub struct Problem<D: DatabaseConnection, V: EvalVar> {
     model: Model<V, ReifiedVar<D>, Option<Origin<D>>>,
     pub(crate) original_var_list: HashMap<V, Variable>,

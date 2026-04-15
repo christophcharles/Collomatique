@@ -1,4 +1,4 @@
-use collo_ml::problem::ConstraintDesc;
+use collo_ml::problem::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -723,15 +723,10 @@ impl Colloscope {
                 .expect("There should be a complete ilp config for the colloscope");
             let warnings = sol
                 .blame()
-                .map(|(_constraint, desc)| {
-                    let ConstraintDesc::InScript { origin } = desc else {
-                        panic!(
-                            "Reification constraints should all be satisfied! {:?}",
-                            desc
-                        )
-                    };
-
-                    origin.to_string()
+                .filter_map(|(_constraint, desc)| match desc {
+                    ConstraintSource::User(Some(origin)) => Some(origin.to_string()),
+                    ConstraintSource::User(None) => None,
+                    ConstraintSource::DefiningExtra { .. } => None,
                 })
                 .collect();
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {

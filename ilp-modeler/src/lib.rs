@@ -10,12 +10,12 @@
 //! This file implements the lazy modeler core
 //! only. Reification helpers are intentionally out of scope.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use std::sync::Mutex;
 
 use collomatique_ilp::{
     Constraint, LinExpr, Objective, ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
@@ -44,12 +44,13 @@ pub use source_var::SourceVar;
 /// Boxed future returned by extra-definition closures.
 ///
 /// Aliased to avoid pulling in `futures` as a dependency.
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Async fixer closure. Called lazily at build time for undeclared
 /// base variables found in constraints/objectives. The first fixer
 /// in the chain to return `Some(_)` wins.
-pub type FixerFn<'m, B, Db> = dyn for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + 'm;
+pub type FixerFn<'m, B, Db> =
+    dyn for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + Send + Sync + 'm;
 
 // ---------------------------------------------------------------------------
 // HasBase (private trait for generic fix logic)
@@ -249,7 +250,7 @@ where
 /// [`Problem`] and carries data needed to build a
 /// reconstruction problem (for computing extra/helper values
 /// from a known base-variable assignment).
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Model<B, E, C>
 where
     B: UsableData,
@@ -346,6 +347,7 @@ pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
         &'a VarContext<'a, B, E, Db>,
         E,
     ) -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
+    + Send
     + 'm;
 
 // ---------------------------------------------------------------------------
@@ -366,7 +368,7 @@ pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
 /// This split avoids a borrow conflict between the factory
 /// (which mutates its declared set) and the context view.
 ///
-/// Fix methods use interior mutability ([`RefCell`]) for the cache,
+/// Fix methods use interior mutability ([`Mutex`]) for the cache,
 /// allowing `VarContext` to be passed as a shared reference through
 /// the HRTB-based closure signature while still caching results.
 pub struct VarContext<'a, B, E, Db>
@@ -378,7 +380,7 @@ where
     extras: &'a HashMap<E, Variable>,
     fixers: &'a [Box<FixerFn<'a, B, Db>>],
     db: &'a Db,
-    cache: &'a RefCell<HashMap<B, Option<f64>>>,
+    cache: &'a Mutex<HashMap<B, Option<f64>>>,
 }
 
 impl<'a, B, E, Db> VarContext<'a, B, E, Db>
@@ -417,7 +419,7 @@ where
         if self.base.contains_key(b) {
             return None;
         }
-        if let Some(&cached) = self.cache.borrow().get(b) {
+        if let Some(&cached) = self.cache.lock().unwrap().get(b) {
             return cached;
         }
         let mut result = None;
@@ -427,7 +429,7 @@ where
                 break;
             }
         }
-        self.cache.borrow_mut().insert(b.clone(), result);
+        self.cache.lock().unwrap().insert(b.clone(), result);
         result
     }
 
@@ -548,7 +550,7 @@ where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Err: Debug + Send + 'static,
 {
     /// The full set of base variables is fixed upfront. No
     /// incremental `declare_base` — if you don't know your base
@@ -592,7 +594,7 @@ where
     /// `Some(value)` wins and that variable is substituted out.
     pub fn add_fixer<F>(&mut self, fixer: F)
     where
-        F: for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + 'm,
+        F: for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + Send + Sync + 'm,
     {
         self.fixers.push(Box::new(fixer));
     }
@@ -615,6 +617,7 @@ where
                 E,
             )
                 -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
+            + Send
             + 'm,
     {
         if self.extras.contains_key(&name) {
@@ -662,6 +665,7 @@ where
                 &'a VarContext<'a, B, E, Db>,
                 E,
             ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
+            + Send
             + 'm,
     {
         // Smuggle the FnOnce into a closure shape that matches
@@ -706,10 +710,10 @@ where
 impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
 where
     B: SourceVar<Db> + UsableData + 'm,
-    Db: 'm,
+    Db: Sync + 'm,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Err: Debug + Send + 'static,
 {
     /// Create a modeler by querying the data source for base variables
     /// via [`SourceVar::vars`], and register [`SourceVar::fix`] as the
@@ -725,11 +729,11 @@ where
 impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
 where
     B: DescribeVar + UsableData + 'm,
-    B::Env: LoadEnv<Db>,
-    Db: 'm,
+    B::Env: LoadEnv<Db> + Send + Sync,
+    Db: Sync + 'm,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Err: Debug + Send + 'static,
 {
     /// Create a modeler from a [`DescribeVar`] type, loading the
     /// environment once via [`LoadEnv`]. More efficient than
@@ -772,7 +776,8 @@ where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Db: Sync,
+    Err: Debug + Send + 'static,
 {
     /// Run the lazy expansion fixpoint and return the assembled
     /// [`Model`]. `db` is passed to every extra-definition
@@ -788,7 +793,7 @@ where
             .collect();
 
         // Shared fix cache for the entire build.
-        let fix_cache: RefCell<HashMap<B, Option<f64>>> = RefCell::new(HashMap::new());
+        let fix_cache: Mutex<HashMap<B, Option<f64>>> = Mutex::new(HashMap::new());
 
         let ctx = VarContext {
             base: &base_vars,
@@ -964,14 +969,15 @@ fn expand<'s, 'm, B, E, C, Db, Err>(
     extras_kinds: &'s HashMap<E, Variable>,
     fixers: &'s [Box<FixerFn<'m, B, Db>>],
     db: &'s Db,
-    fix_cache: &'s RefCell<HashMap<B, Option<f64>>>,
+    fix_cache: &'s Mutex<HashMap<B, Option<f64>>>,
     e: E,
 ) -> BoxFuture<'s, Result<(), BuildError<B, E, C, Err>>>
 where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Err: Debug + 'static,
+    Db: Sync,
+    Err: Debug + Send + 'static,
     'm: 's,
 {
     Box::pin(async move {

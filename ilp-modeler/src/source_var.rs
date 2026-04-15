@@ -24,7 +24,7 @@ pub trait SourceVar<Db>: UsableData {
     /// Enumerate all base variable instances with their variable kinds.
     ///
     /// Variables that should be fixed must NOT be included in the result.
-    fn vars(db: &Db) -> impl Future<Output = HashMap<Self, Variable>>;
+    fn vars(db: &Db) -> impl Future<Output = HashMap<Self, Variable>> + Send;
 
     /// Return a fixed value for this variable instance, if it should
     /// be fixed. Called lazily at build time for undeclared base
@@ -32,7 +32,7 @@ pub trait SourceVar<Db>: UsableData {
     ///
     /// * `None` — this variable is free (a decision variable)
     /// * `Some(value)` — substitute this constant value
-    fn fix(&self, db: &Db) -> impl Future<Output = Option<f64>>;
+    fn fix(&self, db: &Db) -> impl Future<Output = Option<f64>> + Send;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,7 @@ impl<T, Db> SourceVar<Db> for T
 where
     T: DescribeVar,
     T::Env: LoadEnv<Db>,
+    Db: Sync,
 {
     async fn vars(db: &Db) -> HashMap<Self, Variable> {
         let env = T::Env::load(db).await;

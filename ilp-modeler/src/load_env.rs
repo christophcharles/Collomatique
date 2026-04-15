@@ -9,11 +9,11 @@ use std::future::Future;
 /// [`Modeler::from_described`](crate::Modeler::from_described).
 pub trait LoadEnv<Db>: Sized {
     /// Load the environment from the data source.
-    fn load(db: &Db) -> impl Future<Output = Self>;
+    fn load(db: &Db) -> impl Future<Output = Self> + Send;
 }
 
 /// Identity impl: if you already have the environment, clone it.
-impl<E: Clone + Send> LoadEnv<E> for E {
+impl<E: Clone + Send + Sync> LoadEnv<E> for E {
     async fn load(db: &E) -> E {
         db.clone()
     }

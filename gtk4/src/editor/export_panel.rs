@@ -17,11 +17,11 @@ use collomatique_state_colloscopes::export_config;
 use crate::tools;
 
 pub type IlpInnerProblem = collomatique_ilp::Problem<
-    collo_ml::problem::HashedProblemVar<
+    collo_ml::problem::ProblemInternalVar<
         collo_ml::SqliteDatabaseConnection,
         collomatique_binding_colloscopes::vars::Var,
     >,
-    collo_ml::problem::ConstraintDesc<collo_ml::SqliteDatabaseConnection>,
+    collo_ml::problem::ProblemConstraintSource<collo_ml::SqliteDatabaseConnection>,
 >;
 
 pub struct ExportPanel {
