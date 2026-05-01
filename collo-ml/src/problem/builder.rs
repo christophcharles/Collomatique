@@ -86,9 +86,9 @@ impl<
     where
         V: 'static,
         V::Env: collomatique_ilp_modeler::LoadEnv<Db> + Send + Sync + 'static,
-        Db: Sync + 'static,
+        Db: Sync,
     {
-        let bundle = self.feeder.build::<Db>(db_connection).await?;
+        let bundle = self.feeder.build(db_connection).await?;
 
         type MyModeler<'m, D, V, Db> = Modeler<'m, V, E<D>, C<D>, Db, ReifyError<V, E<D>>>;
 
