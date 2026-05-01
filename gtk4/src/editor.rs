@@ -9,15 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use collomatique_binding_colloscopes::scripts::SimpleScriptError;
+use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
-
-type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collo_ml::SqliteDatabaseDriver,
-    collomatique_binding_colloscopes::vars::Var,
->;
 
 use crate::editor::colloscope::ColloscopeOutput;
 use crate::editor::export_panel::ExportPanelInput;
@@ -1406,7 +1401,7 @@ impl EditorPanel {
             .clone();
 
         sender.oneshot_command(async move {
-            use collomatique_binding_colloscopes::scripts::{
+            use collomatique_constraints_colloscopes::{
                 default_problem_builder, get_default_main_module,
             };
 
@@ -1414,8 +1409,7 @@ impl EditorPanel {
                 .as_deref()
                 .unwrap_or_else(|| get_default_main_module());
 
-            let result =
-                default_problem_builder::<collo_ml::SqliteDatabaseDriver>(main_module).await;
+            let result = default_problem_builder(main_module).await;
 
             EditorCommandOutput::MainScriptCompiled { source, result }
         });

@@ -416,6 +416,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-constraints-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "collo-ml",
+ "collomatique-binding-colloscopes",
+ "collomatique-ilp",
+ "collomatique-ilp-modeler",
+ "sqlx",
+]
+
+[[package]]
 name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
@@ -424,6 +435,7 @@ dependencies = [
  "clap",
  "collo-ml",
  "collomatique-binding-colloscopes",
+ "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-mps",
  "collomatique-ops",
@@ -530,6 +542,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "collomatique-binding-colloscopes",
+ "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ops",
  "collomatique-python",

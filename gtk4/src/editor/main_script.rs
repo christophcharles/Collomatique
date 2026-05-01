@@ -7,12 +7,7 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_binding_colloscopes::scripts::SimpleScriptError;
-
-type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collo_ml::SqliteDatabaseDriver,
-    collomatique_binding_colloscopes::vars::Var,
->;
+use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
 
 mod modules_dialog;
 

@@ -1,4 +1,4 @@
-use collo_ml::problem::ConstraintSource;
+use collomatique_constraints_colloscopes::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -14,12 +14,7 @@ mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
-use collomatique_binding_colloscopes::scripts::SimpleScriptError;
-
-type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collo_ml::SqliteDatabaseDriver,
-    collomatique_binding_colloscopes::vars::Var,
->;
+use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -63,10 +58,7 @@ pub enum ColloscopeOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collo_ml::problem::Problem<
-        collo_ml::SqliteDatabaseConnection,
-        collomatique_binding_colloscopes::vars::Var,
-    >,
+    problem: collomatique_constraints_colloscopes::Problem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

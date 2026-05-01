@@ -16,13 +16,7 @@ use collomatique_state_colloscopes::export_config;
 
 use crate::tools;
 
-pub type IlpInnerProblem = collomatique_ilp::Problem<
-    collo_ml::problem::ProblemInternalVar<
-        collo_ml::SqliteDatabaseConnection,
-        collomatique_binding_colloscopes::vars::Var,
-    >,
-    collo_ml::problem::ProblemConstraintSource<collo_ml::SqliteDatabaseConnection>,
->;
+pub use collomatique_constraints_colloscopes::IlpInnerProblem;
 
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,

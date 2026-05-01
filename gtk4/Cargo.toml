@@ -15,6 +15,7 @@ collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
 collo-ml = { path = "../collo-ml" }
 collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
+collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-xlsx = { path = "../xlsx" }
 collomatique-mps = { path = "../mps" }
