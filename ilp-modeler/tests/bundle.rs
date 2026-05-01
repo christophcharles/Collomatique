@@ -705,6 +705,40 @@ async fn objectify_int_bundle_convenience() {
     assert_eq!(pen, 2.0);
 }
 
+#[tokio::test]
+async fn objectify_with_coef_scales_penalty() {
+    // x <= 3 on x in [0,5], force x = 5.
+    // With coef=1, optimal x would be 3 (penalty=0). Force x=5, penalty=2.
+    // With coef=2, the objective contribution is 2*penalty instead of 1*penalty.
+    // Verify by giving x a maximize incentive of 1.5 and comparing outcomes.
+    //
+    // coef=1: minimize(pen) + maximize(1.5*x) → pen costs 1 per unit,
+    //         x gains 1.5 per unit, so x=5 is optimal (pen=2, obj=2 - 7.5 = -5.5).
+    // coef=2: minimize(2*pen) + maximize(1.5*x) → pen costs 2 per unit,
+    //         x gains 1.5 per unit, so x=3 is optimal (pen=0, obj=0 - 4.5 = -4.5).
+    for (coef, expected_x) in [(1.0, 5.0), (2.0, 3.0)] {
+        let mut vars: HashMap<B, Variable> = HashMap::new();
+        vars.insert("x".to_string(), Variable::non_negative().max(5.0));
+        let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+        let x = LinExpr::var(base("x"));
+        let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
+            x.leq(&LinExpr::constant(3.0)),
+            "x<=3".into(),
+        )]);
+        let objectified = bundle
+            .objectify_with_coef("pen".to_string(), coef)
+            .unwrap();
+        m.apply_bundle(objectified).unwrap();
+        m.maximize(1.5, LinExpr::var(base("x")));
+
+        let pb = m.build(&()).await.unwrap().into_problem();
+        let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+        let x_val = cfg.get(InternalVar::<B, E>::Base("x".to_string())).unwrap();
+        assert_eq!(x_val, expected_x, "coef={coef}: expected x={expected_x}");
+    }
+}
+
 // ----- fixer + reify/objectify tests -------------------------------------
 
 #[tokio::test]

@@ -905,18 +905,20 @@ where
     ///
     /// `alpha` in `[0, 1]` controls the balance between L1 (sum
     /// of violations, alpha=0) and L∞ (minimax / worst violation,
-    /// alpha=1).
+    /// alpha=1). `coef` scales the minimize objective added for
+    /// the penalty variable.
     ///
     /// Consumes `self`. Returns a new [`ConstraintBundle`] whose:
     /// - `constraints` is empty (absorbed into the extra's closure),
     /// - `extras` is `self.extras` plus one new extra named `var`
     ///   with kind `non_negative`,
     /// - `objectives` is `self.objectives` plus a minimize term
-    ///   for `var`.
-    pub fn objectify_with_balance(
+    ///   for `var` weighted by `coef`.
+    pub fn objectify_with_balance_and_coef(
         self,
         var: E,
         alpha: f64,
+        coef: f64,
     ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         if self.constraints.is_empty() {
             return Err(EagerObjectifyError::EmptyConstraints);
@@ -959,7 +961,7 @@ where
 
         let mut objectives = self.objectives;
         objectives.push((
-            1.0,
+            coef,
             Objective::new(LinExpr::var(Var::Extra(var)), ObjectiveSense::Minimize),
         ));
 
@@ -971,13 +973,30 @@ where
         })
     }
 
-    /// Objectify with the default balance of 0.5 (equal weight
-    /// between L1 sum and L∞ minimax).
+    /// Objectify with a custom balance and default coefficient 1.0.
+    pub fn objectify_with_balance(
+        self,
+        var: E,
+        alpha: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.objectify_with_balance_and_coef(var, alpha, 1.0)
+    }
+
+    /// Objectify with a custom coefficient and default balance 0.5.
+    pub fn objectify_with_coef(
+        self,
+        var: E,
+        coef: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.objectify_with_balance_and_coef(var, 0.5, coef)
+    }
+
+    /// Objectify with default balance 0.5 and coefficient 1.0.
     pub fn objectify(
         self,
         var: E,
     ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
-        self.objectify_with_balance(var, 0.5)
+        self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
 
@@ -994,13 +1013,35 @@ where
     Err: Debug + Send + 'static,
 {
     /// Convenience wrapper: drops the int wrapping and delegates
+    /// to [`ConstraintBundle::objectify_with_balance_and_coef`].
+    pub fn objectify_with_balance_and_coef(
+        self,
+        var: E,
+        alpha: f64,
+        coef: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.into_general()
+            .objectify_with_balance_and_coef(var, alpha, coef)
+    }
+
+    /// Convenience wrapper: drops the int wrapping and delegates
     /// to [`ConstraintBundle::objectify_with_balance`].
     pub fn objectify_with_balance(
         self,
         var: E,
         alpha: f64,
     ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
-        self.into_general().objectify_with_balance(var, alpha)
+        self.objectify_with_balance_and_coef(var, alpha, 1.0)
+    }
+
+    /// Convenience wrapper: drops the int wrapping and delegates
+    /// to [`ConstraintBundle::objectify_with_coef`].
+    pub fn objectify_with_coef(
+        self,
+        var: E,
+        coef: f64,
+    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+        self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
     /// Convenience wrapper: drops the int wrapping and delegates
@@ -1009,6 +1050,6 @@ where
         self,
         var: E,
     ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
-        self.into_general().objectify(var)
+        self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
