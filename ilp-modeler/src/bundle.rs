@@ -686,7 +686,7 @@ where
         self,
         var: E,
         epsilon: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
         if !(epsilon > 0.0 && epsilon < 1.0) {
             return Err(EagerReifyError::InvalidEpsilon(epsilon));
         }
@@ -736,7 +736,7 @@ where
         let mut extras = self.extras;
         extras.push(entry);
 
-        Ok(ConstraintBundle {
+        Ok(IntConstraintBundle {
             constraints: Vec::new(),
             objectives: self.objectives,
             extras,
@@ -747,7 +747,7 @@ where
     /// Reify the bundle's `constraints` field into a binary
     /// indicator named `var` using the default epsilon of 0.1.
     ///
-    /// Returns a new [`ConstraintBundle`] whose:
+    /// Returns a new [`IntConstraintBundle`] whose:
     ///
     /// - `constraints` is empty (the linearization lives inside
     ///   the new extra's body, not at top level),
@@ -762,7 +762,7 @@ where
     pub fn reify(
         self,
         var: E,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
         self.reify_with_epsilon(var, 0.1)
     }
 }
@@ -919,7 +919,7 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         if self.constraints.is_empty() {
             return Err(EagerObjectifyError::EmptyConstraints);
         }
@@ -965,7 +965,7 @@ where
             Objective::new(LinExpr::var(Var::Extra(var)), ObjectiveSense::Minimize),
         ));
 
-        Ok(ConstraintBundle {
+        Ok(IntConstraintBundle {
             constraints: Vec::new(),
             objectives,
             extras,
@@ -978,7 +978,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -987,7 +987,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -995,7 +995,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
@@ -1019,7 +1019,7 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.into_general()
             .objectify_with_balance_and_coef(var, alpha, coef)
     }
@@ -1030,7 +1030,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -1040,7 +1040,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -1049,7 +1049,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<ConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }

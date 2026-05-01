@@ -215,7 +215,7 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
 
     // Apply and build; the resulting problem should require ind=1.
     let mut m = fresh_reify();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     // Force expansion of `ind` by referencing it.
     m.add_constraint(
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
@@ -249,7 +249,7 @@ async fn reify_and_with_solver() {
     let reified = int_bundle.reify("is_one".to_string()).unwrap();
 
     let mut m = fresh_reify();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     // Maximise is_one.
     m.add_objective(
         1.0,
@@ -281,7 +281,7 @@ async fn reify_continuous_var_errors() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=0".into())]);
     let reified = int_bundle.reify("ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     // Force expansion.
     m.add_constraint(
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
@@ -408,7 +408,7 @@ async fn reify_equality_constraint() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x==3".into())]);
     let reified = int_bundle.reify("eq_ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     m.add_objective(
         1.0,
         Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
@@ -436,7 +436,7 @@ async fn reify_equality_constraint_forced_false() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x==3".into())]);
     let reified = int_bundle.reify("eq_ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     // Force x >= 4, so x == 3 can't be satisfied.
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(4.0)),
@@ -469,7 +469,7 @@ async fn reify_non_binary_integer_variable() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=2".into())]);
     let reified = int_bundle.reify("le_ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     m.add_objective(
         10.0,
         Objective::new(LinExpr::var(xtra("le_ind")), ObjectiveSense::Maximize),
@@ -501,7 +501,7 @@ async fn reify_non_binary_integer_variable_forced_false() {
     let int_bundle =
         IntConstraintBundle::<B, E, C, (), TestErr>::from_constraints(vec![(c, "x<=2".into())]);
     let reified = int_bundle.reify("le_ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(3.0)),
         "x>=3".into(),
@@ -580,7 +580,7 @@ async fn objectify_single_inequality() {
         "x<=3".into(),
     )]);
     let objectified = bundle.objectify("pen".to_string()).unwrap();
-    m.apply_bundle(objectified).unwrap();
+    m.apply_bundle(objectified.into_general()).unwrap();
     // Force x = 5.
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
@@ -608,7 +608,7 @@ async fn objectify_single_equality() {
         "x==3".into(),
     )]);
     let objectified = bundle.objectify("pen".to_string()).unwrap();
-    m.apply_bundle(objectified).unwrap();
+    m.apply_bundle(objectified.into_general()).unwrap();
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
         "x>=5".into(),
@@ -640,7 +640,7 @@ async fn objectify_two_constraints(alpha: f64) -> f64 {
     let objectified = bundle
         .objectify_with_balance("pen".to_string(), alpha)
         .unwrap();
-    m.apply_bundle(objectified).unwrap();
+    m.apply_bundle(objectified.into_general()).unwrap();
     // Force x = 4, y = 5.
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(4.0)),
@@ -691,7 +691,7 @@ async fn objectify_int_bundle_convenience() {
         "x<=3".into(),
     )]);
     let objectified = int_bundle.objectify("pen".to_string()).unwrap();
-    m.apply_bundle(objectified).unwrap();
+    m.apply_bundle(objectified.into_general()).unwrap();
     m.add_constraint(
         LinExpr::var(base("x")).geq(&LinExpr::constant(5.0)),
         "x>=5".into(),
@@ -729,7 +729,7 @@ async fn objectify_with_coef_scales_penalty() {
         let objectified = bundle
             .objectify_with_coef("pen".to_string(), coef)
             .unwrap();
-        m.apply_bundle(objectified).unwrap();
+        m.apply_bundle(objectified.into_general()).unwrap();
         m.maximize(1.5, LinExpr::var(base("x")));
 
         let pb = m.build(&()).await.unwrap().into_problem();
@@ -757,7 +757,7 @@ async fn fix_in_reify_closure() {
         "a+c<=1".into(),
     )]);
     let reified = bundle.reify("ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     m.add_objective(
         1.0,
         Objective::new(LinExpr::var(xtra("ind")), ObjectiveSense::Maximize),
@@ -790,7 +790,7 @@ async fn fix_non_integer_in_reify_fails() {
         "a+c<=1".into(),
     )]);
     let reified = bundle.reify("ind".to_string()).unwrap();
-    m.apply_bundle(reified).unwrap();
+    m.apply_bundle(reified.into_general()).unwrap();
     m.add_constraint(
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
         "ref ind".into(),

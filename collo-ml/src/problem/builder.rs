@@ -417,7 +417,7 @@ impl<
                             .objectify_with_coef(objectify_var, coef.0)
                             .expect("objectification should work");
                         modeler
-                            .apply_bundle(objectified)
+                            .apply_bundle(objectified.into_general())
                             .expect("no duplicate extras");
                     }
                     _ => panic!(
@@ -445,7 +445,9 @@ impl<
                 .collect();
             let bundle = IntConstraintBundle::from_constraints(int_constraints);
             let reified = bundle.reify(reified_var).expect("reification should work");
-            modeler.apply_bundle(reified).expect("no duplicate extras");
+            modeler
+                .apply_bundle(reified.into_general())
+                .expect("no duplicate extras");
         }
 
         // Phase 6: Build
