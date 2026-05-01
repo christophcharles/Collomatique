@@ -66,28 +66,25 @@ async fn constraint_list_return_type() {
         "list_constraints",
         r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    pb_builder
+    feeder
         .add_constraint("list_constraints", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 

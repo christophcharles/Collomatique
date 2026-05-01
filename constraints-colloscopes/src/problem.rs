@@ -1,11 +1,12 @@
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
-use collo_ml::problem::ReifiedVar;
+use collo_ml::script_feeder::ReifiedVar;
 use collomatique_binding_colloscopes::vars::Var;
-use collomatique_ilp::ConfigData;
-use collomatique_ilp::DefaultRepr;
 use collomatique_ilp::solvers::Solver;
-use collomatique_ilp_modeler::{ConstraintSource, InternalVar};
+use collomatique_ilp::{ConfigData, DefaultRepr, Variable};
+use collomatique_ilp_modeler::{ConstraintSource, InternalVar, Model};
+use derivative::Derivative;
+use std::collections::HashMap;
 
 pub type ProblemConstraintSource = ConstraintSource<
     ReifiedVar<SqliteDatabaseConnection>,
@@ -14,29 +15,45 @@ pub type ProblemConstraintSource = ConstraintSource<
 pub type ProblemInternalVar = InternalVar<Var, ReifiedVar<SqliteDatabaseConnection>>;
 pub type IlpInnerProblem = collomatique_ilp::Problem<ProblemInternalVar, ProblemConstraintSource>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
 pub struct Problem {
-    inner: collo_ml::problem::Problem<SqliteDatabaseConnection, Var>,
+    model:
+        Model<Var, ReifiedVar<SqliteDatabaseConnection>, Option<Origin<SqliteDatabaseConnection>>>,
+    original_var_list: HashMap<Var, Variable>,
 }
 
 impl Problem {
-    pub(crate) fn from_inner(
-        inner: collo_ml::problem::Problem<SqliteDatabaseConnection, Var>,
+    pub(crate) fn from_model(
+        model: Model<
+            Var,
+            ReifiedVar<SqliteDatabaseConnection>,
+            Option<Origin<SqliteDatabaseConnection>>,
+        >,
+        original_var_list: HashMap<Var, Variable>,
     ) -> Self {
-        Problem { inner }
+        Problem {
+            model,
+            original_var_list,
+        }
     }
 
     pub fn get_inner_problem(&self) -> &IlpInnerProblem {
-        self.inner.get_inner_problem()
+        self.model.problem()
     }
 
     pub fn solve<'a, S>(&'a self, solver: &S) -> Option<FeasableSolution<'a>>
     where
         S: Solver<ProblemInternalVar, ProblemConstraintSource, DefaultRepr<ProblemInternalVar>>,
     {
-        self.inner
-            .solve(solver)
-            .map(|inner| FeasableSolution { inner })
+        solver
+            .solve(self.model.problem())
+            .map(|feasable_config| FeasableSolution { feasable_config })
     }
 
     pub fn solution_from_data<'a, S>(
@@ -47,43 +64,92 @@ impl Problem {
     where
         S: Solver<ProblemInternalVar, ProblemConstraintSource, DefaultRepr<ProblemInternalVar>>,
     {
-        self.inner
-            .solution_from_data(config_data, solver)
-            .map(|inner| Solution { inner })
+        if !self.check_no_missing_variables(config_data) {
+            return None;
+        }
+
+        let base_values: HashMap<Var, f64> = config_data.get_values().into_iter().collect();
+        let recon_problem = self.model.reconstruction_problem(&base_values).ok()?;
+        let recon_sol = solver
+            .solve(&recon_problem)
+            .expect("There should always be a (unique!) solution to the reconstruction problem");
+
+        let mut complete_values: HashMap<ProblemInternalVar, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
+
+        Some(
+            self.solution_from_complete_data(new_config_data)
+                .expect("The configuration data should be valid!"),
+        )
     }
 
     pub fn solution_from_complete_data<'a>(
         &'a self,
         config_data: ConfigData<ProblemInternalVar>,
     ) -> Option<Solution<'a>> {
-        self.inner
-            .solution_from_complete_data(config_data)
-            .map(|inner| Solution { inner })
+        Some(Solution {
+            config: self.model.problem().build_config(config_data).ok()?,
+        })
+    }
+
+    fn check_variables_valid(&self, config_data: &ConfigData<Var>) -> bool {
+        config_data
+            .get_values()
+            .keys()
+            .all(|x| self.original_var_list.contains_key(x))
+    }
+
+    fn check_no_missing_variables(&self, config_data: &ConfigData<Var>) -> bool {
+        if !self.check_variables_valid(config_data) {
+            return false;
+        }
+
+        self.original_var_list
+            .iter()
+            .all(|(var, var_def)| match config_data.get(var.clone()) {
+                Some(v) => var_def.checks_value(v),
+                None => false,
+            })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct Solution<'a> {
-    inner: collo_ml::problem::Solution<'a, SqliteDatabaseConnection, Var>,
+    config: collomatique_ilp::Config<
+        'a,
+        ProblemInternalVar,
+        ProblemConstraintSource,
+        DefaultRepr<ProblemInternalVar>,
+    >,
 }
 
 impl<'a> Solution<'a> {
     pub fn get_data(&self) -> ConfigData<Var> {
-        self.inner.get_data()
+        ConfigData::from(self.config.get_values().into_iter().filter_map(
+            |(var, value)| match var {
+                InternalVar::Base(v) => Some((v, value)),
+                _ => None,
+            },
+        ))
     }
 
     pub fn get_complete_data(&self) -> ConfigData<ProblemInternalVar> {
-        self.inner.get_complete_data()
+        ConfigData::from(self.config.get_values())
     }
 
     pub fn is_feasable(&self) -> bool {
-        self.inner.is_feasable()
+        self.config.is_feasable()
     }
 
     pub fn into_feasable(self) -> Option<FeasableSolution<'a>> {
-        self.inner
-            .into_feasable()
-            .map(|inner| FeasableSolution { inner })
+        Some(FeasableSolution {
+            feasable_config: self.config.into_feasable()?,
+        })
     }
 
     pub fn blame<'b>(
@@ -94,27 +160,38 @@ impl<'a> Solution<'a> {
             ProblemConstraintSource,
         ),
     > + use<'a, 'b> {
-        self.inner.blame()
+        self.config.blame()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), Clone(bound = ""))]
 pub struct FeasableSolution<'a> {
-    inner: collo_ml::problem::FeasableSolution<'a, SqliteDatabaseConnection, Var>,
+    feasable_config: collomatique_ilp::FeasableConfig<
+        'a,
+        ProblemInternalVar,
+        ProblemConstraintSource,
+        DefaultRepr<ProblemInternalVar>,
+    >,
 }
 
 impl<'a> FeasableSolution<'a> {
     pub fn into_solution(self) -> Solution<'a> {
         Solution {
-            inner: self.inner.into_solution(),
+            config: self.feasable_config.into_inner(),
         }
     }
 
     pub fn get_data(&self) -> ConfigData<Var> {
-        self.inner.get_data()
+        ConfigData::from(self.feasable_config.get_values().into_iter().filter_map(
+            |(var, value)| match var {
+                InternalVar::Base(v) => Some((v, value)),
+                _ => None,
+            },
+        ))
     }
 
     pub fn get_complete_data(&self) -> ConfigData<ProblemInternalVar> {
-        self.inner.get_complete_data()
+        ConfigData::from(self.feasable_config.get_values())
     }
 }

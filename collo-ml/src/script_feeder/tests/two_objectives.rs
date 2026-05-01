@@ -1,15 +1,17 @@
 #[derive(Clone)]
 struct NoObjectEnv;
+use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
 #[tokio::test]
-async fn internal_reification() {
+async fn two_objectives_same_script() {
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
         X,
+        Y,
     }
 
     impl DescribeVar for Var {
@@ -21,6 +23,7 @@ async fn internal_reification() {
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
                 (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
             ])
         }
         fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
@@ -34,6 +37,7 @@ async fn internal_reification() {
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
+                ("Y".to_string(), vec![]),
             ])
         }
     }
@@ -72,6 +76,16 @@ async fn internal_reification() {
                     }
                     Ok(Var::X)
                 }
+                "Y" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "Y".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::Y)
+                }
                 _ => Err(VarConversionError::Unknown(value.name.clone())),
             }
         }
@@ -79,329 +93,381 @@ async fn internal_reification() {
 
     let env = NoObjectEnv {};
     let modules = BTreeMap::from([(
-        "reify_test",
+        "main",
         r#"
-            let c1() -> Constraint = $V() === 1;
-            let c2() -> Constraint = $W() === 1;
-            let c3() -> Constraint = $X() === 1;
-            reify c1 as $R1;
-            reify c2 as $R2;
-            reify c3 as $R3;
-            pub let exactly_one_and_force_w() -> Constraint =
-                $R1() + $R2() + $R3() === 1 and $R2() === 1;
+            pub let c1() -> Constraint = $V() + $W() === 1;
+            pub let c2() -> Constraint = $X() + $Y() === 1;
+            pub let obj_v() -> LinExpr = $V();
+            pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Test internal reification: exactly one of V, W, or X must be 1, and we force it to be W
-    pb_builder
-        .add_constraint("reify_test", "exactly_one_and_force_w", vec![])
+    feeder
+        .add_constraint("main", "c1", vec![])
+        .expect("Should add constraint");
+    feeder
+        .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    feeder
+        .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add objective");
+    feeder
+        .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add objective");
+
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    for (c, _) in problem.get_inner_problem().get_constraints() {
-        println!("{:?}", c);
-    }
-
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // R2 === 1 means W === 1 must hold
-    // R1 + R2 + R3 === 1 with R2 === 1 means R1 === 0 and R3 === 0
-    // Therefore V === 0 and X === 0
     assert_eq!(
         sol.get(InternalVar::Base(Var::V)),
-        Some(0.0),
-        "V should be 0"
+        Some(1.0),
+        "V should be 1 (maximized)"
     );
     assert_eq!(
         sol.get(InternalVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0"
+    );
+
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::X)),
+        Some(0.0),
+        "X should be 0 (minimized)"
+    );
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
-        "W should be 1"
+        "Y should be 1"
+    );
+}
+
+#[tokio::test]
+async fn two_objectives_different_scripts() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    enum Var {
+        V,
+        W,
+        X,
+        Y,
+    }
+
+    impl DescribeVar for Var {
+        type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([
+                ("V".to_string(), vec![]),
+                ("W".to_string(), vec![]),
+                ("X".to_string(), vec![]),
+                ("Y".to_string(), vec![]),
+            ])
+        }
+    }
+
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                "W" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "W".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::W)
+                }
+                "X" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "X".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::X)
+                }
+                "Y" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "Y".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::Y)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let modules = BTreeMap::from([
+        (
+            "constraints",
+            r#"
+                pub let c1() -> Constraint = $V() + $W() === 1;
+                pub let c2() -> Constraint = $X() + $Y() === 1;
+            "#,
+        ),
+        (
+            "objective1",
+            r#"
+                pub let obj_v() -> LinExpr = $V();
+            "#,
+        ),
+        (
+            "objective2",
+            r#"
+                pub let obj_x() -> LinExpr = $X();
+            "#,
+        ),
+    ]);
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
+        .await
+        .expect("Var should be compatible");
+
+    assert!(
+        feeder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        feeder.get_warnings()
+    );
+
+    feeder
+        .add_constraint("constraints", "c1", vec![])
+        .expect("Should add constraint");
+    feeder
+        .add_constraint("constraints", "c2", vec![])
+        .expect("Should add constraint");
+
+    feeder
+        .add_objective("objective1", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add first objective");
+
+    feeder
+        .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add second objective");
+
+    let model = build_model(feeder, &env).await;
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(model.problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::V)),
+        Some(1.0),
+        "V should be 1 (maximized)"
+    );
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0"
+    );
+
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::X)),
+        Some(0.0),
+        "X should be 0 (minimized)"
+    );
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::Y)),
+        Some(1.0),
+        "Y should be 1"
+    );
+}
+
+#[tokio::test]
+async fn objectives_with_different_senses() {
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    enum Var {
+        V,
+        W,
+        X,
+        Y,
+    }
+
+    impl DescribeVar for Var {
+        type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([
+                ("V".to_string(), vec![]),
+                ("W".to_string(), vec![]),
+                ("X".to_string(), vec![]),
+                ("Y".to_string(), vec![]),
+            ])
+        }
+    }
+
+    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
+        type Error = VarConversionError;
+        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
+            match value.name.as_str() {
+                "V" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "V".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::V)
+                }
+                "W" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "W".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::W)
+                }
+                "X" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "X".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::X)
+                }
+                "Y" => {
+                    if value.params.len() != 0 {
+                        return Err(VarConversionError::WrongParameterCount {
+                            name: "Y".into(),
+                            expected: 0,
+                            found: value.params.len(),
+                        });
+                    }
+                    Ok(Var::Y)
+                }
+                _ => Err(VarConversionError::Unknown(value.name.clone())),
+            }
+        }
+    }
+
+    let env = NoObjectEnv {};
+    let modules = BTreeMap::from([(
+        "main",
+        r#"
+            pub let c1() -> Constraint = $V() + $W() === 1;
+            pub let c2() -> Constraint = $X() + $Y() === 1;
+            pub let obj_v() -> LinExpr = $V();
+            pub let obj_x() -> LinExpr = $X();
+        "#,
+    )]);
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
+        .await
+        .expect("Var should be compatible");
+
+    assert!(
+        feeder.get_warnings().is_empty(),
+        "Unexpected warnings: {:?}",
+        feeder.get_warnings()
+    );
+
+    feeder
+        .add_constraint("main", "c1", vec![])
+        .expect("Should add constraint");
+    feeder
+        .add_constraint("main", "c2", vec![])
+        .expect("Should add constraint");
+
+    feeder
+        .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
+        .expect("Should add objective");
+    feeder
+        .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
+        .expect("Should add objective");
+
+    let model = build_model(feeder, &env).await;
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+    use collomatique_ilp::solvers::Solver;
+    let sol_opt = solver.solve(model.problem());
+
+    let sol = sol_opt.expect("There should be a solution");
+
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::V)),
+        Some(1.0),
+        "V should be 1 (maximized)"
+    );
+    assert_eq!(
+        sol.get(InternalVar::Base(Var::W)),
+        Some(0.0),
+        "W should be 0"
     );
     assert_eq!(
         sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
-        "X should be 0"
+        "X should be 0 (minimized)"
     );
-}
-
-#[tokio::test]
-async fn private_reification_does_not_leak() {
-    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    enum Var {
-        V,
-        W,
-    }
-
-    impl DescribeVar for Var {
-        type Env = NoObjectEnv;
-        fn enumerate(
-            _env: &NoObjectEnv,
-        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-            ])
-        }
-        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-    }
-
-    impl EvalVar for Var {
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-    }
-
-    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
-        type Error = VarConversionError;
-        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
-            match value.name.as_str() {
-                "V" => {
-                    if value.params.len() != 0 {
-                        return Err(VarConversionError::WrongParameterCount {
-                            name: "V".into(),
-                            expected: 0,
-                            found: value.params.len(),
-                        });
-                    }
-                    Ok(Var::V)
-                }
-                "W" => {
-                    if value.params.len() != 0 {
-                        return Err(VarConversionError::WrongParameterCount {
-                            name: "W".into(),
-                            expected: 0,
-                            found: value.params.len(),
-                        });
-                    }
-                    Ok(Var::W)
-                }
-                _ => Err(VarConversionError::Unknown(value.name.clone())),
-            }
-        }
-    }
-
-    let env = NoObjectEnv {};
-    // Define both modules upfront
-    // First module: private reification R means V === 1
-    // Second module: private reification R means W === 1 (opposite constraint)
-    let modules = BTreeMap::from([
-        (
-            "first_module",
-            r#"
-                let v_constraint() -> Constraint = $V() === 1;
-                reify v_constraint as $R;
-                pub let use_r() -> Constraint = $R() === 1;
-            "#,
-        ),
-        (
-            "second_module",
-            r#"
-                let w_constraint() -> Constraint = $W() === 1;
-                reify w_constraint as $R;
-                pub let use_r_again() -> Constraint = $R() === 0;
-            "#,
-        ),
-    ]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
-        .await
-        .expect("Var should be compatible");
-
-    assert!(
-        pb_builder.get_warnings().is_empty(),
-        "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
-    );
-
-    // Add constraint from first module
-    pb_builder
-        .add_constraint("first_module", "use_r", vec![])
-        .expect("Should add constraint from first_module");
-
-    // Add constraint from second module
-    pb_builder
-        .add_constraint("second_module", "use_r_again", vec![])
-        .expect("Should add constraint from second_module");
-
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
-
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
-    use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
-
-    let sol = sol_opt.expect("There should be a solution");
-
-    // First module: R === 1 means V === 1 must hold
-    // Second module: R === 0 means W === 1 must NOT hold, so W === 0
-    // If private reifications leaked, these would conflict
     assert_eq!(
-        sol.get(InternalVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
-        "V should be 1 (from first module's private R)"
-    );
-    assert_eq!(
-        sol.get(InternalVar::Base(Var::W)),
-        Some(0.0),
-        "W should be 0 (from second module's private R)"
-    );
-}
-
-#[tokio::test]
-async fn three_module_chain_define_reify_use() {
-    // Tests cross-module reification:
-    // - Module 1 (definitions): defines a constraint function
-    // - Module 2 (reifications): imports module 1 and reifies its function
-    // - Module 3 (main): imports module 2 and uses the reified variable
-
-    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    enum Var {
-        V,
-        W,
-    }
-
-    impl DescribeVar for Var {
-        type Env = NoObjectEnv;
-        fn enumerate(
-            _env: &NoObjectEnv,
-        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-            ])
-        }
-        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-    }
-
-    impl EvalVar for Var {
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-    }
-
-    impl<D: DatabaseConnection> TryFrom<&ExternVar<D>> for Var {
-        type Error = VarConversionError;
-        fn try_from(value: &ExternVar<D>) -> Result<Self, Self::Error> {
-            match value.name.as_str() {
-                "V" => {
-                    if value.params.len() != 0 {
-                        return Err(VarConversionError::WrongParameterCount {
-                            name: "V".into(),
-                            expected: 0,
-                            found: value.params.len(),
-                        });
-                    }
-                    Ok(Var::V)
-                }
-                "W" => {
-                    if value.params.len() != 0 {
-                        return Err(VarConversionError::WrongParameterCount {
-                            name: "W".into(),
-                            expected: 0,
-                            found: value.params.len(),
-                        });
-                    }
-                    Ok(Var::W)
-                }
-                _ => Err(VarConversionError::Unknown(value.name.clone())),
-            }
-        }
-    }
-
-    let env = NoObjectEnv {};
-
-    // Module 1: Define constraint functions
-    // Module 2: Import module 1 and reify its functions
-    // Module 3: Import module 2 and use the reified variables
-    let modules = BTreeMap::from([
-        (
-            "definitions",
-            r#"
-                pub let v_is_one() -> Constraint = $V() === 1;
-                pub let w_is_one() -> Constraint = $W() === 1;
-            "#,
-        ),
-        (
-            "reifications",
-            r#"
-                import "definitions" as defs;
-                pub reify defs::v_is_one as $VIsOne;
-                pub reify defs::w_is_one as $WIsOne;
-            "#,
-        ),
-        (
-            "main",
-            r#"
-                import "reifications" as reifs;
-                pub let exactly_one_true() -> Constraint =
-                    reifs::$VIsOne() + reifs::$WIsOne() === 1;
-                pub let force_v() -> Constraint = reifs::$VIsOne() === 1;
-            "#,
-        ),
-    ]);
-
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
-        .await
-        .expect("Var should be compatible");
-
-    assert!(
-        pb_builder.get_warnings().is_empty(),
-        "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
-    );
-
-    // Add constraints from the main module
-    pb_builder
-        .add_constraint("main", "exactly_one_true", vec![])
-        .expect("Should add exactly_one_true constraint");
-    pb_builder
-        .add_constraint("main", "force_v", vec![])
-        .expect("Should add force_v constraint");
-
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
-
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
-    use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
-
-    let sol = sol_opt.expect("There should be a solution");
-
-    // force_v forces $VIsOne === 1, which means V === 1
-    // exactly_one_true forces $VIsOne + $WIsOne === 1
-    // Since $VIsOne === 1, we need $WIsOne === 0, so W === 0
-    assert_eq!(
-        sol.get(InternalVar::Base(Var::V)),
-        Some(1.0),
-        "V should be 1 (from reified variable chain)"
-    );
-    assert_eq!(
-        sol.get(InternalVar::Base(Var::W)),
-        Some(0.0),
-        "W should be 0 (from exactly_one_true constraint)"
+        "Y should be 1"
     );
 }

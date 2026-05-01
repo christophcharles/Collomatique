@@ -1,10 +1,5 @@
-use super::vars::Var;
 pub use collo_ml::SqliteDatabaseDriver;
-use collo_ml::eval::CompileError;
-use collo_ml::problem::{ProblemBuilder, ScriptError};
-use collo_ml::{DatabaseDriver, SemError, SemWarning};
-use collomatique_ilp::ObjectiveSense;
-use std::collections::BTreeMap;
+use collo_ml::{SemError, SemWarning};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -162,40 +157,3 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 
 #[cfg(test)]
 mod tests;
-
-pub async fn default_problem_builder<T: DatabaseDriver>(
-    main_module: &str,
-) -> Result<ProblemBuilder<T, Var>, SimpleScriptError> {
-    let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
-    modules.insert("main", main_module);
-
-    let mut builder = ProblemBuilder::<T, Var>::new(&modules).await.map_err(|e| {
-        // Filter ScriptError into SimpleScriptError
-        match e {
-            ScriptError::CompileError(compile_error) => match compile_error {
-                CompileError::ParsingError(parse_err) => SimpleScriptError::ParsingError(parse_err),
-                CompileError::SemanticsError { errors, warnings } => {
-                    SimpleScriptError::SemanticErrors { errors, warnings }
-                }
-                other => SimpleScriptError::UnexpectedError(format!("{}", other)),
-            },
-            other => SimpleScriptError::UnexpectedError(format!("{}", other)),
-        }
-    })?;
-
-    let functions = builder.get_fn_from_module("main");
-
-    for (fn_name, _) in &functions {
-        if fn_name == "constraint" || fn_name.starts_with("constraint_") {
-            builder
-                .add_constraint("main", fn_name, vec![])
-                .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
-        } else if fn_name == "objective" || fn_name.starts_with("objective_") {
-            builder
-                .add_objective("main", fn_name, vec![], 1.0, ObjectiveSense::Minimize)
-                .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
-        }
-    }
-
-    Ok(builder)
-}

@@ -1,14 +1,20 @@
 use crate::problem::Problem;
-use collo_ml::problem::ScriptError;
+use collo_ml::eval::Origin;
+use collo_ml::script_feeder::{ReifiedVar, ScriptError, ScriptFeeder};
 use collo_ml::{ExprType, ExprValue, SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 use collomatique_binding_colloscopes::vars::Var;
-use collomatique_ilp::ObjectiveSense;
-use std::collections::BTreeMap;
+use collomatique_ilp::{ObjectiveSense, Variable};
+use collomatique_ilp_modeler::Modeler;
+use collomatique_ilp_modeler::bundle::ReifyError;
+use std::collections::{BTreeMap, HashMap};
+
+type E = ReifiedVar<SqliteDatabaseConnection>;
+type C = Option<Origin<SqliteDatabaseConnection>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder {
-    inner: collo_ml::problem::ProblemBuilder<SqliteDatabaseDriver, Var>,
+    feeder: ScriptFeeder<SqliteDatabaseDriver, Var, E, C>,
 }
 
 impl ProblemBuilder {
@@ -16,12 +22,12 @@ impl ProblemBuilder {
         modules: &BTreeMap<&str, &str>,
     ) -> Result<Self, ScriptError<SqliteDatabaseConnection>> {
         Ok(ProblemBuilder {
-            inner: collo_ml::problem::ProblemBuilder::new(modules).await?,
+            feeder: ScriptFeeder::new(modules).await?,
         })
     }
 
     pub fn get_warnings(&self) -> &[SemWarning] {
-        self.inner.get_warnings()
+        self.feeder.get_warnings()
     }
 
     pub fn get_fn_signature(
@@ -29,11 +35,11 @@ impl ProblemBuilder {
         module: &str,
         fn_name: &str,
     ) -> Option<(Vec<ExprType>, ExprType)> {
-        self.inner.get_fn_signature(module, fn_name)
+        self.feeder.get_fn_signature(module, fn_name)
     }
 
     pub fn get_fn_from_module(&self, module: &str) -> BTreeMap<String, (Vec<ExprType>, ExprType)> {
-        self.inner.get_fn_from_module(module)
+        self.feeder.get_fn_from_module(module)
     }
 
     pub fn add_constraint(
@@ -42,7 +48,7 @@ impl ProblemBuilder {
         fn_name: &str,
         args: Vec<ExprValue<SqliteDatabaseConnection>>,
     ) -> Result<(), ScriptError<SqliteDatabaseConnection>> {
-        self.inner.add_constraint(module, fn_name, args)
+        self.feeder.add_constraint(module, fn_name, args)
     }
 
     pub fn add_objective(
@@ -53,7 +59,7 @@ impl ProblemBuilder {
         coefficient: f64,
         sense: ObjectiveSense,
     ) -> Result<(), ScriptError<SqliteDatabaseConnection>> {
-        self.inner
+        self.feeder
             .add_objective(module, fn_name, args, coefficient, sense)
     }
 
@@ -67,19 +73,70 @@ impl ProblemBuilder {
             collomatique_ilp_modeler::LoadEnv<Db> + Send + Sync + 'static,
         Db: Sync,
     {
-        self.inner
-            .build(db, db_connection)
+        let bundle = self.feeder.build(db_connection).await?;
+
+        type MyModeler<'m, Db> = Modeler<'m, Var, E, C, Db, ReifyError<Var, E>>;
+
+        let mut modeler: MyModeler<'_, Db> = Modeler::from_described(db).await;
+
+        let original_var_list: HashMap<Var, Variable> = modeler
+            .base_vars()
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (name, desc) in &original_var_list {
+            if !desc.is_integer() {
+                return Err(ScriptError::NonIntegerVariable(format!("{:?}", name)));
+            }
+        }
+
+        modeler
+            .apply_bundle(bundle.into_general())
+            .expect("no duplicate extras");
+
+        let model = modeler
+            .build(db)
             .await
-            .map(Problem::from_inner)
+            .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+
+        Ok(Problem::from_model(model, original_var_list))
     }
 }
 
 pub async fn default_problem_builder(
     main_module: &str,
 ) -> Result<ProblemBuilder, SimpleScriptError> {
-    collomatique_binding_colloscopes::scripts::default_problem_builder::<SqliteDatabaseDriver>(
-        main_module,
-    )
-    .await
-    .map(|inner| ProblemBuilder { inner })
+    use collo_ml::eval::CompileError;
+    use collo_ml::script_feeder::ScriptError;
+    use collomatique_binding_colloscopes::scripts::MODULES;
+
+    let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
+    modules.insert("main", main_module);
+
+    let mut builder = ProblemBuilder::new(&modules).await.map_err(|e| match e {
+        ScriptError::CompileError(compile_error) => match compile_error {
+            CompileError::ParsingError(parse_err) => SimpleScriptError::ParsingError(parse_err),
+            CompileError::SemanticsError { errors, warnings } => {
+                SimpleScriptError::SemanticErrors { errors, warnings }
+            }
+            other => SimpleScriptError::UnexpectedError(format!("{}", other)),
+        },
+        other => SimpleScriptError::UnexpectedError(format!("{}", other)),
+    })?;
+
+    let functions = builder.get_fn_from_module("main");
+
+    for (fn_name, _) in &functions {
+        if fn_name == "constraint" || fn_name.starts_with("constraint_") {
+            builder
+                .add_constraint("main", fn_name, vec![])
+                .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
+        } else if fn_name == "objective" || fn_name.starts_with("objective_") {
+            builder
+                .add_objective("main", fn_name, vec![], 1.0, ObjectiveSense::Minimize)
+                .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
+        }
+    }
+
+    Ok(builder)
 }
