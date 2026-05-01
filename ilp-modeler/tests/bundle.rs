@@ -726,9 +726,7 @@ async fn objectify_with_coef_scales_penalty() {
             x.leq(&LinExpr::constant(3.0)),
             "x<=3".into(),
         )]);
-        let objectified = bundle
-            .objectify_with_coef("pen".to_string(), coef)
-            .unwrap();
+        let objectified = bundle.objectify_with_coef("pen".to_string(), coef).unwrap();
         m.apply_bundle(objectified.into_general()).unwrap();
         m.maximize(1.5, LinExpr::var(base("x")));
 

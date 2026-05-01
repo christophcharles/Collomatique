@@ -63,7 +63,7 @@ async fn error_unknown_function() {
 
     assert!(result.is_err());
     match result {
-        Err(ProblemError::UnknownFunction(name)) => {
+        Err(ScriptError::UnknownFunction(name)) => {
             assert_eq!(name, "test::nonexistent");
         }
         _ => panic!("Expected UnknownFunction error, got: {:?}", result),
@@ -130,7 +130,7 @@ async fn error_wrong_return_type_for_constraint() {
 
     assert!(result.is_err());
     match result {
-        Err(ProblemError::WrongReturnType {
+        Err(ScriptError::WrongReturnType {
             func,
             returned,
             expected,

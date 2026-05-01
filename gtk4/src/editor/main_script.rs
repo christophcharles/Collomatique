@@ -7,7 +7,7 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collo_ml::SqliteDatabaseDriver,
@@ -37,7 +37,7 @@ pub struct MainScript {
 pub enum MainScriptInput {
     Update(
         Option<String>,
-        Option<Result<ProblemBuilder, SimpleProblemError>>,
+        Option<Result<ProblemBuilder, SimpleScriptError>>,
     ),
     RestoreDefaultClicked,
     ModifyScriptClicked,
@@ -304,11 +304,11 @@ impl Component for MainScript {
                 self.errors = match main_script_ast {
                     None => None,
                     Some(Err(e)) => match e {
-                        SimpleProblemError::UnexpectedError(e) => Some(vec![ErrorMsg::Error(e)]),
-                        SimpleProblemError::ParsingError(e) => {
+                        SimpleScriptError::UnexpectedError(e) => Some(vec![ErrorMsg::Error(e)]),
+                        SimpleScriptError::ParsingError(e) => {
                             Some(vec![ErrorMsg::Error(e.to_string())])
                         }
-                        SimpleProblemError::SemanticErrors { errors, warnings } => Some(
+                        SimpleScriptError::SemanticErrors { errors, warnings } => Some(
                             errors
                                 .into_iter()
                                 .map(|e| ErrorMsg::Error(e.to_string()))

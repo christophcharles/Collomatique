@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
@@ -102,7 +102,7 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     MainScriptCompiled {
         source: Option<String>,
-        result: Result<ProblemBuilder, SimpleProblemError>,
+        result: Result<ProblemBuilder, SimpleScriptError>,
     },
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
@@ -216,7 +216,7 @@ enum MainScriptAst {
     /// Compilation is in progress (async task running)
     Compiling,
     /// Compilation completed with a result
-    Ready(Result<ProblemBuilder, SimpleProblemError>),
+    Ready(Result<ProblemBuilder, SimpleScriptError>),
 }
 
 pub struct EditorPanel {

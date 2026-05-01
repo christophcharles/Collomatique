@@ -4,7 +4,7 @@
 //! - `ProblemBuilder`: Builder pattern for constructing optimization problems
 
 use super::solution::Problem;
-use super::types::{ProblemError, ReifiedVar};
+use super::types::{ReifiedVar, ScriptError};
 use crate::database::DatabaseDriver;
 use crate::eval::{
     CheckedAST, CustomValue, EvalError, ExprValue, ExternVar, HashedIlpVar, IlpVar, Origin,
@@ -71,13 +71,13 @@ impl<
         fn_name: &str,
         args: &[ExprValue<D::Connection>],
         expected_return: &ExprType,
-    ) -> Result<bool, ProblemError<D::Connection>> {
+    ) -> Result<bool, ScriptError<D::Connection>> {
         let functions = self.ast.get_functions();
         let key = (module.to_string(), fn_name.to_string());
 
         let (args_type, output_type) = functions
             .get(&key)
-            .ok_or_else(|| ProblemError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
+            .ok_or_else(|| ScriptError::UnknownFunction(format!("{}::{}", module, fn_name)))?;
 
         // Determine if the first parameter is a database schema
         let needs_db =
@@ -89,7 +89,7 @@ impl<
         };
 
         if args.len() != expected_args {
-            return Err(ProblemError::ArgumentCountMismatch {
+            return Err(ScriptError::ArgumentCountMismatch {
                 func: format!("{}::{}", module, fn_name),
                 expected: expected_args,
                 found: args.len(),
@@ -100,7 +100,7 @@ impl<
         if !output_type.is_subtype_of(expected_return)
             && !expected_return.is_subtype_of(output_type)
         {
-            return Err(ProblemError::WrongReturnType {
+            return Err(ScriptError::WrongReturnType {
                 func: format!("{}::{}", module, fn_name),
                 returned: output_type.clone(),
                 expected: expected_return.clone(),
@@ -110,7 +110,7 @@ impl<
         Ok(needs_db)
     }
 
-    pub async fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ProblemError<D::Connection>> {
+    pub async fn new(modules: &BTreeMap<&str, &str>) -> Result<Self, ScriptError<D::Connection>> {
         let base_vars = V::field_schema();
 
         // Compile all modules upfront
@@ -160,7 +160,7 @@ impl<
         module: &str,
         fn_name: &str,
         args: Vec<ExprValue<D::Connection>>,
-    ) -> Result<(), ProblemError<D::Connection>> {
+    ) -> Result<(), ScriptError<D::Connection>> {
         // Validate function exists and has correct signature
         // Constraints can return Constraint or [Constraint]
         let constraint_type = ExprType::from_variants([
@@ -187,7 +187,7 @@ impl<
         args: Vec<ExprValue<D::Connection>>,
         coefficient: f64,
         sense: ObjectiveSense,
-    ) -> Result<(), ProblemError<D::Connection>> {
+    ) -> Result<(), ScriptError<D::Connection>> {
         // Validate function exists and has correct signature
         // Objectives can return LinExpr or Constraint or a list of those
         let obj_types = ExprType::from_variants([
@@ -217,7 +217,7 @@ impl<
         self,
         db: &Db,
         db_connection: Option<D::Connection>,
-    ) -> Result<Problem<D::Connection, V>, ProblemError<D::Connection>>
+    ) -> Result<Problem<D::Connection, V>, ScriptError<D::Connection>>
     where
         V: 'static,
         V::Env: collomatique_ilp_modeler::LoadEnv<Db> + Send + Sync + 'static,
@@ -235,7 +235,7 @@ impl<
             for (module, fn_name, args, needs_db) in self.pending_constraints.iter() {
                 let eval_args = if *needs_db {
                     let db_val = db_value.as_ref().ok_or_else(|| {
-                        ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
+                        ScriptError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
                     let fn_desc = self.ast.global_env.get_functions().get(&fn_key).unwrap();
@@ -255,7 +255,7 @@ impl<
                     .eval_fn(module, fn_name, eval_args)
                     .await
                     .map_err(|e| match e {
-                        EvalError::Panic(v) => ProblemError::Panic(v),
+                        EvalError::Panic(v) => ScriptError::Panic(v),
                         _ => panic!(
                             "Evaluation should succeed (function was validated): {:?}",
                             e
@@ -270,7 +270,7 @@ impl<
             {
                 let eval_args = if *needs_db {
                     let db_val = db_value.as_ref().ok_or_else(|| {
-                        ProblemError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
+                        ScriptError::MissingDatabaseConnection(format!("{}::{}", module, fn_name))
                     })?;
                     let fn_key = (module.to_string(), fn_name.to_string());
                     let fn_desc = self.ast.global_env.get_functions().get(&fn_key).unwrap();
@@ -290,7 +290,7 @@ impl<
                     .eval_fn_no_origin(module, fn_name, eval_args)
                     .await
                     .map_err(|e| match e {
-                        EvalError::Panic(v) => ProblemError::Panic(v),
+                        EvalError::Panic(v) => ScriptError::Panic(v),
                         _ => panic!("Evaluation should succeed (function was validated)"),
                     })?;
                 objective_results.push((
@@ -303,7 +303,7 @@ impl<
             }
 
             let var_def = eval_history.into_var_def().await.map_err(|e| match e {
-                EvalError::Panic(v) => ProblemError::Panic(v),
+                EvalError::Panic(v) => ScriptError::Panic(v),
                 _ => panic!(
                     "Evaluation should succeed (variables were validated): {:?}",
                     e
@@ -326,7 +326,7 @@ impl<
             .collect();
         for (name, desc) in &original_var_list {
             if !desc.is_integer() {
-                return Err(ProblemError::NonIntegerVariable(format!("{:?}", name)));
+                return Err(ScriptError::NonIntegerVariable(format!("{:?}", name)));
             }
         }
 

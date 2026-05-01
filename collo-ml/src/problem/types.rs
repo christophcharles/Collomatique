@@ -2,7 +2,7 @@
 //!
 //! This module defines:
 //! - `ReifiedVar`: A reified (script-defined) variable
-//! - `ProblemError`: Errors that can occur during problem construction
+//! - `ScriptError`: Errors that can occur during problem construction
 
 use crate::ExprType;
 use crate::database::DatabaseConnection;
@@ -29,7 +29,7 @@ pub struct ReifiedVar<D: DatabaseConnection> {
 
 #[derive(Derivative, Error)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-pub enum ProblemError<D: DatabaseConnection> {
+pub enum ScriptError<D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
     #[error("Function \"{0}\" was not found in script (maybe it is not public?)")]

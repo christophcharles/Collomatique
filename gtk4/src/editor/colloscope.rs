@@ -14,7 +14,7 @@ mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
-use collomatique_binding_colloscopes::scripts::SimpleProblemError;
+use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 
 type ProblemBuilder = collo_ml::problem::ProblemBuilder<
     collo_ml::SqliteDatabaseDriver,
@@ -26,7 +26,7 @@ pub enum ColloscopeInput {
     Update(
         collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
-        Option<Result<ProblemBuilder, SimpleProblemError>>,
+        Option<Result<ProblemBuilder, SimpleScriptError>>,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -116,7 +116,7 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleProblemError>>,
+    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleScriptError>>,
 }
 
 impl Colloscope {
