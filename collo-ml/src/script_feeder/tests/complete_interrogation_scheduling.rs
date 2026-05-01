@@ -1,65 +1,25 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 
 use super::*;
 
 #[tokio::test]
 async fn complete_interrogations_scheduling() {
-    // Colles scheduling problem:
-    // - 11 students
-    // - 3 subjects (each with 4 teachers, so 12 teachers total)
-    // - 3 weeks
-    // Constraints:
-    // - Each student has exactly one subject per week
-    // - Each student has each subject exactly once over the 3 weeks
-    // - Each teacher interrogates at most 1 student per week
-
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         StudentWithTeacher {
-            student: i32, // 0..11
-            teacher: i32, // 0..12 (teachers 0-3: subject 0, 4-7: subject 1, 8-11: subject 2)
-            week: i32,    // 0..3
+            student: i32,
+            teacher: i32,
+            week: i32,
         },
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([(
-                "StudentWithTeacher".to_string(),
-                vec![
-                    SimpleType::Int.into(),
-                    SimpleType::Int.into(),
-                    SimpleType::Int.into(),
-                ],
-            )])
-        }
-
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            match self {
-                Var::StudentWithTeacher {
-                    student,
-                    teacher,
-                    week,
-                } => {
-                    // Fix to 0 if any parameter is out of bounds
-                    if *student < 0 || *student >= 11 {
-                        return Some(0.0);
-                    }
-                    if *teacher < 0 || *teacher >= 12 {
-                        return Some(0.0);
-                    }
-                    if *week < 0 || *week >= 3 {
-                        return Some(0.0);
-                    }
-                    None
-                }
-            }
-        }
-
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             let mut vars = HashMap::new();
-            // Only create variables for valid combinations
             for student in 0..11 {
                 for teacher in 0..12 {
                     for week in 0..3 {
@@ -75,6 +35,40 @@ async fn complete_interrogations_scheduling() {
                 }
             }
             vars
+        }
+
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            match self {
+                Var::StudentWithTeacher {
+                    student,
+                    teacher,
+                    week,
+                } => {
+                    if *student < 0 || *student >= 11 {
+                        return Some(0.0);
+                    }
+                    if *teacher < 0 || *teacher >= 12 {
+                        return Some(0.0);
+                    }
+                    if *week < 0 || *week >= 3 {
+                        return Some(0.0);
+                    }
+                    None
+                }
+            }
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([(
+                "StudentWithTeacher".to_string(),
+                vec![
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                    SimpleType::Int.into(),
+                ],
+            )])
         }
     }
 
@@ -161,45 +155,40 @@ async fn complete_interrogations_scheduling() {
                 };
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    pb_builder
+    feeder
         .add_constraint("colles_constraints", "one_teacher_per_week", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("colles_constraints", "each_subject_once", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("colles_constraints", "max_students_per_teacher", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
-
-    // Verify the solution satisfies our constraints
 
     // 1. Each student has exactly one teacher per week
     for student in 0..11 {
         for week in 0..3 {
             let mut count = 0;
             for teacher in 0..12 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -219,11 +208,10 @@ async fn complete_interrogations_scheduling() {
 
     // 2. Each student has each subject exactly once
     for student in 0..11 {
-        // Subject 0 (teachers 0-3)
         let mut subject0_count = 0;
         for teacher in 0..4 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -240,11 +228,10 @@ async fn complete_interrogations_scheduling() {
             student, subject0_count
         );
 
-        // Subject 1 (teachers 4-7)
         let mut subject1_count = 0;
         for teacher in 4..8 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -261,11 +248,10 @@ async fn complete_interrogations_scheduling() {
             student, subject1_count
         );
 
-        // Subject 2 (teachers 8-11)
         let mut subject2_count = 0;
         for teacher in 8..12 {
             for week in 0..3 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,
@@ -288,7 +274,7 @@ async fn complete_interrogations_scheduling() {
         for week in 0..3 {
             let mut count = 0;
             for student in 0..11 {
-                if let Some(val) = sol.get(ProblemVar::Base(Var::StudentWithTeacher {
+                if let Some(val) = sol.get(InternalVar::Base(Var::StudentWithTeacher {
                     student,
                     teacher,
                     week,

@@ -263,7 +263,7 @@ async fn if_with_linexpr() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
+                IntLinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -278,7 +278,7 @@ async fn if_with_linexpr() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])))
+                IntLinExpr::var(IlpVar::Base(ExternVar::new("V2".into(), vec![])))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -305,8 +305,8 @@ async fn if_with_constraint() {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
             let constraints = strip_origins(&constraints);
-            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
-                .eq(&LinExpr::constant(1.));
+            let constraint1 = IntLinExpr::var(IlpVar::Base(ExternVar::new("V1".into(), vec![])))
+                .eq(&IntLinExpr::constant(1));
             assert!(constraints.contains(&constraint1));
         }
         _ => panic!("Expected Constraint"),

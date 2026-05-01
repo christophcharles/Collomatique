@@ -376,6 +376,7 @@ dependencies = [
  "base64",
  "collo-ml-derive",
  "collomatique-ilp",
+ "collomatique-ilp-modeler",
  "derivative",
  "lazy_static",
  "ordered-float",
@@ -404,12 +405,26 @@ dependencies = [
  "chrono",
  "collo-ml",
  "collomatique-ilp",
+ "collomatique-ilp-modeler",
  "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
  "const_format",
  "pest",
+ "sqlx",
  "tokio",
+]
+
+[[package]]
+name = "collomatique-constraints-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "collo-ml",
+ "collomatique-binding-colloscopes",
+ "collomatique-ilp",
+ "collomatique-ilp-modeler",
+ "derivative",
+ "sqlx",
 ]
 
 [[package]]
@@ -421,6 +436,7 @@ dependencies = [
  "clap",
  "collo-ml",
  "collomatique-binding-colloscopes",
+ "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-mps",
  "collomatique-ops",
@@ -455,6 +471,25 @@ dependencies = [
  "ordered-float",
  "sprs",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "collomatique-ilp-modeler"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "collomatique-ilp-modeler-derive",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "collomatique-ilp-modeler-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]
@@ -508,6 +543,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "collomatique-binding-colloscopes",
+ "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ops",
  "collomatique-python",

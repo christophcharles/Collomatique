@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 use collomatique_ilp::ObjectiveSense;
 
@@ -11,19 +12,24 @@ async fn simple_objective_selects_solution() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -64,47 +70,39 @@ async fn simple_objective_selects_solution() {
             pub let maximize_v() -> LinExpr = $V();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Constraint: V + W === 1 (exactly one must be 1)
-    // This has two valid solutions: (V=1, W=0) or (V=0, W=1)
-    pb_builder
+    feeder
         .add_constraint("main", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    // Objective: maximize V
-    // This should select the solution V=1, W=0
-    pb_builder
+    feeder
         .add_objective("main", "maximize_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add objective");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // The objective should select V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
@@ -118,19 +116,24 @@ async fn objective_direction_changes_solution() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -171,47 +174,39 @@ async fn objective_direction_changes_solution() {
             pub let minimize_v() -> LinExpr = $V();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Same constraint as before: V + W === 1 (exactly one must be 1)
-    // This has two valid solutions: (V=1, W=0) or (V=0, W=1)
-    pb_builder
+    feeder
         .add_constraint("main", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    // Objective: MINIMIZE V (opposite of the previous test)
-    // This should select the solution V=0, W=1
-    pb_builder
+    feeder
         .add_objective("main", "minimize_v", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // The objective should select V=0, W=1 (opposite of maximize test)
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(0.0),
         "V should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );

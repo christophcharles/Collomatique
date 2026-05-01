@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 
 use super::*;
@@ -11,23 +12,28 @@ async fn internal_reification() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
         fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
-            ])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-                (Var::X, collomatique_ilp::Variable::binary()),
             ])
         }
     }
@@ -85,51 +91,44 @@ async fn internal_reification() {
                 $R1() + $R2() + $R3() === 1 and $R2() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Test internal reification: exactly one of V, W, or X must be 1, and we force it to be W
-    pb_builder
+    feeder
         .add_constraint("reify_test", "exactly_one_and_force_w", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    for (c, _) in problem.get_inner_problem().get_constraints() {
+    for (c, _) in model.problem().get_constraints() {
         println!("{:?}", c);
     }
 
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // R2 === 1 means W === 1 must hold
-    // R1 + R2 + R3 === 1 with R2 === 1 means R1 === 0 and R3 === 0
-    // Therefore V === 0 and X === 0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(0.0),
         "V should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0"
     );
@@ -143,19 +142,24 @@ async fn private_reification_does_not_leak() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -189,9 +193,6 @@ async fn private_reification_does_not_leak() {
     }
 
     let env = NoObjectEnv {};
-    // Define both modules upfront
-    // First module: private reification R means V === 1
-    // Second module: private reification R means W === 1 (opposite constraint)
     let modules = BTreeMap::from([
         (
             "first_module",
@@ -210,47 +211,39 @@ async fn private_reification_does_not_leak() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Add constraint from first module
-    pb_builder
+    feeder
         .add_constraint("first_module", "use_r", vec![])
         .expect("Should add constraint from first_module");
 
-    // Add constraint from second module
-    pb_builder
+    feeder
         .add_constraint("second_module", "use_r_again", vec![])
         .expect("Should add constraint from second_module");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // First module: R === 1 means V === 1 must hold
-    // Second module: R === 0 means W === 1 must NOT hold, so W === 0
-    // If private reifications leaked, these would conflict
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (from first module's private R)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0 (from second module's private R)"
     );
@@ -258,30 +251,30 @@ async fn private_reification_does_not_leak() {
 
 #[tokio::test]
 async fn three_module_chain_define_reify_use() {
-    // Tests cross-module reification:
-    // - Module 1 (definitions): defines a constraint function
-    // - Module 2 (reifications): imports module 1 and reifies its function
-    // - Module 3 (main): imports module 2 and uses the reified variable
-
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -316,9 +309,6 @@ async fn three_module_chain_define_reify_use() {
 
     let env = NoObjectEnv {};
 
-    // Module 1: Define constraint functions
-    // Module 2: Import module 1 and reify its functions
-    // Module 3: Import module 2 and use the reified variables
     let modules = BTreeMap::from([
         (
             "definitions",
@@ -346,45 +336,38 @@ async fn three_module_chain_define_reify_use() {
         ),
     ]);
 
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Add constraints from the main module
-    pb_builder
+    feeder
         .add_constraint("main", "exactly_one_true", vec![])
         .expect("Should add exactly_one_true constraint");
-    pb_builder
+    feeder
         .add_constraint("main", "force_v", vec![])
         .expect("Should add force_v constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // force_v forces $VIsOne === 1, which means V === 1
-    // exactly_one_true forces $VIsOne + $WIsOne === 1
-    // Since $VIsOne === 1, we need $WIsOne === 0, so W === 0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (from reified variable chain)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0 (from exactly_one_true constraint)"
     );

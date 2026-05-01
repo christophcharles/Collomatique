@@ -257,10 +257,10 @@ async fn sum_linexpr_simple() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(1) + $V(2)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -289,7 +289,7 @@ async fn sum_linexpr_empty_list() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be constant 0
-            assert_eq!(lin_expr, LinExpr::constant(0.));
+            assert_eq!(lin_expr, IntLinExpr::constant(0));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -314,7 +314,7 @@ async fn sum_linexpr_with_coefficient() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 1*$V() + 2*$V() = 3*$V()
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
+            let expected = 3 * IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -340,16 +340,16 @@ async fn sum_linexpr_with_constant() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: ($V(1)+10) + ($V(2)+10) + ($V(3)+10) = $V(1) + $V(2) + $V(3) + 30
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
-            ))) + LinExpr::constant(30.);
+            ))) + IntLinExpr::constant(30);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -375,10 +375,10 @@ async fn sum_linexpr_with_filter() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(1) + $V(3) (odd numbers only)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(3))],
             )));
@@ -409,16 +409,16 @@ async fn sum_linexpr_multiple_vars() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(2))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -447,10 +447,10 @@ async fn sum_linexpr_with_param() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 5*$V(1) + 5*$V(2)
-            let expected = 5 * LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = 5 * IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + 5 * LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + 5 * IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -696,19 +696,19 @@ async fn forall_constraint_simple() {
             let constraints = strip_origins(&constraints);
 
             // Check first constraint: $V(1) === 1
-            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint1 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
-            .eq(&LinExpr::constant(1.));
+            .eq(&IntLinExpr::constant(1));
             assert!(constraints.contains(&constraint1));
 
             // Check second constraint: $V(2) === 1
-            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint2 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
-            .eq(&LinExpr::constant(1.));
+            .eq(&IntLinExpr::constant(1));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
@@ -762,18 +762,18 @@ async fn forall_constraint_with_inequality() {
             let constraints = strip_origins(&constraints);
 
             // Check constraints are <= constraints
-            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint1 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
-            .leq(&LinExpr::constant(10.));
+            .leq(&IntLinExpr::constant(10));
             assert!(constraints.contains(&constraint1));
 
-            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint2 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
-            .leq(&LinExpr::constant(10.));
+            .leq(&IntLinExpr::constant(10));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
@@ -802,18 +802,18 @@ async fn forall_constraint_with_filter() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint1 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
-            .eq(&LinExpr::constant(1.));
+            .eq(&IntLinExpr::constant(1));
             assert!(constraints.contains(&constraint1));
 
-            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint2 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(4))],
             )))
-            .eq(&LinExpr::constant(1.));
+            .eq(&IntLinExpr::constant(1));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
@@ -867,18 +867,22 @@ async fn forall_constraint_with_arithmetic() {
             let constraints = strip_origins(&constraints);
 
             // Check first constraint: 2*$V(1) + 5 === 15
-            let constraint1 = (2 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                "V".into(),
-                vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::constant(5.))
-            .eq(&LinExpr::constant(15.));
+            let constraint1 = (2_i32
+                * IntLinExpr::var(IlpVar::Base(ExternVar::new(
+                    "V".into(),
+                    vec![Arc::new(ExprValue::Int(1))],
+                )))
+                + IntLinExpr::constant(5))
+            .eq(&IntLinExpr::constant(15));
             assert!(constraints.contains(&constraint1));
 
-            let constraint2 = (2 * LinExpr::var(IlpVar::Base(ExternVar::new(
-                "V".into(),
-                vec![Arc::new(ExprValue::Int(2))],
-            ))) + LinExpr::constant(5.))
-            .eq(&LinExpr::constant(15.));
+            let constraint2 = (2_i32
+                * IntLinExpr::var(IlpVar::Base(ExternVar::new(
+                    "V".into(),
+                    vec![Arc::new(ExprValue::Int(2))],
+                )))
+                + IntLinExpr::constant(5))
+            .eq(&IntLinExpr::constant(15));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
@@ -909,24 +913,24 @@ async fn forall_constraint_multiple_vars() {
             assert_eq!(constraints.len(), 2);
             let constraints = strip_origins(&constraints);
 
-            let constraint1 = (LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint1 = (IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             ))))
-            .eq(&LinExpr::constant(10.));
+            .eq(&IntLinExpr::constant(10));
             assert!(constraints.contains(&constraint1));
 
-            let constraint2 = (LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint2 = (IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V1".into(),
                 vec![Arc::new(ExprValue::Int(2))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V2".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             ))))
-            .eq(&LinExpr::constant(10.));
+            .eq(&IntLinExpr::constant(10));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),
@@ -955,18 +959,18 @@ async fn forall_constraint_with_param() {
             let constraints = strip_origins(&constraints);
 
             // All constraints should be === 42
-            let constraint1 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint1 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
             )))
-            .eq(&LinExpr::constant(42.));
+            .eq(&IntLinExpr::constant(42));
             assert!(constraints.contains(&constraint1));
 
-            let constraint2 = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let constraint2 = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )))
-            .eq(&LinExpr::constant(42.));
+            .eq(&IntLinExpr::constant(42));
             assert!(constraints.contains(&constraint2));
         }
         _ => panic!("Expected Constraint"),

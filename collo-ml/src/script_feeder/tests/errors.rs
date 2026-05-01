@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 
 use super::*;
@@ -9,16 +10,21 @@ async fn error_unknown_function() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![])])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![])])
         }
     }
 
@@ -42,22 +48,21 @@ async fn error_unknown_function() {
     }
 
     let modules = BTreeMap::from([("test", r#"pub let f() -> Constraint = $V() === 1;"#)]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Try to call a function that doesn't exist in the module
-    let result = pb_builder.add_constraint("test", "nonexistent", vec![]);
+    let result = feeder.add_constraint("test", "nonexistent", vec![]);
 
     assert!(result.is_err());
     match result {
-        Err(ProblemError::UnknownFunction(name)) => {
+        Err(ScriptError::UnknownFunction(name)) => {
             assert_eq!(name, "test::nonexistent");
         }
         _ => panic!("Expected UnknownFunction error, got: {:?}", result),
@@ -71,16 +76,21 @@ async fn error_wrong_return_type_for_constraint() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![])])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![])])
         }
     }
 
@@ -104,22 +114,21 @@ async fn error_wrong_return_type_for_constraint() {
     }
 
     let modules = BTreeMap::from([("bad_type", r#"pub let f() -> Bool = true;"#)]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Try to use a function that returns Bool instead of Constraint
-    let result = pb_builder.add_constraint("bad_type", "f", vec![]);
+    let result = feeder.add_constraint("bad_type", "f", vec![]);
 
     assert!(result.is_err());
     match result {
-        Err(ProblemError::WrongReturnType {
+        Err(ScriptError::WrongReturnType {
             func,
             returned,
             expected,

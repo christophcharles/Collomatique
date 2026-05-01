@@ -24,9 +24,8 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     };
     eprintln!("Building ILP problem...");
 
-    use collomatique_binding_colloscopes::scripts::{
-        SqliteDatabaseDriver, default_problem_builder, get_default_main_module,
-    };
+    use collomatique_binding_colloscopes::scripts::SqliteDatabaseDriver;
+    use collomatique_constraints_colloscopes::{default_problem_builder, get_default_main_module};
 
     let pool = sqlx::SqlitePool::connect(":memory:")
         .await
@@ -47,14 +46,14 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         .main_script
         .as_deref()
         .unwrap_or(get_default_main_module());
-    let b = match default_problem_builder::<SqliteDatabaseDriver>(main_script).await {
+    let b = match default_problem_builder(main_script).await {
         Ok(b) => b,
         Err(e) => {
             eprintln!("Script panic: {}", e);
             return Ok(());
         }
     };
-    let problem = match b.build(&env, Some(db_conn)).await {
+    let problem = match b.build(&pool, Some(db_conn)).await {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Script panic: {}", e);

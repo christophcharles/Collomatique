@@ -11,7 +11,7 @@ use super::values::ExprValue;
 use crate::Hashed;
 use crate::ast::Spanned;
 use crate::database::DatabaseConnection;
-use collomatique_ilp::Constraint;
+use collomatique_ilp::IntConstraint;
 use derivative::Derivative;
 use std::sync::Arc;
 
@@ -139,12 +139,12 @@ impl<D: DatabaseConnection> std::fmt::Display for Origin<D> {
     Eq(bound = "")
 )]
 pub struct ConstraintWithOrigin<D: DatabaseConnection> {
-    pub constraint: Constraint<HashedIlpVar<D>>,
+    pub constraint: IntConstraint<HashedIlpVar<D>>,
     pub origin: Option<Origin<D>>,
 }
 
-impl<D: DatabaseConnection> From<Constraint<HashedIlpVar<D>>> for ConstraintWithOrigin<D> {
-    fn from(value: Constraint<HashedIlpVar<D>>) -> Self {
+impl<D: DatabaseConnection> From<IntConstraint<HashedIlpVar<D>>> for ConstraintWithOrigin<D> {
+    fn from(value: IntConstraint<HashedIlpVar<D>>) -> Self {
         ConstraintWithOrigin {
             constraint: value,
             origin: None,
@@ -154,6 +154,6 @@ impl<D: DatabaseConnection> From<Constraint<HashedIlpVar<D>>> for ConstraintWith
 
 pub fn strip_origins<D: DatabaseConnection>(
     set: &Vec<ConstraintWithOrigin<D>>,
-) -> Vec<Constraint<HashedIlpVar<D>>> {
+) -> Vec<IntConstraint<HashedIlpVar<D>>> {
     set.iter().map(|x| x.constraint.clone()).collect()
 }

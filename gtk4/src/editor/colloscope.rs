@@ -1,4 +1,4 @@
-use collo_ml::problem::ConstraintDesc;
+use collomatique_constraints_colloscopes::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -14,19 +14,14 @@ mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
-use collomatique_binding_colloscopes::scripts::SimpleProblemError;
-
-type ProblemBuilder = collo_ml::problem::ProblemBuilder<
-    collo_ml::SqliteDatabaseDriver,
-    collomatique_binding_colloscopes::vars::Var,
->;
+use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
     Update(
         collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
-        Option<Result<ProblemBuilder, SimpleProblemError>>,
+        Option<Result<ProblemBuilder, SimpleScriptError>>,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -63,10 +58,7 @@ pub enum ColloscopeOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collo_ml::problem::Problem<
-        collo_ml::SqliteDatabaseConnection,
-        collomatique_binding_colloscopes::vars::Var,
-    >,
+    problem: collomatique_constraints_colloscopes::Problem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,7 +108,7 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleProblemError>>,
+    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleScriptError>>,
 }
 
 impl Colloscope {
@@ -723,15 +715,10 @@ impl Colloscope {
                 .expect("There should be a complete ilp config for the colloscope");
             let warnings = sol
                 .blame()
-                .map(|(_constraint, desc)| {
-                    let ConstraintDesc::InScript { origin } = desc else {
-                        panic!(
-                            "Reification constraints should all be satisfied! {:?}",
-                            desc
-                        )
-                    };
-
-                    origin.to_string()
+                .filter_map(|(_constraint, desc)| match desc {
+                    ConstraintSource::User(Some(origin)) => Some(origin.to_string()),
+                    ConstraintSource::User(None) => None,
+                    ConstraintSource::DefiningExtra { .. } => None,
                 })
                 .collect();
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
@@ -792,7 +779,7 @@ impl Colloscope {
                     .map_err(|e| format!("{}", e))?;
 
                 let problem = builder
-                    .build(&env, Some(db_conn))
+                    .build(&pool, Some(db_conn))
                     .await
                     .map_err(|e| format!("{}", e))?;
                 Ok(IlpProblem { env, problem })

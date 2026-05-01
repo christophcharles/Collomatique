@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 use collomatique_ilp::ObjectiveSense;
 
@@ -13,25 +14,30 @@ async fn two_objectives_same_script() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
         fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
                 ("Y".to_string(), vec![]),
-            ])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-                (Var::X, collomatique_ilp::Variable::binary()),
-                (Var::Y, collomatique_ilp::Variable::binary()),
             ])
         }
     }
@@ -95,67 +101,56 @@ async fn two_objectives_same_script() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Two independent constraints:
-    // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
-    // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    pb_builder
+    feeder
         .add_constraint("main", "c1", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    // Two objectives from the same script:
-    // - Maximize V (coefficient 1.0) -> should select V=1, W=0
-    // - Minimize X (coefficient 1.0) -> should select X=0, Y=1
-    pb_builder
+    feeder
         .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add objective");
-    pb_builder
+    feeder
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // First objective maximizes V -> V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
 
-    // Second objective minimizes X -> X=0, Y=1
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );
@@ -171,25 +166,30 @@ async fn two_objectives_different_scripts() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
         fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
                 ("Y".to_string(), vec![]),
-            ])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-                (Var::X, collomatique_ilp::Variable::binary()),
-                (Var::Y, collomatique_ilp::Variable::binary()),
             ])
         }
     }
@@ -244,7 +244,6 @@ async fn two_objectives_different_scripts() {
     }
 
     let env = NoObjectEnv {};
-    // Define all modules upfront
     let modules = BTreeMap::from([
         (
             "constraints",
@@ -266,67 +265,57 @@ async fn two_objectives_different_scripts() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Two independent constraints:
-    // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
-    // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    pb_builder
+    feeder
         .add_constraint("constraints", "c1", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("constraints", "c2", vec![])
         .expect("Should add constraint");
 
-    // First objective from first script: Maximize V -> should select V=1, W=0
-    pb_builder
+    feeder
         .add_objective("objective1", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add first objective");
 
-    // Second objective from different script: Minimize X -> should select X=0, Y=1
-    pb_builder
+    feeder
         .add_objective("objective2", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add second objective");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // First objective maximizes V -> V=1, W=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
 
-    // Second objective minimizes X -> X=0, Y=1
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );
@@ -342,25 +331,30 @@ async fn objectives_with_different_senses() {
         Y,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+                (Var::Y, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
         fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
                 ("Y".to_string(), vec![]),
-            ])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-                (Var::X, collomatique_ilp::Variable::binary()),
-                (Var::Y, collomatique_ilp::Variable::binary()),
             ])
         }
     }
@@ -424,72 +418,55 @@ async fn objectives_with_different_senses() {
             pub let obj_x() -> LinExpr = $X();
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Two independent constraints:
-    // V + W === 1 (solutions: V=1,W=0 or V=0,W=1)
-    // X + Y === 1 (solutions: X=1,Y=0 or X=0,Y=1)
-    pb_builder
+    feeder
         .add_constraint("main", "c1", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    // Two objectives with different senses:
-    // - Maximize V (coefficient 1.0)
-    // - Minimize X (coefficient 1.0)
-    // Combined: Maximize (V - X)
-    //
-    // With V+W=1 and X+Y=1, we have 4 solutions:
-    // (V=1,W=0,X=1,Y=0): objective = 1 - 1 = 0
-    // (V=1,W=0,X=0,Y=1): objective = 1 - 0 = 1  <- best
-    // (V=0,W=1,X=1,Y=0): objective = 0 - 1 = -1
-    // (V=0,W=1,X=0,Y=1): objective = 0 - 0 = 0
-    pb_builder
+    feeder
         .add_objective("main", "obj_v", vec![], 1.0, ObjectiveSense::Maximize)
         .expect("Should add objective");
-    pb_builder
+    feeder
         .add_objective("main", "obj_x", vec![], 1.0, ObjectiveSense::Minimize)
         .expect("Should add objective");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // The combined objective Maximize(V - X) is maximized when V=1, X=0
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(0.0),
         "X should be 0 (minimized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::Y)),
+        sol.get(InternalVar::Base(Var::Y)),
         Some(1.0),
         "Y should be 1"
     );

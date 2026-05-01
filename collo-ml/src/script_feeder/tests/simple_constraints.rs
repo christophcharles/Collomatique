@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 
 use super::*;
@@ -9,16 +10,21 @@ async fn single_constraint_problem() {
         V,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![])])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
         }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             None
         }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([(Var::V, collomatique_ilp::Variable::binary())])
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![])])
         }
     }
 
@@ -43,33 +49,30 @@ async fn single_constraint_problem() {
 
     let env = NoObjectEnv {};
     let modules = BTreeMap::from([("main", "pub let f() -> Constraint = $V() === 1;")]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    pb_builder
+    feeder
         .add_constraint("main", "f", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "Wrong value for solution!"
     );
@@ -84,23 +87,28 @@ async fn multiple_constraints_in_script() {
         X,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            HashMap::from([
+                (Var::V, collomatique_ilp::Variable::binary()),
+                (Var::W, collomatique_ilp::Variable::binary()),
+                (Var::X, collomatique_ilp::Variable::binary()),
+            ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
         fn field_schema() -> HashMap<String, Vec<ExprType>> {
             HashMap::from([
                 ("V".to_string(), vec![]),
                 ("W".to_string(), vec![]),
                 ("X".to_string(), vec![]),
-            ])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            HashMap::from([
-                (Var::V, collomatique_ilp::Variable::binary()),
-                (Var::W, collomatique_ilp::Variable::binary()),
-                (Var::X, collomatique_ilp::Variable::binary()),
             ])
         }
     }
@@ -152,43 +160,40 @@ async fn multiple_constraints_in_script() {
                 $V() === 1 and $W() === 0 and $X() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    pb_builder
+    feeder
         .add_constraint("main", "constraints", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::X)),
+        sol.get(InternalVar::Base(Var::X)),
         Some(1.0),
         "X should be 1"
     );
@@ -202,19 +207,24 @@ async fn multiple_function_calls() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -255,42 +265,38 @@ async fn multiple_function_calls() {
             pub let c2() -> Constraint = $W() === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Add two different constraints from the same module
-    pb_builder
+    feeder
         .add_constraint("main", "c1", vec![])
         .expect("Should add constraint");
-    pb_builder
+    feeder
         .add_constraint("main", "c2", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );
@@ -304,19 +310,24 @@ async fn constraints_from_different_modules() {
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -350,7 +361,6 @@ async fn constraints_from_different_modules() {
     }
 
     let env = NoObjectEnv {};
-    // Define both modules upfront
     let modules = BTreeMap::from([
         (
             "module1",
@@ -365,44 +375,39 @@ async fn constraints_from_different_modules() {
             "#,
         ),
     ]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Add constraint from first module
-    pb_builder
+    feeder
         .add_constraint("module1", "c1", vec![])
         .expect("Should add constraint from module1");
 
-    // Add constraint from second module
-    pb_builder
+    feeder
         .add_constraint("module2", "c2", vec![])
         .expect("Should add constraint from module2");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
         "V should be 1"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(1.0),
         "W should be 1"
     );

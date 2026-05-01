@@ -4,11 +4,12 @@ mod hashed;
 pub(crate) use hashed::Hashed;
 pub mod eval;
 pub mod parser;
-pub mod problem;
+pub mod script_feeder;
 mod semantics;
 pub mod traits;
 pub use ast::AstError;
 pub use collo_ml_derive::EvalVar;
+pub use collomatique_ilp_modeler::DescribeVar;
 pub use database::{
     DatabaseConnection, DatabaseDriver, DbType, SqliteDatabaseConnection, SqliteDatabaseDriver,
 };

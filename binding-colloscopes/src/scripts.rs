@@ -1,14 +1,9 @@
-use super::vars::Var;
 pub use collo_ml::SqliteDatabaseDriver;
-use collo_ml::eval::CompileError;
-use collo_ml::problem::{ProblemBuilder, ProblemError};
-use collo_ml::{DatabaseDriver, SemError, SemWarning};
-use collomatique_ilp::ObjectiveSense;
-use std::collections::BTreeMap;
+use collo_ml::{SemError, SemWarning};
 use std::fmt;
 
 #[derive(Debug, Clone)]
-pub enum SimpleProblemError {
+pub enum SimpleScriptError {
     UnexpectedError(String),
     ParsingError(pest::error::Error<collo_ml::parser::Rule>),
     SemanticErrors {
@@ -17,12 +12,12 @@ pub enum SimpleProblemError {
     },
 }
 
-impl fmt::Display for SimpleProblemError {
+impl fmt::Display for SimpleScriptError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SimpleProblemError::UnexpectedError(msg) => write!(f, "{}", msg),
-            SimpleProblemError::ParsingError(err) => write!(f, "{}", err),
-            SimpleProblemError::SemanticErrors { errors, .. } => {
+            SimpleScriptError::UnexpectedError(msg) => write!(f, "{}", msg),
+            SimpleScriptError::ParsingError(err) => write!(f, "{}", err),
+            SimpleScriptError::SemanticErrors { errors, .. } => {
                 for err in errors {
                     write!(f, "{}", err)?;
                 }
@@ -162,42 +157,3 @@ pub fn get_modules() -> &'static [(&'static str, &'static str)] {
 
 #[cfg(test)]
 mod tests;
-
-pub async fn default_problem_builder<T: DatabaseDriver>(
-    main_module: &str,
-) -> Result<ProblemBuilder<T, Var>, SimpleProblemError> {
-    let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
-    modules.insert("main", main_module);
-
-    let mut builder = ProblemBuilder::<T, Var>::new(&modules).await.map_err(|e| {
-        // Filter ProblemError into SimpleProblemError
-        match e {
-            ProblemError::CompileError(compile_error) => match compile_error {
-                CompileError::ParsingError(parse_err) => {
-                    SimpleProblemError::ParsingError(parse_err)
-                }
-                CompileError::SemanticsError { errors, warnings } => {
-                    SimpleProblemError::SemanticErrors { errors, warnings }
-                }
-                other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-            },
-            other => SimpleProblemError::UnexpectedError(format!("{}", other)),
-        }
-    })?;
-
-    let functions = builder.get_fn_from_module("main");
-
-    for (fn_name, _) in &functions {
-        if fn_name == "constraint" || fn_name.starts_with("constraint_") {
-            builder
-                .add_constraint("main", fn_name, vec![])
-                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
-        } else if fn_name == "objective" || fn_name.starts_with("objective_") {
-            builder
-                .add_objective("main", fn_name, vec![], 1.0, ObjectiveSense::Minimize)
-                .map_err(|e| SimpleProblemError::UnexpectedError(format!("{}", e)))?;
-        }
-    }
-
-    Ok(builder)
-}

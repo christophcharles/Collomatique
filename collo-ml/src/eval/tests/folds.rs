@@ -537,13 +537,13 @@ async fn fold_linexpr_simple() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: $V(0) + $V(1) + $V(2)
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new(
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(0))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(1))],
-            ))) + LinExpr::var(IlpVar::Base(ExternVar::new(
+            ))) + IntLinExpr::var(IlpVar::Base(ExternVar::new(
                 "V".into(),
                 vec![Arc::new(ExprValue::Int(2))],
             )));
@@ -573,7 +573,7 @@ async fn fold_linexpr_with_coefficients() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be: 1*$V() + 2*$V() = 3*$V()
-            let expected = 3 * LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
+            let expected = 3 * IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])));
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -599,7 +599,7 @@ async fn fold_linexpr_empty_list() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be constant 5
-            assert_eq!(lin_expr, LinExpr::constant(5.));
+            assert_eq!(lin_expr, IntLinExpr::constant(5));
         }
         _ => panic!("Expected LinExpr"),
     }

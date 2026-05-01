@@ -12,7 +12,7 @@ use crate::Hashed;
 use crate::ast::Spanned;
 use crate::database::{DatabaseConnection, DatabaseDriver, SqlQueryError};
 use crate::semantics::FunctionDesc;
-use collomatique_ilp::Constraint;
+use collomatique_ilp::IntConstraint;
 use derivative::Derivative;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -332,5 +332,5 @@ impl<'a, D: DatabaseDriver> EvalHistory<'a, D> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct VariableDefinitions<D: DatabaseConnection> {
-    pub vars: HashMap<Hashed<CallKey<D>>, Vec<Constraint<HashedIlpVar<D>>>>,
+    pub vars: HashMap<Hashed<CallKey<D>>, Vec<IntConstraint<HashedIlpVar<D>>>>,
 }

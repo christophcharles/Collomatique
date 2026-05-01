@@ -2,21 +2,16 @@
 //!
 //! This module defines:
 //! - `ReifiedVar`: A reified (script-defined) variable
-//! - `ProblemVar`: Enum of all variable types (Base, Reified, Helper)
-//! - `ConstraintDesc`: Description of constraint origin
-//! - `ExtraDesc`: Extended description for reification problems
-//! - `ProblemError`: Errors that can occur during problem construction
+//! - `ScriptError`: Errors that can occur during problem construction
 
+use crate::ExprType;
 use crate::database::DatabaseConnection;
-use crate::eval::{ExprValue, Origin};
-use crate::{EvalVar, ExprType};
+use crate::eval::ExprValue;
 use derivative::Derivative;
 use std::sync::Arc;
 use thiserror::Error;
 
 use super::CompileError;
-
-pub type HashedProblemVar<D, V> = crate::Hashed<ProblemVar<D, V>>;
 
 #[derive(Derivative)]
 #[derivative(
@@ -32,50 +27,9 @@ pub struct ReifiedVar<D: DatabaseConnection> {
     pub(crate) params: Vec<Arc<ExprValue<D>>>,
 }
 
-#[derive(Derivative)]
-#[derivative(
-    Debug(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = ""),
-    Clone(bound = "")
-)]
-pub enum ProblemVar<D: DatabaseConnection, V: EvalVar> {
-    Base(V),
-    Reified(ReifiedVar<D>),
-    Helper(u64),
-}
-
-#[derive(Derivative)]
-#[derivative(
-    Clone(bound = ""),
-    Debug(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
-pub enum ConstraintDesc<D: DatabaseConnection> {
-    Reified { var_name: String },
-    InScript { origin: Origin<D> },
-    Objectify,
-}
-
-#[derive(Derivative)]
-#[derivative(
-    Debug(bound = ""),
-    Clone(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
-pub enum ExtraDesc<D: DatabaseConnection, V: EvalVar> {
-    Orig(ConstraintDesc<D>),
-    InitCond(V),
-}
-
 #[derive(Derivative, Error)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-pub enum ProblemError<D: DatabaseConnection> {
+pub enum ScriptError<D: DatabaseConnection> {
     #[error("Variable {0} has non-integer type")]
     NonIntegerVariable(String),
     #[error("Function \"{0}\" was not found in script (maybe it is not public?)")]

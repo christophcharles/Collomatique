@@ -1,3 +1,4 @@
+#[derive(Clone)]
 struct NoObjectEnv;
 
 use super::*;
@@ -6,30 +7,35 @@ use super::*;
 async fn test_fix_forces_variable_values() {
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
-        V(i32), // Parameter from 0 to 9
+        V(i32),
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+            let mut vars = HashMap::new();
+            vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
+            vars
         }
 
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
             match self {
                 Var::V(i) => {
-                    // Fix all variables to 0 except V(7)
-                    if *i != 7 { Some(0.0) } else { None }
+                    if *i != 7 {
+                        Some(0.0)
+                    } else {
+                        None
+                    }
                 }
             }
         }
+    }
 
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
-            let mut vars = HashMap::new();
-            // Only include variables that are not fixed
-            // In this case, only V(7) is not fixed
-            vars.insert(Var::V(7), collomatique_ilp::Variable::binary());
-            vars
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![SimpleType::Int.into()])])
         }
     }
 
@@ -69,36 +75,30 @@ async fn test_fix_forces_variable_values() {
             pub let exactly_one() -> Constraint = sum i in [0..10] { $V(i) } === 1;
         "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    // Enforce exactly one V(i) must be 1
-    // Since all are fixed to 0 except V(7), only V(7) can be 1
-    pb_builder
+    feeder
         .add_constraint("test_fix", "exactly_one", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
-    // V(7) should be 1, all others should be 0
     for i in 0..10 {
-        let val = sol.get(ProblemVar::Base(Var::V(i))).unwrap_or(0.0);
+        let val = sol.get(InternalVar::Base(Var::V(i))).unwrap_or(0.0);
         if i == 7 {
             assert_eq!(
                 val, 1.0,

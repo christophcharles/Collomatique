@@ -1,28 +1,35 @@
+#[derive(Clone)]
 struct NoObjectEnv;
+use collomatique_ilp::ObjectiveSense;
 
 use super::*;
 
 #[tokio::test]
-async fn constraint_list_return_type() {
+async fn constraints_and_objectives_same_call() {
     #[derive(Debug, Clone, Hash, PartialEq, Eq)]
     enum Var {
         V,
         W,
     }
 
-    impl EvalVar for Var {
+    impl DescribeVar for Var {
         type Env = NoObjectEnv;
-        fn field_schema() -> HashMap<String, Vec<ExprType>> {
-            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
-        }
-        fn fix(&self, _env: &NoObjectEnv) -> Option<f64> {
-            None
-        }
-        fn vars(_env: &NoObjectEnv) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
+        fn enumerate(
+            _env: &NoObjectEnv,
+        ) -> std::collections::HashMap<Self, collomatique_ilp::Variable> {
             HashMap::from([
                 (Var::V, collomatique_ilp::Variable::binary()),
                 (Var::W, collomatique_ilp::Variable::binary()),
             ])
+        }
+        fn check_fix(&self, _env: &NoObjectEnv) -> Option<f64> {
+            None
+        }
+    }
+
+    impl EvalVar for Var {
+        fn field_schema() -> HashMap<String, Vec<ExprType>> {
+            HashMap::from([("V".to_string(), vec![]), ("W".to_string(), vec![])])
         }
     }
 
@@ -57,41 +64,51 @@ async fn constraint_list_return_type() {
 
     let env = NoObjectEnv {};
     let modules = BTreeMap::from([(
-        "list_constraints",
-        r#"pub let constraints() -> [Constraint] = [$V() === 1, $W() === 0];"#,
+        "combined",
+        r#"
+            pub let constraint() -> Constraint = $V() + $W() === 1;
+            pub let objective() -> LinExpr = $V();
+        "#,
     )]);
-    let mut pb_builder = ProblemBuilder::<SqliteDatabaseDriver, Var>::new(&modules)
+    let mut feeder = ScriptFeeder::<SqliteDatabaseDriver, Var, E, C>::new(&modules)
         .await
         .expect("Var should be compatible");
 
     assert!(
-        pb_builder.get_warnings().is_empty(),
+        feeder.get_warnings().is_empty(),
         "Unexpected warnings: {:?}",
-        pb_builder.get_warnings()
+        feeder.get_warnings()
     );
 
-    pb_builder
-        .add_constraint("list_constraints", "constraints", vec![])
+    feeder
+        .add_constraint("combined", "constraint", vec![])
         .expect("Should add constraint");
 
-    let problem = pb_builder
-        .build(&env, None)
-        .await
-        .expect("Build should succeed");
+    feeder
+        .add_objective(
+            "combined",
+            "objective",
+            vec![],
+            1.0,
+            ObjectiveSense::Maximize,
+        )
+        .expect("Should add objective");
+
+    let model = build_model(feeder, &env).await;
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
     use collomatique_ilp::solvers::Solver;
-    let sol_opt = solver.solve(problem.get_inner_problem());
+    let sol_opt = solver.solve(model.problem());
 
     let sol = sol_opt.expect("There should be a solution");
 
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::V)),
+        sol.get(InternalVar::Base(Var::V)),
         Some(1.0),
-        "V should be 1"
+        "V should be 1 (maximized)"
     );
     assert_eq!(
-        sol.get(ProblemVar::Base(Var::W)),
+        sol.get(InternalVar::Base(Var::W)),
         Some(0.0),
         "W should be 0"
     );

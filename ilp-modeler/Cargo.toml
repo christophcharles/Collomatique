@@ -1,0 +1,18 @@
+[package]
+name = "collomatique-ilp-modeler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = ["derive"]
+derive = ["dep:collomatique-ilp-modeler-derive"]
+
+[dependencies]
+collomatique-ilp = { path = "../ilp", default-features = false }
+collomatique-ilp-modeler-derive = { path = "../ilp-modeler-derive", optional = true }
+thiserror.workspace = true
+
+[dev-dependencies]
+collomatique-ilp = { path = "../ilp" }
+tokio = { workspace = true, features = ["rt", "macros"] }

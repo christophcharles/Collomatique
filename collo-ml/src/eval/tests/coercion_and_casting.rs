@@ -824,8 +824,8 @@ async fn coercion_int_to_linexpr_in_addition() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
-                + LinExpr::constant(5.);
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                + IntLinExpr::constant(5);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -850,8 +850,8 @@ async fn coercion_int_to_linexpr_in_subtraction() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
-                - LinExpr::constant(10.);
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                - IntLinExpr::constant(10);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -901,7 +901,7 @@ async fn coercion_int_to_linexpr_in_constraint() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::constant(5.).eq(&LinExpr::constant(10.))
+                IntLinExpr::constant(5).eq(&IntLinExpr::constant(10))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -929,7 +929,7 @@ async fn coercion_int_to_linexpr_constraint_le() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::constant(3.).leq(&LinExpr::constant(7.))
+                IntLinExpr::constant(3).leq(&IntLinExpr::constant(7))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -957,7 +957,7 @@ async fn coercion_int_to_linexpr_constraint_ge() {
             assert_eq!(constraints.len(), 1);
             assert_eq!(
                 constraints.iter().next().unwrap().constraint,
-                LinExpr::constant(10.).geq(&LinExpr::constant(5.))
+                IntLinExpr::constant(10).geq(&IntLinExpr::constant(5))
             );
         }
         _ => panic!("Expected Constraint"),
@@ -983,9 +983,9 @@ async fn coercion_int_to_linexpr_with_var() {
     match result {
         ExprValue::Constraint(constraints) => {
             assert_eq!(constraints.len(), 1);
-            let expected = (LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
-                + LinExpr::constant(5.))
-            .eq(&LinExpr::constant(10.));
+            let expected = (IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                + IntLinExpr::constant(5))
+            .eq(&IntLinExpr::constant(10));
             assert_eq!(constraints.iter().next().unwrap().constraint, expected);
         }
         _ => panic!("Expected Constraint"),
@@ -1010,8 +1010,8 @@ async fn coercion_int_param_to_linexpr() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
-                + LinExpr::constant(42.);
+            let expected = IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                + IntLinExpr::constant(42);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -1115,7 +1115,7 @@ async fn explicit_cast_int_to_linexpr() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(42.));
+            assert_eq!(lin_expr, IntLinExpr::constant(42));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1139,7 +1139,7 @@ async fn explicit_cast_in_expression() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(15.));
+            assert_eq!(lin_expr, IntLinExpr::constant(15));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1163,7 +1163,7 @@ async fn explicit_cast_param() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(100.));
+            assert_eq!(lin_expr, IntLinExpr::constant(100));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1232,7 +1232,7 @@ async fn explicit_cast_in_sum() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Should be 1 + 2 + 3 = 6 as LinExpr
-            assert_eq!(lin_expr, LinExpr::constant(6.));
+            assert_eq!(lin_expr, IntLinExpr::constant(6));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1282,7 +1282,7 @@ async fn explicit_cast_complex_expression() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // (10 + 5) * 2 = 30
-            assert_eq!(lin_expr, LinExpr::constant(30.));
+            assert_eq!(lin_expr, IntLinExpr::constant(30));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1306,7 +1306,7 @@ async fn explicit_cast_in_if_branches() {
 
     match result_positive {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(5.));
+            assert_eq!(lin_expr, IntLinExpr::constant(5));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1318,7 +1318,7 @@ async fn explicit_cast_in_if_branches() {
 
     match result_negative {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(0.));
+            assert_eq!(lin_expr, IntLinExpr::constant(0));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1347,7 +1347,7 @@ async fn conversion_return_type_int_to_linexpr() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(42.));
+            assert_eq!(lin_expr, IntLinExpr::constant(42));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1374,7 +1374,7 @@ async fn conversion_return_type_with_arithmetic() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(20.));
+            assert_eq!(lin_expr, IntLinExpr::constant(20));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1398,7 +1398,7 @@ async fn conversion_param_to_return_type() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(123.));
+            assert_eq!(lin_expr, IntLinExpr::constant(123));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1424,9 +1424,9 @@ async fn mixed_implicit_and_explicit_conversion() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            let expected = LinExpr::constant(5.)
-                + LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
-                + LinExpr::constant(10.);
+            let expected = IntLinExpr::constant(5)
+                + IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![])))
+                + IntLinExpr::constant(10);
             assert_eq!(lin_expr, expected);
         }
         _ => panic!("Expected LinExpr"),
@@ -1476,7 +1476,7 @@ async fn nested_casts() {
 
     match result {
         ExprValue::LinExpr(lin_expr) => {
-            assert_eq!(lin_expr, LinExpr::constant(5.));
+            assert_eq!(lin_expr, IntLinExpr::constant(5));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1550,7 +1550,7 @@ async fn conversion_in_sum_to_linexpr() {
     match result {
         ExprValue::LinExpr(lin_expr) => {
             // Sum of ints coerced to LinExpr
-            assert_eq!(lin_expr, LinExpr::constant(6.));
+            assert_eq!(lin_expr, IntLinExpr::constant(6));
         }
         _ => panic!("Expected LinExpr"),
     }
@@ -1597,7 +1597,7 @@ async fn cast_linexpr_identity() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![],)))
+                IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![],)))
             );
         }
         _ => panic!("Expected LinExpr"),
@@ -1643,7 +1643,7 @@ async fn conversion_linexpr_identity() {
         ExprValue::LinExpr(lin_expr) => {
             assert_eq!(
                 lin_expr,
-                LinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![],)))
+                IntLinExpr::var(IlpVar::Base(ExternVar::new("V".into(), vec![],)))
             );
         }
         _ => panic!("Expected LinExpr"),

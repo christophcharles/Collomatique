@@ -11,7 +11,7 @@ use crate::Hashed;
 use crate::ast::{Span, Spanned};
 use crate::database::{DatabaseConnection, DatabaseDriver};
 use crate::semantics::{LocalEnvCheck, ResolvedPathKind, SimpleType, resolve_path};
-use collomatique_ilp::LinExpr;
+use collomatique_ilp::IntLinExpr;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -91,7 +91,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             Expr::None => Arc::new(ExprValue::None),
             Expr::Trivial => Arc::new(ExprValue::Constraint(vec![])),
             Expr::Infeasible => Arc::new(ExprValue::Constraint(vec![
-                LinExpr::constant(0.).eq(&LinExpr::constant(1.)).into(),
+                IntLinExpr::constant(0).eq(&IntLinExpr::constant(1)).into(),
             ])),
             Expr::Boolean(val) => Arc::new(ExprValue::Bool(*val)),
             Expr::Number(val) => Arc::new(ExprValue::Int(*val)),
@@ -618,7 +618,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         };
 
         let mut output = match target {
-            a if a.is_lin_expr() => ExprValue::LinExpr(LinExpr::constant(0.)),
+            a if a.is_lin_expr() => ExprValue::LinExpr(IntLinExpr::constant(0)),
             a if a.is_int() => ExprValue::Int(0),
             a if a.is_list() => ExprValue::List(Vec::with_capacity(list.len())),
             a if a.is_string() => ExprValue::String(String::new()),
@@ -658,11 +658,11 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
                     (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value)) => {
                         let mut result = lin_expr_value;
-                        result += LinExpr::constant(int_value as f64);
+                        result += IntLinExpr::constant(int_value as i64);
                         ExprValue::LinExpr(result)
                     }
                     (ExprValue::LinExpr(mut lin_expr_value), ExprValue::Int(int_value)) => {
-                        lin_expr_value += LinExpr::constant(int_value as f64);
+                        lin_expr_value += IntLinExpr::constant(int_value as i64);
                         ExprValue::LinExpr(lin_expr_value)
                     }
                     (ExprValue::LinExpr(mut v1), ExprValue::LinExpr(ref v2)) => {
@@ -982,7 +982,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 + v2),
             (ExprValue::Int(int_value), ExprValue::LinExpr(lin_expr_value))
             | (ExprValue::LinExpr(lin_expr_value), ExprValue::Int(int_value)) => {
-                let new_lin_expr = LinExpr::constant(*int_value as f64);
+                let new_lin_expr = IntLinExpr::constant(*int_value as i64);
                 ExprValue::LinExpr(lin_expr_value.clone() + new_lin_expr)
             }
             (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => {
@@ -1014,11 +1014,11 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
         Ok(Arc::new(match (&*value1, &*value2) {
             (ExprValue::Int(v1), ExprValue::Int(v2)) => ExprValue::Int(v1 - v2),
             (ExprValue::Int(v1), ExprValue::LinExpr(v2)) => {
-                let new_lin_expr = LinExpr::constant(*v1 as f64);
+                let new_lin_expr = IntLinExpr::constant(*v1 as i64);
                 ExprValue::LinExpr(new_lin_expr - v2.clone())
             }
             (ExprValue::LinExpr(v1), ExprValue::Int(v2)) => {
-                let new_lin_expr = LinExpr::constant(*v2 as f64);
+                let new_lin_expr = IntLinExpr::constant(*v2 as i64);
                 ExprValue::LinExpr(v1.clone() - new_lin_expr)
             }
             (ExprValue::LinExpr(v1), ExprValue::LinExpr(v2)) => {
@@ -1351,7 +1351,7 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
             Some(&*self),
         ) {
             Ok(ResolvedPathKind::ExternalVariable(ext_var_name)) => {
-                Ok(Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Base(
+                Ok(Arc::new(ExprValue::LinExpr(IntLinExpr::var(IlpVar::Base(
                     ExternVar::new(ext_var_name, args),
                 )))))
             }
@@ -1364,9 +1364,9 @@ impl<D: DatabaseDriver> LocalEvalEnv<D> {
                     var_name.clone(),
                     args.clone(),
                 )));
-                Ok(Arc::new(ExprValue::LinExpr(LinExpr::var(IlpVar::Script(
-                    ScriptVar::new(var_module, var_name, args),
-                )))))
+                Ok(Arc::new(ExprValue::LinExpr(IntLinExpr::var(
+                    IlpVar::Script(ScriptVar::new(var_module, var_name, args)),
+                ))))
             }
             _ => panic!("Valid var expected (should have been caught by type checker)"),
         }
