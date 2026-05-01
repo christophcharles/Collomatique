@@ -8,6 +8,7 @@
 //! - `solution`: Problem, Solution, and FeasableSolution types
 
 mod builder;
+mod script_feeder;
 mod solution;
 mod types;
 
@@ -16,6 +17,7 @@ mod tests;
 
 // Re-export public types
 pub use builder::ProblemBuilder;
+pub use script_feeder::ScriptFeeder;
 pub use solution::{
     FeasableSolution, Problem, ProblemConstraintSource, ProblemInternalVar, Solution,
 };
