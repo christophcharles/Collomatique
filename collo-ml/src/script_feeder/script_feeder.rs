@@ -179,15 +179,15 @@ impl<
         Ok(())
     }
 
-    pub async fn build<'m, Db>(
+    pub async fn build<'m, Env>(
         self,
         db_connection: Option<D::Connection>,
-    ) -> Result<IntConstraintBundle<'m, V, E, C, Db, ReifyError<V, E>>, ScriptError<D::Connection>>
+    ) -> Result<IntConstraintBundle<'m, V, E, C, Env, ReifyError<V, E>>, ScriptError<D::Connection>>
     where
         V: 'static,
         E: 'static,
         C: 'm,
-        Db: Sync + 'm,
+        Env: Sync + 'm,
     {
         // Phase 1: DSL evaluation
         let (constraint_results, objective_results, var_def) = {
@@ -277,7 +277,7 @@ impl<
         };
 
         // Phase 2: Build the IntConstraintBundle
-        let mut bundle: IntConstraintBundle<'m, V, E, C, Db, ReifyError<V, E>> =
+        let mut bundle: IntConstraintBundle<'m, V, E, C, Env, ReifyError<V, E>> =
             IntConstraintBundle::new();
 
         // Add user constraints

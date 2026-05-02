@@ -1,12 +1,10 @@
 use super::tools::*;
 use collo_ml::EvalVar;
-use collomatique_ilp_modeler::LoadEnv;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
-/// Wrapper around `Parameters` that implements `LoadEnv<SqlitePool>`.
+/// Wrapper around `Parameters` providing env loading.
 ///
-/// `Parameters` is from `state-colloscopes` and `LoadEnv` from `ilp-modeler`,
-/// so the orphan rule prevents implementing the trait directly. This wrapper
+/// `Parameters` is from `state-colloscopes`, so this wrapper
 /// derefs to `Parameters`, so all `env.field` accesses in derive macros work.
 #[derive(Debug, Clone)]
 pub struct VarEnv(pub Parameters);
@@ -18,8 +16,8 @@ impl std::ops::Deref for VarEnv {
     }
 }
 
-impl LoadEnv<sqlx::SqlitePool> for VarEnv {
-    async fn load(pool: &sqlx::SqlitePool) -> VarEnv {
+impl VarEnv {
+    pub async fn load(pool: &sqlx::SqlitePool) -> VarEnv {
         let inner_data = collomatique_sqlite_state::sqlite_to_inner_data(pool)
             .await
             .expect("Failed to load data from database");

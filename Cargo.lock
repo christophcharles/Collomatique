@@ -481,7 +481,6 @@ dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler-derive",
  "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]

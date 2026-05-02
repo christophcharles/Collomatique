@@ -18,11 +18,10 @@ where
         + Send
         + Sync
         + 'static,
-    V::Env: LoadEnv<V::Env> + Clone + Send + Sync + 'static,
+    V::Env: Clone + Send + Sync + 'static,
 {
     let bundle = feeder.build(None).await.unwrap();
-    let mut modeler: Modeler<'_, V, E, C, V::Env, ReifyError<V, E>> =
-        Modeler::from_described(env).await;
+    let mut modeler: Modeler<'_, V, E, C, V::Env, ReifyError<V, E>> = Modeler::from_described(env);
     for (_name, desc) in modeler.base_vars() {
         assert!(desc.is_integer());
     }
@@ -31,7 +30,6 @@ where
         .expect("no duplicate extras");
     modeler
         .build(env)
-        .await
         .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e))
 }
 

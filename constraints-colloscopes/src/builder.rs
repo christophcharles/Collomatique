@@ -6,24 +6,17 @@ use collo_ml::{SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::{ObjectiveSense, Variable};
+use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
-use collomatique_ilp_modeler::{DescribeVar, LoadEnv, Modeler};
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder {
     feeder: ScriptFeeder<SqliteDatabaseDriver, Var, ReifiedVarName, ConstraintDesc>,
 }
 
-pub(crate) type MyModeler<'m> = Modeler<
-    'm,
-    Var,
-    ReifiedVarName,
-    ConstraintDesc,
-    sqlx::SqlitePool,
-    ReifyError<Var, ReifiedVarName>,
->;
+pub(crate) type MyModeler<'m> =
+    Modeler<'m, Var, ReifiedVarName, ConstraintDesc, VarEnv, ReifyError<Var, ReifiedVarName>>;
 
 impl ProblemBuilder {
     pub fn get_warnings(&self) -> &[SemWarning] {
@@ -37,15 +30,9 @@ impl ProblemBuilder {
     ) -> Result<Problem, ScriptError<SqliteDatabaseConnection>> {
         let script_bundle = self.feeder.build(db_connection).await?;
 
-        let env = Arc::new(VarEnv::load(db).await);
+        let env = VarEnv::load(db).await;
 
-        let base_vars = Var::enumerate(&env);
-        let mut modeler: MyModeler<'_> = Modeler::new(base_vars);
-        let env_for_fixer = env.clone();
-        modeler.add_fixer(move |b: &Var, _db: &sqlx::SqlitePool| {
-            let result = b.check_fix(&env_for_fixer);
-            Box::pin(async move { result })
-        });
+        let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 
         let original_var_list: HashMap<Var, Variable> = modeler
             .base_vars()
@@ -68,8 +55,7 @@ impl ProblemBuilder {
             .expect("no duplicate extras from native");
 
         let model = modeler
-            .build(db)
-            .await
+            .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
 
         Ok(Problem::from_model(model, original_var_list))

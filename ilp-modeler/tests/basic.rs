@@ -6,8 +6,8 @@ use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
-    BuildError, DescribeVar, DuplicateExtra, ExtraEntry, ExtraVar, HelperId, InternalVar, LoadEnv,
-    Modeler, ReconstructionError, SourceVar, Var,
+    BuildError, DescribeVar, DuplicateExtra, ExtraEntry, ExtraVar, HelperId, InternalVar, Modeler,
+    ReconstructionError, Var,
 };
 
 type B = String;
@@ -34,14 +34,14 @@ fn fresh<'m>() -> Modeler<'m, B, E, C, (), String> {
     Modeler::new(vars)
 }
 
-#[tokio::test]
-async fn trivial_problem() {
+#[test]
+fn trivial_problem() {
     let mut m = fresh();
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     let solver = CbcSolver::new();
     let cfg = solver.solve(model.problem()).expect("solvable");
     let sum = cfg
@@ -53,13 +53,13 @@ async fn trivial_problem() {
     assert_eq!(sum, 1.0);
 }
 
-#[tokio::test]
-async fn referenced_extra_runs() {
+#[test]
+fn referenced_extra_runs() {
     let ran = Arc::new(Mutex::new(false));
     let ran2 = Arc::clone(&ran);
     let mut m = fresh();
     // Extra `s` is defined as a + b (via constraint s = a + b).
-    m.declare_extra_sync("s".to_string(), Variable::integer(), move |_f, _ctx, e| {
+    m.declare_extra("s".to_string(), Variable::integer(), move |_f, _ctx, e| {
         *ran2.lock().unwrap() = true;
         let lhs = LinExpr::var(ExtraVar::Extra(e));
         let rhs = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
@@ -75,7 +75,7 @@ async fn referenced_extra_runs() {
         1.0,
         Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     assert!(*ran.lock().unwrap());
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
@@ -85,12 +85,12 @@ async fn referenced_extra_runs() {
     );
 }
 
-#[tokio::test]
-async fn unreferenced_extra_does_not_run() {
+#[test]
+fn unreferenced_extra_does_not_run() {
     let ran = Arc::new(Mutex::new(false));
     let ran2 = Arc::clone(&ran);
     let mut m = fresh();
-    m.declare_extra_sync(
+    m.declare_extra(
         "dead".to_string(),
         Variable::integer(),
         move |_f, _ctx, _e| {
@@ -103,29 +103,29 @@ async fn unreferenced_extra_does_not_run() {
         LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
         "trivial".into(),
     );
-    let _ = m.build(&()).await.unwrap();
+    let _ = m.build(&()).unwrap();
     assert!(!*ran.lock().unwrap());
 }
 
-#[tokio::test]
-async fn extra_chain() {
+#[test]
+fn extra_chain() {
     let mut m = fresh();
     // c = b
-    m.declare_extra_sync("c".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("c".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
         ])
     })
     .unwrap();
     // bx = c (chains through c)
-    m.declare_extra_sync("bx".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("bx".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("c"))),
         ])
     })
     .unwrap();
     // ax = bx (chains through bx)
-    m.declare_extra_sync("ax".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("ax".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("bx"))),
         ])
@@ -135,7 +135,7 @@ async fn extra_chain() {
         LinExpr::var(xtra("ax")).eq(&LinExpr::constant(1.0)),
         "ax=1".into(),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap(),
@@ -143,24 +143,24 @@ async fn extra_chain() {
     );
 }
 
-#[tokio::test]
-async fn undeclared_extra() {
+#[test]
+fn undeclared_extra() {
     let mut m = fresh();
     m.add_constraint(
         LinExpr::var(xtra("ghost")).eq(&LinExpr::constant(0.0)),
         "ghost".into(),
     );
-    let err = m.build(&()).await.unwrap_err();
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::UndeclaredExtra(e) => assert_eq!(e, "ghost"),
         other => panic!("expected UndeclaredExtra, got {:?}", other),
     }
 }
 
-#[tokio::test]
-async fn extra_returns_error() {
+#[test]
+fn extra_returns_error() {
     let mut m = fresh();
-    m.declare_extra_sync("bad".to_string(), Variable::integer(), |_f, _ctx, _e| {
+    m.declare_extra("bad".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Err("boom".to_string())
     })
     .unwrap();
@@ -168,7 +168,7 @@ async fn extra_returns_error() {
         LinExpr::var(xtra("bad")).eq(&LinExpr::constant(0.0)),
         "use bad".into(),
     );
-    let err = m.build(&()).await.unwrap_err();
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::ExtraError(e, msg) => {
             assert_eq!(e, "bad");
@@ -178,16 +178,16 @@ async fn extra_returns_error() {
     }
 }
 
-#[tokio::test]
-async fn helpers_namespaced_per_extra() {
+#[test]
+fn helpers_namespaced_per_extra() {
     let mut m = fresh();
     // Two extras each mint their own helper.
-    m.declare_extra_sync("e1".to_string(), Variable::integer(), |f, _kinds, e| {
+    m.declare_extra("e1".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
     })
     .unwrap();
-    m.declare_extra_sync("e2".to_string(), Variable::integer(), |f, _kinds, e| {
+    m.declare_extra("e2".to_string(), Variable::integer(), |f, _kinds, e| {
         let h = f.new_helper(Variable::binary());
         Ok(vec![LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(h))])
     })
@@ -196,7 +196,7 @@ async fn helpers_namespaced_per_extra() {
         (LinExpr::var(xtra("e1")) + LinExpr::var(xtra("e2"))).eq(&LinExpr::constant(1.0)),
         "use both".into(),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     let helper_count = model
         .problem()
         .get_variables()
@@ -218,16 +218,16 @@ async fn helpers_namespaced_per_extra() {
     assert_eq!(owners, vec!["e1".to_string(), "e2".to_string()]);
 }
 
-#[tokio::test]
-async fn cyclic_extras() {
+#[test]
+fn cyclic_extras() {
     let mut m = fresh();
-    m.declare_extra_sync("a1".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("a1".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a2"))),
         ])
     })
     .unwrap();
-    m.declare_extra_sync("a2".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("a2".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("a1"))),
         ])
@@ -237,7 +237,7 @@ async fn cyclic_extras() {
         LinExpr::var(xtra("a1")).eq(&LinExpr::constant(0.0)),
         "use a1".into(),
     );
-    let err = m.build(&()).await.unwrap_err();
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::CyclicExtra { cycle } => {
             assert!(cycle.contains(&"a1".to_string()));
@@ -247,14 +247,14 @@ async fn cyclic_extras() {
     }
 }
 
-#[tokio::test]
-async fn helper_smuggling_detected() {
+#[test]
+fn helper_smuggling_detected() {
     // Smuggle a HelperId out of one closure into another via shared state.
     let stash: Arc<Mutex<Option<HelperId>>> = Arc::new(Mutex::new(None));
     let stash1 = Arc::clone(&stash);
     let stash2 = Arc::clone(&stash);
     let mut m = fresh();
-    m.declare_extra_sync(
+    m.declare_extra(
         "donor".to_string(),
         Variable::integer(),
         move |f, _kinds, e| {
@@ -266,7 +266,7 @@ async fn helper_smuggling_detected() {
         },
     )
     .unwrap();
-    m.declare_extra_sync(
+    m.declare_extra(
         "thief".to_string(),
         Variable::integer(),
         move |_f, _ctx, e| {
@@ -293,7 +293,7 @@ async fn helper_smuggling_detected() {
         LinExpr::var(xtra("thief")).eq(&LinExpr::constant(0.0)),
         "use thief".into(),
     );
-    let err = m.build(&()).await.unwrap_err();
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::HelperLeak { used_in, .. } => {
             assert_eq!(used_in, "thief");
@@ -302,15 +302,15 @@ async fn helper_smuggling_detected() {
     }
 }
 
-#[tokio::test]
-async fn duplicate_extra_fails() {
+#[test]
+fn duplicate_extra_fails() {
     let mut m = fresh();
-    m.declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
+    m.declare_extra("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Ok(vec![])
     })
     .unwrap();
     let DuplicateExtra(name) = m
-        .declare_extra_sync("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        .declare_extra("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
             Ok(vec![])
         })
         .unwrap_err();
@@ -319,8 +319,8 @@ async fn duplicate_extra_fails() {
 
 // ----- add_fixer tests ---------------------------------------------------
 
-#[tokio::test]
-async fn fix_undeclared_variable() {
+#[test]
+fn fix_undeclared_variable() {
     // Constraint references undeclared "c"; fixer returns 1.0 for it.
     // a + c <= 1, with c fixed to 1 → a <= 0 → a = 0.
     let mut m = fresh();
@@ -328,11 +328,12 @@ async fn fix_undeclared_variable() {
     let c = LinExpr::var(base("c"));
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
-    });
-    let model = m.build(&()).await.unwrap();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(1.0) } else { None }
+        },
+    );
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
@@ -340,8 +341,8 @@ async fn fix_undeclared_variable() {
     );
 }
 
-#[tokio::test]
-async fn fixer_chain_first_wins() {
+#[test]
+fn fixer_chain_first_wins() {
     // Two fixers: first returns Some(1.0) for "c", second returns
     // Some(0.0). First should win.
     let mut m = fresh();
@@ -349,15 +350,17 @@ async fn fixer_chain_first_wins() {
     let c = LinExpr::var(base("c"));
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
-    });
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(0.0) } else { None } })
-    });
-    let model = m.build(&()).await.unwrap();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(1.0) } else { None }
+        },
+    );
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(0.0) } else { None }
+        },
+    );
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     // c fixed to 1.0 by first fixer → a <= 0 → a = 0
     assert_eq!(
@@ -366,12 +369,12 @@ async fn fixer_chain_first_wins() {
     );
 }
 
-#[tokio::test]
-async fn fix_in_extra_closure() {
+#[test]
+fn fix_in_extra_closure() {
     // Extra's closure references undeclared "c"; fixer returns 1.0.
     // s = a + c, with c fixed to 1 → s = a + 1.
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
                 + LinExpr::var(ExtraVar::Base("c".to_string())))),
@@ -386,11 +389,12 @@ async fn fix_in_extra_closure() {
         1.0,
         Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
     );
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
-    });
-    let model = m.build(&()).await.unwrap();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(1.0) } else { None }
+        },
+    );
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     // s = a + 1, s <= 2, maximize s → a = 1, s = 2.
     assert_eq!(
@@ -402,12 +406,12 @@ async fn fix_in_extra_closure() {
 
 // ----- reconstruction_problem tests --------------------------------------
 
-#[tokio::test]
-async fn reconstruction_basic() {
+#[test]
+fn reconstruction_basic() {
     // Extra s = a + b. Solve main problem, then reconstruct
     // with base values and verify s matches.
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e))
                 .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
@@ -422,7 +426,7 @@ async fn reconstruction_basic() {
         1.0,
         Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
 
     // Solve the main problem.
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
@@ -439,10 +443,10 @@ async fn reconstruction_basic() {
     assert_eq!(sv, av + bv);
 }
 
-#[tokio::test]
-async fn reconstruction_missing_var() {
+#[test]
+fn reconstruction_missing_var() {
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e))
                 .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
@@ -453,7 +457,7 @@ async fn reconstruction_missing_var() {
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
         "s<=1".into(),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
 
     // Only provide "a", missing "b".
     let base_values = HashMap::from([("a".to_string(), 1.0)]);
@@ -461,13 +465,13 @@ async fn reconstruction_missing_var() {
     assert_eq!(missing, "b");
 }
 
-#[tokio::test]
-async fn reconstruction_with_fixed_vars() {
+#[test]
+fn reconstruction_with_fixed_vars() {
     // Extra s = a + c, where c is fixed to 1.
     // After build, c is substituted out. Reconstruction only
     // needs base var "a".
     let mut m = fresh();
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
         Ok(vec![
             LinExpr::var(ExtraVar::Extra(e)).eq(&(LinExpr::var(ExtraVar::Base("a".to_string()))
                 + LinExpr::var(ExtraVar::Base("c".to_string())))),
@@ -478,11 +482,12 @@ async fn reconstruction_with_fixed_vars() {
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(2.0)),
         "s<=2".into(),
     );
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(1.0) } else { None } })
-    });
-    let model = m.build(&()).await.unwrap();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(1.0) } else { None }
+        },
+    );
+    let model = m.build(&()).unwrap();
 
     // Reconstruct with a=1 only (c was fixed, not a base var).
     let base_values = HashMap::from([("a".to_string(), 1.0)]);
@@ -495,15 +500,15 @@ async fn reconstruction_with_fixed_vars() {
     assert_eq!(sv, 2.0);
 }
 
-#[tokio::test]
-async fn reconstruction_no_extras() {
+#[test]
+fn reconstruction_no_extras() {
     // Model with no extras. Reconstruction problem is trivial.
     let mut m = fresh();
     m.add_constraint(
         LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
         "a<=1".into(),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
 
     // No base vars appear in reconstruction (no extras exist).
     let base_values: HashMap<B, f64> = HashMap::new();
@@ -514,28 +519,24 @@ async fn reconstruction_no_extras() {
 
 // ----- declare_extras tests ----------------------------------------------
 
-#[tokio::test]
-async fn declare_extras_batch() {
+#[test]
+fn declare_extras_batch() {
     let mut m = fresh();
     m.declare_extras(vec![
         (
             "s1".to_string(),
             ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
-                Box::pin(async move {
-                    Ok(vec![
-                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
-                    ])
-                })
+                Ok(vec![
+                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+                ])
             }),
         ),
         (
             "s2".to_string(),
             ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
-                Box::pin(async move {
-                    Ok(vec![
-                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
-                    ])
-                })
+                Ok(vec![
+                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+                ])
             }),
         ),
     ])
@@ -544,71 +545,64 @@ async fn declare_extras_batch() {
         (LinExpr::var(xtra("s1")) + LinExpr::var(xtra("s2"))).leq(&LinExpr::constant(1.0)),
         "s1+s2<=1".into(),
     );
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     // 2 base + 2 extras = 4 variables.
     assert_eq!(model.problem().get_variables().len(), 4);
 }
 
-#[tokio::test]
-async fn declare_extras_internal_duplicate_fails() {
+#[test]
+fn declare_extras_internal_duplicate_fails() {
     let mut m = fresh();
     let DuplicateExtra(name) = m
         .declare_extras(vec![
             (
                 "dup".to_string(),
-                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
-                    Box::pin(async move { Ok(vec![]) })
-                }),
+                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![])),
             ),
             (
                 "dup".to_string(),
-                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
-                    Box::pin(async move { Ok(vec![]) })
-                }),
+                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![])),
             ),
         ])
         .unwrap_err();
     assert_eq!(name, "dup");
 }
 
-#[tokio::test]
-async fn declare_extras_conflicts_with_existing_fails() {
+#[test]
+fn declare_extras_conflicts_with_existing_fails() {
     let mut m = fresh();
-    m.declare_extra_sync("exists".to_string(), Variable::integer(), |_f, _ctx, _e| {
+    m.declare_extra("exists".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Ok(vec![])
     })
     .unwrap();
     let DuplicateExtra(name) = m
         .declare_extras(vec![(
             "exists".to_string(),
-            ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
-                Box::pin(async move { Ok(vec![]) })
-            }),
+            ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![])),
         )])
         .unwrap_err();
     assert_eq!(name, "exists");
 }
 
-// ----- from_source tests ----------------------------------------------------
+// ----- from_described tests (TestVar) ----------------------------------------
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum TestVar {
     X,
     Y,
-    /// Undeclared variable used to test fix().
+    /// Undeclared variable used to test check_fix().
     Z,
 }
 
-impl SourceVar<()> for TestVar {
-    async fn vars(_db: &()) -> HashMap<Self, Variable> {
-        // Z is intentionally excluded — it is fixed, not a decision variable.
+impl DescribeVar for TestVar {
+    type Env = ();
+    fn enumerate(_env: &()) -> HashMap<Self, Variable> {
         HashMap::from([
             (TestVar::X, Variable::binary()),
             (TestVar::Y, Variable::binary()),
         ])
     }
-
-    async fn fix(&self, _db: &()) -> Option<f64> {
+    fn check_fix(&self, _env: &()) -> Option<f64> {
         match self {
             TestVar::Z => Some(1.0),
             _ => None,
@@ -616,56 +610,55 @@ impl SourceVar<()> for TestVar {
     }
 }
 
-#[tokio::test]
-async fn from_source_creates_modeler() {
-    let m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
-    let mut m = m;
+#[test]
+fn from_described_creates_modeler_testvar() {
+    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_described(&());
     let x = LinExpr::var(Var::Base(TestVar::X));
     let y = LinExpr::var(Var::Base(TestVar::Y));
     m.add_constraint((&x + &y).leq(&LinExpr::constant(1.0)), "x+y<=1".into());
     m.add_objective(1.0, Objective::new(x + y, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     let sum = cfg.get(InternalVar::Base(TestVar::X)).unwrap_or(0.0)
         + cfg.get(InternalVar::Base(TestVar::Y)).unwrap_or(0.0);
     assert_eq!(sum, 1.0);
 }
 
-#[tokio::test]
-async fn from_source_auto_fixes_via_source_var() {
-    // Constraint references Z (undeclared). from_source registers
-    // SourceVar::fix as a fixer, which returns Some(1.0) for Z.
+#[test]
+fn from_described_auto_fixes_via_check_fix() {
+    // Constraint references Z (undeclared). from_described registers
+    // DescribeVar::check_fix as a fixer, which returns Some(1.0) for Z.
     // x + Z <= 1, Z fixed to 1 → x <= 0 → x = 0.
-    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
+    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_described(&());
     let x = LinExpr::var(Var::Base(TestVar::X));
     let z = LinExpr::var(Var::Base(TestVar::Z));
     m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
     m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
 }
 
-#[tokio::test]
-async fn from_source_additional_fixer_composes() {
-    // from_source registers SourceVar::fix, then we add another fixer
+#[test]
+fn from_described_additional_fixer_composes() {
+    // from_described registers check_fix, then we add another fixer
     // for a different variable W (not in the enum). The additional
-    // fixer should compose with the SourceVar one.
-    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_source(&()).await;
+    // fixer should compose with the check_fix one.
+    let mut m: Modeler<'_, TestVar, String, String, (), String> = Modeler::from_described(&());
     let x = LinExpr::var(Var::Base(TestVar::X));
     let z = LinExpr::var(Var::Base(TestVar::Z));
-    // x + Z <= 1, Z fixed to 1 by SourceVar::fix → x = 0.
+    // x + Z <= 1, Z fixed to 1 by check_fix → x = 0.
     m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
     m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
     // Add a second fixer that doesn't handle Z (returns None for all).
-    // Shouldn't break anything — the SourceVar fixer handles Z.
-    m.add_fixer(|_b: &TestVar, _db: &()| Box::pin(async move { None }));
-    let model = m.build(&()).await.unwrap();
+    // Shouldn't break anything — the check_fix fixer handles Z.
+    m.add_fixer(|_b: &TestVar, _env: &()| None);
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
 }
 
-// ----- DescribeVar + LoadEnv + from_described tests -------------------------
+// ----- DescribeVar + from_described tests ------------------------------------
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum DescVar {
@@ -677,12 +670,6 @@ enum DescVar {
 
 struct DescEnv {
     c_value: f64,
-}
-
-impl LoadEnv<()> for DescEnv {
-    async fn load(_db: &()) -> Self {
-        DescEnv { c_value: 1.0 }
-    }
 }
 
 impl DescribeVar for DescVar {
@@ -703,45 +690,48 @@ impl DescribeVar for DescVar {
     }
 }
 
-#[tokio::test]
-async fn from_described_creates_modeler() {
-    let mut m: Modeler<'_, DescVar, String, String, (), String> =
-        Modeler::from_described(&()).await;
+#[test]
+fn from_described_creates_modeler() {
+    let env = DescEnv { c_value: 1.0 };
+    let mut m: Modeler<'_, DescVar, String, String, DescEnv, String> =
+        Modeler::from_described(&env);
     let a = LinExpr::var(Var::Base(DescVar::A));
     let b = LinExpr::var(Var::Base(DescVar::B));
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&env).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     let sum = cfg.get(InternalVar::Base(DescVar::A)).unwrap_or(0.0)
         + cfg.get(InternalVar::Base(DescVar::B)).unwrap_or(0.0);
     assert_eq!(sum, 1.0);
 }
 
-#[tokio::test]
-async fn from_described_fixes_via_env() {
+#[test]
+fn from_described_fixes_via_env() {
     // a + C <= 1, C fixed to 1 via check_fix → a <= 0 → a = 0.
-    let mut m: Modeler<'_, DescVar, String, String, (), String> =
-        Modeler::from_described(&()).await;
+    let env = DescEnv { c_value: 1.0 };
+    let mut m: Modeler<'_, DescVar, String, String, DescEnv, String> =
+        Modeler::from_described(&env);
     let a = LinExpr::var(Var::Base(DescVar::A));
     let c = LinExpr::var(Var::Base(DescVar::C));
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&env).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }
 
-#[tokio::test]
-async fn blanket_source_var_from_describe_var() {
-    // DescVar + LoadEnv<()> gives SourceVar<()> via blanket impl.
-    // from_source should work (less optimal, but correct).
-    let mut m: Modeler<'_, DescVar, String, String, (), String> = Modeler::from_source(&()).await;
+#[test]
+fn describe_var_via_from_described() {
+    // DescVar uses from_described directly.
+    let env = DescEnv { c_value: 1.0 };
+    let mut m: Modeler<'_, DescVar, String, String, DescEnv, String> =
+        Modeler::from_described(&env);
     let a = LinExpr::var(Var::Base(DescVar::A));
     let c = LinExpr::var(Var::Base(DescVar::C));
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&env).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }
@@ -750,12 +740,6 @@ async fn blanket_source_var_from_describe_var() {
 
 struct DeriveEnv {
     max_slot: i32,
-}
-
-impl LoadEnv<()> for DeriveEnv {
-    async fn load(_db: &()) -> Self {
-        DeriveEnv { max_slot: 3 }
-    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, DescribeVar)]
@@ -770,8 +754,8 @@ enum DeriveVar {
     },
 }
 
-#[tokio::test]
-async fn derive_enumerate() {
+#[test]
+fn derive_enumerate() {
     let env = DeriveEnv { max_slot: 3 };
     let vars = DeriveVar::enumerate(&env);
     // 3 slots + 2 bools = 5 variables
@@ -783,8 +767,8 @@ async fn derive_enumerate() {
     assert!(vars.contains_key(&DeriveVar::Flag { active: false }));
 }
 
-#[tokio::test]
-async fn derive_check_fix() {
+#[test]
+fn derive_check_fix() {
     let env = DeriveEnv { max_slot: 3 };
     assert_eq!(DeriveVar::Slot { slot: 0 }.check_fix(&env), None);
     assert_eq!(DeriveVar::Slot { slot: 2 }.check_fix(&env), None);
@@ -804,8 +788,8 @@ enum DeriveVarCustomFix {
     },
 }
 
-#[tokio::test]
-async fn derive_custom_fix_with_and_var_type() {
+#[test]
+fn derive_custom_fix_with_and_var_type() {
     let env = DeriveEnv { max_slot: 2 };
     let vars = DeriveVarCustomFix::enumerate(&env);
     assert_eq!(vars.len(), 2);
@@ -829,8 +813,8 @@ enum DeriveVarDeferFix {
     },
 }
 
-#[tokio::test]
-async fn derive_defer_fix() {
+#[test]
+fn derive_defer_fix() {
     let env = DeriveEnv { max_slot: 5 };
     let vars = DeriveVarDeferFix::enumerate(&env);
     // defer_fix filters: slots 0,1 are free; slots 2,3,4 are fixed
@@ -849,8 +833,8 @@ enum DeriveVarOption {
     },
 }
 
-#[tokio::test]
-async fn derive_option_field() {
+#[test]
+fn derive_option_field() {
     let env = DeriveEnv { max_slot: 2 };
     let vars = DeriveVarOption::enumerate(&env);
     // None + Some(0) + Some(1) = 3 variables
@@ -860,15 +844,16 @@ async fn derive_option_field() {
     assert!(vars.contains_key(&DeriveVarOption::Slot { slot: Some(1) }));
 }
 
-#[tokio::test]
-async fn derive_integration_from_described() {
-    let mut m: Modeler<'_, DeriveVar, String, String, (), String> =
-        Modeler::from_described(&()).await;
+#[test]
+fn derive_integration_from_described() {
+    let env = DeriveEnv { max_slot: 3 };
+    let mut m: Modeler<'_, DeriveVar, String, String, DeriveEnv, String> =
+        Modeler::from_described(&env);
     let s0 = LinExpr::var(Var::Base(DeriveVar::Slot { slot: 0 }));
     let s1 = LinExpr::var(Var::Base(DeriveVar::Slot { slot: 1 }));
     m.add_constraint((&s0 + &s1).leq(&LinExpr::constant(1.0)), "s0+s1<=1".into());
     m.add_objective(1.0, Objective::new(s0 + s1, ObjectiveSense::Maximize));
-    let model = m.build(&()).await.unwrap();
+    let model = m.build(&env).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     let sum = cfg
         .get(InternalVar::Base(DeriveVar::Slot { slot: 0 }))

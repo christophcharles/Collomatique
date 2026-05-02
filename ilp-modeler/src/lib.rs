@@ -12,9 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::future::Future;
 use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Mutex;
 
 use collomatique_ilp::{
@@ -35,22 +33,10 @@ pub use describe_var::DescribeVar;
 #[cfg(feature = "derive")]
 pub use collomatique_ilp_modeler_derive::DescribeVar;
 
-mod load_env;
-pub use load_env::LoadEnv;
-
-mod source_var;
-pub use source_var::SourceVar;
-
-/// Boxed future returned by extra-definition closures.
-///
-/// Aliased to avoid pulling in `futures` as a dependency.
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-/// Async fixer closure. Called lazily at build time for undeclared
+/// Fixer closure. Called lazily at build time for undeclared
 /// base variables found in constraints/objectives. The first fixer
 /// in the chain to return `Some(_)` wins.
-pub type FixerFn<'m, B, Db> =
-    dyn for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + Send + Sync + 'm;
+pub type FixerFn<'m, B, Env> = dyn Fn(&B, &Env) -> Option<f64> + Send + Sync + 'm;
 
 // ---------------------------------------------------------------------------
 // HasBase (private trait for generic fix logic)
@@ -342,11 +328,11 @@ where
 // Modeler
 // ---------------------------------------------------------------------------
 
-pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
+pub type DefineFn<'m, B, E, Env, Err> = dyn for<'a> FnOnce(
         &'a mut HelperFactory<B, E>,
-        &'a VarContext<'a, B, E, Db>,
+        &'a VarContext<'a, B, E, Env>,
         E,
-    ) -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
+    ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
     + Send
     + 'm;
 
@@ -371,26 +357,26 @@ pub type DefineFn<'m, B, E, Db, Err> = dyn for<'a> FnOnce(
 /// Fix methods use interior mutability ([`Mutex`]) for the cache,
 /// allowing `VarContext` to be passed as a shared reference through
 /// the HRTB-based closure signature while still caching results.
-pub struct VarContext<'a, B, E, Db>
+pub struct VarContext<'a, B, E, Env>
 where
     B: UsableData,
     E: UsableData,
 {
     base: &'a HashMap<B, Variable>,
     extras: &'a HashMap<E, Variable>,
-    fixers: &'a [Box<FixerFn<'a, B, Db>>],
-    db: &'a Db,
+    fixers: &'a [Box<FixerFn<'a, B, Env>>],
+    env: &'a Env,
     cache: &'a Mutex<HashMap<B, Option<f64>>>,
 }
 
-impl<'a, B, E, Db> VarContext<'a, B, E, Db>
+impl<'a, B, E, Env> VarContext<'a, B, E, Env>
 where
     B: UsableData,
     E: UsableData,
 {
-    /// Access the data source.
-    pub fn db(&self) -> &Db {
-        self.db
+    /// Access the environment.
+    pub fn env(&self) -> &Env {
+        self.env
     }
 
     /// Look up the kind of a base variable.
@@ -415,7 +401,7 @@ where
     /// Resolve fix for a single base variable. Checks cache first,
     /// then calls fixers in order. Caches both `Some` and `None`
     /// results so a variable is never queried twice.
-    async fn resolve_fix(&self, b: &B) -> Option<f64> {
+    fn resolve_fix(&self, b: &B) -> Option<f64> {
         if self.base.contains_key(b) {
             return None;
         }
@@ -424,7 +410,7 @@ where
         }
         let mut result = None;
         for fixer in self.fixers {
-            if let Some(value) = fixer(b, self.db).await {
+            if let Some(value) = fixer(b, self.env) {
                 result = Some(value);
                 break;
             }
@@ -435,14 +421,14 @@ where
 
     /// Collect fix values for a set of base variable references.
     /// Deduplicates and uses the cache.
-    async fn resolve_fixes<'b>(&self, base_refs: impl Iterator<Item = &'b B>) -> HashMap<B, f64>
+    fn resolve_fixes<'b>(&self, base_refs: impl Iterator<Item = &'b B>) -> HashMap<B, f64>
     where
         B: 'b,
     {
         let mut fixes = HashMap::new();
         for b in base_refs {
             if !fixes.contains_key(b) {
-                if let Some(val) = self.resolve_fix(b).await {
+                if let Some(val) = self.resolve_fix(b) {
                     fixes.insert(b.clone(), val);
                 }
             }
@@ -452,12 +438,12 @@ where
 
     /// Fix a single constraint by resolving undeclared base
     /// variables through the fixer chain.
-    pub async fn fix_constraint(
+    pub fn fix_constraint(
         &self,
         constraint: Constraint<ExtraVar<B, E>>,
     ) -> (Constraint<ExtraVar<B, E>>, HashMap<B, f64>) {
         let base_refs = constraint.variable_refs().filter_map(|v| v.as_base());
-        let fixes = self.resolve_fixes(base_refs).await;
+        let fixes = self.resolve_fixes(base_refs);
         if fixes.is_empty() {
             return (constraint, fixes);
         }
@@ -470,12 +456,12 @@ where
 
     /// Fix a single linear expression by resolving undeclared base
     /// variables through the fixer chain.
-    pub async fn fix_expr(
+    pub fn fix_expr(
         &self,
         expr: LinExpr<ExtraVar<B, E>>,
     ) -> (LinExpr<ExtraVar<B, E>>, HashMap<B, f64>) {
         let base_refs = expr.variable_refs().filter_map(|v| v.as_base());
-        let fixes = self.resolve_fixes(base_refs).await;
+        let fixes = self.resolve_fixes(base_refs);
         if fixes.is_empty() {
             return (expr, fixes);
         }
@@ -489,7 +475,7 @@ where
     /// Fix a batch of constraints. Resolves all undeclared base
     /// variables across the batch, then reduces each constraint.
     /// Trivially-true constraints are filtered out.
-    pub async fn fix_constraints(
+    pub fn fix_constraints(
         &self,
         constraints: Vec<Constraint<ExtraVar<B, E>>>,
     ) -> (Vec<Constraint<ExtraVar<B, E>>>, HashMap<B, f64>) {
@@ -497,7 +483,7 @@ where
             .iter()
             .flat_map(|c| c.variable_refs())
             .filter_map(|v| v.as_base());
-        let fixes = self.resolve_fixes(base_refs).await;
+        let fixes = self.resolve_fixes(base_refs);
         if fixes.is_empty() {
             return (constraints, fixes);
         }
@@ -514,13 +500,13 @@ where
     }
 }
 
-struct ExtraDef<'m, B, E, Db, Err>
+struct ExtraDef<'m, B, E, Env, Err>
 where
     B: UsableData,
     E: UsableData,
 {
     kind: Variable,
-    define: Box<DefineFn<'m, B, E, Db, Err>>,
+    define: Box<DefineFn<'m, B, E, Env, Err>>,
 }
 
 /// Lazy ILP modeler.
@@ -529,10 +515,11 @@ where
 /// closures must outlive (use `'static` if you don't need
 /// borrowing). `B` is the base-variable name type, `E` is the
 /// extra-variable name type, `C` is the user constraint
-/// description type, `Db` is the shared async context handed to
-/// each extra-definition closure, and `Err` is the user-defined
-/// error type returned by fallible extra-definition closures.
-pub struct Modeler<'m, B, E, C, Db, Err>
+/// description type, `Env` is the shared context handed to
+/// each extra-definition closure and fixer, and `Err` is the
+/// user-defined error type returned by fallible extra-definition
+/// closures.
+pub struct Modeler<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -541,11 +528,11 @@ where
     base_vars: HashMap<B, Variable>,
     constraints: Vec<(Constraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: HashMap<E, ExtraDef<'m, B, E, Db, Err>>,
-    fixers: Vec<Box<FixerFn<'m, B, Db>>>,
+    extras: HashMap<E, ExtraDef<'m, B, E, Env, Err>>,
+    fixers: Vec<Box<FixerFn<'m, B, Env>>>,
 }
 
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -593,13 +580,13 @@ where
         self.add_objective(coef, Objective::new(expr, ObjectiveSense::Maximize));
     }
 
-    /// Register an async fixer closure. At build time, for every
+    /// Register a fixer closure. At build time, for every
     /// undeclared base variable found in constraints/objectives,
     /// fixers are called in registration order; the first to return
     /// `Some(value)` wins and that variable is substituted out.
     pub fn add_fixer<F>(&mut self, fixer: F)
     where
-        F: for<'a> Fn(&'a B, &'a Db) -> BoxFuture<'a, Option<f64>> + Send + Sync + 'm,
+        F: Fn(&B, &Env) -> Option<f64> + Send + Sync + 'm,
     {
         self.fixers.push(Box::new(fixer));
     }
@@ -618,10 +605,9 @@ where
     where
         F: for<'a> FnOnce(
                 &'a mut HelperFactory<B, E>,
-                &'a VarContext<'a, B, E, Db>,
+                &'a VarContext<'a, B, E, Env>,
                 E,
-            )
-                -> BoxFuture<'a, Result<Vec<Constraint<ExtraVar<B, E>>>, Err>>
+            ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
             + Send
             + 'm,
     {
@@ -645,7 +631,7 @@ where
         &mut self,
         name: E,
         kind: Variable,
-        define: Box<DefineFn<'m, B, E, Db, Err>>,
+        define: Box<DefineFn<'m, B, E, Env, Err>>,
     ) -> Result<(), DuplicateExtra<E>> {
         if self.extras.contains_key(&name) {
             return Err(DuplicateExtra(name));
@@ -654,41 +640,11 @@ where
         Ok(())
     }
 
-    /// Synchronous convenience wrapper around [`declare_extra`].
-    /// Most callers' extras don't actually need async; this avoids
-    /// forcing them to wrap their definition in
-    /// `Box::pin(async move { ... })`.
-    pub fn declare_extra_sync<F>(
-        &mut self,
-        name: E,
-        kind: Variable,
-        define: F,
-    ) -> Result<(), DuplicateExtra<E>>
-    where
-        F: for<'a> FnOnce(
-                &'a mut HelperFactory<B, E>,
-                &'a VarContext<'a, B, E, Db>,
-                E,
-            ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, Err>
-            + Send
-            + 'm,
-    {
-        // Smuggle the FnOnce into a closure shape that matches
-        // declare_extra. We need an Option dance because the inner
-        // closure must be FnOnce-callable through a `for<'a>` HRTB.
-        let mut slot: Option<F> = Some(define);
-        self.declare_extra(name, kind, move |factory, ctx, e| {
-            let f = slot.take().expect("define called more than once");
-            let result = f(factory, ctx, e);
-            Box::pin(async move { result })
-        })
-    }
-
     /// Register multiple extras at once. Checks for duplicates
     /// both within the batch and against already-declared extras.
     pub fn declare_extras(
         &mut self,
-        entries: impl IntoIterator<Item = (E, ExtraEntry<'m, B, E, Db, Err>)>,
+        entries: impl IntoIterator<Item = (E, ExtraEntry<'m, B, E, Env, Err>)>,
     ) -> Result<(), DuplicateExtra<E>> {
         let entries: Vec<_> = entries.into_iter().collect();
         let mut seen: HashSet<E> = HashSet::new();
@@ -706,50 +662,23 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// SourceVar integration
+// DescribeVar integration
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
 where
-    B: SourceVar<Db> + UsableData + 'm,
-    Db: Sync + 'm,
+    B: DescribeVar<Env = Env> + UsableData + 'm,
+    Env: Sync + 'm,
     E: UsableData,
     C: UsableData,
     Err: Debug + Send + 'static,
 {
-    /// Create a modeler by querying the data source for base variables
-    /// via [`SourceVar::vars`], and register [`SourceVar::fix`] as the
-    /// first fixer in the chain.
-    pub async fn from_source(db: &Db) -> Self {
-        let base_vars = B::vars(db).await;
+    /// Create a modeler from a [`DescribeVar`] type, using the
+    /// environment for variable enumeration and fix resolution.
+    pub fn from_described(env: &Env) -> Self {
+        let base_vars = B::enumerate(env);
         let mut modeler = Self::new(base_vars);
-        modeler.add_fixer(|b: &B, db: &Db| Box::pin(b.fix(db)));
-        modeler
-    }
-}
-
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
-where
-    B: DescribeVar + UsableData + 'm,
-    B::Env: LoadEnv<Db> + Send + Sync,
-    Db: Sync + 'm,
-    E: UsableData,
-    C: UsableData,
-    Err: Debug + Send + 'static,
-{
-    /// Create a modeler from a [`DescribeVar`] type, loading the
-    /// environment once via [`LoadEnv`]. More efficient than
-    /// [`from_source`](Self::from_source) for `DescribeVar` types
-    /// because the env is loaded once and captured by the fixer
-    /// closure.
-    pub async fn from_described(db: &Db) -> Self {
-        let env = B::Env::load(db).await;
-        let base_vars = B::enumerate(&env);
-        let mut modeler = Self::new(base_vars);
-        modeler.add_fixer(move |b: &B, _db: &Db| {
-            let result = b.check_fix(&env);
-            Box::pin(async move { result })
-        });
+        modeler.add_fixer(|b: &B, env: &Env| b.check_fix(env));
         modeler
     }
 }
@@ -773,18 +702,18 @@ where
     path: Vec<E>,
 }
 
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Db: Sync,
+    Env: Sync,
     Err: Debug + Send + 'static,
 {
     /// Run the lazy expansion fixpoint and return the assembled
-    /// [`Model`]. `db` is passed to every extra-definition
+    /// [`Model`]. `env` is passed to every extra-definition
     /// closure and to the fixer chain.
-    pub async fn build(mut self, db: &Db) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+    pub fn build(mut self, env: &Env) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
         // Move data out of self for the build scope.
         let mut extras = std::mem::take(&mut self.extras);
         let base_vars = std::mem::take(&mut self.base_vars);
@@ -801,7 +730,7 @@ where
             base: &base_vars,
             extras: &extras_kinds,
             fixers: &fixers,
-            db,
+            env,
             cache: &fix_cache,
         };
 
@@ -829,7 +758,7 @@ where
             }
             let mut fixes_var: HashMap<Var<B, E>, f64> = HashMap::new();
             for b in all_undeclared {
-                if let Some(val) = ctx.resolve_fix(&b).await {
+                if let Some(val) = ctx.resolve_fix(&b) {
                     fixes_var.insert(Var::Base(b), val);
                 }
             }
@@ -907,11 +836,10 @@ where
                 &base_vars,
                 &extras_kinds,
                 &fixers,
-                db,
+                env,
                 &fix_cache,
                 root,
-            )
-            .await?;
+            )?;
         }
 
         // Step 4: partition constraints for reconstruction.
@@ -964,144 +892,140 @@ where
     }
 }
 
-fn expand<'s, 'm, B, E, C, Db, Err>(
+fn expand<'s, 'm, B, E, C, Env, Err>(
     state: &'s mut BuildState<B, E, C>,
-    extras: &'s mut HashMap<E, ExtraDef<'m, B, E, Db, Err>>,
+    extras: &'s mut HashMap<E, ExtraDef<'m, B, E, Env, Err>>,
     base_vars: &'s HashMap<B, Variable>,
     extras_kinds: &'s HashMap<E, Variable>,
-    fixers: &'s [Box<FixerFn<'m, B, Db>>],
-    db: &'s Db,
+    fixers: &'s [Box<FixerFn<'m, B, Env>>],
+    env: &'s Env,
     fix_cache: &'s Mutex<HashMap<B, Option<f64>>>,
     e: E,
-) -> BoxFuture<'s, Result<(), BuildError<B, E, C, Err>>>
+) -> Result<(), BuildError<B, E, C, Err>>
 where
     B: UsableData,
     E: UsableData,
     C: UsableData,
-    Db: Sync,
+    Env: Sync,
     Err: Debug + Send + 'static,
     'm: 's,
 {
-    Box::pin(async move {
-        if state.expanded.contains(&e) {
-            return Ok(());
-        }
-        if state.in_progress.contains(&e) {
-            let start = state.path.iter().position(|x| *x == e).unwrap_or(0);
-            let mut cycle: Vec<E> = state.path[start..].to_vec();
-            cycle.push(e);
-            return Err(BuildError::CyclicExtra { cycle });
-        }
-        let def = extras
-            .remove(&e)
-            .ok_or_else(|| BuildError::UndeclaredExtra(e.clone()))?;
+    if state.expanded.contains(&e) {
+        return Ok(());
+    }
+    if state.in_progress.contains(&e) {
+        let start = state.path.iter().position(|x| *x == e).unwrap_or(0);
+        let mut cycle: Vec<E> = state.path[start..].to_vec();
+        cycle.push(e);
+        return Err(BuildError::CyclicExtra { cycle });
+    }
+    let def = extras
+        .remove(&e)
+        .ok_or_else(|| BuildError::UndeclaredExtra(e.clone()))?;
 
-        state.in_progress.insert(e.clone());
-        state.path.push(e.clone());
+    state.in_progress.insert(e.clone());
+    state.path.push(e.clone());
 
-        let mut factory: HelperFactory<B, E> = HelperFactory::default();
-        let constraints = {
-            let ctx = VarContext {
-                base: base_vars,
-                extras: extras_kinds,
-                fixers,
-                db,
-                cache: fix_cache,
-            };
-            (def.define)(&mut factory, &ctx, e.clone())
-                .await
-                .map_err(|err| BuildError::ExtraError(e.clone(), err))?
-        };
-
-        // Smuggling check.
-        for c in &constraints {
-            for v in c.variable_refs() {
-                if let ExtraVar::Helper(hid) = v
-                    && !factory.declared.contains_key(hid)
-                {
-                    return Err(BuildError::HelperLeak {
-                        used_in: e.clone(),
-                        id: hid.clone(),
-                    });
-                }
-            }
-        }
-
-        // Safety-net fix: resolve undeclared base variables in
-        // closure output via the VarContext cache.
+    let mut factory: HelperFactory<B, E> = HelperFactory::default();
+    let constraints = {
         let ctx = VarContext {
             base: base_vars,
             extras: extras_kinds,
             fixers,
-            db,
+            env,
             cache: fix_cache,
         };
-        let (constraints, _fixes) = ctx.fix_constraints(constraints).await;
+        (def.define)(&mut factory, &ctx, e.clone())
+            .map_err(|err| BuildError::ExtraError(e.clone(), err))?
+    };
 
-        // Register the extra itself and its helpers as variables.
-        state
-            .out_vars
-            .insert(InternalVar::Extra(e.clone()), def.kind);
-        for (hid, kind) in factory.declared {
-            state.out_vars.insert(
-                InternalVar::Helper {
-                    owner: e.clone(),
-                    id: hid,
-                },
-                kind,
-            );
-        }
-
-        // Transmute constraints and append, collecting deps.
-        let mut deps: Vec<E> = Vec::new();
-        let mut seen_dep: HashSet<E> = HashSet::new();
-        for (i, c) in constraints.into_iter().enumerate() {
-            let owner = e.clone();
-            let tc: Constraint<InternalVar<B, E>> = c.transmute(|v| match v {
-                ExtraVar::Base(b) => InternalVar::Base(b.clone()),
-                ExtraVar::Extra(ex) => InternalVar::Extra(ex.clone()),
-                ExtraVar::Helper(h) => InternalVar::Helper {
-                    owner: owner.clone(),
-                    id: h.clone(),
-                },
-            });
-            for v in tc.variable_refs() {
-                if let InternalVar::Extra(ex) = v
-                    && *ex != e
-                    && !state.expanded.contains(ex)
-                    && seen_dep.insert(ex.clone())
-                {
-                    deps.push(ex.clone());
-                }
+    // Smuggling check.
+    for c in &constraints {
+        for v in c.variable_refs() {
+            if let ExtraVar::Helper(hid) = v
+                && !factory.declared.contains_key(hid)
+            {
+                return Err(BuildError::HelperLeak {
+                    used_in: e.clone(),
+                    id: hid.clone(),
+                });
             }
-            state.out_constraints.push((
-                tc,
-                ConstraintSource::DefiningExtra {
-                    extra: e.clone(),
-                    index: i,
-                },
-            ));
         }
+    }
 
-        // Recurse into deps.
-        for d in deps {
-            expand(
-                state,
-                extras,
-                base_vars,
-                extras_kinds,
-                fixers,
-                db,
-                fix_cache,
-                d,
-            )
-            .await?;
+    // Safety-net fix: resolve undeclared base variables in
+    // closure output via the VarContext cache.
+    let ctx = VarContext {
+        base: base_vars,
+        extras: extras_kinds,
+        fixers,
+        env,
+        cache: fix_cache,
+    };
+    let (constraints, _fixes) = ctx.fix_constraints(constraints);
+
+    // Register the extra itself and its helpers as variables.
+    state
+        .out_vars
+        .insert(InternalVar::Extra(e.clone()), def.kind);
+    for (hid, kind) in factory.declared {
+        state.out_vars.insert(
+            InternalVar::Helper {
+                owner: e.clone(),
+                id: hid,
+            },
+            kind,
+        );
+    }
+
+    // Transmute constraints and append, collecting deps.
+    let mut deps: Vec<E> = Vec::new();
+    let mut seen_dep: HashSet<E> = HashSet::new();
+    for (i, c) in constraints.into_iter().enumerate() {
+        let owner = e.clone();
+        let tc: Constraint<InternalVar<B, E>> = c.transmute(|v| match v {
+            ExtraVar::Base(b) => InternalVar::Base(b.clone()),
+            ExtraVar::Extra(ex) => InternalVar::Extra(ex.clone()),
+            ExtraVar::Helper(h) => InternalVar::Helper {
+                owner: owner.clone(),
+                id: h.clone(),
+            },
+        });
+        for v in tc.variable_refs() {
+            if let InternalVar::Extra(ex) = v
+                && *ex != e
+                && !state.expanded.contains(ex)
+                && seen_dep.insert(ex.clone())
+            {
+                deps.push(ex.clone());
+            }
         }
+        state.out_constraints.push((
+            tc,
+            ConstraintSource::DefiningExtra {
+                extra: e.clone(),
+                index: i,
+            },
+        ));
+    }
 
-        state.in_progress.remove(&e);
-        let popped = state.path.pop();
-        debug_assert_eq!(popped.as_ref(), Some(&e));
-        state.expanded.insert(e);
-        Ok(())
-    })
+    // Recurse into deps.
+    for d in deps {
+        expand(
+            state,
+            extras,
+            base_vars,
+            extras_kinds,
+            fixers,
+            env,
+            fix_cache,
+            d,
+        )?;
+    }
+
+    state.in_progress.remove(&e);
+    let popped = state.path.pop();
+    debug_assert_eq!(popped.as_ref(), Some(&e));
+    state.expanded.insert(e);
+    Ok(())
 }

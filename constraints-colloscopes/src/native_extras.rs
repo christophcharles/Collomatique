@@ -14,7 +14,7 @@ type MyBundle = IntConstraintBundle<
     Var,
     ReifiedVarName,
     ConstraintDesc,
-    sqlx::SqlitePool,
+    VarEnv,
     ReifyError<Var, ReifiedVarName>,
 >;
 

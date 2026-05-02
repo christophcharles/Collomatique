@@ -35,6 +35,6 @@ pub(crate) use crate::traits::VarConversionError;
 #[cfg(test)]
 pub(crate) use collomatique_ilp_modeler::bundle::ReifyError;
 #[cfg(test)]
-pub(crate) use collomatique_ilp_modeler::{LoadEnv, Model, Modeler};
+pub(crate) use collomatique_ilp_modeler::{Model, Modeler};
 #[cfg(test)]
 pub(crate) use std::collections::{BTreeMap, HashMap};

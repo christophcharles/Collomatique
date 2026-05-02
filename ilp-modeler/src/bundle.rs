@@ -33,16 +33,16 @@ use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, Var
 /// that it can sit inside a bundle until the bundle is applied.
 /// The extra's name is not stored here — it serves as the key
 /// in the bundle's `HashMap<E, ExtraEntry>`.
-pub struct ExtraEntry<'m, B, E, Db, Err>
+pub struct ExtraEntry<'m, B, E, Env, Err>
 where
     B: UsableData,
     E: UsableData,
 {
     kind: Variable,
-    define: Box<DefineFn<'m, B, E, Db, Err>>,
+    define: Box<DefineFn<'m, B, E, Env, Err>>,
 }
 
-impl<'m, B, E, Db, Err> ExtraEntry<'m, B, E, Db, Err>
+impl<'m, B, E, Env, Err> ExtraEntry<'m, B, E, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -55,12 +55,10 @@ where
     where
         F: for<'a> FnOnce(
                 &'a mut crate::HelperFactory<B, E>,
-                &'a crate::VarContext<'a, B, E, Db>,
+                &'a crate::VarContext<'a, B, E, Env>,
                 E,
-            ) -> crate::BoxFuture<
-                'a,
-                Result<Vec<Constraint<crate::ExtraVar<B, E>>>, Err>,
-            > + Send
+            ) -> Result<Vec<Constraint<crate::ExtraVar<B, E>>>, Err>
+            + Send
             + 'm,
     {
         ExtraEntry {
@@ -75,7 +73,7 @@ where
     }
 
     /// Consume the entry and return its parts.
-    pub(crate) fn into_parts(self) -> (Variable, Box<DefineFn<'m, B, E, Db, Err>>) {
+    pub(crate) fn into_parts(self) -> (Variable, Box<DefineFn<'m, B, E, Env, Err>>) {
         (self.kind, self.define)
     }
 }
@@ -89,7 +87,7 @@ where
 /// [`Modeler::add_objective`] and [`Modeler::declare_extra`]
 /// one-to-one. Bundles compose by appending and are consumed by
 /// [`Modeler::apply_bundle`].
-pub struct ConstraintBundle<'m, B, E, C, Db, Err>
+pub struct ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -97,11 +95,11 @@ where
 {
     constraints: Vec<(Constraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: HashMap<E, ExtraEntry<'m, B, E, Db, Err>>,
-    _phantom: PhantomData<Db>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Env, Err>>,
+    _phantom: PhantomData<Env>,
 }
 
-impl<'m, B, E, C, Db, Err> Default for ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Default for ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -117,7 +115,7 @@ where
     }
 }
 
-impl<'m, B, E, C, Db, Err> ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -178,7 +176,7 @@ where
     pub fn with_extra(
         mut self,
         name: E,
-        entry: ExtraEntry<'m, B, E, Db, Err>,
+        entry: ExtraEntry<'m, B, E, Env, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
         if self.extras.contains_key(&name) {
             return Err(DuplicateExtra(name));
@@ -198,7 +196,7 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Db, Err>> {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Env, Err>> {
         &self.extras
     }
 
@@ -226,7 +224,7 @@ where
 /// Same shape as [`ConstraintBundle`] but the eager constraints
 /// are [`IntConstraint`] rather than [`Constraint`]. The
 /// objective stays as [`Objective`] (no `IntObjective`).
-pub struct IntConstraintBundle<'m, B, E, C, Db, Err>
+pub struct IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -234,11 +232,11 @@ where
 {
     constraints: Vec<(IntConstraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: HashMap<E, ExtraEntry<'m, B, E, Db, Err>>,
-    _phantom: PhantomData<Db>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Env, Err>>,
+    _phantom: PhantomData<Env>,
 }
 
-impl<'m, B, E, C, Db, Err> Default for IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Default for IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -254,7 +252,7 @@ where
     }
 }
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -315,7 +313,7 @@ where
     pub fn with_extra(
         mut self,
         name: E,
-        entry: ExtraEntry<'m, B, E, Db, Err>,
+        entry: ExtraEntry<'m, B, E, Env, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
         if self.extras.contains_key(&name) {
             return Err(DuplicateExtra(name));
@@ -335,7 +333,7 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Db, Err>> {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Env, Err>> {
         &self.extras
     }
 
@@ -358,7 +356,7 @@ where
     /// Drop the int wrapping. Each [`IntConstraint`] is unwrapped
     /// into its underlying [`Constraint`]; objectives and extras
     /// pass through unchanged.
-    pub fn into_general(self) -> ConstraintBundle<'m, B, E, C, Db, Err> {
+    pub fn into_general(self) -> ConstraintBundle<'m, B, E, C, Env, Err> {
         ConstraintBundle {
             constraints: self
                 .constraints
@@ -376,7 +374,7 @@ where
 // Modeler::apply_bundle
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -389,7 +387,7 @@ where
     /// / `declare_extra` calls in field-then-vec order.
     pub fn apply_bundle(
         &mut self,
-        bundle: ConstraintBundle<'m, B, E, C, Db, Err>,
+        bundle: ConstraintBundle<'m, B, E, C, Env, Err>,
     ) -> Result<(), DuplicateExtra<E>> {
         for (c, desc) in bundle.constraints {
             self.add_constraint(c, desc);
@@ -465,9 +463,9 @@ pub enum EagerReifyError<E: UsableData> {
 /// Look up the kind of any [`ExtraVar`] reference reachable
 /// from inside an extra-definition closure. Helpers are routed
 /// through the factory; base/extra refs through `kinds`.
-fn lookup_kind<'a, B, E, Db>(
+fn lookup_kind<'a, B, E, Env>(
     var: &ExtraVar<B, E>,
-    kinds: &'a VarContext<'a, B, E, Db>,
+    kinds: &'a VarContext<'a, B, E, Env>,
     factory: &'a HelperFactory<B, E>,
 ) -> Option<&'a Variable>
 where
@@ -485,11 +483,11 @@ where
 /// indicator. Direct port of
 /// `collo-ml/src/problem/builder.rs:582` (`reify_constraint`)
 /// generalised to operate on `ExtraVar<B, E>`.
-pub(crate) fn reify_and_inner<B, E, Db>(
+pub(crate) fn reify_and_inner<B, E, Env>(
     constraints: &[Constraint<ExtraVar<B, E>>],
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarContext<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Env>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -542,11 +540,11 @@ where
 /// in the big-M linearization. Correctness relies on all
 /// referenced variables being integer: with integrality, an
 /// integer expression `<= epsilon` is equivalent to `<= 0`.
-pub(crate) fn reify_single<B, E, Db>(
+pub(crate) fn reify_single<B, E, Env>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarContext<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Env>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -659,12 +657,12 @@ where
 // IntConstraintBundle::reify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData + 'm,
-    Db: Sync + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static + From<ReifyError<B, E>>,
 {
     /// Add a lazy reified extra to this bundle.
@@ -701,22 +699,19 @@ where
                     .into_iter()
                     .map(|c| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
                     .collect();
-                Box::pin(async move {
-                    let (reduced, fixes) = ctx.fix_constraints(constraints).await;
+                let (reduced, fixes) = ctx.fix_constraints(constraints);
 
-                    for (b, &val) in &fixes {
-                        if val != val.round() {
-                            return Err(Err::from(ReifyError::NonIntegerFixValue {
-                                variable: ExtraVar::Base(b.clone()),
-                                value: val,
-                            }));
-                        }
+                for (b, &val) in &fixes {
+                    if val != val.round() {
+                        return Err(Err::from(ReifyError::NonIntegerFixValue {
+                            variable: ExtraVar::Base(b.clone()),
+                            value: val,
+                        }));
                     }
+                }
 
-                    let result =
-                        reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon);
-                    result.map_err(Err::from)
-                })
+                reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon)
+                    .map_err(Err::from)
             },
         );
 
@@ -765,7 +760,7 @@ where
         self,
         var: E,
         epsilon: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerReifyError<E>> {
         let constraints = self.constraints;
         IntConstraintBundle {
             constraints: Vec::new(),
@@ -785,7 +780,7 @@ where
     pub fn reify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerReifyError<E>> {
         self.reify_with_epsilon(var, 0.1)
     }
 }
@@ -915,12 +910,12 @@ where
 // ConstraintBundle::objectify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: Sync + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static,
 {
     /// Convert the bundle's constraints into a penalty variable
@@ -942,7 +937,7 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         if self.constraints.is_empty() {
             return Err(EagerObjectifyError::EmptyConstraints);
         }
@@ -962,16 +957,13 @@ where
         let entry = ExtraEntry::new(
             Variable::non_negative(),
             move |factory: &mut HelperFactory<B, E>, ctx, e| {
-                let constraints = constraints; // move
-                Box::pin(async move {
-                    let (reduced, _fixes) = ctx.fix_constraints(constraints).await;
-                    Ok(objectify_inner(
-                        &reduced,
-                        ExtraVar::Extra(e),
-                        factory,
-                        alpha,
-                    ))
-                })
+                let (reduced, _fixes) = ctx.fix_constraints(constraints);
+                Ok(objectify_inner(
+                    &reduced,
+                    ExtraVar::Extra(e),
+                    factory,
+                    alpha,
+                ))
             },
         );
 
@@ -997,7 +989,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -1006,7 +998,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -1014,7 +1006,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
@@ -1023,12 +1015,12 @@ where
 // IntConstraintBundle::objectify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: Sync + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static,
 {
     /// Convenience wrapper: drops the int wrapping and delegates
@@ -1038,7 +1030,7 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.into_general()
             .objectify_with_balance_and_coef(var, alpha, coef)
     }
@@ -1049,7 +1041,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -1059,7 +1051,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -1068,7 +1060,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
