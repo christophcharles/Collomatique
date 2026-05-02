@@ -716,7 +716,7 @@ impl Colloscope {
             let warnings = sol
                 .blame()
                 .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(desc) => Some(desc.to_string()),
+                    ConstraintSource::User(desc) => Some(desc.user_readable(&ilp_problem.env)),
                     ConstraintSource::DefiningExtra { .. } => None,
                 })
                 .collect();

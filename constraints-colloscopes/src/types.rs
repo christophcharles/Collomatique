@@ -80,31 +80,53 @@ pub enum ConstraintDesc {
     },
 }
 
-impl std::fmt::Display for ConstraintDesc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ConstraintDesc {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
         match self {
-            ConstraintDesc::Script(Some(origin)) => write!(f, "{}", origin),
-            ConstraintDesc::Script(None) => write!(f, "Script (origine inconnue)"),
+            ConstraintDesc::Script(Some(origin)) => origin.to_string(),
+            ConstraintDesc::Script(None) => "Script (origine inconnue)".to_string(),
             ConstraintDesc::StudentsPerGroupMin {
                 group_list,
                 group,
                 min_students,
-            } => write!(
-                f,
-                "Au moins {} élèves dans le groupe {} de la liste {:?}",
-                min_students, group.0, group_list
-            ),
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                format!(
+                    "Au moins {} élèves dans le groupe {} de la liste {}",
+                    min_students,
+                    group.0 + 1,
+                    gl_name
+                )
+            }
             ConstraintDesc::StudentsPerGroupMax {
                 group_list,
                 group,
                 max_students,
-            } => write!(
-                f,
-                "Au plus {} élèves dans le groupe {} de la liste {:?}",
-                max_students, group.0, group_list
-            ),
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                format!(
+                    "Au plus {} élèves dans le groupe {} de la liste {}",
+                    max_students,
+                    group.0 + 1,
+                    gl_name
+                )
+            }
         }
     }
+}
+
+fn group_list_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    group_list: GroupListId,
+) -> String {
+    env.group_lists
+        .group_list_map
+        .get(&group_list)
+        .map(|gl| gl.params.name.clone())
+        .unwrap_or_else(|| format!("{:?}", group_list))
 }
 
 impl From<Option<Origin<SqliteDatabaseConnection>>> for ConstraintDesc {
