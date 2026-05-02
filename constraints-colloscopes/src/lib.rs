@@ -2,6 +2,7 @@ mod builder;
 pub mod ids;
 mod native_extras;
 mod problem;
+mod students_per_group;
 mod types;
 
 pub use builder::{ProblemBuilder, default_problem_builder};

@@ -12,7 +12,6 @@ import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
 import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
 import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
-import "collomatique_students_per_group" as students_per_group;
 import "collomatique_balancing_rotation" as balancing_rotation;
 import "collomatique_balancing_slot_rotation" as balancing_slot_rotation;
 import "collomatique_balancing_avoid_twice_in_a_row" as balancing_avoid_twice;
@@ -24,7 +23,6 @@ import "collomatique_slot_pairings" as slot_pairings;
 pub let default_constraint(db: Db) -> Constraint =
     one_interrogation_at_once::constraint(db) and
     group_count_per_interrogation::constraint(db) and
-    students_per_group::constraint(db) and
     limits::constraint(db) and
     students_have_groups::constraint(db) and
     students_per_group_for_subject::constraint(db) and

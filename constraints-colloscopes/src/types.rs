@@ -68,7 +68,43 @@ impl From<ReifiedVar<SqliteDatabaseConnection>> for ReifiedVarName {
 )]
 pub enum ConstraintDesc {
     Script(Option<Origin<SqliteDatabaseConnection>>),
-    Native(&'static str),
+    StudentsPerGroupMin {
+        group_list: GroupListId,
+        group: GroupNum,
+        min_students: u32,
+    },
+    StudentsPerGroupMax {
+        group_list: GroupListId,
+        group: GroupNum,
+        max_students: u32,
+    },
+}
+
+impl std::fmt::Display for ConstraintDesc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstraintDesc::Script(Some(origin)) => write!(f, "{}", origin),
+            ConstraintDesc::Script(None) => write!(f, "Script (origine inconnue)"),
+            ConstraintDesc::StudentsPerGroupMin {
+                group_list,
+                group,
+                min_students,
+            } => write!(
+                f,
+                "Au moins {} élèves dans le groupe {} de la liste {:?}",
+                min_students, group.0, group_list
+            ),
+            ConstraintDesc::StudentsPerGroupMax {
+                group_list,
+                group,
+                max_students,
+            } => write!(
+                f,
+                "Au plus {} élèves dans le groupe {} de la liste {:?}",
+                max_students, group.0, group_list
+            ),
+        }
+    }
 }
 
 impl From<Option<Origin<SqliteDatabaseConnection>>> for ConstraintDesc {
