@@ -6,7 +6,6 @@ import "collomatique_limits" as limits;
 import "collomatique_one_interrogation_at_once" as one_interrogation_at_once;
 import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicity_afab;
 import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
-import "collomatique_forbidden_groups" as forbidden_groups;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
 import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
 import "collomatique_balancing_rotation" as balancing_rotation;
@@ -26,7 +25,6 @@ pub let default_constraint(db: Db) -> Constraint =
     periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and
     periodicity_ofeb::constraint(db) and
-    forbidden_groups::constraint(db) and
     balancing_rotation::constraint(db) and
     balancing_slot_rotation::constraint(db) and
     balancing_avoid_twice::constraint(db) and

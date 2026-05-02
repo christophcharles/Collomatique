@@ -28,17 +28,17 @@ pub(crate) fn extra_var(v: ReifiedVarName) -> V {
 
 // ---- Helper functions reading from Parameters ----
 
-fn week_to_period_id(env: &VarEnv, week: GlobalWeek) -> Option<(PeriodId, usize)> {
+pub(crate) fn week_to_period_id(env: &VarEnv, week: GlobalWeek) -> Option<(PeriodId, usize)> {
     collomatique_binding_colloscopes::tools::week_to_period_id(env, week.0)
 }
 
-fn slot_subject(env: &VarEnv, slot: SlotId) -> Option<SubjectId> {
+pub(crate) fn slot_subject(env: &VarEnv, slot: SlotId) -> Option<SubjectId> {
     env.slots
         .find_slot_subject_and_position(slot)
         .map(|(subject_id, _)| subject_id)
 }
 
-fn group_list_for_interrogation(
+pub(crate) fn group_list_for_interrogation(
     env: &VarEnv,
     slot: SlotId,
     week: GlobalWeek,
@@ -77,7 +77,7 @@ fn is_student_enrolled(env: &VarEnv, student: StudentId, slot: SlotId, week: Glo
         .is_some_and(|students| students.contains(&student))
 }
 
-fn all_slots(env: &VarEnv) -> Vec<SlotId> {
+pub(crate) fn all_slots(env: &VarEnv) -> Vec<SlotId> {
     env.slots
         .subject_map
         .values()
@@ -85,7 +85,7 @@ fn all_slots(env: &VarEnv) -> Vec<SlotId> {
         .collect()
 }
 
-fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
+pub(crate) fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
     collomatique_binding_colloscopes::tools::enumerate_weeks_for_slot(env, slot)
         .into_iter()
         .map(GlobalWeek)

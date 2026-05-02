@@ -100,6 +100,13 @@ pub enum ConstraintDesc {
         group_list: GroupListId,
         group: GroupNum,
     },
+    ForbiddenGroup {
+        group_list: GroupListId,
+        group: GroupNum,
+        slot: SlotId,
+        week: GlobalWeek,
+        subject: SubjectId,
+    },
 }
 
 impl ConstraintDesc {
@@ -192,6 +199,21 @@ impl ConstraintDesc {
                     group.0 + 1,
                     gl_name,
                     group.0 + 2,
+                )
+            }
+            ConstraintDesc::ForbiddenGroup {
+                group_list,
+                group,
+                subject,
+                ..
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "Le groupe {} de la liste {} ne peut avoir de colle dans la matière {} sans élève associé",
+                    group.0 + 1,
+                    gl_name,
+                    subj_name,
                 )
             }
         }

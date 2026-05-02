@@ -76,6 +76,11 @@ impl ProblemBuilder {
             .apply_bundle(groups_filled_by_ascending_order_bundle.into_general())
             .expect("no duplicate extras from groups_filled_by_ascending_order");
 
+        let forbidden_groups_bundle = crate::forbidden_groups::build(&env);
+        modeler
+            .apply_bundle(forbidden_groups_bundle.into_general())
+            .expect("no duplicate extras from forbidden_groups");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
