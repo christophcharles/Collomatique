@@ -65,56 +65,6 @@ pub(crate) fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Ve
         .collect()
 }
 
-pub(crate) fn is_group_list_prefilled(env: &VarEnv, group_list: GroupListId) -> bool {
-    env.group_lists
-        .group_list_map
-        .get(&group_list)
-        .is_some_and(|gl| gl.filling.is_prefilled())
-}
-
-pub(crate) fn prefilled_student_count(
-    env: &VarEnv,
-    group_list: GroupListId,
-    group: GroupNum,
-) -> usize {
-    let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
-        return 0;
-    };
-    match &gl.filling {
-        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
-            groups.get(group.0 as usize).map_or(0, |g| g.students.len())
-        }
-        _ => 0,
-    }
-}
-
-fn student_prefilled_group(
-    env: &VarEnv,
-    student: StudentId,
-    group_list: GroupListId,
-) -> Option<GroupNum> {
-    let gl = env.group_lists.group_list_map.get(&group_list)?;
-    gl.filling
-        .find_student_group(student)
-        .map(|n| GroupNum(n as u32))
-}
-
-pub(crate) fn students_for_automatic_group_list(
-    env: &VarEnv,
-    group_list: GroupListId,
-) -> Vec<StudentId> {
-    let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
-        return vec![];
-    };
-    let excluded = gl.filling.excluded_students();
-    env.students
-        .student_map
-        .keys()
-        .filter(|s| !excluded.contains(s))
-        .copied()
-        .collect()
-}
-
 fn is_student_enrolled(env: &VarEnv, student: StudentId, slot: SlotId, week: GlobalWeek) -> bool {
     let Some(subject_id) = slot_subject(env, slot) else {
         return false;
@@ -142,14 +92,6 @@ fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
         .into_iter()
         .map(|w| GlobalWeek(w as u32))
         .collect()
-}
-
-pub(crate) fn all_group_lists(env: &VarEnv) -> Vec<GroupListId> {
-    env.group_lists.group_list_map.keys().copied().collect()
-}
-
-fn all_students(env: &VarEnv) -> Vec<StudentId> {
-    env.students.student_map.keys().copied().collect()
 }
 
 pub(crate) fn students_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<StudentId> {
@@ -261,12 +203,11 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
 
 fn build_student_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for &group_list in all_group_lists(env).iter() {
-        let student_ids = Var::compute_student_ids(env, &(group_list.inner() as i32));
-        let groups = groups_for_group_list(env, group_list);
-        for &student_id_i32 in &student_ids {
-            let student = unsafe { StudentId::new(student_id_i32 as u64) };
-            for &group in &groups {
+    for (&group_list, gl) in &env.group_lists.group_list_map {
+        let students = students_for_group_list(env, group_list);
+        for group_index in 0..gl.params.group_names.len() as u32 {
+            let group = GroupNum(group_index);
+            for &student in &students {
                 let var = ReifiedVarName::StudentInGroup {
                     student,
                     group_list,
@@ -288,43 +229,56 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
 }
 
 fn build_group_has_students(env: &VarEnv) -> MyBundle {
+    use collomatique_state_colloscopes::group_lists::GroupListFilling;
+
     let mut bundle = MyBundle::new();
-    for &group_list in all_group_lists(env).iter() {
-        let groups = groups_for_group_list(env, group_list);
-        for &group in &groups {
+    for (&group_list, gl) in &env.group_lists.group_list_map {
+        for group_index in 0..gl.params.group_names.len() as u32 {
+            let group = GroupNum(group_index);
             let var = ReifiedVarName::GroupHasStudents { group_list, group };
-            if is_group_list_prefilled(env, group_list) {
-                let count = prefilled_student_count(env, group_list, group);
-                if count >= 1 {
+            match &gl.filling {
+                GroupListFilling::Prefilled { groups } => {
+                    let has_students = groups
+                        .get(group_index as usize)
+                        .is_some_and(|g| !g.students.is_empty());
+                    if has_students {
+                        bundle = bundle
+                            .and_reified(var, move || {
+                                vec![IntLinExpr::constant(0).leq(&IntLinExpr::constant(0))]
+                            })
+                            .expect("no duplicate extras");
+                    } else {
+                        bundle = bundle
+                            .and_reified(var, move || {
+                                vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
+                            })
+                            .expect("no duplicate extras");
+                    }
+                }
+                GroupListFilling::Automatic { excluded_students } => {
+                    let students: Vec<StudentId> = env
+                        .students
+                        .student_map
+                        .keys()
+                        .filter(|s| !excluded_students.contains(s))
+                        .copied()
+                        .collect();
                     bundle = bundle
                         .and_reified(var, move || {
-                            vec![IntLinExpr::constant(0).leq(&IntLinExpr::constant(0))]
-                        })
-                        .expect("no duplicate extras");
-                } else {
-                    bundle = bundle
-                        .and_reified(var, move || {
-                            vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
+                            let sum: IntLinExpr<V> = students
+                                .iter()
+                                .map(|&student| {
+                                    IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                                        student,
+                                        group_list,
+                                        group,
+                                    }))
+                                })
+                                .sum();
+                            vec![sum.geq(&IntLinExpr::constant(1))]
                         })
                         .expect("no duplicate extras");
                 }
-            } else {
-                let students = students_for_automatic_group_list(env, group_list);
-                bundle = bundle
-                    .and_reified(var, move || {
-                        let sum: IntLinExpr<V> = students
-                            .iter()
-                            .map(|&student| {
-                                IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
-                                    student,
-                                    group_list,
-                                    group,
-                                }))
-                            })
-                            .sum();
-                        vec![sum.geq(&IntLinExpr::constant(1))]
-                    })
-                    .expect("no duplicate extras");
             }
         }
     }
@@ -338,11 +292,13 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
             let Some(group_list) = group_list_for_interrogation(env, slot, week) else {
                 continue;
             };
-            let student_ids = Var::compute_student_ids(env, &(group_list.inner() as i32));
-            let groups = groups_for_group_list(env, group_list);
-            for &student_id_i32 in &student_ids {
-                let student = unsafe { StudentId::new(student_id_i32 as u64) };
-                for &group in &groups {
+            let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
+                continue;
+            };
+            let students = students_for_group_list(env, group_list);
+            for &student in &students {
+                for group_index in 0..gl.params.group_names.len() as u32 {
+                    let group = GroupNum(group_index);
                     let var = ReifiedVarName::StudentAtInterrogationInGroup {
                         student,
                         slot,
@@ -375,10 +331,12 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
 }
 
 fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
+    use collomatique_state_colloscopes::group_lists::GroupListFilling;
+
     let mut bundle = MyBundle::new();
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
-            for &student in all_students(env).iter() {
+            for &student in env.students.student_map.keys() {
                 let var = ReifiedVarName::StudentAtInterrogation {
                     student,
                     slot,
@@ -403,47 +361,61 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                     continue;
                 };
 
-                if is_group_list_prefilled(env, group_list) {
-                    match student_prefilled_group(env, student, group_list) {
-                        Some(group) => {
-                            bundle = bundle
-                                .and_reified(var, move || {
-                                    let expr = IntLinExpr::var(extra_var(
-                                        ReifiedVarName::GroupInInterrogation { slot, week, group },
-                                    ));
-                                    vec![expr.geq(&IntLinExpr::constant(1))]
-                                })
-                                .expect("no duplicate extras");
-                        }
-                        None => {
-                            bundle = bundle
-                                .and_reified(var, move || {
-                                    vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
-                                })
-                                .expect("no duplicate extras");
+                let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
+                    continue;
+                };
+
+                match &gl.filling {
+                    GroupListFilling::Prefilled { groups } => {
+                        let group = groups.iter().enumerate().find_map(|(i, g)| {
+                            g.students.contains(&student).then(|| GroupNum(i as u32))
+                        });
+                        match group {
+                            Some(group) => {
+                                bundle = bundle
+                                    .and_reified(var, move || {
+                                        let expr = IntLinExpr::var(extra_var(
+                                            ReifiedVarName::GroupInInterrogation {
+                                                slot,
+                                                week,
+                                                group,
+                                            },
+                                        ));
+                                        vec![expr.geq(&IntLinExpr::constant(1))]
+                                    })
+                                    .expect("no duplicate extras");
+                            }
+                            None => {
+                                bundle = bundle
+                                    .and_reified(var, move || {
+                                        vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
+                                    })
+                                    .expect("no duplicate extras");
+                            }
                         }
                     }
-                } else {
-                    let groups = groups_for_group_list(env, group_list);
-                    bundle = bundle
-                        .and_reified(var, move || {
-                            let sum: IntLinExpr<V> = groups
-                                .iter()
-                                .map(|&group| {
-                                    IntLinExpr::var(extra_var(
-                                        ReifiedVarName::StudentAtInterrogationInGroup {
-                                            student,
-                                            slot,
-                                            week,
-                                            group_list,
-                                            group,
-                                        },
-                                    ))
-                                })
-                                .sum();
-                            vec![sum.geq(&IntLinExpr::constant(1))]
-                        })
-                        .expect("no duplicate extras");
+                    GroupListFilling::Automatic { .. } => {
+                        let group_count = gl.params.group_names.len() as u32;
+                        bundle = bundle
+                            .and_reified(var, move || {
+                                let sum: IntLinExpr<V> = (0..group_count)
+                                    .map(|i| {
+                                        let group = GroupNum(i);
+                                        IntLinExpr::var(extra_var(
+                                            ReifiedVarName::StudentAtInterrogationInGroup {
+                                                student,
+                                                slot,
+                                                week,
+                                                group_list,
+                                                group,
+                                            },
+                                        ))
+                                    })
+                                    .sum();
+                                vec![sum.geq(&IntLinExpr::constant(1))]
+                            })
+                            .expect("no duplicate extras");
+                    }
                 }
             }
         }

@@ -1,7 +1,5 @@
 use crate::ids::GroupNum;
-use crate::native_extras::{
-    MyBundle, V, all_group_lists, extra_var, groups_for_group_list, students_for_group_list,
-};
+use crate::native_extras::{MyBundle, V, extra_var, students_for_group_list};
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
@@ -55,14 +53,11 @@ fn build_for_group(
 
 pub fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for &group_list in all_group_lists(env).iter() {
-        let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
-            continue;
-        };
+    for (&group_list, gl) in &env.group_lists.group_list_map {
         let min_students = gl.params.students_per_group.start().get() as i64;
         let max_students = gl.params.students_per_group.end().get() as i64;
-        let groups = groups_for_group_list(env, group_list);
-        for &group in &groups {
+        for group_index in 0..gl.params.group_names.len() as u32 {
+            let group = GroupNum(group_index);
             bundle = build_for_group(env, bundle, group_list, group, min_students, max_students);
         }
     }
