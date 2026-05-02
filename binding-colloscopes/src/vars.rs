@@ -77,30 +77,10 @@ impl Var {
     pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        let Some((subject_id, pos)) = env.slots.find_slot_subject_and_position(slot_id) else {
-            return vec![];
-        };
-        let slot_desc = &env.slots.subject_map[&subject_id].ordered_slots[pos].1;
-        let subject_desc = env
-            .subjects
-            .find_subject(subject_id)
-            .expect("Subject ID should be valid");
-
-        let week_pattern = crate::tools::extract_week_pattern(env, slot_desc.week_pattern);
-        let mut output = vec![];
-        for (week, status) in week_pattern.into_iter().enumerate() {
-            if !status {
-                continue;
-            }
-            let (period, _) = crate::tools::week_to_period_id(env, week)
-                .expect("Week should correspond to some period");
-            if subject_desc.excluded_periods.contains(&period) {
-                continue;
-            }
-            output.push(week as i32);
-        }
-
-        output
+        crate::tools::enumerate_weeks_for_slot(env, slot_id)
+            .into_iter()
+            .map(|w| w as i32)
+            .collect()
     }
 
     pub fn compute_week_range(env: &VarEnv, slot: &i32) -> std::ops::Range<i32> {

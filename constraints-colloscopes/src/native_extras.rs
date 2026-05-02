@@ -86,9 +86,9 @@ fn all_slots(env: &VarEnv) -> Vec<SlotId> {
 }
 
 fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
-    Var::enumerate_weeks_for_slot(env, &(slot.inner() as i32))
+    collomatique_binding_colloscopes::tools::enumerate_weeks_for_slot(env, slot)
         .into_iter()
-        .map(|w| GlobalWeek(w.try_into().expect("week index should be non-negative")))
+        .map(GlobalWeek)
         .collect()
 }
 
