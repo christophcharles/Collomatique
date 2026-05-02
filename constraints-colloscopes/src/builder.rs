@@ -64,6 +64,12 @@ impl ProblemBuilder {
             .apply_bundle(students_have_groups_bundle.into_general())
             .expect("no duplicate extras from students_have_groups");
 
+        let students_per_group_for_subject_bundle =
+            crate::students_per_group_for_subject::build(&env);
+        modeler
+            .apply_bundle(students_per_group_for_subject_bundle.into_general())
+            .expect("no duplicate extras from students_per_group_for_subject");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

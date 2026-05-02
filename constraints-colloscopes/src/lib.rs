@@ -4,6 +4,7 @@ mod native_extras;
 mod problem;
 mod students_have_groups;
 mod students_per_group;
+mod students_per_group_for_subject;
 mod types;
 
 pub use builder::{ProblemBuilder, default_problem_builder};

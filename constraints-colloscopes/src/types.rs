@@ -82,6 +82,20 @@ pub enum ConstraintDesc {
         student: StudentId,
         group_list: GroupListId,
     },
+    StudentsPerGroupForSubjectMin {
+        group_list: GroupListId,
+        group: GroupNum,
+        subject: SubjectId,
+        period: PeriodId,
+        min_students: u32,
+    },
+    StudentsPerGroupForSubjectMax {
+        group_list: GroupListId,
+        group: GroupNum,
+        subject: SubjectId,
+        period: PeriodId,
+        max_students: u32,
+    },
 }
 
 impl ConstraintDesc {
@@ -129,6 +143,44 @@ impl ConstraintDesc {
                     s_name, gl_name
                 )
             }
+            ConstraintDesc::StudentsPerGroupForSubjectMin {
+                group_list,
+                group,
+                subject,
+                period,
+                min_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let subj_name = subject_name(env, *subject);
+                let period_num = period_position(env, *period);
+                format!(
+                    "Au moins {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
+                    min_students,
+                    group.0 + 1,
+                    gl_name,
+                    subj_name,
+                    period_num
+                )
+            }
+            ConstraintDesc::StudentsPerGroupForSubjectMax {
+                group_list,
+                group,
+                subject,
+                period,
+                max_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let subj_name = subject_name(env, *subject);
+                let period_num = period_position(env, *period);
+                format!(
+                    "Au plus {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
+                    max_students,
+                    group.0 + 1,
+                    gl_name,
+                    subj_name,
+                    period_num
+                )
+            }
         }
     }
 }
@@ -142,6 +194,30 @@ fn student_name(
         .get(&student)
         .map(|s| format!("{} {}", s.desc.firstname, s.desc.surname))
         .unwrap_or_else(|| format!("{:?}", student))
+}
+
+fn subject_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    subject: SubjectId,
+) -> String {
+    env.subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(id, _)| *id == subject)
+        .map(|(_, s)| s.parameters.name.clone())
+        .unwrap_or_else(|| format!("{:?}", subject))
+}
+
+fn period_position(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    period: PeriodId,
+) -> usize {
+    env.periods
+        .ordered_period_list
+        .iter()
+        .position(|(id, _)| *id == period)
+        .map(|p| p + 1)
+        .unwrap_or(0)
 }
 
 fn group_list_name(
