@@ -123,11 +123,10 @@ impl ConstraintDesc {
                 min_students,
             } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
                 format!(
                     "Au moins {} élèves dans le groupe {} de la liste {}",
-                    min_students,
-                    group.0 + 1,
-                    gl_name
+                    min_students, g_name, gl_name
                 )
             }
             ConstraintDesc::StudentsPerGroupMax {
@@ -136,11 +135,10 @@ impl ConstraintDesc {
                 max_students,
             } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
                 format!(
                     "Au plus {} élèves dans le groupe {} de la liste {}",
-                    max_students,
-                    group.0 + 1,
-                    gl_name
+                    max_students, g_name, gl_name
                 )
             }
             ConstraintDesc::StudentHasGroup {
@@ -162,15 +160,12 @@ impl ConstraintDesc {
                 min_students,
             } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
                 let subj_name = subject_name(env, *subject);
                 let period_num = period_position(env, *period);
                 format!(
                     "Au moins {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
-                    min_students,
-                    group.0 + 1,
-                    gl_name,
-                    subj_name,
-                    period_num
+                    min_students, g_name, gl_name, subj_name, period_num
                 )
             }
             ConstraintDesc::StudentsPerGroupForSubjectMax {
@@ -181,24 +176,21 @@ impl ConstraintDesc {
                 max_students,
             } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
                 let subj_name = subject_name(env, *subject);
                 let period_num = period_position(env, *period);
                 format!(
                     "Au plus {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
-                    max_students,
-                    group.0 + 1,
-                    gl_name,
-                    subj_name,
-                    period_num
+                    max_students, g_name, gl_name, subj_name, period_num
                 )
             }
             ConstraintDesc::GroupFilledByAscendingOrder { group_list, group } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                let next_g_name = group_name(env, *group_list, GroupNum(group.0 + 1));
                 format!(
                     "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
-                    group.0 + 1,
-                    gl_name,
-                    group.0 + 2,
+                    g_name, gl_name, next_g_name,
                 )
             }
             ConstraintDesc::ForbiddenGroup {
@@ -208,12 +200,11 @@ impl ConstraintDesc {
                 ..
             } => {
                 let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
                 let subj_name = subject_name(env, *subject);
                 format!(
                     "Le groupe {} de la liste {} ne peut avoir de colle dans la matière {} sans élève associé",
-                    group.0 + 1,
-                    gl_name,
-                    subj_name,
+                    g_name, gl_name, subj_name,
                 )
             }
         }
@@ -264,6 +255,24 @@ fn group_list_name(
         .get(&group_list)
         .map(|gl| gl.params.name.clone())
         .unwrap_or_else(|| format!("{:?}", group_list))
+}
+
+fn group_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    group_list: GroupListId,
+    group: GroupNum,
+) -> String {
+    let number = group.0 + 1;
+    let name = env
+        .group_lists
+        .group_list_map
+        .get(&group_list)
+        .and_then(|gl| gl.params.group_names.get(group.0))
+        .and_then(|name| name.as_ref());
+    match name {
+        Some(name) => format!("{} ({})", number, name),
+        None => format!("{}", number),
+    }
 }
 
 impl From<Option<Origin<SqliteDatabaseConnection>>> for ConstraintDesc {
