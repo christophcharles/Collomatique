@@ -401,6 +401,97 @@ async fn reify_duplicate_variable_fails() {
     }
 }
 
+// ----- with_reified / and_reified tests ----------------------------------
+
+#[tokio::test]
+async fn with_reified_constructor() {
+    let bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::with_reified("ind".to_string(), || {
+            let a = IntLinExpr::var(base("a"));
+            vec![a.leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap();
+    assert_eq!(bundle.constraints().len(), 0);
+    assert_eq!(bundle.extras().len(), 1);
+    assert!(bundle.extras().contains_key(&"ind".to_string()));
+}
+
+#[tokio::test]
+async fn and_reified_accumulates() {
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::new()
+        .and_reified("x".to_string(), || {
+            vec![IntLinExpr::var(base("a")).leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap()
+        .and_reified("y".to_string(), || {
+            vec![IntLinExpr::var(base("b")).leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap();
+    assert_eq!(bundle.extras().len(), 2);
+    assert!(bundle.extras().contains_key(&"x".to_string()));
+    assert!(bundle.extras().contains_key(&"y".to_string()));
+}
+
+#[tokio::test]
+async fn and_reified_duplicate_fails() {
+    let result = IntConstraintBundle::<B, E, C, (), TestErr>::new()
+        .and_reified("dup".to_string(), || vec![])
+        .unwrap()
+        .and_reified("dup".to_string(), || vec![]);
+    match result {
+        Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "dup"),
+        Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
+        Ok(_) => panic!("expected DuplicateVariable, got Ok"),
+    }
+}
+
+#[tokio::test]
+async fn and_reified_with_epsilon_validates() {
+    for bad_eps in [0.0, 1.0, -0.5, 1.5, f64::NAN] {
+        let result = IntConstraintBundle::<B, E, C, (), TestErr>::new().and_reified_with_epsilon(
+            "ind".to_string(),
+            || vec![],
+            bad_eps,
+        );
+        match result {
+            Err(EagerReifyError::InvalidEpsilon(_)) => {}
+            Err(other) => panic!("expected InvalidEpsilon for {bad_eps}, got {other:?}"),
+            Ok(_) => panic!("expected InvalidEpsilon for {bad_eps}, got Ok"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn with_reified_matches_reify_behavior() {
+    let a = IntLinExpr::var(base("a"));
+    let b = IntLinExpr::var(base("b"));
+    let c1 = (&a + &b).leq(&IntLinExpr::constant(1));
+    let c2 = (&a + &b).geq(&IntLinExpr::constant(1));
+
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::with_reified(
+        "is_one".to_string(),
+        move || vec![c1, c2],
+    )
+    .unwrap();
+
+    let mut m = fresh_reify();
+    m.apply_bundle(bundle.into_general()).unwrap();
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("is_one")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).await.unwrap().into_problem();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let is_one = cfg
+        .get(InternalVar::<B, E>::Extra("is_one".to_string()))
+        .unwrap();
+    let av = cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap();
+    let bv = cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap();
+    assert_eq!(is_one, 1.0);
+    assert_eq!(av + bv, 1.0);
+}
+
 // ----- Reification coverage tests ----------------------------------------
 
 #[tokio::test]

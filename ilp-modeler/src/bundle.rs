@@ -663,27 +663,29 @@ impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
-    C: UsableData,
+    C: UsableData + 'm,
     Db: Sync + 'm,
     Err: Debug + Send + 'static + From<ReifyError<B, E>>,
 {
-    /// Reify with a custom epsilon. See
-    /// [`IntConstraintBundle::reify`] for the general contract.
+    /// Add a lazy reified extra to this bundle.
     ///
-    /// `epsilon` must satisfy `0 < epsilon < 1`. It controls the
-    /// slack in the big-M linearization; correctness relies on
-    /// all referenced variables being integer.
+    /// `build_constraints` is only called during
+    /// [`Modeler::build`] if the extra is actually referenced.
+    /// At that point, the returned `IntConstraint`s are
+    /// transmuted, fixed, and linearized via big-M reification.
     ///
-    /// Returns `Err` eagerly if `epsilon` is out of range or if
-    /// `var` conflicts with an extra already in the bundle.
-    /// Lazy [`ReifyError`]s (undeclared variables, non-integer
-    /// variables, infinite ranges) still surface later as
-    /// `BuildError::ExtraError`.
-    pub fn reify_with_epsilon(
-        self,
+    /// `epsilon` must satisfy `0 < epsilon < 1`. Returns `Err`
+    /// eagerly if `epsilon` is out of range or if `var` conflicts
+    /// with an extra already in the bundle.
+    pub fn and_reified_with_epsilon<F>(
+        mut self,
         var: E,
+        build_constraints: F,
         epsilon: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
         if !(epsilon > 0.0 && epsilon < 1.0) {
             return Err(EagerReifyError::InvalidEpsilon(epsilon));
         }
@@ -691,19 +693,16 @@ where
             return Err(EagerReifyError::DuplicateVariable(var));
         }
 
-        // Capture inputs by move into the closure.
-        let int_constraints: Vec<Constraint<ExtraVar<B, E>>> = self
-            .constraints
-            .into_iter()
-            .map(|(c, _desc)| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
-            .collect();
-
         let entry = ExtraEntry::new(
             Variable::binary(),
             move |factory: &mut HelperFactory<B, E>, ctx, e| {
-                let int_constraints = int_constraints; // move
+                let int_constraints = build_constraints();
+                let constraints: Vec<Constraint<ExtraVar<B, E>>> = int_constraints
+                    .into_iter()
+                    .map(|c| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
+                    .collect();
                 Box::pin(async move {
-                    let (reduced, fixes) = ctx.fix_constraints(int_constraints).await;
+                    let (reduced, fixes) = ctx.fix_constraints(constraints).await;
 
                     for (b, &val) in &fixes {
                         if val != val.round() {
@@ -721,32 +720,68 @@ where
             },
         );
 
-        let mut extras = self.extras;
-        extras.insert(var, entry);
-
-        Ok(IntConstraintBundle {
-            constraints: Vec::new(),
-            objectives: self.objectives,
-            extras,
-            _phantom: PhantomData,
-        })
+        self.extras.insert(var, entry);
+        Ok(self)
     }
 
-    /// Reify the bundle's `constraints` field into a binary
+    /// Add a lazy reified extra with the default epsilon of 0.1.
+    pub fn and_reified<F>(self, var: E, build_constraints: F) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        self.and_reified_with_epsilon(var, build_constraints, 0.1)
+    }
+
+    /// Construct a bundle containing a single lazy reified extra
+    /// with a custom epsilon.
+    pub fn with_reified_with_epsilon<F>(
+        var: E,
+        build_constraints: F,
+        epsilon: f64,
+    ) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        Self::new().and_reified_with_epsilon(var, build_constraints, epsilon)
+    }
+
+    /// Construct a bundle containing a single lazy reified extra
+    /// with the default epsilon of 0.1.
+    pub fn with_reified<F>(var: E, build_constraints: F) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        Self::new().and_reified(var, build_constraints)
+    }
+
+    /// Reify the bundle's eager `constraints` into a binary
+    /// indicator named `var` with a custom epsilon.
+    ///
+    /// Returns a new bundle whose `constraints` is empty (the
+    /// linearization lives inside the new extra's closure),
+    /// `objectives` is a pass-through, and `extras` is
+    /// `self.extras` plus one new binary extra for `var`.
+    pub fn reify_with_epsilon(
+        self,
+        var: E,
+        epsilon: f64,
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+        let constraints = self.constraints;
+        IntConstraintBundle {
+            constraints: Vec::new(),
+            objectives: self.objectives,
+            extras: self.extras,
+            _phantom: PhantomData,
+        }
+        .and_reified_with_epsilon(
+            var,
+            move || constraints.into_iter().map(|(c, _desc)| c).collect(),
+            epsilon,
+        )
+    }
+
+    /// Reify the bundle's eager `constraints` into a binary
     /// indicator named `var` using the default epsilon of 0.1.
-    ///
-    /// Returns a new [`IntConstraintBundle`] whose:
-    ///
-    /// - `constraints` is empty (the linearization lives inside
-    ///   the new extra's body, not at top level),
-    /// - `objectives` is a pass-through copy of self's,
-    /// - `extras` is `self.extras` unchanged plus one new
-    ///   `ExtraEntry` for `var` with kind binary.
-    ///
-    /// Returns `Err` if `var` conflicts with an extra already
-    /// in the bundle. Lazy [`ReifyError`]s surface later as
-    /// `BuildError::ExtraError(var, _)` when the modeler
-    /// expands the new extra.
     pub fn reify(
         self,
         var: E,
