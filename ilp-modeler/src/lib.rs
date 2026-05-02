@@ -845,8 +845,6 @@ where
     /// [`Model`]. `db` is passed to every extra-definition
     /// closure and to the fixer chain.
     pub async fn build(mut self, db: &Db) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
-        let build_t0 = std::time::Instant::now();
-
         // Move data out of self for the build scope.
         let mut extras = std::mem::take(&mut self.extras);
         let base_vars = std::mem::take(&mut self.base_vars);
@@ -867,11 +865,8 @@ where
             cache: &fix_cache,
         };
 
-        eprintln!("[modeler.build] setup: {:?}", build_t0.elapsed());
-
         // Step 0: lazily resolve fixes for user constraints and
         // objectives via the VarContext cache.
-        let step0_t = std::time::Instant::now();
         {
             let mut all_undeclared: HashSet<B> = HashSet::new();
             for (c, _) in &self.constraints {
@@ -909,11 +904,6 @@ where
             }
         }
 
-        eprintln!(
-            "[modeler.build] step 0 (fix resolution): {:?}",
-            step0_t.elapsed()
-        );
-
         // Step 1: transmute user constraints/objectives to InternalVar.
         let user_constraints: Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)> = self
             .constraints
@@ -941,7 +931,6 @@ where
         let folded_obj: Objective<InternalVar<B, E>> =
             folded_obj_var.transmute(|v| InternalVar::from(v.clone()));
 
-        let step2_t = std::time::Instant::now();
         // Step 2: collect initial roots.
         let mut roots: Vec<E> = Vec::new();
         let mut seen_root: HashSet<E> = HashSet::new();
@@ -962,13 +951,7 @@ where
             }
         }
 
-        eprintln!(
-            "[modeler.build] step 1+2 (transmute + roots): {:?}",
-            step2_t.elapsed()
-        );
-
         // Step 3: DFS expansion.
-        let step3_t = std::time::Instant::now();
         let mut state: BuildState<B, E, C> = BuildState {
             out_vars: HashMap::new(),
             out_constraints: user_constraints,
@@ -991,15 +974,7 @@ where
             .await?;
         }
 
-        eprintln!(
-            "[modeler.build] step 3 (DFS expansion): {:?}, expanded {} extras, {} constraints",
-            step3_t.elapsed(),
-            state.expanded.len(),
-            state.out_constraints.len()
-        );
-
         // Step 4: partition constraints for reconstruction.
-        let step4_t = std::time::Instant::now();
         let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
         for (b, kind) in &base_vars {
             all_vars.insert(InternalVar::Base(b.clone()), kind.clone());
@@ -1032,25 +1007,13 @@ where
             })
             .collect();
 
-        eprintln!(
-            "[modeler.build] step 4 (partition): {:?}",
-            step4_t.elapsed()
-        );
-
         // Step 5: feed everything into ProblemBuilder.
-        let step5_t = std::time::Instant::now();
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
                 .set_variables(all_vars)
                 .add_constraints(state.out_constraints)
                 .set_objective(folded_obj);
         let problem = builder.build().map_err(BuildError::Ilp)?;
-
-        eprintln!(
-            "[modeler.build] step 5 (ILP build): {:?}",
-            step5_t.elapsed()
-        );
-        eprintln!("[modeler.build] total: {:?}", build_t0.elapsed());
 
         Ok(Model {
             problem,

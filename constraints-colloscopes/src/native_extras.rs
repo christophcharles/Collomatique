@@ -418,30 +418,10 @@ fn register_student_at_interrogation(modeler: &mut MyModeler<'_>, env: &Arc<VarE
 // ---- Public API ----
 
 pub fn register_native_extras(modeler: &mut MyModeler<'_>, env: Arc<VarEnv>) {
-    let t = std::time::Instant::now();
     register_group_in_interrogation(modeler, &env);
-    eprintln!("[native] group_in_interrogation: {:?}", t.elapsed());
-
-    let t = std::time::Instant::now();
     register_interrogation_has_groups(modeler, &env);
-    eprintln!("[native] interrogation_has_groups: {:?}", t.elapsed());
-
-    let t = std::time::Instant::now();
     register_student_in_group(modeler, &env);
-    eprintln!("[native] student_in_group: {:?}", t.elapsed());
-
-    let t = std::time::Instant::now();
     register_group_has_students(modeler, &env);
-    eprintln!("[native] group_has_students: {:?}", t.elapsed());
-
-    let t = std::time::Instant::now();
     register_student_at_interrogation_in_group(modeler, &env);
-    eprintln!(
-        "[native] student_at_interrogation_in_group: {:?}",
-        t.elapsed()
-    );
-
-    let t = std::time::Instant::now();
     register_student_at_interrogation(modeler, &env);
-    eprintln!("[native] student_at_interrogation: {:?}", t.elapsed());
 }
