@@ -1,4 +1,4 @@
-use crate::native_extras::register_native_extras;
+use crate::native_extras::build_native_extras;
 use crate::problem::Problem;
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
@@ -62,7 +62,10 @@ impl ProblemBuilder {
             .apply_bundle(script_bundle.into_general())
             .expect("no duplicate extras from script");
 
-        register_native_extras(&mut modeler, env);
+        let native_bundle = build_native_extras(&env);
+        modeler
+            .apply_bundle(native_bundle.into_general())
+            .expect("no duplicate extras from native");
 
         let model = modeler
             .build(db)

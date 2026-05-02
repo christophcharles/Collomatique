@@ -1,15 +1,22 @@
-use crate::builder::MyModeler;
 use crate::ids::{GlobalWeek, GroupNum};
-use crate::types::ReifiedVarName;
+use crate::types::{ConstraintDesc, ReifiedVarName};
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_ilp_modeler::Var as ModelerVar;
+use collomatique_ilp_modeler::bundle::ReifyError;
+use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::ids::{
     GroupListId, Id, PeriodId, SlotId, StudentId, SubjectId,
 };
-use std::sync::Arc;
 
 type V = ModelerVar<Var, ReifiedVarName>;
+type MyBundle = IntConstraintBundle<
+    'static,
+    Var,
+    ReifiedVarName,
+    ConstraintDesc,
+    sqlx::SqlitePool,
+    ReifyError<Var, ReifiedVarName>,
+>;
 
 fn base_var(v: Var) -> V {
     ModelerVar::Base(v)
@@ -140,63 +147,59 @@ fn all_students(env: &VarEnv) -> Vec<StudentId> {
 
 // ---- Reified variable builders (lazy registration) ----
 
-fn register_group_in_interrogation(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
+fn build_group_in_interrogation(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
             for group in groups_for_interrogation(env, slot, week) {
                 let var = ReifiedVarName::GroupInInterrogation { slot, week, group };
-                modeler
-                    .declare_reified(
-                        var,
-                        move || {
-                            let expr =
-                                IntLinExpr::var(base_var(Var::GroupInInterrogationInternal {
-                                    slot: slot.inner() as i32,
-                                    week: week.0 as i32,
-                                    group: group.0 as i32,
-                                }));
-                            vec![expr.eq(&IntLinExpr::constant(1))]
-                        },
-                        0.1,
-                    )
+                bundle = bundle
+                    .and_reified(var, move || {
+                        let expr = IntLinExpr::var(base_var(Var::GroupInInterrogationInternal {
+                            slot: slot.inner() as i32,
+                            week: week.0 as i32,
+                            group: group.0 as i32,
+                        }));
+                        vec![expr.eq(&IntLinExpr::constant(1))]
+                    })
                     .expect("no duplicate extras");
             }
         }
     }
+    bundle
 }
 
-fn register_interrogation_has_groups(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
-    let env = env.clone();
-    for slot in all_slots(&env) {
-        for week in weeks_for_slot(&env, slot) {
-            let groups = groups_for_interrogation(&env, slot, week);
+fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
+    for slot in all_slots(env) {
+        for week in weeks_for_slot(env, slot) {
+            let groups = groups_for_interrogation(env, slot, week);
             if groups.is_empty() {
                 continue;
             }
             let var = ReifiedVarName::InterrogationHasGroups { slot, week };
-            modeler
-                .declare_reified(
-                    var,
-                    move || {
-                        let sum: IntLinExpr<V> =
-                            groups
-                                .iter()
-                                .map(|&group| {
-                                    IntLinExpr::var(extra_var(
-                                        ReifiedVarName::GroupInInterrogation { slot, week, group },
-                                    ))
-                                })
-                                .sum();
-                        vec![sum.geq(&IntLinExpr::constant(1))]
-                    },
-                    0.1,
-                )
+            bundle = bundle
+                .and_reified(var, move || {
+                    let sum: IntLinExpr<V> = groups
+                        .iter()
+                        .map(|&group| {
+                            IntLinExpr::var(extra_var(ReifiedVarName::GroupInInterrogation {
+                                slot,
+                                week,
+                                group,
+                            }))
+                        })
+                        .sum();
+                    vec![sum.geq(&IntLinExpr::constant(1))]
+                })
                 .expect("no duplicate extras");
         }
     }
+    bundle
 }
 
-fn register_student_in_group(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
+fn build_student_in_group(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
     for &group_list in all_group_lists(env).iter() {
         let student_ids = Var::compute_student_ids(env, &(group_list.inner() as i32));
         let groups = groups_for_group_list(env, group_list);
@@ -208,25 +211,23 @@ fn register_student_in_group(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
                     group_list,
                     group,
                 };
-                modeler
-                    .declare_reified(
-                        var,
-                        move || {
-                            let expr = IntLinExpr::var(base_var(Var::StudentGroup {
-                                group_list: group_list.inner() as i32,
-                                student: student.inner() as i32,
-                            }));
-                            vec![expr.eq(&IntLinExpr::constant(group.0 as i64))]
-                        },
-                        0.1,
-                    )
+                bundle = bundle
+                    .and_reified(var, move || {
+                        let expr = IntLinExpr::var(base_var(Var::StudentGroup {
+                            group_list: group_list.inner() as i32,
+                            student: student.inner() as i32,
+                        }));
+                        vec![expr.eq(&IntLinExpr::constant(group.0 as i64))]
+                    })
                     .expect("no duplicate extras");
             }
         }
     }
+    bundle
 }
 
-fn register_group_has_students(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
+fn build_group_has_students(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
     for &group_list in all_group_lists(env).iter() {
         let groups = groups_for_group_list(env, group_list);
         for &group in &groups {
@@ -234,49 +235,43 @@ fn register_group_has_students(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
             if is_group_list_prefilled(env, group_list) {
                 let count = prefilled_student_count(env, group_list, group);
                 if count >= 1 {
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || vec![IntLinExpr::constant(0).leq(&IntLinExpr::constant(0))],
-                            0.1,
-                        )
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            vec![IntLinExpr::constant(0).leq(&IntLinExpr::constant(0))]
+                        })
                         .expect("no duplicate extras");
                 } else {
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))],
-                            0.1,
-                        )
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
+                        })
                         .expect("no duplicate extras");
                 }
             } else {
                 let students = students_for_automatic_group_list(env, group_list);
-                modeler
-                    .declare_reified(
-                        var,
-                        move || {
-                            let sum: IntLinExpr<V> = students
-                                .iter()
-                                .map(|&student| {
-                                    IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
-                                        student,
-                                        group_list,
-                                        group,
-                                    }))
-                                })
-                                .sum();
-                            vec![sum.geq(&IntLinExpr::constant(1))]
-                        },
-                        0.1,
-                    )
+                bundle = bundle
+                    .and_reified(var, move || {
+                        let sum: IntLinExpr<V> = students
+                            .iter()
+                            .map(|&student| {
+                                IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                                    student,
+                                    group_list,
+                                    group,
+                                }))
+                            })
+                            .sum();
+                        vec![sum.geq(&IntLinExpr::constant(1))]
+                    })
                     .expect("no duplicate extras");
             }
         }
     }
+    bundle
 }
 
-fn register_student_at_interrogation_in_group(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
+fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
             let Some(group_list) = group_list_for_interrogation(env, slot, week) else {
@@ -294,10 +289,9 @@ fn register_student_at_interrogation_in_group(modeler: &mut MyModeler<'_>, env: 
                         group_list,
                         group,
                     };
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || {
+                    bundle =
+                        bundle
+                            .and_reified(var, move || {
                                 let c1 =
                                     IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
                                         student,
@@ -310,17 +304,17 @@ fn register_student_at_interrogation_in_group(modeler: &mut MyModeler<'_>, env: 
                                 ))
                                 .geq(&IntLinExpr::constant(1));
                                 vec![c1, c2]
-                            },
-                            0.1,
-                        )
-                        .expect("no duplicate extras");
+                            })
+                            .expect("no duplicate extras");
                 }
             }
         }
     }
+    bundle
 }
 
-fn register_student_at_interrogation(modeler: &mut MyModeler<'_>, env: &Arc<VarEnv>) {
+fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
             for &student in all_students(env).iter() {
@@ -331,23 +325,19 @@ fn register_student_at_interrogation(modeler: &mut MyModeler<'_>, env: &Arc<VarE
                 };
 
                 if !is_student_enrolled(env, student, slot, week) {
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))],
-                            0.1,
-                        )
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
+                        })
                         .expect("no duplicate extras");
                     continue;
                 }
 
                 let Some(group_list) = group_list_for_interrogation(env, slot, week) else {
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))],
-                            0.1,
-                        )
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
+                        })
                         .expect("no duplicate extras");
                     continue;
                 };
@@ -355,73 +345,68 @@ fn register_student_at_interrogation(modeler: &mut MyModeler<'_>, env: &Arc<VarE
                 if is_group_list_prefilled(env, group_list) {
                     match student_prefilled_group(env, student, group_list) {
                         Some(group) => {
-                            modeler
-                                .declare_reified(
-                                    var,
-                                    move || {
-                                        let expr = IntLinExpr::var(extra_var(
-                                            ReifiedVarName::GroupInInterrogation {
-                                                slot,
-                                                week,
-                                                group,
-                                            },
-                                        ));
-                                        vec![expr.geq(&IntLinExpr::constant(1))]
-                                    },
-                                    0.1,
-                                )
+                            bundle = bundle
+                                .and_reified(var, move || {
+                                    let expr = IntLinExpr::var(extra_var(
+                                        ReifiedVarName::GroupInInterrogation { slot, week, group },
+                                    ));
+                                    vec![expr.geq(&IntLinExpr::constant(1))]
+                                })
                                 .expect("no duplicate extras");
                         }
                         None => {
-                            modeler
-                                .declare_reified(
-                                    var,
-                                    move || {
-                                        vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
-                                    },
-                                    0.1,
-                                )
+                            bundle = bundle
+                                .and_reified(var, move || {
+                                    vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
+                                })
                                 .expect("no duplicate extras");
                         }
                     }
                 } else {
                     let groups = groups_for_group_list(env, group_list);
-                    modeler
-                        .declare_reified(
-                            var,
-                            move || {
-                                let sum: IntLinExpr<V> = groups
-                                    .iter()
-                                    .map(|&group| {
-                                        IntLinExpr::var(extra_var(
-                                            ReifiedVarName::StudentAtInterrogationInGroup {
-                                                student,
-                                                slot,
-                                                week,
-                                                group_list,
-                                                group,
-                                            },
-                                        ))
-                                    })
-                                    .sum();
-                                vec![sum.geq(&IntLinExpr::constant(1))]
-                            },
-                            0.1,
-                        )
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            let sum: IntLinExpr<V> = groups
+                                .iter()
+                                .map(|&group| {
+                                    IntLinExpr::var(extra_var(
+                                        ReifiedVarName::StudentAtInterrogationInGroup {
+                                            student,
+                                            slot,
+                                            week,
+                                            group_list,
+                                            group,
+                                        },
+                                    ))
+                                })
+                                .sum();
+                            vec![sum.geq(&IntLinExpr::constant(1))]
+                        })
                         .expect("no duplicate extras");
                 }
             }
         }
     }
+    bundle
 }
 
 // ---- Public API ----
 
-pub fn register_native_extras(modeler: &mut MyModeler<'_>, env: Arc<VarEnv>) {
-    register_group_in_interrogation(modeler, &env);
-    register_interrogation_has_groups(modeler, &env);
-    register_student_in_group(modeler, &env);
-    register_group_has_students(modeler, &env);
-    register_student_at_interrogation_in_group(modeler, &env);
-    register_student_at_interrogation(modeler, &env);
+pub fn build_native_extras(env: &VarEnv) -> MyBundle {
+    let bundle = build_group_in_interrogation(env);
+    let bundle = bundle
+        .merge(build_interrogation_has_groups(env))
+        .expect("no duplicate extras");
+    let bundle = bundle
+        .merge(build_student_in_group(env))
+        .expect("no duplicate extras");
+    let bundle = bundle
+        .merge(build_group_has_students(env))
+        .expect("no duplicate extras");
+    let bundle = bundle
+        .merge(build_student_at_interrogation_in_group(env))
+        .expect("no duplicate extras");
+    bundle
+        .merge(build_student_at_interrogation(env))
+        .expect("no duplicate extras")
 }
