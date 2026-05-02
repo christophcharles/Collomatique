@@ -706,63 +706,6 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Lazy reification
-// ---------------------------------------------------------------------------
-
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
-where
-    B: UsableData + 'm,
-    E: UsableData + 'm,
-    C: UsableData,
-    Db: Sync + 'm,
-    Err: From<bundle::ReifyError<B, E>> + Debug + Send + 'static,
-{
-    /// Register a binary reified variable whose defining
-    /// constraints are built lazily.
-    ///
-    /// `build_constraints` is only called during [`Modeler::build`]
-    /// if the extra is actually referenced. At that point, the
-    /// returned `IntConstraint`s are transmuted, fixed, and
-    /// linearized via big-M reification — exactly as
-    /// [`IntConstraintBundle::reify_with_epsilon`] does, but
-    /// without eagerly constructing the constraints at registration
-    /// time.
-    pub fn declare_reified<F>(
-        &mut self,
-        name: E,
-        build_constraints: F,
-        epsilon: f64,
-    ) -> Result<(), DuplicateExtra<E>>
-    where
-        F: FnOnce() -> Vec<collomatique_ilp::int_linexpr::IntConstraint<Var<B, E>>> + Send + 'm,
-    {
-        self.declare_extra(name, Variable::binary(), move |factory, ctx, e| {
-            let int_constraints = build_constraints();
-            let constraints: Vec<Constraint<ExtraVar<B, E>>> = int_constraints
-                .into_iter()
-                .map(|c| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
-                .collect();
-            Box::pin(async move {
-                let (reduced, fixes) = ctx.fix_constraints(constraints).await;
-
-                for (b, &val) in &fixes {
-                    if val != val.round() {
-                        return Err(Err::from(bundle::ReifyError::NonIntegerFixValue {
-                            variable: ExtraVar::Base(b.clone()),
-                            value: val,
-                        }));
-                    }
-                }
-
-                let result =
-                    bundle::reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon);
-                result.map_err(Err::from)
-            })
-        })
-    }
-}
-
-// ---------------------------------------------------------------------------
 // SourceVar integration
 // ---------------------------------------------------------------------------
 
