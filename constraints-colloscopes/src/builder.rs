@@ -2,7 +2,7 @@ use crate::native_extras::build_native_extras_bundle;
 use crate::problem::Problem;
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
-use collo_ml::{ExprType, ExprValue, SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
+use collo_ml::{SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::{ObjectiveSense, Variable};
@@ -16,70 +16,31 @@ pub struct ProblemBuilder {
 }
 
 impl ProblemBuilder {
-    pub async fn new(
-        modules: &BTreeMap<&str, &str>,
-    ) -> Result<Self, ScriptError<SqliteDatabaseConnection>> {
-        Ok(ProblemBuilder {
-            feeder: ScriptFeeder::new(modules).await?,
-        })
-    }
-
     pub fn get_warnings(&self) -> &[SemWarning] {
         self.feeder.get_warnings()
     }
 
-    pub fn get_fn_signature(
-        &self,
-        module: &str,
-        fn_name: &str,
-    ) -> Option<(Vec<ExprType>, ExprType)> {
-        self.feeder.get_fn_signature(module, fn_name)
-    }
-
-    pub fn get_fn_from_module(&self, module: &str) -> BTreeMap<String, (Vec<ExprType>, ExprType)> {
-        self.feeder.get_fn_from_module(module)
-    }
-
-    pub fn add_constraint(
-        &mut self,
-        module: &str,
-        fn_name: &str,
-        args: Vec<ExprValue<SqliteDatabaseConnection>>,
-    ) -> Result<(), ScriptError<SqliteDatabaseConnection>> {
-        self.feeder.add_constraint(module, fn_name, args)
-    }
-
-    pub fn add_objective(
-        &mut self,
-        module: &str,
-        fn_name: &str,
-        args: Vec<ExprValue<SqliteDatabaseConnection>>,
-        coefficient: f64,
-        sense: ObjectiveSense,
-    ) -> Result<(), ScriptError<SqliteDatabaseConnection>> {
-        self.feeder
-            .add_objective(module, fn_name, args, coefficient, sense)
-    }
-
-    pub async fn build<Db>(
+    pub async fn build(
         self,
-        db: &Db,
+        db: &sqlx::SqlitePool,
         db_connection: Option<SqliteDatabaseConnection>,
-    ) -> Result<Problem, ScriptError<SqliteDatabaseConnection>>
-    where
-        VarEnv: LoadEnv<Db> + Send + Sync + 'static,
-        Db: Sync,
-    {
+    ) -> Result<Problem, ScriptError<SqliteDatabaseConnection>> {
         let script_bundle = self.feeder.build(db_connection).await?;
 
-        type MyModeler<'m, Db> =
-            Modeler<'m, Var, ReifiedVarName, ConstraintDesc, Db, ReifyError<Var, ReifiedVarName>>;
+        type MyModeler<'m> = Modeler<
+            'm,
+            Var,
+            ReifiedVarName,
+            ConstraintDesc,
+            sqlx::SqlitePool,
+            ReifyError<Var, ReifiedVarName>,
+        >;
 
         let env = VarEnv::load(db).await;
         let base_vars = Var::enumerate(&env);
-        let mut modeler: MyModeler<'_, Db> = Modeler::new(base_vars);
+        let mut modeler: MyModeler<'_> = Modeler::new(base_vars);
         let env_for_fixer = env.clone();
-        modeler.add_fixer(move |b: &Var, _db: &Db| {
+        modeler.add_fixer(move |b: &Var, _db: &sqlx::SqlitePool| {
             let result = b.check_fix(&env_for_fixer);
             Box::pin(async move { result })
         });
@@ -123,7 +84,7 @@ pub async fn default_problem_builder(
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
 
-    let mut builder = ProblemBuilder::new(&modules).await.map_err(|e| match e {
+    let mut feeder = ScriptFeeder::new(&modules).await.map_err(|e| match e {
         ScriptError::CompileError(compile_error) => match compile_error {
             CompileError::ParsingError(parse_err) => SimpleScriptError::ParsingError(parse_err),
             CompileError::SemanticsError { errors, warnings } => {
@@ -134,19 +95,19 @@ pub async fn default_problem_builder(
         other => SimpleScriptError::UnexpectedError(format!("{}", other)),
     })?;
 
-    let functions = builder.get_fn_from_module("main");
+    let functions = feeder.get_fn_from_module("main");
 
     for (fn_name, _) in &functions {
         if fn_name == "constraint" || fn_name.starts_with("constraint_") {
-            builder
+            feeder
                 .add_constraint("main", fn_name, vec![])
                 .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
         } else if fn_name == "objective" || fn_name.starts_with("objective_") {
-            builder
+            feeder
                 .add_objective("main", fn_name, vec![], 1.0, ObjectiveSense::Minimize)
                 .map_err(|e| SimpleScriptError::UnexpectedError(format!("{}", e)))?;
         }
     }
 
-    Ok(builder)
+    Ok(ProblemBuilder { feeder })
 }
