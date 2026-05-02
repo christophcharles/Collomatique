@@ -8,8 +8,8 @@ use collomatique_state_colloscopes::ids::{
     GroupListId, Id, PeriodId, SlotId, StudentId, SubjectId,
 };
 
-type V = ModelerVar<Var, ReifiedVarName>;
-type MyBundle = IntConstraintBundle<
+pub(crate) type V = ModelerVar<Var, ReifiedVarName>;
+pub(crate) type MyBundle = IntConstraintBundle<
     'static,
     Var,
     ReifiedVarName,
@@ -18,11 +18,11 @@ type MyBundle = IntConstraintBundle<
     ReifyError<Var, ReifiedVarName>,
 >;
 
-fn base_var(v: Var) -> V {
+pub(crate) fn base_var(v: Var) -> V {
     ModelerVar::Base(v)
 }
 
-fn extra_var(v: ReifiedVarName) -> V {
+pub(crate) fn extra_var(v: ReifiedVarName) -> V {
     ModelerVar::Extra(v)
 }
 
@@ -56,7 +56,7 @@ fn groups_for_interrogation(env: &VarEnv, slot: SlotId, week: GlobalWeek) -> Vec
     groups_for_group_list(env, gl_id)
 }
 
-fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<GroupNum> {
+pub(crate) fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<GroupNum> {
     let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
         return vec![];
     };
@@ -65,14 +65,18 @@ fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<GroupNum>
         .collect()
 }
 
-fn is_group_list_prefilled(env: &VarEnv, group_list: GroupListId) -> bool {
+pub(crate) fn is_group_list_prefilled(env: &VarEnv, group_list: GroupListId) -> bool {
     env.group_lists
         .group_list_map
         .get(&group_list)
         .is_some_and(|gl| gl.filling.is_prefilled())
 }
 
-fn prefilled_student_count(env: &VarEnv, group_list: GroupListId, group: GroupNum) -> usize {
+pub(crate) fn prefilled_student_count(
+    env: &VarEnv,
+    group_list: GroupListId,
+    group: GroupNum,
+) -> usize {
     let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
         return 0;
     };
@@ -95,7 +99,10 @@ fn student_prefilled_group(
         .map(|n| GroupNum(n as u32))
 }
 
-fn students_for_automatic_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<StudentId> {
+pub(crate) fn students_for_automatic_group_list(
+    env: &VarEnv,
+    group_list: GroupListId,
+) -> Vec<StudentId> {
     let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
         return vec![];
     };
@@ -137,12 +144,66 @@ fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
         .collect()
 }
 
-fn all_group_lists(env: &VarEnv) -> Vec<GroupListId> {
+pub(crate) fn all_group_lists(env: &VarEnv) -> Vec<GroupListId> {
     env.group_lists.group_list_map.keys().copied().collect()
 }
 
 fn all_students(env: &VarEnv) -> Vec<StudentId> {
     env.students.student_map.keys().copied().collect()
+}
+
+pub(crate) fn students_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<StudentId> {
+    let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
+        return vec![];
+    };
+    match &gl.filling {
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+            excluded_students,
+        } => env
+            .students
+            .student_map
+            .keys()
+            .filter(|s| !excluded_students.contains(s))
+            .copied()
+            .collect(),
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+            groups
+                .iter()
+                .flat_map(|g| g.students.iter().copied())
+                .collect()
+        }
+    }
+}
+
+pub(crate) fn students_for_subject_period_group_list(
+    env: &VarEnv,
+    group_list: GroupListId,
+    subject: SubjectId,
+    period: PeriodId,
+) -> Vec<StudentId> {
+    let enrolled = env
+        .assignments
+        .period_map
+        .get(&period)
+        .and_then(|pa| pa.subject_map.get(&subject));
+    let Some(enrolled) = enrolled else {
+        return vec![];
+    };
+    students_for_group_list(env, group_list)
+        .into_iter()
+        .filter(|s| enrolled.contains(s))
+        .collect()
+}
+
+pub(crate) fn subject_interrogation_params(
+    env: &VarEnv,
+    subject: SubjectId,
+) -> Option<&collomatique_state_colloscopes::subjects::SubjectInterrogationParameters> {
+    env.subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(id, _)| *id == subject)
+        .and_then(|(_, s)| s.parameters.interrogation_parameters.as_ref())
 }
 
 // ---- Reified variable builders (lazy registration) ----
