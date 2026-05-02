@@ -1,4 +1,4 @@
-use crate::ids::{GlobalWeek, GroupListId, GroupNum, SlotId, StudentId};
+use crate::ids::{GlobalWeek, GroupListId, GroupNum, PeriodId, SlotId, StudentId, SubjectId};
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
 use collo_ml::script_feeder::ReifiedVar;
@@ -31,6 +31,12 @@ pub enum ReifiedVarName {
     GroupHasStudents {
         group_list: GroupListId,
         group: GroupNum,
+    },
+    GroupHasStudentsForSubject {
+        group_list: GroupListId,
+        group: GroupNum,
+        subject: SubjectId,
+        period: PeriodId,
     },
     StudentAtInterrogationInGroup {
         student: StudentId,

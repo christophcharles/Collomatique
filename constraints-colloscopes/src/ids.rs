@@ -1,4 +1,6 @@
-pub use collomatique_state_colloscopes::ids::{GroupListId, SlotId, StudentId};
+pub use collomatique_state_colloscopes::ids::{
+    GroupListId, PeriodId, SlotId, StudentId, SubjectId,
+};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GlobalWeek(pub u32);
