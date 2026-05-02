@@ -1,6 +1,6 @@
 use crate::problem::Problem;
-use collo_ml::eval::Origin;
-use collo_ml::script_feeder::{ReifiedVar, ScriptError, ScriptFeeder};
+use crate::types::{ConstraintDesc, ReifiedVarName};
+use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
 use collo_ml::{ExprType, ExprValue, SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
 use collomatique_binding_colloscopes::vars::Var;
@@ -9,12 +9,9 @@ use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
 use std::collections::{BTreeMap, HashMap};
 
-type E = ReifiedVar<SqliteDatabaseConnection>;
-type C = Option<Origin<SqliteDatabaseConnection>>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder {
-    feeder: ScriptFeeder<SqliteDatabaseDriver, Var, E, C>,
+    feeder: ScriptFeeder<SqliteDatabaseDriver, Var, ReifiedVarName, ConstraintDesc>,
 }
 
 impl ProblemBuilder {
@@ -75,7 +72,8 @@ impl ProblemBuilder {
     {
         let bundle = self.feeder.build(db_connection).await?;
 
-        type MyModeler<'m, Db> = Modeler<'m, Var, E, C, Db, ReifyError<Var, E>>;
+        type MyModeler<'m, Db> =
+            Modeler<'m, Var, ReifiedVarName, ConstraintDesc, Db, ReifyError<Var, ReifiedVarName>>;
 
         let mut modeler: MyModeler<'_, Db> = Modeler::from_described(db).await;
 

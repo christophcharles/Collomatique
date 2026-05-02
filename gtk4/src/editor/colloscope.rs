@@ -1,4 +1,4 @@
-use collomatique_constraints_colloscopes::ConstraintSource;
+use collomatique_constraints_colloscopes::{ConstraintDesc, ConstraintSource};
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -716,8 +716,10 @@ impl Colloscope {
             let warnings = sol
                 .blame()
                 .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(Some(origin)) => Some(origin.to_string()),
-                    ConstraintSource::User(None) => None,
+                    ConstraintSource::User(ConstraintDesc::Script(Some(origin))) => {
+                        Some(origin.to_string())
+                    }
+                    ConstraintSource::User(_) => None,
                     ConstraintSource::DefiningExtra { .. } => None,
                 })
                 .collect();

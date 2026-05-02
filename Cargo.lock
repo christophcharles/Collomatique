@@ -423,6 +423,7 @@ dependencies = [
  "collomatique-binding-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-state-colloscopes",
  "derivative",
  "sqlx",
 ]
