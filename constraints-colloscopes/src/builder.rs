@@ -70,6 +70,12 @@ impl ProblemBuilder {
             .apply_bundle(students_per_group_for_subject_bundle.into_general())
             .expect("no duplicate extras from students_per_group_for_subject");
 
+        let groups_filled_by_ascending_order_bundle =
+            crate::groups_filled_by_ascending_order::build(&env);
+        modeler
+            .apply_bundle(groups_filled_by_ascending_order_bundle.into_general())
+            .expect("no duplicate extras from groups_filled_by_ascending_order");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

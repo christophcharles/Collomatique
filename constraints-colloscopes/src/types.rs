@@ -96,6 +96,10 @@ pub enum ConstraintDesc {
         period: PeriodId,
         max_students: u32,
     },
+    GroupFilledByAscendingOrder {
+        group_list: GroupListId,
+        group: GroupNum,
+    },
 }
 
 impl ConstraintDesc {
@@ -179,6 +183,15 @@ impl ConstraintDesc {
                     gl_name,
                     subj_name,
                     period_num
+                )
+            }
+            ConstraintDesc::GroupFilledByAscendingOrder { group_list, group } => {
+                let gl_name = group_list_name(env, *group_list);
+                format!(
+                    "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
+                    group.0 + 1,
+                    gl_name,
+                    group.0 + 2,
                 )
             }
         }
