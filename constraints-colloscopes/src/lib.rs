@@ -2,6 +2,7 @@ mod builder;
 pub mod ids;
 mod native_extras;
 mod problem;
+mod students_have_groups;
 mod students_per_group;
 mod types;
 

@@ -78,6 +78,10 @@ pub enum ConstraintDesc {
         group: GroupNum,
         max_students: u32,
     },
+    StudentHasGroup {
+        student: StudentId,
+        group_list: GroupListId,
+    },
 }
 
 impl ConstraintDesc {
@@ -114,8 +118,30 @@ impl ConstraintDesc {
                     gl_name
                 )
             }
+            ConstraintDesc::StudentHasGroup {
+                student,
+                group_list,
+            } => {
+                let s_name = student_name(env, *student);
+                let gl_name = group_list_name(env, *group_list);
+                format!(
+                    "L'élève {} doit avoir un groupe dans la liste {}",
+                    s_name, gl_name
+                )
+            }
         }
     }
+}
+
+fn student_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    student: StudentId,
+) -> String {
+    env.students
+        .student_map
+        .get(&student)
+        .map(|s| format!("{} {}", s.desc.firstname, s.desc.surname))
+        .unwrap_or_else(|| format!("{:?}", student))
 }
 
 fn group_list_name(
