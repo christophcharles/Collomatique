@@ -29,7 +29,7 @@ pub(crate) fn extra_var(v: ReifiedVarName) -> V {
 // ---- Helper functions reading from Parameters ----
 
 fn week_to_period_id(env: &VarEnv, week: GlobalWeek) -> Option<(PeriodId, usize)> {
-    collomatique_binding_colloscopes::tools::week_to_period_id(env, week.0 as usize)
+    collomatique_binding_colloscopes::tools::week_to_period_id(env, week.0)
 }
 
 fn slot_subject(env: &VarEnv, slot: SlotId) -> Option<SubjectId> {
@@ -60,9 +60,7 @@ pub(crate) fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Ve
     let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
         return vec![];
     };
-    (0..gl.params.group_names.len() as u32)
-        .map(GroupNum)
-        .collect()
+    (0..gl.params.group_names.len()).map(GroupNum).collect()
 }
 
 fn is_student_enrolled(env: &VarEnv, student: StudentId, slot: SlotId, week: GlobalWeek) -> bool {
@@ -90,7 +88,7 @@ fn all_slots(env: &VarEnv) -> Vec<SlotId> {
 fn weeks_for_slot(env: &VarEnv, slot: SlotId) -> Vec<GlobalWeek> {
     Var::enumerate_weeks_for_slot(env, &(slot.inner() as i32))
         .into_iter()
-        .map(|w| GlobalWeek(w as u32))
+        .map(|w| GlobalWeek(w.try_into().expect("week index should be non-negative")))
         .collect()
 }
 
@@ -205,7 +203,7 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
         let students = students_for_group_list(env, group_list);
-        for group_index in 0..gl.params.group_names.len() as u32 {
+        for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
             for &student in &students {
                 let var = ReifiedVarName::StudentInGroup {
@@ -219,7 +217,9 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
                             group_list: group_list.inner() as i32,
                             student: student.inner() as i32,
                         }));
-                        vec![expr.eq(&IntLinExpr::constant(group.0 as i64))]
+                        let group_i64: i64 =
+                            group.0.try_into().expect("group index should fit in i64");
+                        vec![expr.eq(&IntLinExpr::constant(group_i64))]
                     })
                     .expect("no duplicate extras");
             }
@@ -233,13 +233,13 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
 
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
-        for group_index in 0..gl.params.group_names.len() as u32 {
+        for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
             let var = ReifiedVarName::GroupHasStudents { group_list, group };
             match &gl.filling {
                 GroupListFilling::Prefilled { groups } => {
                     let has_students = groups
-                        .get(group_index as usize)
+                        .get(group_index)
                         .is_some_and(|g| !g.students.is_empty());
                     if has_students {
                         bundle = bundle
@@ -297,7 +297,7 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
             };
             let students = students_for_group_list(env, group_list);
             for &student in &students {
-                for group_index in 0..gl.params.group_names.len() as u32 {
+                for group_index in 0..gl.params.group_names.len() {
                     let group = GroupNum(group_index);
                     let var = ReifiedVarName::StudentAtInterrogationInGroup {
                         student,
@@ -367,9 +367,10 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
 
                 match &gl.filling {
                     GroupListFilling::Prefilled { groups } => {
-                        let group = groups.iter().enumerate().find_map(|(i, g)| {
-                            g.students.contains(&student).then(|| GroupNum(i as u32))
-                        });
+                        let group = groups
+                            .iter()
+                            .enumerate()
+                            .find_map(|(i, g)| g.students.contains(&student).then(|| GroupNum(i)));
                         match group {
                             Some(group) => {
                                 bundle = bundle
@@ -395,7 +396,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                         }
                     }
                     GroupListFilling::Automatic { .. } => {
-                        let group_count = gl.params.group_names.len() as u32;
+                        let group_count = gl.params.group_names.len();
                         bundle = bundle
                             .and_reified(var, move || {
                                 let sum: IntLinExpr<V> = (0..group_count)

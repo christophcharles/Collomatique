@@ -10,8 +10,8 @@ fn build_for_group(
     bundle: MyBundle,
     group_list: GroupListId,
     group: GroupNum,
-    min_students: i64,
-    max_students: i64,
+    min_students: u32,
+    max_students: u32,
 ) -> MyBundle {
     let students = students_for_group_list(env, group_list);
 
@@ -30,23 +30,23 @@ fn build_for_group(
         group_list,
         group,
     }));
-    let min_constraint = count.clone().geq(&(min_students * group_has));
+    let min_constraint = count.clone().geq(&(i64::from(min_students) * group_has));
     let bundle = bundle.with_constraint(
         min_constraint,
         ConstraintDesc::StudentsPerGroupMin {
             group_list,
             group,
-            min_students: min_students as u32,
+            min_students,
         },
     );
 
-    let max_constraint = count.leq(&IntLinExpr::constant(max_students));
+    let max_constraint = count.leq(&IntLinExpr::constant(i64::from(max_students)));
     bundle.with_constraint(
         max_constraint,
         ConstraintDesc::StudentsPerGroupMax {
             group_list,
             group,
-            max_students: max_students as u32,
+            max_students,
         },
     )
 }
@@ -54,9 +54,9 @@ fn build_for_group(
 pub fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
-        let min_students = gl.params.students_per_group.start().get() as i64;
-        let max_students = gl.params.students_per_group.end().get() as i64;
-        for group_index in 0..gl.params.group_names.len() as u32 {
+        let min_students = gl.params.students_per_group.start().get();
+        let max_students = gl.params.students_per_group.end().get();
+        for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
             bundle = build_for_group(env, bundle, group_list, group, min_students, max_students);
         }
