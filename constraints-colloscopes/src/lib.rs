@@ -1,5 +1,6 @@
 mod builder;
 pub mod ids;
+mod native_extras;
 mod problem;
 mod types;
 

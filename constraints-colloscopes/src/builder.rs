@@ -1,12 +1,13 @@
+use crate::native_extras::build_native_extras_bundle;
 use crate::problem::Problem;
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
 use collo_ml::{ExprType, ExprValue, SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
-use collomatique_binding_colloscopes::vars::Var;
+use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::{ObjectiveSense, Variable};
-use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
+use collomatique_ilp_modeler::{DescribeVar, LoadEnv, Modeler};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,16 +67,22 @@ impl ProblemBuilder {
         db_connection: Option<SqliteDatabaseConnection>,
     ) -> Result<Problem, ScriptError<SqliteDatabaseConnection>>
     where
-        <Var as collomatique_ilp_modeler::DescribeVar>::Env:
-            collomatique_ilp_modeler::LoadEnv<Db> + Send + Sync + 'static,
+        VarEnv: LoadEnv<Db> + Send + Sync + 'static,
         Db: Sync,
     {
-        let bundle = self.feeder.build(db_connection).await?;
+        let script_bundle = self.feeder.build(db_connection).await?;
 
         type MyModeler<'m, Db> =
             Modeler<'m, Var, ReifiedVarName, ConstraintDesc, Db, ReifyError<Var, ReifiedVarName>>;
 
-        let mut modeler: MyModeler<'_, Db> = Modeler::from_described(db).await;
+        let env = VarEnv::load(db).await;
+        let base_vars = Var::enumerate(&env);
+        let mut modeler: MyModeler<'_, Db> = Modeler::new(base_vars);
+        let env_for_fixer = env.clone();
+        modeler.add_fixer(move |b: &Var, _db: &Db| {
+            let result = b.check_fix(&env_for_fixer);
+            Box::pin(async move { result })
+        });
 
         let original_var_list: HashMap<Var, Variable> = modeler
             .base_vars()
@@ -89,8 +96,13 @@ impl ProblemBuilder {
         }
 
         modeler
-            .apply_bundle(bundle.into_general())
-            .expect("no duplicate extras");
+            .apply_bundle(script_bundle.into_general())
+            .expect("no duplicate extras from script");
+
+        let native_bundle = build_native_extras_bundle(&env);
+        modeler
+            .apply_bundle(native_bundle)
+            .expect("no duplicate extras from native");
 
         let model = modeler
             .build(db)

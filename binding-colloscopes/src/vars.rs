@@ -61,7 +61,7 @@ impl Var {
         (group_list_data.params.group_names.len() as i32 - 1) as f64
     }
 
-    fn compute_slot_range(env: &VarEnv) -> std::ops::Range<i32> {
+    pub fn compute_slot_range(env: &VarEnv) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let ids = env
             .slots
@@ -76,7 +76,7 @@ impl Var {
         Self::compute_range_from_iter(ids)
     }
 
-    fn enumerate_weeks_for_slot(env: &VarEnv, slot: &i32) -> Vec<i32> {
+    pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
         let Some((subject_id, pos)) = env.slots.find_slot_subject_and_position(slot_id) else {
@@ -105,12 +105,12 @@ impl Var {
         output
     }
 
-    fn compute_week_range(env: &VarEnv, slot: &i32) -> std::ops::Range<i32> {
+    pub fn compute_week_range(env: &VarEnv, slot: &i32) -> std::ops::Range<i32> {
         let weeks = Self::enumerate_weeks_for_slot(env, slot);
         Self::compute_range_from_iter(weeks.into_iter())
     }
 
-    fn compute_group_range(env: &VarEnv, slot: &i32, week: &i32) -> std::ops::Range<i32> {
+    pub fn compute_group_range(env: &VarEnv, slot: &i32, week: &i32) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
         let week_num = *week as usize;
@@ -138,7 +138,7 @@ impl Var {
         0..group_list.params.group_names.len() as i32
     }
 
-    fn compute_range_from_iter(ids: impl Iterator<Item = i32>) -> std::ops::Range<i32> {
+    pub fn compute_range_from_iter(ids: impl Iterator<Item = i32>) -> std::ops::Range<i32> {
         let mut group_list_min = i32::MAX;
         let mut group_list_max = 0;
         for id in ids {
@@ -155,7 +155,7 @@ impl Var {
         group_list_min..group_list_max + 1
     }
 
-    fn compute_group_list_range(env: &VarEnv) -> std::ops::Range<i32> {
+    pub fn compute_group_list_range(env: &VarEnv) -> std::ops::Range<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let ids = env
             .group_lists
@@ -165,7 +165,7 @@ impl Var {
         Self::compute_range_from_iter(ids)
     }
 
-    fn compute_student_ids(env: &VarEnv, group_list: &i32) -> Vec<i32> {
+    pub fn compute_student_ids(env: &VarEnv, group_list: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let group_list_id =
             unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
@@ -196,7 +196,7 @@ impl Var {
         }
     }
 
-    fn compute_student_range(env: &VarEnv, group_list: &i32) -> std::ops::Range<i32> {
+    pub fn compute_student_range(env: &VarEnv, group_list: &i32) -> std::ops::Range<i32> {
         let ids = Self::compute_student_ids(env, group_list);
         Self::compute_range_from_iter(ids.into_iter())
     }
