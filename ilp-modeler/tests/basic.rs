@@ -518,20 +518,26 @@ async fn reconstruction_no_extras() {
 async fn declare_extras_batch() {
     let mut m = fresh();
     m.declare_extras(vec![
-        ExtraEntry::new("s1".to_string(), Variable::integer(), |_f, _ctx, e| {
-            Box::pin(async move {
-                Ok(vec![
-                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
-                ])
-            })
-        }),
-        ExtraEntry::new("s2".to_string(), Variable::integer(), |_f, _ctx, e| {
-            Box::pin(async move {
-                Ok(vec![
-                    LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
-                ])
-            })
-        }),
+        (
+            "s1".to_string(),
+            ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
+                Box::pin(async move {
+                    Ok(vec![
+                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+                    ])
+                })
+            }),
+        ),
+        (
+            "s2".to_string(),
+            ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
+                Box::pin(async move {
+                    Ok(vec![
+                        LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+                    ])
+                })
+            }),
+        ),
     ])
     .unwrap();
     m.add_constraint(
@@ -548,12 +554,18 @@ async fn declare_extras_internal_duplicate_fails() {
     let mut m = fresh();
     let DuplicateExtra(name) = m
         .declare_extras(vec![
-            ExtraEntry::new("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
-                Box::pin(async move { Ok(vec![]) })
-            }),
-            ExtraEntry::new("dup".to_string(), Variable::integer(), |_f, _ctx, _e| {
-                Box::pin(async move { Ok(vec![]) })
-            }),
+            (
+                "dup".to_string(),
+                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
+                    Box::pin(async move { Ok(vec![]) })
+                }),
+            ),
+            (
+                "dup".to_string(),
+                ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
+                    Box::pin(async move { Ok(vec![]) })
+                }),
+            ),
         ])
         .unwrap_err();
     assert_eq!(name, "dup");
@@ -567,10 +579,11 @@ async fn declare_extras_conflicts_with_existing_fails() {
     })
     .unwrap();
     let DuplicateExtra(name) = m
-        .declare_extras(vec![ExtraEntry::new(
+        .declare_extras(vec![(
             "exists".to_string(),
-            Variable::integer(),
-            |_f, _ctx, _e| Box::pin(async move { Ok(vec![]) }),
+            ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
+                Box::pin(async move { Ok(vec![]) })
+            }),
         )])
         .unwrap_err();
     assert_eq!(name, "exists");

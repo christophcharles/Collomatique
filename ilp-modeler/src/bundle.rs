@@ -31,12 +31,13 @@ use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, Var
 
 /// One declare-extra worth of arguments, stored as a value so
 /// that it can sit inside a bundle until the bundle is applied.
+/// The extra's name is not stored here — it serves as the key
+/// in the bundle's `HashMap<E, ExtraEntry>`.
 pub struct ExtraEntry<'m, B, E, Db, Err>
 where
     B: UsableData,
     E: UsableData,
 {
-    name: E,
     kind: Variable,
     define: Box<DefineFn<'m, B, E, Db, Err>>,
 }
@@ -50,7 +51,7 @@ where
     /// [`Modeler::declare_extra`]. The closure is boxed under
     /// the proper HRTB so callers don't have to wrangle the
     /// `dyn` lifetimes themselves.
-    pub fn new<F>(name: E, kind: Variable, define: F) -> Self
+    pub fn new<F>(kind: Variable, define: F) -> Self
     where
         F: for<'a> FnOnce(
                 &'a mut crate::HelperFactory<B, E>,
@@ -63,15 +64,9 @@ where
             + 'm,
     {
         ExtraEntry {
-            name,
             kind,
             define: Box::new(define),
         }
-    }
-
-    /// The extra's name.
-    pub fn name(&self) -> &E {
-        &self.name
     }
 
     /// The extra's variable kind.
@@ -80,8 +75,8 @@ where
     }
 
     /// Consume the entry and return its parts.
-    pub(crate) fn into_parts(self) -> (E, Variable, Box<DefineFn<'m, B, E, Db, Err>>) {
-        (self.name, self.kind, self.define)
+    pub(crate) fn into_parts(self) -> (Variable, Box<DefineFn<'m, B, E, Db, Err>>) {
+        (self.kind, self.define)
     }
 }
 
@@ -102,7 +97,7 @@ where
 {
     constraints: Vec<(Constraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Db, Err>>,
     _phantom: PhantomData<Db>,
 }
 
@@ -116,7 +111,7 @@ where
         ConstraintBundle {
             constraints: Vec::new(),
             objectives: Vec::new(),
-            extras: Vec::new(),
+            extras: HashMap::new(),
             _phantom: PhantomData,
         }
     }
@@ -182,12 +177,13 @@ where
     /// already exists in this bundle.
     pub fn with_extra(
         mut self,
+        name: E,
         entry: ExtraEntry<'m, B, E, Db, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
-        if self.extras.iter().any(|e| e.name == entry.name) {
-            return Err(DuplicateExtra(entry.name));
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
         }
-        self.extras.push(entry);
+        self.extras.insert(name, entry);
         Ok(self)
     }
 
@@ -202,18 +198,18 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Db, Err>> {
         &self.extras
     }
 
     /// Append all of `other`'s entries into `self`. Constraints,
-    /// objectives, and extras concat in order; no arithmetic.
+    /// objectives, and extras are combined; no arithmetic.
     /// Returns [`DuplicateExtra`] if any extra in `other` has
     /// the same name as one already in `self`.
     pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
-        for entry in &other.extras {
-            if self.extras.iter().any(|e| e.name == entry.name) {
-                return Err(DuplicateExtra(entry.name.clone()));
+        for key in other.extras.keys() {
+            if self.extras.contains_key(key) {
+                return Err(DuplicateExtra(key.clone()));
             }
         }
         self.constraints.extend(other.constraints);
@@ -238,7 +234,7 @@ where
 {
     constraints: Vec<(IntConstraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Db, Err>>,
     _phantom: PhantomData<Db>,
 }
 
@@ -252,7 +248,7 @@ where
         IntConstraintBundle {
             constraints: Vec::new(),
             objectives: Vec::new(),
-            extras: Vec::new(),
+            extras: HashMap::new(),
             _phantom: PhantomData,
         }
     }
@@ -318,12 +314,13 @@ where
     /// already exists in this bundle.
     pub fn with_extra(
         mut self,
+        name: E,
         entry: ExtraEntry<'m, B, E, Db, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
-        if self.extras.iter().any(|e| e.name == entry.name) {
-            return Err(DuplicateExtra(entry.name));
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
         }
-        self.extras.push(entry);
+        self.extras.insert(name, entry);
         Ok(self)
     }
 
@@ -338,18 +335,18 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Db, Err>> {
         &self.extras
     }
 
     /// Append all of `other`'s entries into `self`. Constraints,
-    /// objectives, and extras concat in order; no arithmetic.
+    /// objectives, and extras are combined; no arithmetic.
     /// Returns [`DuplicateExtra`] if any extra in `other` has
     /// the same name as one already in `self`.
     pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
-        for entry in &other.extras {
-            if self.extras.iter().any(|e| e.name == entry.name) {
-                return Err(DuplicateExtra(entry.name.clone()));
+        for key in other.extras.keys() {
+            if self.extras.contains_key(key) {
+                return Err(DuplicateExtra(key.clone()));
             }
         }
         self.constraints.extend(other.constraints);
@@ -400,8 +397,8 @@ where
         for (coef, obj) in bundle.objectives {
             self.add_objective(coef, obj);
         }
-        for entry in bundle.extras {
-            let (name, kind, define) = entry.into_parts();
+        for (name, entry) in bundle.extras {
+            let (kind, define) = entry.into_parts();
             self.declare_extra_boxed(name, kind, define)?;
         }
         Ok(())
@@ -690,7 +687,7 @@ where
         if !(epsilon > 0.0 && epsilon < 1.0) {
             return Err(EagerReifyError::InvalidEpsilon(epsilon));
         }
-        if self.extras.iter().any(|e| e.name == var) {
+        if self.extras.contains_key(&var) {
             return Err(EagerReifyError::DuplicateVariable(var));
         }
 
@@ -698,25 +695,16 @@ where
         let int_constraints: Vec<Constraint<ExtraVar<B, E>>> = self
             .constraints
             .into_iter()
-            .map(|(c, _desc)| {
-                // Drop the int wrapping and lift Var → ExtraVar.
-                c.into_constraint().transmute(|v| ExtraVar::from(v.clone()))
-            })
+            .map(|(c, _desc)| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
             .collect();
 
         let entry = ExtraEntry::new(
-            var.clone(),
             Variable::binary(),
             move |factory: &mut HelperFactory<B, E>, ctx, e| {
                 let int_constraints = int_constraints; // move
                 Box::pin(async move {
-                    // Reduce captured constraints with fixed variable
-                    // values before reification inspects them (for
-                    // range computation, variable kind checks, etc.).
                     let (reduced, fixes) = ctx.fix_constraints(int_constraints).await;
 
-                    // Integrality check: reification requires integer
-                    // fixed values.
                     for (b, &val) in &fixes {
                         if val != val.round() {
                             return Err(Err::from(ReifyError::NonIntegerFixValue {
@@ -734,7 +722,7 @@ where
         );
 
         let mut extras = self.extras;
-        extras.push(entry);
+        extras.insert(var, entry);
 
         Ok(IntConstraintBundle {
             constraints: Vec::new(),
@@ -926,11 +914,10 @@ where
         if !(alpha >= 0.0 && alpha <= 1.0) {
             return Err(EagerObjectifyError::InvalidBalance(alpha));
         }
-        if self.extras.iter().any(|e| e.name == var) {
+        if self.extras.contains_key(&var) {
             return Err(EagerObjectifyError::DuplicateVariable(var));
         }
 
-        // Capture constraints by move, lifting Var → ExtraVar.
         let constraints: Vec<Constraint<ExtraVar<B, E>>> = self
             .constraints
             .into_iter()
@@ -938,13 +925,10 @@ where
             .collect();
 
         let entry = ExtraEntry::new(
-            var.clone(),
             Variable::non_negative(),
             move |factory: &mut HelperFactory<B, E>, ctx, e| {
                 let constraints = constraints; // move
                 Box::pin(async move {
-                    // Reduce captured constraints with fixed variable
-                    // values before objectification processes them.
                     let (reduced, _fixes) = ctx.fix_constraints(constraints).await;
                     Ok(objectify_inner(
                         &reduced,
@@ -957,7 +941,7 @@ where
         );
 
         let mut extras = self.extras;
-        extras.push(entry);
+        extras.insert(var.clone(), entry);
 
         let mut objectives = self.objectives;
         objectives.push((

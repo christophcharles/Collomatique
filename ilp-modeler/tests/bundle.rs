@@ -84,7 +84,7 @@ async fn bundle_only_objectives() {
 async fn bundle_only_extras() {
     // Bundle declares one extra `s = a + b` and nothing else.
     let entry: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
             Box::pin(async move {
                 let lhs = LinExpr::var(ExtraVar::Extra(e));
                 let rhs = LinExpr::var(ExtraVar::Base("a".to_string()))
@@ -92,8 +92,9 @@ async fn bundle_only_extras() {
                 Ok(vec![lhs.eq(&rhs)])
             })
         });
-    let bundle: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry).unwrap();
+    let bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry)
+        .unwrap();
 
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
@@ -210,8 +211,11 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
     assert_eq!(reified.constraints().len(), 0);
     assert_eq!(reified.objectives().len(), 0);
     assert_eq!(reified.extras().len(), 1);
-    assert_eq!(*reified.extras()[0].name(), "ind");
-    assert_eq!(*reified.extras()[0].kind(), Variable::binary());
+    assert!(reified.extras().contains_key(&"ind".to_string()));
+    assert_eq!(
+        *reified.extras().get(&"ind".to_string()).unwrap().kind(),
+        Variable::binary()
+    );
 
     // Apply and build; the resulting problem should require ind=1.
     let mut m = fresh_reify();
@@ -330,11 +334,12 @@ async fn apply_bundle_duplicate_extra_fails() {
     .unwrap();
     // Then try to apply a bundle that defines the same extra.
     let entry: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
             Box::pin(async move { Ok(vec![]) })
         });
-    let bundle: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry).unwrap();
+    let bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry)
+        .unwrap();
     let err = m.apply_bundle(bundle).unwrap_err();
     assert_eq!(err.0, "s");
 }
@@ -343,17 +348,19 @@ async fn apply_bundle_duplicate_extra_fails() {
 async fn merged_bundles_duplicate_extra_fails() {
     // Two bundles each define extra "s"; merge them and apply.
     let entry1: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
             Box::pin(async move { Ok(vec![]) })
         });
     let entry2: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
             Box::pin(async move { Ok(vec![]) })
         });
-    let left: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry1).unwrap();
-    let right: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry2).unwrap();
+    let left: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry1)
+        .unwrap();
+    let right: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry2)
+        .unwrap();
     match left.merge(right) {
         Err(DuplicateExtra(name)) => assert_eq!(name, "s"),
         Ok(_) => panic!("expected DuplicateExtra, got Ok"),
@@ -381,11 +388,12 @@ async fn reify_invalid_epsilon_fails() {
 async fn reify_duplicate_variable_fails() {
     // Bundle already has an extra named "x"; reify("x") should fail.
     let entry: ExtraEntry<B, E, (), TestErr> =
-        ExtraEntry::new("x".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
             Box::pin(async move { Ok(vec![]) })
         });
-    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> =
-        IntConstraintBundle::new().with_extra(entry).unwrap();
+    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new()
+        .with_extra("x".to_string(), entry)
+        .unwrap();
     match int_bundle.reify("x".to_string()) {
         Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "x"),
         Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
@@ -538,11 +546,12 @@ async fn objectify_duplicate_variable_errors() {
         a.leq(&LinExpr::constant(0.0)),
         "c".into(),
     )])
-    .with_extra(ExtraEntry::new(
+    .with_extra(
         "pen".to_string(),
-        Variable::integer(),
-        |_f, _ctx, _e| Box::pin(async move { Ok(vec![]) }),
-    ))
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| {
+            Box::pin(async move { Ok(vec![]) })
+        }),
+    )
     .unwrap();
     match bundle.objectify("pen".to_string()) {
         Err(EagerObjectifyError::DuplicateVariable(name)) => assert_eq!(name, "pen"),
