@@ -1,4 +1,3 @@
-use crate::ids::GroupNum;
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
@@ -22,7 +21,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
             }));
             let next = IntLinExpr::<V>::var(extra_var(ReifiedVarName::GroupHasStudents {
                 group_list,
-                group: GroupNum(group.0 + 1),
+                group: group.next(),
             }));
             bundle = bundle.with_constraint(
                 current.geq(&next),

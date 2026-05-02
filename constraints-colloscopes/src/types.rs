@@ -187,7 +187,7 @@ impl ConstraintDesc {
             ConstraintDesc::GroupFilledByAscendingOrder { group_list, group } => {
                 let gl_name = group_list_name(env, *group_list);
                 let g_name = group_name(env, *group_list, *group);
-                let next_g_name = group_name(env, *group_list, GroupNum(group.0 + 1));
+                let next_g_name = group_name(env, *group_list, group.next());
                 format!(
                     "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
                     g_name, gl_name, next_g_name,
