@@ -1,4 +1,4 @@
-use crate::native_extras::build_native_extras_bundle;
+use crate::native_extras::register_native_extras;
 use crate::problem::Problem;
 use crate::types::{ConstraintDesc, ReifiedVarName};
 use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
@@ -9,11 +9,22 @@ use collomatique_ilp::{ObjectiveSense, Variable};
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{DescribeVar, LoadEnv, Modeler};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder {
     feeder: ScriptFeeder<SqliteDatabaseDriver, Var, ReifiedVarName, ConstraintDesc>,
 }
+
+pub(crate) type MyModeler<'m> = Modeler<
+    'm,
+    Var,
+    ReifiedVarName,
+    ConstraintDesc,
+    sqlx::SqlitePool,
+    ReifyError<Var, ReifiedVarName>,
+>;
 
 impl ProblemBuilder {
     pub fn get_warnings(&self) -> &[SemWarning] {
@@ -25,18 +36,15 @@ impl ProblemBuilder {
         db: &sqlx::SqlitePool,
         db_connection: Option<SqliteDatabaseConnection>,
     ) -> Result<Problem, ScriptError<SqliteDatabaseConnection>> {
+        let t0 = Instant::now();
         let script_bundle = self.feeder.build(db_connection).await?;
+        eprintln!("[build] feeder.build: {:?}", t0.elapsed());
 
-        type MyModeler<'m> = Modeler<
-            'm,
-            Var,
-            ReifiedVarName,
-            ConstraintDesc,
-            sqlx::SqlitePool,
-            ReifyError<Var, ReifiedVarName>,
-        >;
+        let t1 = Instant::now();
+        let env = Arc::new(VarEnv::load(db).await);
+        eprintln!("[build] VarEnv::load: {:?}", t1.elapsed());
 
-        let env = VarEnv::load(db).await;
+        let t2 = Instant::now();
         let base_vars = Var::enumerate(&env);
         let mut modeler: MyModeler<'_> = Modeler::new(base_vars);
         let env_for_fixer = env.clone();
@@ -44,6 +52,7 @@ impl ProblemBuilder {
             let result = b.check_fix(&env_for_fixer);
             Box::pin(async move { result })
         });
+        eprintln!("[build] modeler setup: {:?}", t2.elapsed());
 
         let original_var_list: HashMap<Var, Variable> = modeler
             .base_vars()
@@ -56,20 +65,24 @@ impl ProblemBuilder {
             }
         }
 
+        let t3 = Instant::now();
         modeler
             .apply_bundle(script_bundle.into_general())
             .expect("no duplicate extras from script");
+        eprintln!("[build] apply script bundle: {:?}", t3.elapsed());
 
-        let native_bundle = build_native_extras_bundle(&env);
-        modeler
-            .apply_bundle(native_bundle)
-            .expect("no duplicate extras from native");
+        let t4 = Instant::now();
+        register_native_extras(&mut modeler, env);
+        eprintln!("[build] register native extras: {:?}", t4.elapsed());
 
+        let t5 = Instant::now();
         let model = modeler
             .build(db)
             .await
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+        eprintln!("[build] modeler.build: {:?}", t5.elapsed());
 
+        eprintln!("[build] total: {:?}", t0.elapsed());
         Ok(Problem::from_model(model, original_var_list))
     }
 }
@@ -80,6 +93,8 @@ pub async fn default_problem_builder(
     use collo_ml::eval::CompileError;
     use collo_ml::script_feeder::ScriptError;
     use collomatique_binding_colloscopes::scripts::MODULES;
+
+    let t0 = Instant::now();
 
     let mut modules: BTreeMap<&str, &str> = MODULES.iter().copied().collect();
     modules.insert("main", main_module);
@@ -109,5 +124,6 @@ pub async fn default_problem_builder(
         }
     }
 
+    eprintln!("[default_problem_builder] total: {:?}", t0.elapsed());
     Ok(ProblemBuilder { feeder })
 }

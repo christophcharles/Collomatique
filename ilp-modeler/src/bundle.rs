@@ -488,7 +488,7 @@ where
 /// indicator. Direct port of
 /// `collo-ml/src/problem/builder.rs:582` (`reify_constraint`)
 /// generalised to operate on `ExtraVar<B, E>`.
-fn reify_and_inner<B, E, Db>(
+pub(crate) fn reify_and_inner<B, E, Db>(
     constraints: &[Constraint<ExtraVar<B, E>>],
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
@@ -545,7 +545,7 @@ where
 /// in the big-M linearization. Correctness relies on all
 /// referenced variables being integer: with integrality, an
 /// integer expression `<= epsilon` is equivalent to `<= 0`.
-fn reify_single<B, E, Db>(
+pub(crate) fn reify_single<B, E, Db>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
