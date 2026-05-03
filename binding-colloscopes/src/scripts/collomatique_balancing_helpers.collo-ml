@@ -35,3 +35,149 @@ WHERE (sw1.rn - 1) % ?3 = 0
 
 pub let roll_weeks_for_subject(db: Db, subject_id: SubjectId, window_size: Int, step_size: Int) -> [WeekBounds] =
     roll_weeks_for_subject_internal(db, subject_id, window_size, step_size);
+
+// --- Week counting helpers (moved from collomatique_slot_pairings) ---
+
+query subject_weeks_in_range(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> [GlobalWeek] = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+    AND NOT EXISTS (
+        SELECT 1 FROM subject_excluded_periods sep
+        WHERE sep.subject_id = ?1 AND sep.period_id = pw.period_id
+    )
+)
+SELECT global_week_number AS id FROM ordered_weeks
+WHERE global_week_number >= ?2 AND global_week_number <= ?3
+";
+
+query slot_count_in_week_internal(db: Db, subject_id: SubjectId, slot_id: SlotId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM ordered_weeks ow
+JOIN slots s ON s.id = ?2
+WHERE s.subject_id = ?1
+AND ow.global_week_number = ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+query teacher_count_in_week_internal(db: Db, subject_id: SubjectId, teacher_id: TeacherId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?1
+AND s.teacher_id = ?2
+AND ow.global_week_number = ?3
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+query tot_count_in_week_internal(db: Db, subject_id: SubjectId, week: GlobalWeek) -> ?Int = "
+WITH ordered_weeks AS (
+    SELECT pw.period_id, pw.week_index,
+        (SELECT COUNT(*) FROM period_weeks pw2
+         JOIN periods p2 ON p2.id = pw2.period_id
+         JOIN periods p ON p.id = pw.period_id
+         WHERE (p2.position < p.position)
+            OR (p2.position = p.position AND pw2.week_index < pw.week_index)
+        ) AS global_week_number
+    FROM period_weeks pw
+    WHERE pw.has_interrogations = 1
+)
+SELECT COUNT(*) AS total
+FROM slots s
+CROSS JOIN ordered_weeks ow
+WHERE s.subject_id = ?1
+AND ow.global_week_number = ?2
+AND (
+    s.week_pattern_id IS NULL
+    OR NOT EXISTS (
+        SELECT 1 FROM week_pattern_disabled_weeks wpdw
+        WHERE wpdw.week_pattern_id = s.week_pattern_id
+          AND wpdw.period_id = ow.period_id
+          AND wpdw.week_index = ow.week_index
+    )
+)
+AND NOT EXISTS (
+    SELECT 1 FROM subject_excluded_periods sep
+    WHERE sep.subject_id = s.subject_id
+      AND sep.period_id = ow.period_id
+)
+";
+
+pub let slot_count_in_week(db: Db, subject_id: SubjectId, slot_id: SlotId, week: GlobalWeek) -> Int =
+    slot_count_in_week_internal(db, subject_id, slot_id, week) ?? 0;
+
+pub let teacher_count_in_week(db: Db, subject_id: SubjectId, teacher_id: TeacherId, week: GlobalWeek) -> Int =
+    teacher_count_in_week_internal(db, subject_id, teacher_id, week) ?? 0;
+
+pub let tot_count_in_week(db: Db, subject_id: SubjectId, week: GlobalWeek) -> Int =
+    tot_count_in_week_internal(db, subject_id, week) ?? 0;
+
+pub let nb_teach(db: Db, subject_id: SubjectId, teacher_id: TeacherId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        teacher_count_in_week(db, subject_id, teacher_id, week)
+    };
+
+pub let nb_tot(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        tot_count_in_week(db, subject_id, week)
+    };
+
+pub let nb_slot(db: Db, subject_id: SubjectId, slot_id: SlotId, first_week: GlobalWeek, last_week: GlobalWeek) -> Int =
+    sum week in subject_weeks_in_range(db, subject_id, first_week, last_week) {
+        slot_count_in_week(db, subject_id, slot_id, week)
+    };

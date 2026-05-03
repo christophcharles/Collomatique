@@ -3,7 +3,6 @@ import "collomatique_vars" as *;
 import "collomatique_types" as *;
 import "collomatique_queries" as queries;
 import "collomatique_balancing_helpers" as bal_helpers;
-import "collomatique_slot_pairings" as slot_pairings;
 
 type NullableIntRow = {
     value: ?Int | String | Bool,
@@ -116,13 +115,13 @@ let enforce_ceiling_for_window(db: Db, student_id: StudentId, subject_id: Subjec
         <== (ns * nb_interr + ntot - 1) / ntot;
 
 let enforce_rotation_for_all_in_window(db: Db, subject_id: SubjectId, first_week: GlobalWeek, last_week: GlobalWeek, nb_interr: Int) -> Constraint =
-    let ntot = slot_pairings::nb_tot(db, subject_id, first_week, last_week) {
+    let ntot = bal_helpers::nb_tot(db, subject_id, first_week, last_week) {
         if ntot == 0 {
             trivial
         } else {
             forall student in students_for_subject(db, subject_id) {
                 forall slot in slots_for_subject(db, subject_id) {
-                    let ns = slot_pairings::nb_slot(db, subject_id, slot, first_week, last_week) {
+                    let ns = bal_helpers::nb_slot(db, subject_id, slot, first_week, last_week) {
                         enforce_ceiling_for_window(db, student, subject_id, slot, first_week, last_week, ns, nb_interr, ntot)
                     }
                 }
