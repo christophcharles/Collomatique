@@ -389,7 +389,7 @@ impl ConstraintDesc {
                 let s_name = student_name(env, *student);
                 let i_name = incompat_name(env, *incompat);
                 format!(
-                    "Pas de colle pour l'élève {} la semaine {} (incompatibilité {})",
+                    "L'élève {} ne doit pas avoir de colle la semaine {} pendant l'incompatibilité {}",
                     s_name,
                     week.0 + 1,
                     i_name,
@@ -472,56 +472,92 @@ impl ConstraintDesc {
                 )
             }
             ConstraintDesc::SlotPairingUsedImpliesUsed { rule, week } => {
-                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "Si le créneau {} est utilisé semaine {}, le créneau {} doit aussi être utilisé",
-                    ant_slot,
+                    "{} semaine {} : si le créneau ({}) est utilisé, le créneau ({}) doit aussi être utilisé",
+                    subj,
                     week.0 + 1,
-                    con_slot,
+                    ant,
+                    con,
                 )
             }
             ConstraintDesc::SlotPairingUsedImpliesNotUsed { rule, week } => {
-                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "Si le créneau {} est utilisé semaine {}, le créneau {} ne doit pas être utilisé",
-                    ant_slot,
+                    "{} semaine {} : si le créneau ({}) est utilisé, le créneau ({}) ne doit pas être utilisé",
+                    subj,
                     week.0 + 1,
-                    con_slot,
+                    ant,
+                    con,
                 )
             }
             ConstraintDesc::SlotPairingNotUsedImpliesUsed { rule, week } => {
-                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "Si le créneau {} n'est pas utilisé semaine {}, le créneau {} doit être utilisé",
-                    ant_slot,
+                    "{} semaine {} : si le créneau ({}) n'est pas utilisé, le créneau ({}) doit être utilisé",
+                    subj,
                     week.0 + 1,
-                    con_slot,
+                    ant,
+                    con,
                 )
             }
             ConstraintDesc::SlotPairingNotUsedImpliesNotUsed { rule, week } => {
-                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "Si le créneau {} n'est pas utilisé semaine {}, le créneau {} ne doit pas être utilisé non plus",
-                    ant_slot,
+                    "{} semaine {} : si le créneau ({}) n'est pas utilisé, le créneau ({}) ne doit pas être utilisé non plus",
+                    subj,
                     week.0 + 1,
-                    con_slot,
+                    ant,
+                    con,
                 )
             }
         }
     }
 }
 
-fn slot_pairing_slot_names(
+fn slot_pairing_info(
     env: &collomatique_state_colloscopes::colloscope_params::Parameters,
     rule: SlotPairingRuleId,
-) -> (String, String) {
+) -> (String, String, String) {
     let rule_data = env.slot_pairings.slot_pairing_rule_map.get(&rule);
     match rule_data {
-        Some(r) => (
-            slot_name(env, r.antecedent.slot_id),
-            slot_name(env, r.consequent.slot_id),
+        Some(r) => {
+            let subj = env
+                .slots
+                .find_slot_subject_and_position(r.antecedent.slot_id)
+                .and_then(|(subj_id, _)| {
+                    env.subjects
+                        .ordered_subject_list
+                        .iter()
+                        .find(|(id, _)| *id == subj_id)
+                        .map(|(_, s)| s.parameters.name.clone())
+                })
+                .unwrap_or_else(|| format!("{:?}", rule));
+            (
+                subj,
+                slot_teacher_and_time(env, r.antecedent.slot_id),
+                slot_teacher_and_time(env, r.consequent.slot_id),
+            )
+        }
+        None => (
+            format!("{:?}", rule),
+            format!("{:?}", rule),
+            format!("{:?}", rule),
         ),
-        None => (format!("{:?}", rule), format!("{:?}", rule)),
+    }
+}
+
+fn slot_teacher_and_time(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    slot: SlotId,
+) -> String {
+    match env.slots.find_slot(slot) {
+        Some(data) => format!(
+            "{}, {}",
+            data.start_time,
+            teacher_name(env, data.teacher_id)
+        ),
+        None => format!("{:?}", slot),
     }
 }
 
@@ -605,6 +641,17 @@ fn slot_name(
         (Some(subj), None) => subj.to_string(),
         _ => format!("{:?}", slot),
     }
+}
+
+fn teacher_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    teacher_id: collomatique_state_colloscopes::ids::TeacherId,
+) -> String {
+    env.teachers
+        .teacher_map
+        .get(&teacher_id)
+        .map(|t| format!("{} {}", t.desc.firstname, t.desc.surname))
+        .unwrap_or_else(|| format!("{:?}", teacher_id))
 }
 
 fn group_list_name(
