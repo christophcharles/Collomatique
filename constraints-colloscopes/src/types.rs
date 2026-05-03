@@ -1,4 +1,6 @@
-use crate::ids::{GlobalWeek, GroupListId, GroupNum, PeriodId, SlotId, StudentId, SubjectId};
+use crate::ids::{
+    GlobalWeek, GroupListId, GroupNum, IncompatId, PeriodId, SlotId, StudentId, SubjectId,
+};
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
 use collo_ml::script_feeder::ReifiedVar;
@@ -48,6 +50,12 @@ pub enum ExtraVarName {
     StudentAtInterrogation {
         student: StudentId,
         slot: SlotId,
+        week: GlobalWeek,
+    },
+    StudentNotAtIncompatSlot {
+        student: StudentId,
+        incompat: IncompatId,
+        incompat_slot_index: usize,
         week: GlobalWeek,
     },
     LimitsMaxPerDayPenalty,
@@ -141,6 +149,17 @@ pub enum ConstraintDesc {
         student: StudentId,
         week: GlobalWeek,
         min: u32,
+    },
+    IncompatSaturated {
+        student: StudentId,
+        incompat: IncompatId,
+        week: GlobalWeek,
+    },
+    IncompatNonSaturated {
+        student: StudentId,
+        incompat: IncompatId,
+        week: GlobalWeek,
+        minimum_free_slots: u32,
     },
 }
 
@@ -318,8 +337,49 @@ impl ConstraintDesc {
                     s_name,
                 )
             }
+            ConstraintDesc::IncompatSaturated {
+                student,
+                incompat,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let i_name = incompat_name(env, *incompat);
+                format!(
+                    "Pas de colle pour l'élève {} la semaine {} (incompatibilité {})",
+                    s_name,
+                    week.0 + 1,
+                    i_name,
+                )
+            }
+            ConstraintDesc::IncompatNonSaturated {
+                student,
+                incompat,
+                week,
+                minimum_free_slots,
+            } => {
+                let s_name = student_name(env, *student);
+                let i_name = incompat_name(env, *incompat);
+                format!(
+                    "Au moins {} créneau(x) disponible(s) pour l'élève {} la semaine {} (incompatibilité {})",
+                    minimum_free_slots,
+                    s_name,
+                    week.0 + 1,
+                    i_name,
+                )
+            }
         }
     }
+}
+
+fn incompat_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    incompat: IncompatId,
+) -> String {
+    env.incompats
+        .incompat_map
+        .get(&incompat)
+        .map(|i| i.name.clone())
+        .unwrap_or_else(|| format!("{:?}", incompat))
 }
 
 fn student_name(

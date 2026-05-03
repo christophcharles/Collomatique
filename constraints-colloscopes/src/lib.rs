@@ -3,6 +3,7 @@ mod forbidden_groups;
 mod group_count_per_interrogation;
 mod groups_filled_by_ascending_order;
 pub mod ids;
+mod incompats;
 mod interrogation_cost;
 mod limits;
 mod native_extras;

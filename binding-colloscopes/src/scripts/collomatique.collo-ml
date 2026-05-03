@@ -1,5 +1,4 @@
 import "collomatique_db" as *;
-import "collomatique_incompats" as incompats;
 import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicity_afab;
 import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
@@ -13,7 +12,6 @@ import "collomatique_pairings" as pairings;
 import "collomatique_slot_pairings" as slot_pairings;
 
 pub let default_constraint(db: Db) -> Constraint =
-    incompats::constraint(db) and
     periodicity_amount_in_year::constraint(db) and
     periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and

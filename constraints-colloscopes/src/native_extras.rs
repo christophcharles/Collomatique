@@ -5,8 +5,10 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::group_lists::GroupList;
+use collomatique_state_colloscopes::ids::WeekPatternId;
 use collomatique_state_colloscopes::ids::{GroupListId, Id, PeriodId, StudentId, SubjectId};
 use collomatique_state_colloscopes::slots::Slot;
+use collomatique_time::SlotWithDuration;
 use std::collections::BTreeSet;
 
 pub(crate) type V = ModelerVar<Var, ExtraVarName>;
@@ -137,6 +139,29 @@ pub(crate) fn subject_interrogation_params(
         .iter()
         .find(|(id, _)| *id == subject)
         .and_then(|(_, s)| s.parameters.interrogation_parameters.as_ref())
+}
+
+pub(crate) fn weeks_for_week_pattern(
+    env: &VarEnv,
+    week_pattern_id: Option<WeekPatternId>,
+    excluded_periods: &BTreeSet<PeriodId>,
+) -> Vec<GlobalWeek> {
+    let week_pattern =
+        collomatique_binding_colloscopes::tools::extract_week_pattern(env, week_pattern_id);
+    let mut output = Vec::new();
+    let mut global_week = 0usize;
+    for (period_id, period_desc) in &env.periods.ordered_period_list {
+        for week_desc in period_desc {
+            if week_desc.interrogations
+                && *week_pattern.get(global_week).unwrap_or(&true)
+                && !excluded_periods.contains(period_id)
+            {
+                output.push(GlobalWeek(global_week));
+            }
+            global_week += 1;
+        }
+    }
+    output
 }
 
 // ---- Reified variable builders (lazy registration) ----
@@ -443,6 +468,113 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
     bundle
 }
 
+fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
+
+    let all_interrog_slots: Vec<_> = {
+        let mut result = Vec::new();
+        for (&subject_id, subject_slots) in &env.slots.subject_map {
+            let Some(subject) = env.subjects.find_subject(subject_id) else {
+                continue;
+            };
+            let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
+                continue;
+            };
+            for (slot_id, slot_data) in &subject_slots.ordered_slots {
+                let Some(swd) =
+                    SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
+                else {
+                    continue;
+                };
+                result.push((
+                    *slot_id,
+                    subject_id,
+                    slot_data,
+                    &subject.excluded_periods,
+                    swd,
+                ));
+            }
+        }
+        result
+    };
+
+    for (&incompat_id, incompat) in &env.incompats.incompat_map {
+        let Some(subject) = env.subjects.find_subject(incompat.subject_id) else {
+            continue;
+        };
+
+        let incompat_weeks =
+            weeks_for_week_pattern(env, incompat.week_pattern_id, &subject.excluded_periods);
+
+        for (incompat_slot_index, incompat_swd) in incompat.slots.iter().enumerate() {
+            for &week in &incompat_weeks {
+                let (period_id, _) = match week_to_period_id(env, week) {
+                    Some(p) => p,
+                    None => continue,
+                };
+
+                let enrolled_in_incompat_subject = env
+                    .assignments
+                    .period_map
+                    .get(&period_id)
+                    .and_then(|pa| pa.subject_map.get(&incompat.subject_id));
+                let Some(enrolled_students) = enrolled_in_incompat_subject else {
+                    continue;
+                };
+
+                for &student in enrolled_students {
+                    let overlapping: Vec<_> = all_interrog_slots
+                        .iter()
+                        .filter(|(_, subj_id, slot_data, excluded, swd)| {
+                            swd.overlaps_with(incompat_swd)
+                                && !excluded.contains(&period_id)
+                                && is_student_enrolled(env, student, *subj_id, week)
+                                && {
+                                    let pattern =
+                                        collomatique_binding_colloscopes::tools::extract_week_pattern(
+                                            env,
+                                            slot_data.week_pattern,
+                                        );
+                                    pattern.get(week.0).copied().unwrap_or(false)
+                                }
+                        })
+                        .map(|(slot_id, ..)| *slot_id)
+                        .collect();
+
+                    if overlapping.is_empty() {
+                        continue;
+                    }
+
+                    let var = ExtraVarName::StudentNotAtIncompatSlot {
+                        student,
+                        incompat: incompat_id,
+                        incompat_slot_index,
+                        week,
+                    };
+                    bundle = bundle
+                        .and_reified(var, move || {
+                            overlapping
+                                .iter()
+                                .map(|&slot| {
+                                    IntLinExpr::<V>::var(extra_var(
+                                        ExtraVarName::StudentAtInterrogation {
+                                            student,
+                                            slot,
+                                            week,
+                                        },
+                                    ))
+                                    .leq(&IntLinExpr::constant(0))
+                                })
+                                .collect()
+                        })
+                        .expect("no duplicate extras");
+                }
+            }
+        }
+    }
+    bundle
+}
+
 // ---- Public API ----
 
 pub fn build_native_extras(env: &VarEnv) -> MyBundle {
@@ -459,7 +591,10 @@ pub fn build_native_extras(env: &VarEnv) -> MyBundle {
     let bundle = bundle
         .merge(build_student_at_interrogation_in_group(env))
         .expect("no duplicate extras");
-    bundle
+    let bundle = bundle
         .merge(build_student_at_interrogation(env))
+        .expect("no duplicate extras");
+    bundle
+        .merge(build_student_not_at_incompat_slot(env))
         .expect("no duplicate extras")
 }
