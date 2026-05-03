@@ -77,7 +77,7 @@ impl Var {
     pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &i32) -> Vec<i32> {
         use collomatique_state_colloscopes::ids::Id;
         let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        crate::tools::enumerate_weeks_for_slot(env, slot_id)
+        crate::tools::enumerate_weeks_for_slot_id(env, slot_id)
             .into_iter()
             .map(|w| w as i32)
             .collect()

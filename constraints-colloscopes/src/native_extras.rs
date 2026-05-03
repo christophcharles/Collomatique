@@ -81,22 +81,9 @@ pub(crate) fn weeks_for_slot(
     slot: &Slot,
     excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<GlobalWeek> {
-    let week_pattern =
-        collomatique_binding_colloscopes::tools::extract_week_pattern(env, slot.week_pattern);
-    week_pattern
+    collomatique_binding_colloscopes::tools::enumerate_weeks_for_slot(env, slot, excluded_periods)
         .into_iter()
-        .enumerate()
-        .filter_map(|(week_num, active)| {
-            if !active {
-                return None;
-            }
-            let week = GlobalWeek(week_num);
-            let (period, _) = week_to_period_id(env, week)?;
-            if excluded_periods.contains(&period) {
-                return None;
-            }
-            Some(week)
-        })
+        .map(GlobalWeek)
         .collect()
 }
 
