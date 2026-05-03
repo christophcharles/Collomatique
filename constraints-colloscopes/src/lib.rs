@@ -10,6 +10,7 @@ mod native_extras;
 mod one_interrogation_at_once;
 mod pairings;
 mod problem;
+mod slot_pairings;
 mod students_have_groups;
 mod students_per_group;
 mod students_per_group_for_subject;

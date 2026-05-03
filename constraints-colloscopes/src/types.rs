@@ -1,6 +1,6 @@
 use crate::ids::{
-    GlobalWeek, GroupListId, GroupNum, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId,
-    SubjectId,
+    GlobalWeek, GroupListId, GroupNum, IncompatId, PairingRuleId, PeriodId, SlotId,
+    SlotPairingRuleId, StudentId, SubjectId,
 };
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
@@ -65,6 +65,7 @@ pub enum ExtraVarName {
         week: GlobalWeek,
     },
     PairingsPenalty,
+    SlotPairingsPenalty,
     LimitsMaxPerDayPenalty,
     LimitsMaxPerWeekPenalty,
     LimitsMinPerWeekPenalty,
@@ -187,6 +188,22 @@ pub enum ConstraintDesc {
         student: StudentId,
         week: GlobalWeek,
         rule: PairingRuleId,
+    },
+    SlotPairingUsedImpliesUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+    SlotPairingUsedImpliesNotUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+    SlotPairingNotUsedImpliesUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+    SlotPairingNotUsedImpliesNotUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
     },
 }
 
@@ -454,7 +471,57 @@ impl ConstraintDesc {
                     con_subj,
                 )
             }
+            ConstraintDesc::SlotPairingUsedImpliesUsed { rule, week } => {
+                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                format!(
+                    "Si le créneau {} est utilisé semaine {}, le créneau {} doit aussi être utilisé",
+                    ant_slot,
+                    week.0 + 1,
+                    con_slot,
+                )
+            }
+            ConstraintDesc::SlotPairingUsedImpliesNotUsed { rule, week } => {
+                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                format!(
+                    "Si le créneau {} est utilisé semaine {}, le créneau {} ne doit pas être utilisé",
+                    ant_slot,
+                    week.0 + 1,
+                    con_slot,
+                )
+            }
+            ConstraintDesc::SlotPairingNotUsedImpliesUsed { rule, week } => {
+                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                format!(
+                    "Si le créneau {} n'est pas utilisé semaine {}, le créneau {} doit être utilisé",
+                    ant_slot,
+                    week.0 + 1,
+                    con_slot,
+                )
+            }
+            ConstraintDesc::SlotPairingNotUsedImpliesNotUsed { rule, week } => {
+                let (ant_slot, con_slot) = slot_pairing_slot_names(env, *rule);
+                format!(
+                    "Si le créneau {} n'est pas utilisé semaine {}, le créneau {} ne doit pas être utilisé non plus",
+                    ant_slot,
+                    week.0 + 1,
+                    con_slot,
+                )
+            }
         }
+    }
+}
+
+fn slot_pairing_slot_names(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    rule: SlotPairingRuleId,
+) -> (String, String) {
+    let rule_data = env.slot_pairings.slot_pairing_rule_map.get(&rule);
+    match rule_data {
+        Some(r) => (
+            slot_name(env, r.antecedent.slot_id),
+            slot_name(env, r.consequent.slot_id),
+        ),
+        None => (format!("{:?}", rule), format!("{:?}", rule)),
     }
 }
 

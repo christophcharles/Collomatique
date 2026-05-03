@@ -112,6 +112,11 @@ impl ProblemBuilder {
             .apply_bundle(pairings_bundle.into_general())
             .expect("no duplicate extras from pairings");
 
+        let slot_pairings_bundle = crate::slot_pairings::build(&env);
+        modeler
+            .apply_bundle(slot_pairings_bundle.into_general())
+            .expect("no duplicate extras from slot_pairings");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
