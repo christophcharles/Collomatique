@@ -4,6 +4,7 @@ mod group_count_per_interrogation;
 mod groups_filled_by_ascending_order;
 pub mod ids;
 mod interrogation_cost;
+mod limits;
 mod native_extras;
 mod one_interrogation_at_once;
 mod problem;

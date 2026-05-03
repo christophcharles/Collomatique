@@ -50,6 +50,9 @@ pub enum ExtraVarName {
         slot: SlotId,
         week: GlobalWeek,
     },
+    LimitsMaxPerDayPenalty,
+    LimitsMaxPerWeekPenalty,
+    LimitsMinPerWeekPenalty,
 }
 
 impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
@@ -122,6 +125,22 @@ pub enum ConstraintDesc {
         slot_a: SlotId,
         slot_b: SlotId,
         week: GlobalWeek,
+    },
+    MaxInterrogationsPerDay {
+        student: StudentId,
+        week: GlobalWeek,
+        day: collomatique_time::Weekday,
+        max: u32,
+    },
+    MaxInterrogationsPerWeek {
+        student: StudentId,
+        week: GlobalWeek,
+        max: u32,
+    },
+    MinInterrogationsPerWeek {
+        student: StudentId,
+        week: GlobalWeek,
+        min: u32,
     },
 }
 
@@ -264,6 +283,39 @@ impl ConstraintDesc {
                     sa_name,
                     sb_name,
                     week.0 + 1,
+                )
+            }
+            ConstraintDesc::MaxInterrogationsPerDay {
+                student,
+                week,
+                day,
+                max,
+            } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au maximum {} colle(s) le {} de la semaine {} pour l'élève {}",
+                    max,
+                    day,
+                    week.0 + 1,
+                    s_name,
+                )
+            }
+            ConstraintDesc::MaxInterrogationsPerWeek { student, week, max } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au maximum {} colle(s) la semaine {} pour l'élève {}",
+                    max,
+                    week.0 + 1,
+                    s_name,
+                )
+            }
+            ConstraintDesc::MinInterrogationsPerWeek { student, week, min } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au minimum {} colle(s) la semaine {} pour l'élève {}",
+                    min,
+                    week.0 + 1,
+                    s_name,
                 )
             }
         }
