@@ -664,33 +664,35 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
                         .map(|(slot_id, ..)| *slot_id)
                         .collect();
 
-                    if overlapping.is_empty() {
-                        continue;
-                    }
-
                     let var = ExtraVarName::StudentNotAtIncompatSlot {
                         student,
                         incompat: incompat_id,
                         incompat_slot_index,
                         week,
                     };
-                    bundle = bundle
-                        .and_reified(var, move || {
-                            overlapping
-                                .iter()
-                                .map(|&slot| {
-                                    IntLinExpr::<V>::var(extra_var(
-                                        ExtraVarName::StudentAtInterrogation {
-                                            student,
-                                            slot,
-                                            week,
-                                        },
-                                    ))
-                                    .leq(&IntLinExpr::constant(0))
-                                })
-                                .collect()
-                        })
-                        .expect("no duplicate extras");
+                    if overlapping.is_empty() {
+                        bundle = bundle
+                            .and_reified(var, move || vec![])
+                            .expect("no duplicate extras");
+                    } else {
+                        bundle = bundle
+                            .and_reified(var, move || {
+                                overlapping
+                                    .iter()
+                                    .map(|&slot| {
+                                        IntLinExpr::<V>::var(extra_var(
+                                            ExtraVarName::StudentAtInterrogation {
+                                                student,
+                                                slot,
+                                                week,
+                                            },
+                                        ))
+                                        .leq(&IntLinExpr::constant(0))
+                                    })
+                                    .collect()
+                            })
+                            .expect("no duplicate extras");
+                    }
                 }
             }
         }
