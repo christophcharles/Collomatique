@@ -56,10 +56,6 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique_incompats.collo-ml"),
     ),
     (
-        "collomatique_interrogation_cost",
-        include_str!("scripts/collomatique_interrogation_cost.collo-ml"),
-    ),
-    (
         "collomatique_limits",
         include_str!("scripts/collomatique_limits.collo-ml"),
     ),
