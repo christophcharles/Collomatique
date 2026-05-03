@@ -49,7 +49,11 @@ pub(crate) fn group_list_for_interrogation(
     period_associations.get(&subject_id).copied()
 }
 
-fn groups_for_interrogation(env: &VarEnv, slot: SlotId, week: GlobalWeek) -> Vec<GroupNum> {
+pub(crate) fn groups_for_interrogation(
+    env: &VarEnv,
+    slot: SlotId,
+    week: GlobalWeek,
+) -> Vec<GroupNum> {
     let Some(gl_id) = group_list_for_interrogation(env, slot, week) else {
         return vec![];
     };

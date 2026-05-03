@@ -81,6 +81,12 @@ impl ProblemBuilder {
             .apply_bundle(forbidden_groups_bundle.into_general())
             .expect("no duplicate extras from forbidden_groups");
 
+        let group_count_per_interrogation_bundle =
+            crate::group_count_per_interrogation::build(&env);
+        modeler
+            .apply_bundle(group_count_per_interrogation_bundle.into_general())
+            .expect("no duplicate extras from group_count_per_interrogation");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

@@ -1,5 +1,6 @@
 mod builder;
 mod forbidden_groups;
+mod group_count_per_interrogation;
 mod groups_filled_by_ascending_order;
 pub mod ids;
 mod native_extras;

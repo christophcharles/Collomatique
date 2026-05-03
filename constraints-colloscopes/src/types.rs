@@ -107,6 +107,16 @@ pub enum ConstraintDesc {
         week: GlobalWeek,
         subject: SubjectId,
     },
+    GroupCountPerInterrogationMin {
+        slot: SlotId,
+        week: GlobalWeek,
+        min_groups: u32,
+    },
+    GroupCountPerInterrogationMax {
+        slot: SlotId,
+        week: GlobalWeek,
+        max_groups: u32,
+    },
 }
 
 impl ConstraintDesc {
@@ -207,6 +217,32 @@ impl ConstraintDesc {
                     g_name, gl_name, subj_name,
                 )
             }
+            ConstraintDesc::GroupCountPerInterrogationMin {
+                slot,
+                week,
+                min_groups,
+            } => {
+                let s_name = slot_name(env, *slot);
+                format!(
+                    "Minimum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
+                    min_groups,
+                    s_name,
+                    week.0 + 1,
+                )
+            }
+            ConstraintDesc::GroupCountPerInterrogationMax {
+                slot,
+                week,
+                max_groups,
+            } => {
+                let s_name = slot_name(env, *slot);
+                format!(
+                    "Maximum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
+                    max_groups,
+                    s_name,
+                    week.0 + 1,
+                )
+            }
         }
     }
 }
@@ -244,6 +280,28 @@ fn period_position(
         .position(|(id, _)| *id == period)
         .map(|p| p + 1)
         .unwrap_or(0)
+}
+
+fn slot_name(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    slot: SlotId,
+) -> String {
+    let slot_data = env.slots.find_slot(slot);
+    let subject = env
+        .slots
+        .find_slot_subject_and_position(slot)
+        .and_then(|(subj_id, _)| {
+            env.subjects
+                .ordered_subject_list
+                .iter()
+                .find(|(id, _)| *id == subj_id)
+                .map(|(_, s)| s.parameters.name.as_str())
+        });
+    match (subject, slot_data) {
+        (Some(subj), Some(data)) => format!("{} ({})", subj, data.start_time),
+        (Some(subj), None) => subj.to_string(),
+        _ => format!("{:?}", slot),
+    }
 }
 
 fn group_list_name(

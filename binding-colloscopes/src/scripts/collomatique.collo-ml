@@ -1,5 +1,4 @@
 import "collomatique_db" as *;
-import "collomatique_group_count_per_interrogation" as group_count_per_interrogation;
 import "collomatique_incompats" as incompats;
 import "collomatique_interrogation_cost" as interrogation_cost;
 import "collomatique_limits" as limits;
@@ -18,7 +17,6 @@ import "collomatique_slot_pairings" as slot_pairings;
 
 pub let default_constraint(db: Db) -> Constraint =
     one_interrogation_at_once::constraint(db) and
-    group_count_per_interrogation::constraint(db) and
     limits::constraint(db) and
     incompats::constraint(db) and
     periodicity_amount_in_year::constraint(db) and
