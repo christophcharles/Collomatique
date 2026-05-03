@@ -92,6 +92,11 @@ impl ProblemBuilder {
             .apply_bundle(one_interrogation_at_once_bundle.into_general())
             .expect("no duplicate extras from one_interrogation_at_once");
 
+        let interrogation_cost_bundle = crate::interrogation_cost::build(&env);
+        modeler
+            .apply_bundle(interrogation_cost_bundle.into_general())
+            .expect("no duplicate extras from interrogation_cost");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

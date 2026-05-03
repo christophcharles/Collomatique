@@ -1,6 +1,5 @@
 import "collomatique_db" as *;
 import "collomatique_incompats" as incompats;
-import "collomatique_interrogation_cost" as interrogation_cost;
 import "collomatique_limits" as limits;
 import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicity_afab;
 import "collomatique_periodicity_amount_in_year" as periodicity_amount_in_year;
@@ -30,7 +29,7 @@ pub let default_constraint(db: Db) -> Constraint =
     slot_pairings::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
-    limits::objective(db) + [interrogation_cost::objective(db)]
+    limits::objective(db)
     + balancing_rotation::objective(db)
     + balancing_slot_rotation::objective(db)
     + balancing_avoid_twice::objective(db)
