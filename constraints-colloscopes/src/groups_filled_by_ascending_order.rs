@@ -1,5 +1,5 @@
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -15,11 +15,11 @@ pub fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
         for &group in &groups[..groups.len() - 1] {
-            let current = IntLinExpr::<V>::var(extra_var(ReifiedVarName::GroupHasStudents {
+            let current = IntLinExpr::<V>::var(extra_var(ExtraVarName::GroupHasStudents {
                 group_list,
                 group,
             }));
-            let next = IntLinExpr::<V>::var(extra_var(ReifiedVarName::GroupHasStudents {
+            let next = IntLinExpr::<V>::var(extra_var(ExtraVarName::GroupHasStudents {
                 group_list,
                 group: group.next(),
             }));

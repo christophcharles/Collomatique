@@ -2,7 +2,7 @@ use crate::native_extras::{
     MyBundle, V, all_slots, extra_var, groups_for_interrogation, slot_subject,
     subject_interrogation_params, weeks_for_slot,
 };
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
@@ -28,7 +28,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
             let sum: IntLinExpr<V> = groups
                 .iter()
                 .map(|&group| {
-                    IntLinExpr::var(extra_var(ReifiedVarName::GroupInInterrogation {
+                    IntLinExpr::var(extra_var(ExtraVarName::GroupInInterrogation {
                         slot,
                         week,
                         group,
@@ -36,7 +36,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
                 })
                 .sum();
 
-            let has_groups = IntLinExpr::var(extra_var(ReifiedVarName::InterrogationHasGroups {
+            let has_groups = IntLinExpr::var(extra_var(ExtraVarName::InterrogationHasGroups {
                 slot,
                 week,
             }));

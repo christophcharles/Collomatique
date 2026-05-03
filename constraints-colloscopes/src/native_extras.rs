@@ -1,5 +1,5 @@
 use crate::ids::{GlobalWeek, GroupNum};
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::ReifyError;
@@ -8,21 +8,21 @@ use collomatique_state_colloscopes::ids::{
     GroupListId, Id, PeriodId, SlotId, StudentId, SubjectId,
 };
 
-pub(crate) type V = ModelerVar<Var, ReifiedVarName>;
+pub(crate) type V = ModelerVar<Var, ExtraVarName>;
 pub(crate) type MyBundle = IntConstraintBundle<
     'static,
     Var,
-    ReifiedVarName,
+    ExtraVarName,
     ConstraintDesc,
     VarEnv,
-    ReifyError<Var, ReifiedVarName>,
+    ReifyError<Var, ExtraVarName>,
 >;
 
 pub(crate) fn base_var(v: Var) -> V {
     ModelerVar::Base(v)
 }
 
-pub(crate) fn extra_var(v: ReifiedVarName) -> V {
+pub(crate) fn extra_var(v: ExtraVarName) -> V {
     ModelerVar::Extra(v)
 }
 
@@ -162,7 +162,7 @@ fn build_group_in_interrogation(env: &VarEnv) -> MyBundle {
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
             for group in groups_for_interrogation(env, slot, week) {
-                let var = ReifiedVarName::GroupInInterrogation { slot, week, group };
+                let var = ExtraVarName::GroupInInterrogation { slot, week, group };
                 bundle = bundle
                     .and_reified(var, move || {
                         let expr = IntLinExpr::var(base_var(Var::GroupInInterrogationInternal {
@@ -187,13 +187,13 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
             if groups.is_empty() {
                 continue;
             }
-            let var = ReifiedVarName::InterrogationHasGroups { slot, week };
+            let var = ExtraVarName::InterrogationHasGroups { slot, week };
             bundle = bundle
                 .and_reified(var, move || {
                     let sum: IntLinExpr<V> = groups
                         .iter()
                         .map(|&group| {
-                            IntLinExpr::var(extra_var(ReifiedVarName::GroupInInterrogation {
+                            IntLinExpr::var(extra_var(ExtraVarName::GroupInInterrogation {
                                 slot,
                                 week,
                                 group,
@@ -215,7 +215,7 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
         for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
             for &student in &students {
-                let var = ReifiedVarName::StudentInGroup {
+                let var = ExtraVarName::StudentInGroup {
                     student,
                     group_list,
                     group,
@@ -244,7 +244,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
     for (&group_list, gl) in &env.group_lists.group_list_map {
         for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
-            let var = ReifiedVarName::GroupHasStudents { group_list, group };
+            let var = ExtraVarName::GroupHasStudents { group_list, group };
             match &gl.filling {
                 GroupListFilling::Prefilled { groups } => {
                     let has_students = groups
@@ -277,7 +277,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
                             let sum: IntLinExpr<V> = students
                                 .iter()
                                 .map(|&student| {
-                                    IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                                    IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
                                         student,
                                         group_list,
                                         group,
@@ -308,7 +308,7 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
             for &student in &students {
                 for group_index in 0..gl.params.group_names.len() {
                     let group = GroupNum(group_index);
-                    let var = ReifiedVarName::StudentAtInterrogationInGroup {
+                    let var = ExtraVarName::StudentAtInterrogationInGroup {
                         student,
                         slot,
                         week,
@@ -318,15 +318,14 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
                     bundle =
                         bundle
                             .and_reified(var, move || {
-                                let c1 =
-                                    IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
-                                        student,
-                                        group_list,
-                                        group,
-                                    }))
-                                    .geq(&IntLinExpr::constant(1));
+                                let c1 = IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                                    student,
+                                    group_list,
+                                    group,
+                                }))
+                                .geq(&IntLinExpr::constant(1));
                                 let c2 = IntLinExpr::var(extra_var(
-                                    ReifiedVarName::GroupInInterrogation { slot, week, group },
+                                    ExtraVarName::GroupInInterrogation { slot, week, group },
                                 ))
                                 .geq(&IntLinExpr::constant(1));
                                 vec![c1, c2]
@@ -346,7 +345,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
     for slot in all_slots(env) {
         for week in weeks_for_slot(env, slot) {
             for &student in env.students.student_map.keys() {
-                let var = ReifiedVarName::StudentAtInterrogation {
+                let var = ExtraVarName::StudentAtInterrogation {
                     student,
                     slot,
                     week,
@@ -385,7 +384,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                                 bundle = bundle
                                     .and_reified(var, move || {
                                         let expr = IntLinExpr::var(extra_var(
-                                            ReifiedVarName::GroupInInterrogation {
+                                            ExtraVarName::GroupInInterrogation {
                                                 slot,
                                                 week,
                                                 group,
@@ -412,7 +411,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                                     .map(|i| {
                                         let group = GroupNum(i);
                                         IntLinExpr::var(extra_var(
-                                            ReifiedVarName::StudentAtInterrogationInGroup {
+                                            ExtraVarName::StudentAtInterrogationInGroup {
                                                 student,
                                                 slot,
                                                 week,

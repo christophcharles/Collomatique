@@ -12,7 +12,7 @@ use derivative::Derivative;
     PartialEq(bound = ""),
     Eq(bound = "")
 )]
-pub enum ReifiedVarName {
+pub enum ExtraVarName {
     Script(ReifiedVar<SqliteDatabaseConnection>),
     GroupInInterrogation {
         slot: SlotId,
@@ -52,9 +52,9 @@ pub enum ReifiedVarName {
     },
 }
 
-impl From<ReifiedVar<SqliteDatabaseConnection>> for ReifiedVarName {
+impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
     fn from(v: ReifiedVar<SqliteDatabaseConnection>) -> Self {
-        ReifiedVarName::Script(v)
+        ExtraVarName::Script(v)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::native_extras::{
     MyBundle, all_slots, extra_var, is_student_enrolled, slot_subject,
     subject_interrogation_params, weeks_for_slot,
 };
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_time::SlotWithDuration;
@@ -44,18 +44,16 @@ pub fn build(env: &VarEnv) -> MyBundle {
                         continue;
                     }
 
-                    let expr_a =
-                        IntLinExpr::var(extra_var(ReifiedVarName::StudentAtInterrogation {
-                            student,
-                            slot: *slot_a,
-                            week,
-                        }));
-                    let expr_b =
-                        IntLinExpr::var(extra_var(ReifiedVarName::StudentAtInterrogation {
-                            student,
-                            slot: *slot_b,
-                            week,
-                        }));
+                    let expr_a = IntLinExpr::var(extra_var(ExtraVarName::StudentAtInterrogation {
+                        student,
+                        slot: *slot_a,
+                        week,
+                    }));
+                    let expr_b = IntLinExpr::var(extra_var(ExtraVarName::StudentAtInterrogation {
+                        student,
+                        slot: *slot_b,
+                        week,
+                    }));
                     bundle = bundle.with_constraint(
                         (expr_a + expr_b).leq(&IntLinExpr::constant(1)),
                         ConstraintDesc::OneInterrogationAtOnce {

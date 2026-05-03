@@ -3,7 +3,7 @@ use crate::native_extras::{
     MyBundle, V, all_slots, extra_var, group_list_for_interrogation, groups_for_group_list,
     slot_subject, students_for_subject_period_group_list, week_to_period_id, weeks_for_slot,
 };
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -38,7 +38,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
 
                         if !has_enrolled {
                             let expr = IntLinExpr::<V>::var(extra_var(
-                                ReifiedVarName::GroupInInterrogation { slot, week, group },
+                                ExtraVarName::GroupInInterrogation { slot, week, group },
                             ));
                             bundle = bundle.with_constraint(
                                 expr.eq(&IntLinExpr::constant(0)),
@@ -61,7 +61,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
                         let sum: IntLinExpr<V> = students
                             .iter()
                             .map(|&student| {
-                                IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                                IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
                                     student,
                                     group_list,
                                     group,
@@ -70,7 +70,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
                             .sum();
 
                         let gi =
-                            IntLinExpr::<V>::var(extra_var(ReifiedVarName::GroupInInterrogation {
+                            IntLinExpr::<V>::var(extra_var(ExtraVarName::GroupInInterrogation {
                                 slot,
                                 week,
                                 group,

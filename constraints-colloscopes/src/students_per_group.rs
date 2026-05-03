@@ -1,6 +1,6 @@
 use crate::ids::GroupNum;
 use crate::native_extras::{MyBundle, V, extra_var, students_for_group_list};
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::GroupListId;
@@ -18,7 +18,7 @@ fn build_for_group(
     let count: IntLinExpr<V> = students
         .iter()
         .map(|&student| {
-            IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
                 student,
                 group_list,
                 group,
@@ -26,7 +26,7 @@ fn build_for_group(
         })
         .sum();
 
-    let group_has = IntLinExpr::var(extra_var(ReifiedVarName::GroupHasStudents {
+    let group_has = IntLinExpr::var(extra_var(ExtraVarName::GroupHasStudents {
         group_list,
         group,
     }));

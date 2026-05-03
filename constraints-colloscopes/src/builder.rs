@@ -1,6 +1,6 @@
 use crate::native_extras::build_native_extras;
 use crate::problem::Problem;
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collo_ml::script_feeder::{ScriptError, ScriptFeeder};
 use collo_ml::{SemWarning, SqliteDatabaseConnection, SqliteDatabaseDriver};
 use collomatique_binding_colloscopes::scripts::SimpleScriptError;
@@ -12,11 +12,11 @@ use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemBuilder {
-    feeder: ScriptFeeder<SqliteDatabaseDriver, Var, ReifiedVarName, ConstraintDesc>,
+    feeder: ScriptFeeder<SqliteDatabaseDriver, Var, ExtraVarName, ConstraintDesc>,
 }
 
 pub(crate) type MyModeler<'m> =
-    Modeler<'m, Var, ReifiedVarName, ConstraintDesc, VarEnv, ReifyError<Var, ReifiedVarName>>;
+    Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
 
 impl ProblemBuilder {
     pub fn get_warnings(&self) -> &[SemWarning] {

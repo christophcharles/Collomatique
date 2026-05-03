@@ -2,7 +2,7 @@ use crate::ids::GroupNum;
 use crate::native_extras::{
     MyBundle, V, extra_var, students_for_subject_period_group_list, subject_interrogation_params,
 };
-use crate::types::{ConstraintDesc, ReifiedVarName};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -32,7 +32,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
                 let count: IntLinExpr<V> = students
                     .iter()
                     .map(|&student| {
-                        IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                        IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
                             student,
                             group_list,
                             group,
@@ -41,7 +41,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
                     .sum();
 
                 let group_has =
-                    IntLinExpr::var(extra_var(ReifiedVarName::GroupHasStudentsForSubject {
+                    IntLinExpr::var(extra_var(ExtraVarName::GroupHasStudentsForSubject {
                         group_list,
                         group,
                         subject,
@@ -85,7 +85,7 @@ fn add_reification(
     subject: collomatique_state_colloscopes::ids::SubjectId,
     period: collomatique_state_colloscopes::ids::PeriodId,
 ) -> MyBundle {
-    let var = ReifiedVarName::GroupHasStudentsForSubject {
+    let var = ExtraVarName::GroupHasStudentsForSubject {
         group_list,
         group,
         subject,
@@ -125,7 +125,7 @@ fn add_reification(
                     let sum: IntLinExpr<V> = students
                         .iter()
                         .map(|&student| {
-                            IntLinExpr::var(extra_var(ReifiedVarName::StudentInGroup {
+                            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
                                 student,
                                 group_list,
                                 group,
