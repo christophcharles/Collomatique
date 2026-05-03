@@ -10,7 +10,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
         let GroupListFilling::Automatic { .. } = &gl.filling else {
             continue;
         };
-        let groups = groups_for_group_list(env, group_list);
+        let groups = groups_for_group_list(gl);
         if groups.len() < 2 {
             continue;
         }

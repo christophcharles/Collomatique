@@ -58,11 +58,10 @@ pub fn build(env: &VarEnv) -> MyBundle {
                         }
                     }
                     GroupListFilling::Automatic { .. } => {
-                        let students = students_for_subject_period_group_list(
-                            env, group_list, subject_id, period,
-                        );
+                        let students =
+                            students_for_subject_period_group_list(env, gl, subject_id, period);
 
-                        for group in groups_for_group_list(env, group_list) {
+                        for group in groups_for_group_list(gl) {
                             let sum: IntLinExpr<V> = students
                                 .iter()
                                 .map(|&student| {

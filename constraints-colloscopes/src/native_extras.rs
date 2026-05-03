@@ -4,6 +4,7 @@ use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
+use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::{GroupListId, Id, PeriodId, StudentId, SubjectId};
 use collomatique_state_colloscopes::slots::Slot;
 use std::collections::BTreeSet;
@@ -50,13 +51,13 @@ pub(crate) fn groups_for_interrogation(
     let Some(gl_id) = group_list_for_interrogation(env, subject, week) else {
         return vec![];
     };
-    groups_for_group_list(env, gl_id)
-}
-
-pub(crate) fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<GroupNum> {
-    let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
+    let Some(gl) = env.group_lists.group_list_map.get(&gl_id) else {
         return vec![];
     };
+    groups_for_group_list(gl)
+}
+
+pub(crate) fn groups_for_group_list(gl: &GroupList) -> Vec<GroupNum> {
     (0..gl.params.group_names.len()).map(GroupNum).collect()
 }
 
@@ -87,10 +88,7 @@ pub(crate) fn weeks_for_slot(
         .collect()
 }
 
-pub(crate) fn students_for_group_list(env: &VarEnv, group_list: GroupListId) -> Vec<StudentId> {
-    let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
-        return vec![];
-    };
+pub(crate) fn students_for_group_list(env: &VarEnv, gl: &GroupList) -> Vec<StudentId> {
     match &gl.filling {
         collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
             excluded_students,
@@ -112,7 +110,7 @@ pub(crate) fn students_for_group_list(env: &VarEnv, group_list: GroupListId) -> 
 
 pub(crate) fn students_for_subject_period_group_list(
     env: &VarEnv,
-    group_list: GroupListId,
+    gl: &GroupList,
     subject: SubjectId,
     period: PeriodId,
 ) -> Vec<StudentId> {
@@ -124,7 +122,7 @@ pub(crate) fn students_for_subject_period_group_list(
     let Some(enrolled) = enrolled else {
         return vec![];
     };
-    students_for_group_list(env, group_list)
+    students_for_group_list(env, gl)
         .into_iter()
         .filter(|s| enrolled.contains(s))
         .collect()
@@ -210,7 +208,7 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
 fn build_student_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
-        let students = students_for_group_list(env, group_list);
+        let students = students_for_group_list(env, gl);
         for group_index in 0..gl.params.group_names.len() {
             let group = GroupNum(group_index);
             for &student in &students {
@@ -308,7 +306,7 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
                 let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
                     continue;
                 };
-                let students = students_for_group_list(env, group_list);
+                let students = students_for_group_list(env, gl);
                 for &student in &students {
                     for group_index in 0..gl.params.group_names.len() {
                         let group = GroupNum(group_index);

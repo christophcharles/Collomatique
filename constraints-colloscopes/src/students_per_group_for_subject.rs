@@ -26,8 +26,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
 
                 bundle = add_reification(env, bundle, group_list, gl, group, subject, period);
 
-                let students =
-                    students_for_subject_period_group_list(env, group_list, subject, period);
+                let students = students_for_subject_period_group_list(env, gl, subject, period);
 
                 let count: IntLinExpr<V> = students
                     .iter()
@@ -119,7 +118,7 @@ fn add_reification(
             }
         }
         GroupListFilling::Automatic { .. } => {
-            let students = students_for_subject_period_group_list(env, group_list, subject, period);
+            let students = students_for_subject_period_group_list(env, gl, subject, period);
             bundle
                 .and_reified(var, move || {
                     let sum: IntLinExpr<V> = students
