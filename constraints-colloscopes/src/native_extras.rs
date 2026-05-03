@@ -67,7 +67,12 @@ pub(crate) fn groups_for_group_list(env: &VarEnv, group_list: GroupListId) -> Ve
     (0..gl.params.group_names.len()).map(GroupNum).collect()
 }
 
-fn is_student_enrolled(env: &VarEnv, student: StudentId, slot: SlotId, week: GlobalWeek) -> bool {
+pub(crate) fn is_student_enrolled(
+    env: &VarEnv,
+    student: StudentId,
+    slot: SlotId,
+    week: GlobalWeek,
+) -> bool {
     let Some(subject_id) = slot_subject(env, slot) else {
         return false;
     };

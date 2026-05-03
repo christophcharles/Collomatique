@@ -9,6 +9,7 @@ collo-ml = { path = "../collo-ml" }
 collomatique-binding-colloscopes = { path = "../binding-colloscopes" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ilp = { path = "../ilp" }
+collomatique-time = { path = "../time" }
 collomatique-ilp-modeler = { path = "../ilp-modeler", default-features = false }
 derivative = "2.2"
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }

@@ -117,6 +117,12 @@ pub enum ConstraintDesc {
         week: GlobalWeek,
         max_groups: u32,
     },
+    OneInterrogationAtOnce {
+        student: StudentId,
+        slot_a: SlotId,
+        slot_b: SlotId,
+        week: GlobalWeek,
+    },
 }
 
 impl ConstraintDesc {
@@ -240,6 +246,23 @@ impl ConstraintDesc {
                     "Maximum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
                     max_groups,
                     s_name,
+                    week.0 + 1,
+                )
+            }
+            ConstraintDesc::OneInterrogationAtOnce {
+                student,
+                slot_a,
+                slot_b,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let sa_name = slot_name(env, *slot_a);
+                let sb_name = slot_name(env, *slot_b);
+                format!(
+                    "L'élève {} ne peut avoir les colles des créneaux {} et {} en même temps la semaine {}",
+                    s_name,
+                    sa_name,
+                    sb_name,
                     week.0 + 1,
                 )
             }

@@ -424,6 +424,7 @@ dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
  "collomatique-state-colloscopes",
+ "collomatique-time",
  "derivative",
  "sqlx",
 ]

@@ -87,6 +87,11 @@ impl ProblemBuilder {
             .apply_bundle(group_count_per_interrogation_bundle.into_general())
             .expect("no duplicate extras from group_count_per_interrogation");
 
+        let one_interrogation_at_once_bundle = crate::one_interrogation_at_once::build(&env);
+        modeler
+            .apply_bundle(one_interrogation_at_once_bundle.into_general())
+            .expect("no duplicate extras from one_interrogation_at_once");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

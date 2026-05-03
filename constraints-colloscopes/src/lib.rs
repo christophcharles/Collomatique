@@ -4,6 +4,7 @@ mod group_count_per_interrogation;
 mod groups_filled_by_ascending_order;
 pub mod ids;
 mod native_extras;
+mod one_interrogation_at_once;
 mod problem;
 mod students_have_groups;
 mod students_per_group;
