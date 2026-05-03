@@ -107,6 +107,11 @@ impl ProblemBuilder {
             .apply_bundle(incompats_bundle.into_general())
             .expect("no duplicate extras from incompats");
 
+        let pairings_bundle = crate::pairings::build(&env);
+        modeler
+            .apply_bundle(pairings_bundle.into_general())
+            .expect("no duplicate extras from pairings");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

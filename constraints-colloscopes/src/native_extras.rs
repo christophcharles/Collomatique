@@ -141,6 +141,76 @@ pub(crate) fn subject_interrogation_params(
         .and_then(|(_, s)| s.parameters.interrogation_parameters.as_ref())
 }
 
+pub(crate) fn active_slots_for_subject_week(
+    env: &VarEnv,
+    subject: SubjectId,
+    week: GlobalWeek,
+) -> Vec<crate::ids::SlotId> {
+    let Some(subject_slots) = env.slots.subject_map.get(&subject) else {
+        return vec![];
+    };
+    let Some(subj) = env.subjects.find_subject(subject) else {
+        return vec![];
+    };
+    subject_slots
+        .ordered_slots
+        .iter()
+        .filter(|(_, slot_data)| {
+            if subj
+                .excluded_periods
+                .iter()
+                .any(|ep| week_to_period_id(env, week).is_some_and(|(pid, _)| pid == *ep))
+            {
+                return false;
+            }
+            let pattern = collomatique_binding_colloscopes::tools::extract_week_pattern(
+                env,
+                slot_data.week_pattern,
+            );
+            pattern.get(week.0).copied().unwrap_or(false)
+        })
+        .map(|(slot_id, _)| *slot_id)
+        .collect()
+}
+
+pub(crate) fn student_has_interrogation_in_expr(
+    env: &VarEnv,
+    student: StudentId,
+    subject: SubjectId,
+    week: GlobalWeek,
+) -> IntLinExpr<V> {
+    let slots = active_slots_for_subject_week(env, subject, week);
+    slots
+        .into_iter()
+        .map(|slot| {
+            IntLinExpr::var(extra_var(ExtraVarName::StudentAtInterrogation {
+                student,
+                slot,
+                week,
+            }))
+        })
+        .sum()
+}
+
+pub(crate) fn is_at_most_once_per_week(env: &VarEnv, subject: SubjectId) -> bool {
+    use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
+    let Some(params) = subject_interrogation_params(env, subject) else {
+        return true;
+    };
+    match &params.periodicity {
+        SubjectPeriodicity::ExactlyPeriodic { .. } => true,
+        SubjectPeriodicity::OnceForEveryBlockOfWeeks { .. } => true,
+        SubjectPeriodicity::AmountInYear {
+            minimum_week_separation,
+            ..
+        } => *minimum_week_separation >= 1,
+        SubjectPeriodicity::AmountForEveryArbitraryBlock {
+            minimum_week_separation,
+            ..
+        } => *minimum_week_separation >= 1,
+    }
+}
+
 pub(crate) fn weeks_for_week_pattern(
     env: &VarEnv,
     week_pattern_id: Option<WeekPatternId>,
@@ -468,6 +538,59 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
     bundle
 }
 
+fn build_student_has_interrogation_in(env: &VarEnv) -> MyBundle {
+    let mut bundle = MyBundle::new();
+    for (&subject_id, subject_slots) in &env.slots.subject_map {
+        let Some(subject) = env.subjects.find_subject(subject_id) else {
+            continue;
+        };
+        let active_slot_ids_per_week: Vec<(GlobalWeek, Vec<crate::ids::SlotId>)> = {
+            let mut weeks_seen = std::collections::BTreeSet::new();
+            let mut result = Vec::new();
+            for (_, slot_data) in &subject_slots.ordered_slots {
+                for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
+                    if weeks_seen.insert(week) {
+                        let slots = active_slots_for_subject_week(env, subject_id, week);
+                        if !slots.is_empty() {
+                            result.push((week, slots));
+                        }
+                    }
+                }
+            }
+            result
+        };
+        for (week, active_slot_ids) in active_slot_ids_per_week {
+            for &student in env.students.student_map.keys() {
+                if !is_student_enrolled(env, student, subject_id, week) {
+                    continue;
+                }
+                let var = ExtraVarName::StudentHasInterrogationIn {
+                    student,
+                    subject: subject_id,
+                    week,
+                };
+                let slots = active_slot_ids.clone();
+                bundle = bundle
+                    .and_reified(var, move || {
+                        let sum: IntLinExpr<V> = slots
+                            .iter()
+                            .map(|&slot| {
+                                IntLinExpr::var(extra_var(ExtraVarName::StudentAtInterrogation {
+                                    student,
+                                    slot,
+                                    week,
+                                }))
+                            })
+                            .sum();
+                        vec![sum.geq(&IntLinExpr::constant(1))]
+                    })
+                    .expect("no duplicate extras");
+            }
+        }
+    }
+    bundle
+}
+
 fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
@@ -594,7 +717,10 @@ pub fn build_native_extras(env: &VarEnv) -> MyBundle {
     let bundle = bundle
         .merge(build_student_at_interrogation(env))
         .expect("no duplicate extras");
-    bundle
+    let bundle = bundle
         .merge(build_student_not_at_incompat_slot(env))
+        .expect("no duplicate extras");
+    bundle
+        .merge(build_student_has_interrogation_in(env))
         .expect("no duplicate extras")
 }

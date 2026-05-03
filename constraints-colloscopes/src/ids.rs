@@ -1,5 +1,5 @@
 pub use collomatique_state_colloscopes::ids::{
-    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId, SubjectId,
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]

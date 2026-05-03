@@ -8,6 +8,7 @@ mod interrogation_cost;
 mod limits;
 mod native_extras;
 mod one_interrogation_at_once;
+mod pairings;
 mod problem;
 mod students_have_groups;
 mod students_per_group;

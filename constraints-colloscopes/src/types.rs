@@ -1,5 +1,6 @@
 use crate::ids::{
-    GlobalWeek, GroupListId, GroupNum, IncompatId, PeriodId, SlotId, StudentId, SubjectId,
+    GlobalWeek, GroupListId, GroupNum, IncompatId, PairingRuleId, PeriodId, SlotId, StudentId,
+    SubjectId,
 };
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
@@ -58,6 +59,12 @@ pub enum ExtraVarName {
         incompat_slot_index: usize,
         week: GlobalWeek,
     },
+    StudentHasInterrogationIn {
+        student: StudentId,
+        subject: SubjectId,
+        week: GlobalWeek,
+    },
+    PairingsPenalty,
     LimitsMaxPerDayPenalty,
     LimitsMaxPerWeekPenalty,
     LimitsMinPerWeekPenalty,
@@ -160,6 +167,26 @@ pub enum ConstraintDesc {
         incompat: IncompatId,
         week: GlobalWeek,
         minimum_free_slots: u32,
+    },
+    PairingHavingImpliesHaving {
+        student: StudentId,
+        week: GlobalWeek,
+        rule: PairingRuleId,
+    },
+    PairingHavingImpliesNotHaving {
+        student: StudentId,
+        week: GlobalWeek,
+        rule: PairingRuleId,
+    },
+    PairingNotHavingImpliesHaving {
+        student: StudentId,
+        week: GlobalWeek,
+        rule: PairingRuleId,
+    },
+    PairingNotHavingImpliesNotHaving {
+        student: StudentId,
+        week: GlobalWeek,
+        rule: PairingRuleId,
     },
 }
 
@@ -367,7 +394,81 @@ impl ConstraintDesc {
                     i_name,
                 )
             }
+            ConstraintDesc::PairingHavingImpliesHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} a une colle en {} semaine {}, il doit aussi en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
+            ConstraintDesc::PairingHavingImpliesNotHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} a une colle en {} semaine {}, il ne doit pas en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
+            ConstraintDesc::PairingNotHavingImpliesHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} n'a pas de colle en {} semaine {}, il doit en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
+            ConstraintDesc::PairingNotHavingImpliesNotHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} n'a pas de colle en {} semaine {}, il ne doit pas en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
         }
+    }
+}
+
+fn pairing_subject_names(
+    env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    rule: PairingRuleId,
+) -> (String, String) {
+    let rule_data = env.pairings.pairing_rule_map.get(&rule);
+    match rule_data {
+        Some(r) => (
+            subject_name(env, r.antecedent.subject_id),
+            subject_name(env, r.consequent.subject_id),
+        ),
+        None => (format!("{:?}", rule), format!("{:?}", rule)),
     }
 }
 
