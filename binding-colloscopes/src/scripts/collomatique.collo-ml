@@ -1,21 +1,18 @@
 import "collomatique_db" as *;
 import "collomatique_balancing_rotation" as balancing_rotation;
 import "collomatique_balancing_slot_rotation" as balancing_slot_rotation;
-import "collomatique_balancing_avoid_twice_in_a_row" as balancing_avoid_twice;
 import "collomatique_balancing_year_rotation" as balancing_year_rotation;
 import "collomatique_balancing_period_rotation" as balancing_period_rotation;
 
 pub let default_constraint(db: Db) -> Constraint =
     balancing_rotation::constraint(db) and
     balancing_slot_rotation::constraint(db) and
-    balancing_avoid_twice::constraint(db) and
     balancing_year_rotation::constraint(db) and
     balancing_period_rotation::constraint(db);
 
 pub let default_objective(db: Db) -> [Constraint | LinExpr] =
     balancing_rotation::objective(db)
     + balancing_slot_rotation::objective(db)
-    + balancing_avoid_twice::objective(db)
     + balancing_year_rotation::objective(db)
     + balancing_period_rotation::objective(db);
 
