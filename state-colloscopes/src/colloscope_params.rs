@@ -37,7 +37,6 @@ pub struct Parameters {
     pub slot_pairings: slot_pairings::SlotPairings,
     #[serde(default)]
     pub balancing: balancing::Balancing,
-    pub main_script: Option<String>,
 }
 
 impl Parameters {

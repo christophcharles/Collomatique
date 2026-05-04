@@ -96,7 +96,6 @@ pub enum EditorCommandOutput {
     ScriptLoaded(PathBuf, String),
     ScriptLoadingFailed(PathBuf, String),
     MainScriptCompiled {
-        source: Option<String>,
         result: Result<ProblemBuilder, SimpleScriptError>,
     },
     ExportXlsxSuccessful(PathBuf),
@@ -206,11 +205,8 @@ impl PanelNumbers {
 
 #[derive(Clone)]
 enum MainScriptAst {
-    /// No compilation has been attempted yet
     Uninitialized,
-    /// Compilation is in progress (async task running)
     Compiling,
-    /// Compilation completed with a result
     Ready(Result<ProblemBuilder, SimpleScriptError>),
 }
 
@@ -528,15 +524,7 @@ impl EditorPanel {
         };
         self.main_script
             .sender()
-            .send(main_script::MainScriptInput::Update(
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .main_script
-                    .clone(),
-                ast_option.clone(),
-            ))
+            .send(main_script::MainScriptInput::Update)
             .unwrap();
         self.colloscope
             .sender()
@@ -583,7 +571,6 @@ impl EditorPanel {
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
-            collomatique_ops::OpCategory::MainScript => Some(PanelNumbers::MainScript),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
             collomatique_ops::OpCategory::ExportConfig => Some(PanelNumbers::Export),
         }
@@ -857,11 +844,7 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
             });
 
-        let main_script = main_script::MainScript::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::MainScript(op))
-            });
+        let main_script = main_script::MainScript::builder().launch(()).detach();
 
         let colloscope =
             colloscope::Colloscope::builder()
@@ -1293,24 +1276,8 @@ impl Component for EditorPanel {
                     .output(EditorOutput::ExportError(path, error))
                     .unwrap();
             }
-            EditorCommandOutput::MainScriptCompiled { source, result } => {
-                // Check if source code still matches current data
-                let current_source = self
-                    .data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .main_script
-                    .clone();
-                if source != current_source {
-                    // Script changed since compilation started - ignore stale result
-                    return;
-                }
-
-                // Update the AST field
+            EditorCommandOutput::MainScriptCompiled { result } => {
                 self.main_script_ast = MainScriptAst::Ready(result);
-
-                // Trigger interface update
                 self.send_msg_for_interface_update(sender);
             }
         }
@@ -1361,15 +1328,6 @@ impl EditorPanel {
         update: DataUpdate,
         sender: ComponentSender<Self>,
     ) {
-        let previous_script = self
-            .data
-            .get_data()
-            .get_inner_data()
-            .params
-            .main_script
-            .clone();
-
-        // Update self.data based on the update type
         match update {
             DataUpdate::Undo => {
                 self.data.undo().expect("Should be able to undo");
@@ -1382,36 +1340,20 @@ impl EditorPanel {
             }
         }
 
-        if (self.data.get_data().get_inner_data().params.main_script == previous_script)
-            && !matches!(self.main_script_ast, MainScriptAst::Uninitialized)
-        {
+        if !matches!(self.main_script_ast, MainScriptAst::Uninitialized) {
             return;
         }
 
-        // Set to Compiling to indicate compilation in progress
         self.main_script_ast = MainScriptAst::Compiling;
-
-        // Get the current main script source
-        let source = self
-            .data
-            .get_data()
-            .get_inner_data()
-            .params
-            .main_script
-            .clone();
 
         sender.oneshot_command(async move {
             use collomatique_constraints_colloscopes::{
                 default_problem_builder, get_default_main_module,
             };
 
-            let main_module = source
-                .as_deref()
-                .unwrap_or_else(|| get_default_main_module());
+            let result = default_problem_builder(get_default_main_module()).await;
 
-            let result = default_problem_builder(main_module).await;
-
-            EditorCommandOutput::MainScriptCompiled { source, result }
+            EditorCommandOutput::MainScriptCompiled { result }
         });
     }
 }

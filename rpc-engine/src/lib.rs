@@ -42,10 +42,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
 
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let main_script = env
-        .main_script
-        .as_deref()
-        .unwrap_or(get_default_main_module());
+    let main_script = get_default_main_module();
     let b = match default_problem_builder(main_script).await {
         Ok(b) => b,
         Err(e) => {

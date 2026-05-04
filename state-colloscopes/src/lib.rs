@@ -10,7 +10,7 @@ use ops::AnnotatedExportConfigOp;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{InMemoryData, Operation, tools};
-use ops::{AnnotatedBalancingOp, AnnotatedMainScriptOp, AnnotatedSettingsOp};
+use ops::{AnnotatedBalancingOp, AnnotatedSettingsOp};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -29,8 +29,8 @@ use ops::{
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
-    MainScriptOp, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp,
-    TeacherOp, WeekPatternOp,
+    Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
+    WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -660,12 +660,6 @@ pub enum SlotPairingError {
     SlotsNotInSameSubject(SlotId, SlotId),
 }
 
-/// Errors for main script operations
-///
-/// These errors can be returned when trying to modify [Data] with a main script op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum MainScriptError {}
-
 /// Errors for export configuration operations
 ///
 /// These errors can be returned when trying to modify [Data] with an export config op.
@@ -764,8 +758,6 @@ pub enum Error {
     SlotPairing(#[from] SlotPairingError),
     #[error(transparent)]
     Balancing(#[from] BalancingError),
-    #[error(transparent)]
-    MainScript(#[from] MainScriptError),
     #[error(transparent)]
     Colloscope(#[from] ColloscopeError),
     #[error(transparent)]
@@ -981,11 +973,6 @@ impl InMemoryData for Data {
             AnnotatedOp::Balancing(balancing_op) => Ok(AnnotatedOp::Balancing(
                 self.build_rev_balancing(balancing_op),
             )),
-            AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(_)) => {
-                Ok(AnnotatedOp::MainScript(AnnotatedMainScriptOp::Update(
-                    self.inner_data.params.main_script.clone(),
-                )))
-            }
             AnnotatedOp::Colloscope(colloscope_op) => Ok(AnnotatedOp::Colloscope(
                 self.build_rev_colloscope(colloscope_op)?,
             )),
@@ -1015,7 +1002,6 @@ impl InMemoryData for Data {
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::Balancing(balancing_op) => self.apply_balancing(balancing_op)?,
-            AnnotatedOp::MainScript(main_script_op) => self.apply_main_script(main_script_op)?,
             AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
             AnnotatedOp::ExportConfig(export_config_op) => {
                 self.apply_export_config(export_config_op)?
@@ -2957,21 +2943,6 @@ impl Data {
             AnnotatedBalancingOp::Update(new_balancing) => {
                 self.inner_data.params.validate_balancing(new_balancing)?;
                 self.inner_data.params.balancing = new_balancing.clone();
-                Ok(())
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Apply main script operations
-    fn apply_main_script(
-        &mut self,
-        main_script_op: &AnnotatedMainScriptOp,
-    ) -> std::result::Result<(), MainScriptError> {
-        match main_script_op {
-            AnnotatedMainScriptOp::Update(new_script) => {
-                self.inner_data.params.main_script = new_script.clone();
                 Ok(())
             }
         }

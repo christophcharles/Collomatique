@@ -42,8 +42,6 @@ pub enum Op {
     SlotPairing(SlotPairingOp),
     /// Operation on balancing
     Balancing(BalancingOp),
-    /// Operation on main script
-    MainScript(MainScriptOp),
     /// Operation on colloscopes
     Colloscope(ColloscopeOp),
     /// Operation on export configuration
@@ -238,16 +236,6 @@ pub enum BalancingOp {
     Update(balancing::Balancing),
 }
 
-/// Main script operation enumeration
-///
-/// This is the list of all possible operations related to the
-/// main script we can do on a [Data]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MainScriptOp {
-    /// Update the main script (None = use default, Some = custom script)
-    Update(Option<String>),
-}
-
 /// Colloscope operation enumeration
 ///
 /// This is the list of all possible operations related to the
@@ -319,8 +307,6 @@ pub enum AnnotatedOp {
     SlotPairing(AnnotatedSlotPairingOp),
     /// Operation on balancing
     Balancing(AnnotatedBalancingOp),
-    /// Operation on main script
-    MainScript(AnnotatedMainScriptOp),
     /// Operation on colloscopes
     Colloscope(AnnotatedColloscopeOp),
     /// Operation on export configuration
@@ -404,12 +390,6 @@ impl From<AnnotatedSettingsOp> for AnnotatedOp {
 impl From<AnnotatedBalancingOp> for AnnotatedOp {
     fn from(value: AnnotatedBalancingOp) -> Self {
         AnnotatedOp::Balancing(value)
-    }
-}
-
-impl From<AnnotatedMainScriptOp> for AnnotatedOp {
-    fn from(value: AnnotatedMainScriptOp) -> Self {
-        AnnotatedOp::MainScript(value)
     }
 }
 
@@ -657,19 +637,6 @@ pub enum AnnotatedBalancingOp {
     Update(balancing::Balancing),
 }
 
-/// Main script operation enumeration
-///
-/// Compared to [MainScriptOp], this is a annotated operation,
-/// meaning the operation has been annotated to contain
-/// all the necessary data to make it *reproducible*.
-///
-/// See [collomatique_state::history] for a complete discussion of the problem.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotatedMainScriptOp {
-    /// Update the main script
-    Update(Option<String>),
-}
-
 /// Colloscope operation enumeration
 ///
 /// Compared to [ColloscopeOp], this is a annotated operation,
@@ -776,10 +743,6 @@ impl AnnotatedOp {
             }
             Op::Balancing(balancing_op) => {
                 let op = AnnotatedBalancingOp::annotate(balancing_op);
-                (op.into(), None)
-            }
-            Op::MainScript(main_script_op) => {
-                let op = AnnotatedMainScriptOp::annotate(main_script_op);
                 (op.into(), None)
             }
             Op::Colloscope(colloscope_op) => {
@@ -1064,17 +1027,6 @@ impl AnnotatedBalancingOp {
     fn annotate(balancing_op: BalancingOp) -> AnnotatedBalancingOp {
         match balancing_op {
             BalancingOp::Update(balancing) => AnnotatedBalancingOp::Update(balancing),
-        }
-    }
-}
-
-impl AnnotatedMainScriptOp {
-    /// Used internally
-    ///
-    /// Annotates the subcategory of operations [MainScriptOp].
-    fn annotate(main_script_op: MainScriptOp) -> AnnotatedMainScriptOp {
-        match main_script_op {
-            MainScriptOp::Update(script) => AnnotatedMainScriptOp::Update(script),
         }
     }
 }
