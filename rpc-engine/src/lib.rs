@@ -71,7 +71,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     println!("Solution found!");
     let config_data = sol.get_data();
     let new_colloscope =
-        collomatique_binding_colloscopes::convert::build_colloscope(&env, &config_data)
+        collomatique_constraints_colloscopes::convert::build_colloscope(&env, &config_data)
             .expect("Config data should be compatible with colloscope parameters");
 
     println!("Sending updated data...");

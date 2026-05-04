@@ -1,11 +1,10 @@
-use crate::tools;
+use collomatique_binding_colloscopes::tools;
+use collomatique_binding_colloscopes::vars::Var;
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 
 use collomatique_state_colloscopes::ids::Id;
-
-use super::vars::Var;
 
 pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
@@ -110,7 +109,6 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                 .find_slot_subject_and_position(*slot_id)
                 .expect("Slot ID should be valid");
             let Some(group_list_id) = subject_associations.get(&subject_id) else {
-                // No interrogations for this period
                 continue;
             };
             let group_list = env

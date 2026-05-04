@@ -704,7 +704,7 @@ impl Colloscope {
         let colloscope = self.colloscope.clone();
 
         sender.spawn_oneshot_command(move || {
-            let config_data = collomatique_binding_colloscopes::convert::build_complete_config(
+            let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
                 &ilp_problem.env,
                 &colloscope,
             );

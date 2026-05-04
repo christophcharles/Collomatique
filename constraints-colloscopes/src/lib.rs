@@ -1,5 +1,6 @@
 mod balancing;
 mod builder;
+pub mod convert;
 mod groups;
 mod helpers;
 pub mod ids;
