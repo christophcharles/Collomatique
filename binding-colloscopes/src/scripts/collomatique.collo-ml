@@ -1,5 +1,3 @@
-import "collomatique_db" as *;
+pub let default_constraint() -> Constraint = trivial;
 
-pub let default_constraint(_db: Db) -> Constraint = trivial;
-
-pub let default_objective(_db: Db) -> [Constraint | LinExpr] = [LinExpr(0)];
+pub let default_objective() -> [Constraint | LinExpr] = [LinExpr(0)];

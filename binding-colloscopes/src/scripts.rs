@@ -39,18 +39,6 @@ pub const MODULES: &[(&str, &str)] = &[
         include_str!("scripts/collomatique.collo-ml"),
     ),
     ("collomatique_db", DB_MODULE_SOURCE),
-    (
-        "collomatique_types",
-        include_str!("scripts/collomatique_types.collo-ml"),
-    ),
-    (
-        "collomatique_queries",
-        include_str!("scripts/collomatique_queries.collo-ml"),
-    ),
-    (
-        "collomatique_vars",
-        include_str!("scripts/collomatique_vars.collo-ml"),
-    ),
 ];
 
 pub const MAIN_MODULE: &str = include_str!("scripts/main.collo-ml");
