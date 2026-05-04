@@ -1,6 +1,6 @@
 use crate::ids::{
     GlobalWeek, GroupListId, GroupNum, IncompatId, PairingRuleId, PeriodId, SlotId,
-    SlotPairingRuleId, StudentId, SubjectId,
+    SlotPairingRuleId, StudentId, SubjectId, TeacherId,
 };
 use collo_ml::SqliteDatabaseConnection;
 use collo_ml::eval::Origin;
@@ -69,6 +69,14 @@ pub enum ExtraVarName {
     LimitsMaxPerDayPenalty,
     LimitsMaxPerWeekPenalty,
     LimitsMinPerWeekPenalty,
+    IsLastTeacherSeen {
+        subject: SubjectId,
+        student: StudentId,
+        teacher: TeacherId,
+        week: GlobalWeek,
+    },
+    BalancingAvoidTwiceInARowPenalty,
+    BalancingYearRotationPenalty,
 }
 
 impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
@@ -92,6 +100,9 @@ pub enum InfeasibleConstraint {
         first_week: GlobalWeek,
         last_week: GlobalWeek,
         weeks_per_block: u32,
+    },
+    BalancingAvoidTwiceUnsupported {
+        subject: SubjectId,
     },
 }
 
@@ -254,6 +265,25 @@ pub enum PreferenceConstraint {
         week: GlobalWeek,
         min: u32,
     },
+    BalancingAvoidTwiceInARow {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+    },
+    BalancingAvoidTwiceInARowRecursive {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        week: GlobalWeek,
+    },
+    BalancingYearRotation {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        max_count: u32,
+    },
 }
 
 #[derive(Derivative)]
@@ -343,6 +373,13 @@ impl InfeasibleConstraint {
                     subj_name,
                     first_week.0 + 1,
                     last_week.0 + 1,
+                )
+            }
+            InfeasibleConstraint::BalancingAvoidTwiceUnsupported { subject } => {
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "L'option \"pas deux fois de suite\" n'est pas supportée pour la matière {} (séparation minimale < 1 semaine)",
+                    subj_name,
                 )
             }
         }
@@ -765,6 +802,57 @@ impl PreferenceConstraint {
                     min,
                     week.0 + 1,
                     s_name,
+                )
+            }
+            PreferenceConstraint::BalancingAvoidTwiceInARow {
+                student,
+                subject,
+                teacher,
+                first_week,
+                last_week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                format!(
+                    "{} ne doit pas être collé(e) deux fois de suite par {} en {} (semaines {} à {})",
+                    s_name,
+                    t_name,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            PreferenceConstraint::BalancingAvoidTwiceInARowRecursive {
+                student,
+                subject,
+                teacher,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                format!(
+                    "{} ne doit pas être collé(e) deux fois de suite par {} en {} (semaine {})",
+                    s_name,
+                    t_name,
+                    subj_name,
+                    week.0 + 1,
+                )
+            }
+            PreferenceConstraint::BalancingYearRotation {
+                student,
+                subject,
+                teacher,
+                max_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                let plural = if *max_count > 1 { "s" } else { "" };
+                format!(
+                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} sur l'année",
+                    s_name, max_count, plural, t_name, subj_name,
                 )
             }
         }

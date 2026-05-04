@@ -106,18 +106,7 @@ fn student_at_interrogation_sum(
         .sum()
 }
 
-fn merge_objectified(
-    bundle: MyBundle,
-    soft_bundle: MyBundle,
-    penalty_var: ExtraVarName,
-) -> MyBundle {
-    match soft_bundle.objectify_with_coef(penalty_var, 1.0) {
-        Ok(objectified) => bundle
-            .merge(objectified)
-            .expect("no duplicate extras from limits objectification"),
-        Err(_) => bundle,
-    }
-}
+use crate::helpers::merge_objectified;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut hard_max_per_day = MyBundle::new();

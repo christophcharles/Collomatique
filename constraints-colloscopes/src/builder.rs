@@ -79,6 +79,11 @@ impl ProblemBuilder {
             .apply_bundle(periodicity_bundle.into_general())
             .expect("no duplicate extras from periodicity");
 
+        let balancing_bundle = crate::balancing::build(&env);
+        modeler
+            .apply_bundle(balancing_bundle.into_general())
+            .expect("no duplicate extras from balancing");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
