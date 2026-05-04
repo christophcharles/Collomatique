@@ -239,6 +239,13 @@ pub enum ConstraintDesc {
         last_week: GlobalWeek,
         periodicity: u32,
     },
+    PeriodicityOncePerBlockInfeasible {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        weeks_per_block: u32,
+    },
 }
 
 impl ConstraintDesc {
@@ -645,6 +652,24 @@ impl ConstraintDesc {
                     periodicity,
                     subj_name,
                     s_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            ConstraintDesc::PeriodicityOncePerBlockInfeasible {
+                student,
+                subject,
+                first_week,
+                last_week,
+                weeks_per_block,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "Le nombre de semaines actives n'est pas un multiple de {} pour {} en {} (semaines {} à {})",
+                    weeks_per_block,
+                    s_name,
+                    subj_name,
                     first_week.0 + 1,
                     last_week.0 + 1,
                 )
