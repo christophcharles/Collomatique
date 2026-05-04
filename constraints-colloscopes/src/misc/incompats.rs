@@ -8,7 +8,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
 use collomatique_time::SlotWithDuration;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
     let all_interrog_slots: Vec<_> = {

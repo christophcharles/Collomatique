@@ -3,7 +3,7 @@ use crate::types::ExtraVarName;
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut expr = LinExpr::constant(0.0);
     let mut has_terms = false;
 

@@ -7,7 +7,7 @@ use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&period, subject_map) in &env.group_lists.subjects_associations {
         for (&subject, &group_list) in subject_map {

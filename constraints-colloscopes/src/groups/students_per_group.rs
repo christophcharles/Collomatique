@@ -53,7 +53,7 @@ fn build_for_group(
     )
 }
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
         let min_students = gl.params.students_per_group.start().get();

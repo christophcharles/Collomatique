@@ -5,7 +5,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_time::SlotWithDuration;
 use std::collections::BTreeSet;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
     let slots_with_duration: Vec<_> = {

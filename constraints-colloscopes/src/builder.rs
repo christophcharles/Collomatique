@@ -54,68 +54,25 @@ impl ProblemBuilder {
             .apply_bundle(native_bundle.into_general())
             .expect("no duplicate extras from native");
 
-        let students_per_group_bundle = crate::students_per_group::build(&env);
+        let groups_bundle = crate::groups::build(&env);
         modeler
-            .apply_bundle(students_per_group_bundle.into_general())
-            .expect("no duplicate extras from students_per_group");
+            .apply_bundle(groups_bundle.into_general())
+            .expect("no duplicate extras from groups");
 
-        let students_have_groups_bundle = crate::students_have_groups::build(&env);
+        let schedule_structure_bundle = crate::schedule_structure::build(&env);
         modeler
-            .apply_bundle(students_have_groups_bundle.into_general())
-            .expect("no duplicate extras from students_have_groups");
-
-        let students_per_group_for_subject_bundle =
-            crate::students_per_group_for_subject::build(&env);
-        modeler
-            .apply_bundle(students_per_group_for_subject_bundle.into_general())
-            .expect("no duplicate extras from students_per_group_for_subject");
-
-        let groups_filled_by_ascending_order_bundle =
-            crate::groups_filled_by_ascending_order::build(&env);
-        modeler
-            .apply_bundle(groups_filled_by_ascending_order_bundle.into_general())
-            .expect("no duplicate extras from groups_filled_by_ascending_order");
-
-        let forbidden_groups_bundle = crate::forbidden_groups::build(&env);
-        modeler
-            .apply_bundle(forbidden_groups_bundle.into_general())
-            .expect("no duplicate extras from forbidden_groups");
-
-        let group_count_per_interrogation_bundle =
-            crate::group_count_per_interrogation::build(&env);
-        modeler
-            .apply_bundle(group_count_per_interrogation_bundle.into_general())
-            .expect("no duplicate extras from group_count_per_interrogation");
-
-        let one_interrogation_at_once_bundle = crate::one_interrogation_at_once::build(&env);
-        modeler
-            .apply_bundle(one_interrogation_at_once_bundle.into_general())
-            .expect("no duplicate extras from one_interrogation_at_once");
-
-        let interrogation_cost_bundle = crate::interrogation_cost::build(&env);
-        modeler
-            .apply_bundle(interrogation_cost_bundle.into_general())
-            .expect("no duplicate extras from interrogation_cost");
-
-        let limits_bundle = crate::limits::build(&env);
-        modeler
-            .apply_bundle(limits_bundle.into_general())
-            .expect("no duplicate extras from limits");
-
-        let incompats_bundle = crate::incompats::build(&env);
-        modeler
-            .apply_bundle(incompats_bundle.into_general())
-            .expect("no duplicate extras from incompats");
+            .apply_bundle(schedule_structure_bundle.into_general())
+            .expect("no duplicate extras from schedule_structure");
 
         let pairings_bundle = crate::pairings::build(&env);
         modeler
             .apply_bundle(pairings_bundle.into_general())
             .expect("no duplicate extras from pairings");
 
-        let slot_pairings_bundle = crate::slot_pairings::build(&env);
+        let misc_bundle = crate::misc::build(&env);
         modeler
-            .apply_bundle(slot_pairings_bundle.into_general())
-            .expect("no duplicate extras from slot_pairings");
+            .apply_bundle(misc_bundle.into_general())
+            .expect("no duplicate extras from misc");
 
         let periodicity_bundle = crate::periodicity::build(&env);
         modeler

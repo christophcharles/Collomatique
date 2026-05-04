@@ -3,7 +3,7 @@ use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
     for (&subject_id, subject_slots) in &env.slots.subject_map {

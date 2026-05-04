@@ -8,7 +8,7 @@ use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&subject_id, subject_slots) in &env.slots.subject_map {
         let Some(subject) = env.subjects.find_subject(subject_id) else {

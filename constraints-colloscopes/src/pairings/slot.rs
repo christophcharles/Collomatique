@@ -27,7 +27,7 @@ fn slot_group_count_expr(
         .sum()
 }
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut hard_bundle = MyBundle::new();
     let mut soft_bundle = MyBundle::new();
 

@@ -1,20 +1,12 @@
 mod builder;
-mod forbidden_groups;
-mod group_count_per_interrogation;
-mod groups_filled_by_ascending_order;
+mod groups;
 pub mod ids;
-mod incompats;
-mod interrogation_cost;
-mod limits;
+mod misc;
 mod native_extras;
-mod one_interrogation_at_once;
 mod pairings;
 mod periodicity;
 mod problem;
-mod slot_pairings;
-mod students_have_groups;
-mod students_per_group;
-mod students_per_group_for_subject;
+mod schedule_structure;
 mod types;
 
 pub use builder::{ProblemBuilder, default_problem_builder};

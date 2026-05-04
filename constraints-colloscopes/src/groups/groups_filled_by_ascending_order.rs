@@ -4,7 +4,7 @@ use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&group_list, gl) in &env.group_lists.group_list_map {
         let GroupListFilling::Automatic { .. } = &gl.filling else {

@@ -119,7 +119,7 @@ fn merge_objectified(
     }
 }
 
-pub fn build(env: &VarEnv) -> MyBundle {
+pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut hard_max_per_day = MyBundle::new();
     let mut soft_max_per_day = MyBundle::new();
     let mut hard_max_per_week = MyBundle::new();
