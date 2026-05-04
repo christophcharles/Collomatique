@@ -1,6 +1,7 @@
 mod avoid_twice_in_a_row;
 mod helpers;
 mod rotation;
+mod slot_rotation;
 mod year_rotation;
 
 use crate::native_extras::MyBundle;
@@ -12,5 +13,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
         .merge(year_rotation::build(env))
         .expect("no duplicate extras from balancing")
         .merge(rotation::build(env))
+        .expect("no duplicate extras from balancing")
+        .merge(slot_rotation::build(env))
         .expect("no duplicate extras from balancing")
 }

@@ -13,7 +13,7 @@ use super::helpers::{
     slot_week_pairs_for_teacher, slot_weeks_in_range, subject_active_weeks, teachers_for_subject,
 };
 
-fn generate_windows(
+pub(super) fn generate_windows(
     active_weeks: &[GlobalWeek],
     last_week: GlobalWeek,
     periodicity: &SubjectPeriodicity,
