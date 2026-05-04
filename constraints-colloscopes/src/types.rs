@@ -358,12 +358,11 @@ impl InfeasibleConstraint {
                 let s_name = student_name(env, *student);
                 let subj_name = subject_name(env, *subject);
                 format!(
-                    "Pas assez de semaines actives pour une périodicité exacte de {} semaine(s) en {} pour {} (semaines {} à {})",
+                    "Pas assez de semaines actives pour une périodicité exacte de {} semaine(s) en {} pour {} ({})",
                     periodicity,
                     subj_name,
                     s_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
             InfeasibleConstraint::PeriodicityOncePerBlockInfeasible {
@@ -376,12 +375,11 @@ impl InfeasibleConstraint {
                 let s_name = student_name(env, *student);
                 let subj_name = subject_name(env, *subject);
                 format!(
-                    "Le nombre de semaines actives n'est pas un multiple de {} pour {} en {} (semaines {} à {})",
+                    "Le nombre de semaines actives n'est pas un multiple de {} pour {} en {} ({})",
                     weeks_per_block,
                     s_name,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
             InfeasibleConstraint::BalancingAvoidTwiceUnsupported { subject } => {
@@ -555,13 +553,12 @@ impl QualityConstraint {
                 let subj_name = subject_name(env, *subject);
                 let plural = if *max_count > 1 { "s" } else { "" };
                 format!(
-                    "{} doit avoir au plus {} colle{} en {} entre la semaine {} et la semaine {}",
+                    "{} doit avoir au plus {} colle{} en {} pour {}",
                     s_name,
                     max_count,
                     plural,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
             QualityConstraint::PeriodicitySeparation {
@@ -573,11 +570,10 @@ impl QualityConstraint {
                 let s_name = student_name(env, *student);
                 let subj_name = subject_name(env, *subject);
                 format!(
-                    "{} ne doit pas avoir plus d'une colle en {} entre la semaine {} et la semaine {}",
+                    "{} ne doit pas avoir plus d'une colle en {} pour {}",
                     s_name,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
         }
@@ -642,13 +638,12 @@ impl ProgressiveConstraint {
                 let subj_name = subject_name(env, *subject);
                 let plural = if *min_count > 1 { "s" } else { "" };
                 format!(
-                    "{} doit avoir au moins {} colle{} en {} entre la semaine {} et la semaine {}",
+                    "{} doit avoir au moins {} colle{} en {} pour {}",
                     s_name,
                     min_count,
                     plural,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
             ProgressiveConstraint::PeriodicityInterrogationCountExact {
@@ -662,22 +657,20 @@ impl ProgressiveConstraint {
                 let subj_name = subject_name(env, *subject);
                 if *count == 0 {
                     format!(
-                        "{} ne doit pas avoir de colle en {} entre la semaine {} et la semaine {}",
+                        "{} ne doit pas avoir de colle en {} pour {}",
                         s_name,
                         subj_name,
-                        first_week.0 + 1,
-                        last_week.0 + 1,
+                        week_range_text(*first_week, *last_week),
                     )
                 } else {
                     let plural = if *count > 1 { "s" } else { "" };
                     format!(
-                        "{} doit avoir exactement {} colle{} en {} entre la semaine {} et la semaine {}",
+                        "{} doit avoir exactement {} colle{} en {} pour {}",
                         s_name,
                         count,
                         plural,
                         subj_name,
-                        first_week.0 + 1,
-                        last_week.0 + 1,
+                        week_range_text(*first_week, *last_week),
                     )
                 }
             }
@@ -824,12 +817,11 @@ impl PreferenceConstraint {
                 let subj_name = subject_name(env, *subject);
                 let t_name = teacher_name(env, *teacher);
                 format!(
-                    "{} ne doit pas être collé(e) deux fois de suite par {} en {} (semaines {} à {})",
+                    "{} ne doit pas être collé(e) deux fois de suite par {} en {} ({})",
                     s_name,
                     t_name,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
             PreferenceConstraint::BalancingAvoidTwiceInARowRecursive {
@@ -877,14 +869,13 @@ impl PreferenceConstraint {
                 let t_name = teacher_name(env, *teacher);
                 let plural = if *max_count > 1 { "s" } else { "" };
                 format!(
-                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} (semaines {} à {})",
+                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} ({})",
                     s_name,
                     max_count,
                     plural,
                     t_name,
                     subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    week_range_text(*first_week, *last_week),
                 )
             }
         }
@@ -905,6 +896,14 @@ impl ConstraintDesc {
             ConstraintDesc::Level3(c) => c.user_readable(env),
             ConstraintDesc::Level4(c) => c.user_readable(env),
         }
+    }
+}
+
+fn week_range_text(first_week: GlobalWeek, last_week: GlobalWeek) -> String {
+    if first_week == last_week {
+        format!("la semaine {}", first_week.0 + 1)
+    } else {
+        format!("les semaines {} à {}", first_week.0 + 1, last_week.0 + 1,)
     }
 }
 
