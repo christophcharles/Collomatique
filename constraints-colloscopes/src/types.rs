@@ -232,6 +232,13 @@ pub enum ConstraintDesc {
         first_week: GlobalWeek,
         last_week: GlobalWeek,
     },
+    PeriodicityExactlyPeriodicInfeasible {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        periodicity: u32,
+    },
 }
 
 impl ConstraintDesc {
@@ -620,6 +627,24 @@ impl ConstraintDesc {
                     "{} ne doit pas avoir plus d'une colle en {} entre la semaine {} et la semaine {}",
                     s_name,
                     subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            ConstraintDesc::PeriodicityExactlyPeriodicInfeasible {
+                student,
+                subject,
+                first_week,
+                last_week,
+                periodicity,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "Pas assez de semaines actives pour une périodicité exacte de {} semaine(s) en {} pour {} (semaines {} à {})",
+                    periodicity,
+                    subj_name,
+                    s_name,
                     first_week.0 + 1,
                     last_week.0 + 1,
                 )

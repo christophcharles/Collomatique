@@ -1,0 +1,134 @@
+use crate::ids::GlobalWeek;
+use crate::native_extras::{MyBundle, subject_interrogation_params};
+use crate::types::ConstraintDesc;
+use collomatique_binding_colloscopes::vars::VarEnv;
+use collomatique_ilp::int_linexpr::IntLinExpr;
+use collomatique_state_colloscopes::ids::{PeriodId, StudentId, SubjectId};
+use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
+use std::collections::BTreeSet;
+
+use super::helpers::{
+    count_interrogations_expr, enrolled_students_for_subject, slot_week_pairs_for_subject,
+};
+
+struct PeriodRunInfo {
+    first_global_week: GlobalWeek,
+    last_global_week: GlobalWeek,
+    active_weeks: Vec<GlobalWeek>,
+}
+
+fn compute_period_runs(
+    env: &VarEnv,
+    subject_id: SubjectId,
+    student: StudentId,
+    excluded_periods: &BTreeSet<PeriodId>,
+) -> Vec<PeriodRunInfo> {
+    let mut runs = Vec::new();
+    let mut current_first: Option<GlobalWeek> = None;
+    let mut current_last = GlobalWeek(0);
+    let mut current_active_weeks = Vec::new();
+    let mut global_week = 0usize;
+
+    for (period_id, period_desc) in &env.periods.ordered_period_list {
+        let first_of_period = GlobalWeek(global_week);
+        let last_of_period = GlobalWeek(global_week + period_desc.len().saturating_sub(1));
+
+        let is_active = !excluded_periods.contains(period_id)
+            && env
+                .assignments
+                .period_map
+                .get(period_id)
+                .and_then(|pa| pa.subject_map.get(&subject_id))
+                .is_some_and(|students| students.contains(&student));
+
+        if is_active {
+            if current_first.is_none() {
+                current_first = Some(first_of_period);
+            }
+            current_last = last_of_period;
+            for week_desc in period_desc {
+                if week_desc.interrogations {
+                    current_active_weeks.push(GlobalWeek(global_week));
+                }
+                global_week += 1;
+            }
+        } else {
+            if let Some(first) = current_first.take() {
+                runs.push(PeriodRunInfo {
+                    first_global_week: first,
+                    last_global_week: current_last,
+                    active_weeks: std::mem::take(&mut current_active_weeks),
+                });
+            }
+            global_week += period_desc.len();
+        }
+    }
+    if let Some(first) = current_first {
+        runs.push(PeriodRunInfo {
+            first_global_week: first,
+            last_global_week: current_last,
+            active_weeks: current_active_weeks,
+        });
+    }
+
+    runs
+}
+
+pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
+    for (subject_id, subject) in &env.subjects.ordered_subject_list {
+        let Some(params) = subject_interrogation_params(env, *subject_id) else {
+            continue;
+        };
+        let SubjectPeriodicity::ExactlyPeriodic {
+            periodicity_in_weeks,
+        } = &params.periodicity
+        else {
+            continue;
+        };
+
+        let periodicity = periodicity_in_weeks.get() as usize;
+        let slot_week_pairs =
+            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let enrolled = enrolled_students_for_subject(env, *subject_id);
+
+        for &student in &enrolled {
+            let runs = compute_period_runs(env, *subject_id, student, &subject.excluded_periods);
+
+            for run in &runs {
+                if run.active_weeks.len() < periodicity {
+                    bundle = bundle.with_infeasible(
+                        ConstraintDesc::PeriodicityExactlyPeriodicInfeasible {
+                            student,
+                            subject: *subject_id,
+                            first_week: run.first_global_week,
+                            last_week: run.last_global_week,
+                            periodicity: periodicity_in_weeks.get(),
+                        },
+                    );
+                } else {
+                    for window in run.active_weeks.windows(periodicity) {
+                        let win_first = window[0];
+                        let win_last = window[window.len() - 1];
+                        let count_expr = count_interrogations_expr(
+                            &slot_week_pairs,
+                            student,
+                            win_first,
+                            win_last,
+                        );
+                        bundle = bundle.with_constraint(
+                            count_expr.eq(&IntLinExpr::constant(1)),
+                            ConstraintDesc::PeriodicityInterrogationCountExact {
+                                student,
+                                subject: *subject_id,
+                                first_week: win_first,
+                                last_week: win_last,
+                                count: 1,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+    bundle
+}
