@@ -55,10 +55,6 @@ pub const MODULES: &[(&str, &str)] = &[
         "collomatique_balancing_helpers",
         include_str!("scripts/collomatique_balancing_helpers.collo-ml"),
     ),
-    (
-        "collomatique_balancing_period_rotation",
-        include_str!("scripts/collomatique_balancing_period_rotation.collo-ml"),
-    ),
 ];
 
 pub const MAIN_MODULE: &str = include_str!("scripts/main.collo-ml");
