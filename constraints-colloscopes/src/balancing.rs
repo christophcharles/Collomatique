@@ -1,5 +1,6 @@
 mod avoid_twice_in_a_row;
 mod helpers;
+mod period_rotation;
 mod rotation;
 mod slot_rotation;
 mod year_rotation;
@@ -15,5 +16,7 @@ pub fn build(env: &VarEnv) -> MyBundle {
         .merge(rotation::build(env))
         .expect("no duplicate extras from balancing")
         .merge(slot_rotation::build(env))
+        .expect("no duplicate extras from balancing")
+        .merge(period_rotation::build(env))
         .expect("no duplicate extras from balancing")
 }

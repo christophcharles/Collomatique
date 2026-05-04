@@ -79,6 +79,7 @@ pub enum ExtraVarName {
     BalancingYearRotationPenalty,
     BalancingRotationPenalty,
     BalancingSlotRotationPenalty,
+    BalancingPeriodRotationPenalty,
 }
 
 impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
@@ -298,6 +299,14 @@ pub enum PreferenceConstraint {
         student: StudentId,
         subject: SubjectId,
         slot: SlotId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        max_count: u32,
+    },
+    BalancingPeriodRotation {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
         first_week: GlobalWeek,
         last_week: GlobalWeek,
         max_count: u32,
@@ -905,6 +914,28 @@ impl PreferenceConstraint {
                     max_count,
                     plural,
                     sl_name,
+                    subj_name,
+                    week_range_text(*first_week, *last_week),
+                )
+            }
+            PreferenceConstraint::BalancingPeriodRotation {
+                student,
+                subject,
+                teacher,
+                first_week,
+                last_week,
+                max_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                let plural = if *max_count > 1 { "s" } else { "" };
+                format!(
+                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} sur la période ({})",
+                    s_name,
+                    max_count,
+                    plural,
+                    t_name,
                     subj_name,
                     week_range_text(*first_week, *last_week),
                 )
