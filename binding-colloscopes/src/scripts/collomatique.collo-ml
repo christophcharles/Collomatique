@@ -1,5 +1,4 @@
 import "collomatique_db" as *;
-import "collomatique_periodicity_amount_for_every_arbitrary_block" as periodicity_afab;
 import "collomatique_periodicity_exactly_periodic" as periodicity_ep;
 import "collomatique_periodicity_once_for_every_block_of_weeks" as periodicity_ofeb;
 import "collomatique_balancing_rotation" as balancing_rotation;
@@ -9,7 +8,6 @@ import "collomatique_balancing_year_rotation" as balancing_year_rotation;
 import "collomatique_balancing_period_rotation" as balancing_period_rotation;
 
 pub let default_constraint(db: Db) -> Constraint =
-    periodicity_afab::constraint(db) and
     periodicity_ep::constraint(db) and
     periodicity_ofeb::constraint(db) and
     balancing_rotation::constraint(db) and
