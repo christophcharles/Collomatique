@@ -111,6 +111,16 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                             count: br.count_min,
                         },
                     );
+                    bundle = bundle.with_constraint(
+                        count_expr.leq(&IntLinExpr::constant(i64::from(br.count_max))),
+                        ConstraintDesc::PeriodicityInterrogationCountMax {
+                            student,
+                            subject: *subject_id,
+                            first_week: br.first_week,
+                            last_week: br.last_week,
+                            max_count: br.count_max,
+                        },
+                    );
                 } else {
                     if br.count_min > 0 {
                         bundle = bundle.with_constraint(
@@ -148,6 +158,16 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                         first_week: gap_first,
                         last_week: gap_last,
                         count: 0,
+                    },
+                );
+                bundle = bundle.with_constraint(
+                    gap_expr.leq(&IntLinExpr::constant(0)),
+                    ConstraintDesc::PeriodicityInterrogationCountMax {
+                        student,
+                        subject: *subject_id,
+                        first_week: gap_first,
+                        last_week: gap_last,
+                        max_count: 0,
                     },
                 );
             }

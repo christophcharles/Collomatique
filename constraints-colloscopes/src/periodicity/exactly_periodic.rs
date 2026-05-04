@@ -125,6 +125,16 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                                 count: 1,
                             },
                         );
+                        bundle = bundle.with_constraint(
+                            count_expr.leq(&IntLinExpr::constant(1)),
+                            ConstraintDesc::PeriodicityInterrogationCountMax {
+                                student,
+                                subject: *subject_id,
+                                first_week: win_first,
+                                last_week: win_last,
+                                max_count: 1,
+                            },
+                        );
                     }
                 }
             }

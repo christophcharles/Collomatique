@@ -50,6 +50,16 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                         count: count_min,
                     },
                 );
+                bundle = bundle.with_constraint(
+                    count_expr.leq(&IntLinExpr::constant(i64::from(count_max))),
+                    ConstraintDesc::PeriodicityInterrogationCountMax {
+                        student,
+                        subject: *subject_id,
+                        first_week,
+                        last_week,
+                        max_count: count_max,
+                    },
+                );
             } else {
                 if count_min > 0 {
                     bundle = bundle.with_constraint(
