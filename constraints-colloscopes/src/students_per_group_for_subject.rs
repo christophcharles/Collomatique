@@ -4,7 +4,7 @@ use crate::native_extras::{
 };
 use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::VarEnv;
-use collomatique_ilp::int_linexpr::IntLinExpr;
+use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
 pub fn build(env: &VarEnv) -> MyBundle {
@@ -111,9 +111,7 @@ fn add_reification(
                     .expect("no duplicate extras")
             } else {
                 bundle
-                    .and_reified(var, move || {
-                        vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
-                    })
+                    .and_reified(var, move || vec![IntConstraint::infeasible()])
                     .expect("no duplicate extras")
             }
         }

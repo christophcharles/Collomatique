@@ -1,7 +1,7 @@
 use crate::ids::{GlobalWeek, GroupNum};
 use crate::types::{ConstraintDesc, ExtraVarName};
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
-use collomatique_ilp::int_linexpr::IntLinExpr;
+use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::group_lists::GroupList;
@@ -350,9 +350,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
                             .expect("no duplicate extras");
                     } else {
                         bundle = bundle
-                            .and_reified(var, move || {
-                                vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
-                            })
+                            .and_reified(var, move || vec![IntConstraint::infeasible()])
                             .expect("no duplicate extras");
                     }
                 }
@@ -455,9 +453,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
 
                     if !is_student_enrolled(env, student, subject_id, week) {
                         bundle = bundle
-                            .and_reified(var, move || {
-                                vec![IntLinExpr::constant(1).leq(&IntLinExpr::constant(0))]
-                            })
+                            .and_reified(var, move || vec![IntConstraint::infeasible()])
                             .expect("no duplicate extras");
                         continue;
                     }
@@ -465,9 +461,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                     let Some(group_list) = group_list_for_interrogation(env, subject_id, week)
                     else {
                         bundle = bundle
-                            .and_reified(var, move || {
-                                vec![IntLinExpr::constant(0).geq(&IntLinExpr::constant(1))]
-                            })
+                            .and_reified(var, move || vec![IntConstraint::infeasible()])
                             .expect("no duplicate extras");
                         continue;
                     };
@@ -498,12 +492,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                                 }
                                 None => {
                                     bundle = bundle
-                                        .and_reified(var, move || {
-                                            vec![
-                                                IntLinExpr::constant(0)
-                                                    .geq(&IntLinExpr::constant(1)),
-                                            ]
-                                        })
+                                        .and_reified(var, move || vec![IntConstraint::infeasible()])
                                         .expect("no duplicate extras");
                                 }
                             }
