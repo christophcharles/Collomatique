@@ -77,86 +77,31 @@ impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(
-    Debug(bound = ""),
-    Clone(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
-pub enum ConstraintDesc {
-    Script(Option<Origin<SqliteDatabaseConnection>>),
-    StudentsPerGroupMin {
-        group_list: GroupListId,
-        group: GroupNum,
-        min_students: u32,
-    },
-    StudentsPerGroupMax {
-        group_list: GroupListId,
-        group: GroupNum,
-        max_students: u32,
-    },
-    StudentHasGroup {
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum InfeasibleConstraint {
+    PeriodicityExactlyPeriodicInfeasible {
         student: StudentId,
-        group_list: GroupListId,
-    },
-    StudentsPerGroupForSubjectMin {
-        group_list: GroupListId,
-        group: GroupNum,
         subject: SubjectId,
-        period: PeriodId,
-        min_students: u32,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        periodicity: u32,
     },
-    StudentsPerGroupForSubjectMax {
-        group_list: GroupListId,
-        group: GroupNum,
+    PeriodicityOncePerBlockInfeasible {
+        student: StudentId,
         subject: SubjectId,
-        period: PeriodId,
-        max_students: u32,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        weeks_per_block: u32,
     },
-    GroupFilledByAscendingOrder {
-        group_list: GroupListId,
-        group: GroupNum,
-    },
-    ForbiddenGroup {
-        group_list: GroupListId,
-        group: GroupNum,
-        slot: SlotId,
-        week: GlobalWeek,
-        subject: SubjectId,
-    },
-    GroupCountPerInterrogationMin {
-        slot: SlotId,
-        week: GlobalWeek,
-        min_groups: u32,
-    },
-    GroupCountPerInterrogationMax {
-        slot: SlotId,
-        week: GlobalWeek,
-        max_groups: u32,
-    },
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum StructuralConstraint {
     OneInterrogationAtOnce {
         student: StudentId,
         slot_a: SlotId,
         slot_b: SlotId,
         week: GlobalWeek,
-    },
-    MaxInterrogationsPerDay {
-        student: StudentId,
-        week: GlobalWeek,
-        day: collomatique_time::Weekday,
-        max: u32,
-    },
-    MaxInterrogationsPerWeek {
-        student: StudentId,
-        week: GlobalWeek,
-        max: u32,
-    },
-    MinInterrogationsPerWeek {
-        student: StudentId,
-        week: GlobalWeek,
-        min: u32,
     },
     IncompatSaturated {
         student: StudentId,
@@ -168,6 +113,110 @@ pub enum ConstraintDesc {
         incompat: IncompatId,
         week: GlobalWeek,
         minimum_free_slots: u32,
+    },
+    StudentHasGroup {
+        student: StudentId,
+        group_list: GroupListId,
+    },
+    ForbiddenGroup {
+        group_list: GroupListId,
+        group: GroupNum,
+        slot: SlotId,
+        week: GlobalWeek,
+        subject: SubjectId,
+    },
+    SlotPairingUsedImpliesNotUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+    SlotPairingNotUsedImpliesNotUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum QualityConstraint {
+    StudentsPerGroupMax {
+        group_list: GroupListId,
+        group: GroupNum,
+        max_students: u32,
+    },
+    StudentsPerGroupForSubjectMax {
+        group_list: GroupListId,
+        group: GroupNum,
+        subject: SubjectId,
+        period: PeriodId,
+        max_students: u32,
+    },
+    GroupCountPerInterrogationMax {
+        slot: SlotId,
+        week: GlobalWeek,
+        max_groups: u32,
+    },
+    PeriodicityInterrogationCountMax {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        max_count: u32,
+    },
+    PeriodicitySeparation {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+    },
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum ProgressiveConstraint {
+    StudentsPerGroupMin {
+        group_list: GroupListId,
+        group: GroupNum,
+        min_students: u32,
+    },
+    StudentsPerGroupForSubjectMin {
+        group_list: GroupListId,
+        group: GroupNum,
+        subject: SubjectId,
+        period: PeriodId,
+        min_students: u32,
+    },
+    GroupCountPerInterrogationMin {
+        slot: SlotId,
+        week: GlobalWeek,
+        min_groups: u32,
+    },
+    PeriodicityInterrogationCountMin {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        min_count: u32,
+    },
+    PeriodicityInterrogationCountExact {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        count: u32,
+    },
+    SlotPairingUsedImpliesUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+    SlotPairingNotUsedImpliesUsed {
+        rule: SlotPairingRuleId,
+        week: GlobalWeek,
+    },
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PreferenceConstraint {
+    GroupFilledByAscendingOrder {
+        group_list: GroupListId,
+        group: GroupNum,
     },
     PairingHavingImpliesHaving {
         student: StudentId,
@@ -189,190 +238,124 @@ pub enum ConstraintDesc {
         week: GlobalWeek,
         rule: PairingRuleId,
     },
-    SlotPairingUsedImpliesUsed {
-        rule: SlotPairingRuleId,
+    MaxInterrogationsPerDay {
+        student: StudentId,
         week: GlobalWeek,
+        day: collomatique_time::Weekday,
+        max: u32,
     },
-    SlotPairingUsedImpliesNotUsed {
-        rule: SlotPairingRuleId,
+    MaxInterrogationsPerWeek {
+        student: StudentId,
         week: GlobalWeek,
+        max: u32,
     },
-    SlotPairingNotUsedImpliesUsed {
-        rule: SlotPairingRuleId,
+    MinInterrogationsPerWeek {
+        student: StudentId,
         week: GlobalWeek,
-    },
-    SlotPairingNotUsedImpliesNotUsed {
-        rule: SlotPairingRuleId,
-        week: GlobalWeek,
-    },
-    PeriodicityInterrogationCountExact {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-        count: u32,
-    },
-    PeriodicityInterrogationCountMin {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-        min_count: u32,
-    },
-    PeriodicityInterrogationCountMax {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-        max_count: u32,
-    },
-    PeriodicitySeparation {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-    },
-    PeriodicityExactlyPeriodicInfeasible {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-        periodicity: u32,
-    },
-    PeriodicityOncePerBlockInfeasible {
-        student: StudentId,
-        subject: SubjectId,
-        first_week: GlobalWeek,
-        last_week: GlobalWeek,
-        weeks_per_block: u32,
+        min: u32,
     },
 }
 
-impl ConstraintDesc {
+#[derive(Derivative)]
+#[derivative(
+    Debug(bound = ""),
+    Clone(bound = ""),
+    Hash(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = "")
+)]
+pub enum ConstraintDesc {
+    Script(Option<Origin<SqliteDatabaseConnection>>),
+    Level0(InfeasibleConstraint),
+    Level1(StructuralConstraint),
+    Level2(QualityConstraint),
+    Level3(ProgressiveConstraint),
+    Level4(PreferenceConstraint),
+}
+
+impl From<InfeasibleConstraint> for ConstraintDesc {
+    fn from(c: InfeasibleConstraint) -> Self {
+        ConstraintDesc::Level0(c)
+    }
+}
+
+impl From<StructuralConstraint> for ConstraintDesc {
+    fn from(c: StructuralConstraint) -> Self {
+        ConstraintDesc::Level1(c)
+    }
+}
+
+impl From<QualityConstraint> for ConstraintDesc {
+    fn from(c: QualityConstraint) -> Self {
+        ConstraintDesc::Level2(c)
+    }
+}
+
+impl From<ProgressiveConstraint> for ConstraintDesc {
+    fn from(c: ProgressiveConstraint) -> Self {
+        ConstraintDesc::Level3(c)
+    }
+}
+
+impl From<PreferenceConstraint> for ConstraintDesc {
+    fn from(c: PreferenceConstraint) -> Self {
+        ConstraintDesc::Level4(c)
+    }
+}
+
+impl InfeasibleConstraint {
     pub fn user_readable(
         &self,
         env: &collomatique_state_colloscopes::colloscope_params::Parameters,
     ) -> String {
         match self {
-            ConstraintDesc::Script(Some(origin)) => origin.to_string(),
-            ConstraintDesc::Script(None) => "Script (origine inconnue)".to_string(),
-            ConstraintDesc::StudentsPerGroupMin {
-                group_list,
-                group,
-                min_students,
-            } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
-                format!(
-                    "Au moins {} élèves dans le groupe {} de la liste {}",
-                    min_students, g_name, gl_name
-                )
-            }
-            ConstraintDesc::StudentsPerGroupMax {
-                group_list,
-                group,
-                max_students,
-            } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
-                format!(
-                    "Au plus {} élèves dans le groupe {} de la liste {}",
-                    max_students, g_name, gl_name
-                )
-            }
-            ConstraintDesc::StudentHasGroup {
+            InfeasibleConstraint::PeriodicityExactlyPeriodicInfeasible {
                 student,
-                group_list,
+                subject,
+                first_week,
+                last_week,
+                periodicity,
             } => {
                 let s_name = student_name(env, *student);
-                let gl_name = group_list_name(env, *group_list);
-                format!(
-                    "L'élève {} doit avoir un groupe dans la liste {}",
-                    s_name, gl_name
-                )
-            }
-            ConstraintDesc::StudentsPerGroupForSubjectMin {
-                group_list,
-                group,
-                subject,
-                period,
-                min_students,
-            } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
-                let subj_name = subject_name(env, *subject);
-                let period_num = period_position(env, *period);
-                format!(
-                    "Au moins {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
-                    min_students, g_name, gl_name, subj_name, period_num
-                )
-            }
-            ConstraintDesc::StudentsPerGroupForSubjectMax {
-                group_list,
-                group,
-                subject,
-                period,
-                max_students,
-            } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
-                let subj_name = subject_name(env, *subject);
-                let period_num = period_position(env, *period);
-                format!(
-                    "Au plus {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
-                    max_students, g_name, gl_name, subj_name, period_num
-                )
-            }
-            ConstraintDesc::GroupFilledByAscendingOrder { group_list, group } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
-                let next_g_name = group_name(env, *group_list, group.next());
-                format!(
-                    "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
-                    g_name, gl_name, next_g_name,
-                )
-            }
-            ConstraintDesc::ForbiddenGroup {
-                group_list,
-                group,
-                subject,
-                ..
-            } => {
-                let gl_name = group_list_name(env, *group_list);
-                let g_name = group_name(env, *group_list, *group);
                 let subj_name = subject_name(env, *subject);
                 format!(
-                    "Le groupe {} de la liste {} ne peut avoir de colle dans la matière {} sans élève associé",
-                    g_name, gl_name, subj_name,
-                )
-            }
-            ConstraintDesc::GroupCountPerInterrogationMin {
-                slot,
-                week,
-                min_groups,
-            } => {
-                let s_name = slot_name(env, *slot);
-                format!(
-                    "Minimum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
-                    min_groups,
+                    "Pas assez de semaines actives pour une périodicité exacte de {} semaine(s) en {} pour {} (semaines {} à {})",
+                    periodicity,
+                    subj_name,
                     s_name,
-                    week.0 + 1,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
                 )
             }
-            ConstraintDesc::GroupCountPerInterrogationMax {
-                slot,
-                week,
-                max_groups,
+            InfeasibleConstraint::PeriodicityOncePerBlockInfeasible {
+                student,
+                subject,
+                first_week,
+                last_week,
+                weeks_per_block,
             } => {
-                let s_name = slot_name(env, *slot);
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
                 format!(
-                    "Maximum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
-                    max_groups,
+                    "Le nombre de semaines actives n'est pas un multiple de {} pour {} en {} (semaines {} à {})",
+                    weeks_per_block,
                     s_name,
-                    week.0 + 1,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
                 )
             }
-            ConstraintDesc::OneInterrogationAtOnce {
+        }
+    }
+}
+
+impl StructuralConstraint {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
+        match self {
+            StructuralConstraint::OneInterrogationAtOnce {
                 student,
                 slot_a,
                 slot_b,
@@ -389,40 +372,7 @@ impl ConstraintDesc {
                     week.0 + 1,
                 )
             }
-            ConstraintDesc::MaxInterrogationsPerDay {
-                student,
-                week,
-                day,
-                max,
-            } => {
-                let s_name = student_name(env, *student);
-                format!(
-                    "Au maximum {} colle(s) le {} de la semaine {} pour l'élève {}",
-                    max,
-                    day,
-                    week.0 + 1,
-                    s_name,
-                )
-            }
-            ConstraintDesc::MaxInterrogationsPerWeek { student, week, max } => {
-                let s_name = student_name(env, *student);
-                format!(
-                    "Au maximum {} colle(s) la semaine {} pour l'élève {}",
-                    max,
-                    week.0 + 1,
-                    s_name,
-                )
-            }
-            ConstraintDesc::MinInterrogationsPerWeek { student, week, min } => {
-                let s_name = student_name(env, *student);
-                format!(
-                    "Au minimum {} colle(s) la semaine {} pour l'élève {}",
-                    min,
-                    week.0 + 1,
-                    s_name,
-                )
-            }
-            ConstraintDesc::IncompatSaturated {
+            StructuralConstraint::IncompatSaturated {
                 student,
                 incompat,
                 week,
@@ -436,7 +386,7 @@ impl ConstraintDesc {
                     i_name,
                 )
             }
-            ConstraintDesc::IncompatNonSaturated {
+            StructuralConstraint::IncompatNonSaturated {
                 student,
                 incompat,
                 week,
@@ -452,77 +402,32 @@ impl ConstraintDesc {
                     i_name,
                 )
             }
-            ConstraintDesc::PairingHavingImpliesHaving {
+            StructuralConstraint::StudentHasGroup {
                 student,
-                week,
-                rule,
+                group_list,
             } => {
                 let s_name = student_name(env, *student);
-                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                let gl_name = group_list_name(env, *group_list);
                 format!(
-                    "Si l'élève {} a une colle en {} semaine {}, il doit aussi en avoir en {}",
-                    s_name,
-                    ant_subj,
-                    week.0 + 1,
-                    con_subj,
+                    "L'élève {} doit avoir un groupe dans la liste {}",
+                    s_name, gl_name
                 )
             }
-            ConstraintDesc::PairingHavingImpliesNotHaving {
-                student,
-                week,
-                rule,
+            StructuralConstraint::ForbiddenGroup {
+                group_list,
+                group,
+                subject,
+                ..
             } => {
-                let s_name = student_name(env, *student);
-                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                let subj_name = subject_name(env, *subject);
                 format!(
-                    "Si l'élève {} a une colle en {} semaine {}, il ne doit pas en avoir en {}",
-                    s_name,
-                    ant_subj,
-                    week.0 + 1,
-                    con_subj,
+                    "Le groupe {} de la liste {} ne peut avoir de colle dans la matière {} sans élève associé",
+                    g_name, gl_name, subj_name,
                 )
             }
-            ConstraintDesc::PairingNotHavingImpliesHaving {
-                student,
-                week,
-                rule,
-            } => {
-                let s_name = student_name(env, *student);
-                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
-                format!(
-                    "Si l'élève {} n'a pas de colle en {} semaine {}, il doit en avoir en {}",
-                    s_name,
-                    ant_subj,
-                    week.0 + 1,
-                    con_subj,
-                )
-            }
-            ConstraintDesc::PairingNotHavingImpliesNotHaving {
-                student,
-                week,
-                rule,
-            } => {
-                let s_name = student_name(env, *student);
-                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
-                format!(
-                    "Si l'élève {} n'a pas de colle en {} semaine {}, il ne doit pas en avoir en {}",
-                    s_name,
-                    ant_subj,
-                    week.0 + 1,
-                    con_subj,
-                )
-            }
-            ConstraintDesc::SlotPairingUsedImpliesUsed { rule, week } => {
-                let (subj, ant, con) = slot_pairing_info(env, *rule);
-                format!(
-                    "{} semaine {} : si le créneau ({}) est utilisé, le créneau ({}) doit aussi être utilisé",
-                    subj,
-                    week.0 + 1,
-                    ant,
-                    con,
-                )
-            }
-            ConstraintDesc::SlotPairingUsedImpliesNotUsed { rule, week } => {
+            StructuralConstraint::SlotPairingUsedImpliesNotUsed { rule, week } => {
                 let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
                     "{} semaine {} : si le créneau ({}) est utilisé, le créneau ({}) ne doit pas être utilisé",
@@ -532,17 +437,7 @@ impl ConstraintDesc {
                     con,
                 )
             }
-            ConstraintDesc::SlotPairingNotUsedImpliesUsed { rule, week } => {
-                let (subj, ant, con) = slot_pairing_info(env, *rule);
-                format!(
-                    "{} semaine {} : si le créneau ({}) n'est pas utilisé, le créneau ({}) doit être utilisé",
-                    subj,
-                    week.0 + 1,
-                    ant,
-                    con,
-                )
-            }
-            ConstraintDesc::SlotPairingNotUsedImpliesNotUsed { rule, week } => {
+            StructuralConstraint::SlotPairingNotUsedImpliesNotUsed { rule, week } => {
                 let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
                     "{} semaine {} : si le créneau ({}) n'est pas utilisé, le créneau ({}) ne doit pas être utilisé non plus",
@@ -552,7 +447,165 @@ impl ConstraintDesc {
                     con,
                 )
             }
-            ConstraintDesc::PeriodicityInterrogationCountExact {
+        }
+    }
+}
+
+impl QualityConstraint {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
+        match self {
+            QualityConstraint::StudentsPerGroupMax {
+                group_list,
+                group,
+                max_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                format!(
+                    "Au plus {} élèves dans le groupe {} de la liste {}",
+                    max_students, g_name, gl_name
+                )
+            }
+            QualityConstraint::StudentsPerGroupForSubjectMax {
+                group_list,
+                group,
+                subject,
+                period,
+                max_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                let subj_name = subject_name(env, *subject);
+                let period_num = period_position(env, *period);
+                format!(
+                    "Au plus {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
+                    max_students, g_name, gl_name, subj_name, period_num
+                )
+            }
+            QualityConstraint::GroupCountPerInterrogationMax {
+                slot,
+                week,
+                max_groups,
+            } => {
+                let s_name = slot_name(env, *slot);
+                format!(
+                    "Maximum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
+                    max_groups,
+                    s_name,
+                    week.0 + 1,
+                )
+            }
+            QualityConstraint::PeriodicityInterrogationCountMax {
+                student,
+                subject,
+                first_week,
+                last_week,
+                max_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let plural = if *max_count > 1 { "s" } else { "" };
+                format!(
+                    "{} doit avoir au plus {} colle{} en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    max_count,
+                    plural,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            QualityConstraint::PeriodicitySeparation {
+                student,
+                subject,
+                first_week,
+                last_week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "{} ne doit pas avoir plus d'une colle en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+        }
+    }
+}
+
+impl ProgressiveConstraint {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
+        match self {
+            ProgressiveConstraint::StudentsPerGroupMin {
+                group_list,
+                group,
+                min_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                format!(
+                    "Au moins {} élèves dans le groupe {} de la liste {}",
+                    min_students, g_name, gl_name
+                )
+            }
+            ProgressiveConstraint::StudentsPerGroupForSubjectMin {
+                group_list,
+                group,
+                subject,
+                period,
+                min_students,
+            } => {
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                let subj_name = subject_name(env, *subject);
+                let period_num = period_position(env, *period);
+                format!(
+                    "Au moins {} élèves dans le groupe {} de la liste {} pour la matière {} sur la période {}",
+                    min_students, g_name, gl_name, subj_name, period_num
+                )
+            }
+            ProgressiveConstraint::GroupCountPerInterrogationMin {
+                slot,
+                week,
+                min_groups,
+            } => {
+                let s_name = slot_name(env, *slot);
+                format!(
+                    "Minimum de {} groupe(s) pour la colle du créneau {} de la semaine {}",
+                    min_groups,
+                    s_name,
+                    week.0 + 1,
+                )
+            }
+            ProgressiveConstraint::PeriodicityInterrogationCountMin {
+                student,
+                subject,
+                first_week,
+                last_week,
+                min_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let plural = if *min_count > 1 { "s" } else { "" };
+                format!(
+                    "{} doit avoir au moins {} colle{} en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    min_count,
+                    plural,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            ProgressiveConstraint::PeriodicityInterrogationCountExact {
                 student,
                 subject,
                 first_week,
@@ -582,98 +635,155 @@ impl ConstraintDesc {
                     )
                 }
             }
-            ConstraintDesc::PeriodicityInterrogationCountMin {
-                student,
-                subject,
-                first_week,
-                last_week,
-                min_count,
-            } => {
-                let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
-                let plural = if *min_count > 1 { "s" } else { "" };
+            ProgressiveConstraint::SlotPairingUsedImpliesUsed { rule, week } => {
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "{} doit avoir au moins {} colle{} en {} entre la semaine {} et la semaine {}",
-                    s_name,
-                    min_count,
-                    plural,
-                    subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    "{} semaine {} : si le créneau ({}) est utilisé, le créneau ({}) doit aussi être utilisé",
+                    subj,
+                    week.0 + 1,
+                    ant,
+                    con,
                 )
             }
-            ConstraintDesc::PeriodicityInterrogationCountMax {
-                student,
-                subject,
-                first_week,
-                last_week,
-                max_count,
-            } => {
-                let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
-                let plural = if *max_count > 1 { "s" } else { "" };
+            ProgressiveConstraint::SlotPairingNotUsedImpliesUsed { rule, week } => {
+                let (subj, ant, con) = slot_pairing_info(env, *rule);
                 format!(
-                    "{} doit avoir au plus {} colle{} en {} entre la semaine {} et la semaine {}",
-                    s_name,
-                    max_count,
-                    plural,
-                    subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    "{} semaine {} : si le créneau ({}) n'est pas utilisé, le créneau ({}) doit être utilisé",
+                    subj,
+                    week.0 + 1,
+                    ant,
+                    con,
                 )
             }
-            ConstraintDesc::PeriodicitySeparation {
-                student,
-                subject,
-                first_week,
-                last_week,
-            } => {
-                let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
+        }
+    }
+}
+
+impl PreferenceConstraint {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
+        match self {
+            PreferenceConstraint::GroupFilledByAscendingOrder { group_list, group } => {
+                let gl_name = group_list_name(env, *group_list);
+                let g_name = group_name(env, *group_list, *group);
+                let next_g_name = group_name(env, *group_list, group.next());
                 format!(
-                    "{} ne doit pas avoir plus d'une colle en {} entre la semaine {} et la semaine {}",
-                    s_name,
-                    subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
+                    g_name, gl_name, next_g_name,
                 )
             }
-            ConstraintDesc::PeriodicityExactlyPeriodicInfeasible {
+            PreferenceConstraint::PairingHavingImpliesHaving {
                 student,
-                subject,
-                first_week,
-                last_week,
-                periodicity,
+                week,
+                rule,
             } => {
                 let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
                 format!(
-                    "Pas assez de semaines actives pour une périodicité exacte de {} semaine(s) en {} pour {} (semaines {} à {})",
-                    periodicity,
-                    subj_name,
+                    "Si l'élève {} a une colle en {} semaine {}, il doit aussi en avoir en {}",
                     s_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
                 )
             }
-            ConstraintDesc::PeriodicityOncePerBlockInfeasible {
+            PreferenceConstraint::PairingHavingImpliesNotHaving {
                 student,
-                subject,
-                first_week,
-                last_week,
-                weeks_per_block,
+                week,
+                rule,
             } => {
                 let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
                 format!(
-                    "Le nombre de semaines actives n'est pas un multiple de {} pour {} en {} (semaines {} à {})",
-                    weeks_per_block,
+                    "Si l'élève {} a une colle en {} semaine {}, il ne doit pas en avoir en {}",
                     s_name,
-                    subj_name,
-                    first_week.0 + 1,
-                    last_week.0 + 1,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
                 )
             }
+            PreferenceConstraint::PairingNotHavingImpliesHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} n'a pas de colle en {} semaine {}, il doit en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
+            PreferenceConstraint::PairingNotHavingImpliesNotHaving {
+                student,
+                week,
+                rule,
+            } => {
+                let s_name = student_name(env, *student);
+                let (ant_subj, con_subj) = pairing_subject_names(env, *rule);
+                format!(
+                    "Si l'élève {} n'a pas de colle en {} semaine {}, il ne doit pas en avoir en {}",
+                    s_name,
+                    ant_subj,
+                    week.0 + 1,
+                    con_subj,
+                )
+            }
+            PreferenceConstraint::MaxInterrogationsPerDay {
+                student,
+                week,
+                day,
+                max,
+            } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au maximum {} colle(s) le {} de la semaine {} pour l'élève {}",
+                    max,
+                    day,
+                    week.0 + 1,
+                    s_name,
+                )
+            }
+            PreferenceConstraint::MaxInterrogationsPerWeek { student, week, max } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au maximum {} colle(s) la semaine {} pour l'élève {}",
+                    max,
+                    week.0 + 1,
+                    s_name,
+                )
+            }
+            PreferenceConstraint::MinInterrogationsPerWeek { student, week, min } => {
+                let s_name = student_name(env, *student);
+                format!(
+                    "Au minimum {} colle(s) la semaine {} pour l'élève {}",
+                    min,
+                    week.0 + 1,
+                    s_name,
+                )
+            }
+        }
+    }
+}
+
+impl ConstraintDesc {
+    pub fn user_readable(
+        &self,
+        env: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> String {
+        match self {
+            ConstraintDesc::Script(Some(origin)) => origin.to_string(),
+            ConstraintDesc::Script(None) => "Script (origine inconnue)".to_string(),
+            ConstraintDesc::Level0(c) => c.user_readable(env),
+            ConstraintDesc::Level1(c) => c.user_readable(env),
+            ConstraintDesc::Level2(c) => c.user_readable(env),
+            ConstraintDesc::Level3(c) => c.user_readable(env),
+            ConstraintDesc::Level4(c) => c.user_readable(env),
         }
     }
 }

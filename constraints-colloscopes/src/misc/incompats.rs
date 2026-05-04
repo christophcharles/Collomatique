@@ -2,7 +2,7 @@ use crate::ids::GlobalWeek;
 use crate::native_extras::{
     MyBundle, V, extra_var, is_student_enrolled, week_to_period_id, weeks_for_week_pattern,
 };
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, StructuralConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
@@ -83,11 +83,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             ));
                             bundle = bundle.with_constraint(
                                 expr.leq(&IntLinExpr::constant(0)),
-                                ConstraintDesc::IncompatSaturated {
+                                StructuralConstraint::IncompatSaturated {
                                     student,
                                     incompat: incompat_id,
                                     week,
-                                },
+                                }
+                                .into(),
                             );
                         }
                     }
@@ -104,12 +105,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         .sum();
                     bundle = bundle.with_constraint(
                         sum.geq(&IntLinExpr::constant(minimum_free_slots as i64)),
-                        ConstraintDesc::IncompatNonSaturated {
+                        StructuralConstraint::IncompatNonSaturated {
                             student,
                             incompat: incompat_id,
                             week,
                             minimum_free_slots: incompat.minimum_free_slots.get(),
-                        },
+                        }
+                        .into(),
                     );
                 }
             }

@@ -3,7 +3,7 @@ use crate::native_extras::{
     MyBundle, V, extra_var, group_list_for_interrogation, groups_for_group_list,
     students_for_subject_period_group_list, week_to_period_id, weeks_for_slot,
 };
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, StructuralConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -46,13 +46,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                                 ));
                                 bundle = bundle.with_constraint(
                                     expr.eq(&IntLinExpr::constant(0)),
-                                    ConstraintDesc::ForbiddenGroup {
+                                    StructuralConstraint::ForbiddenGroup {
                                         group_list,
                                         group,
                                         slot,
                                         week,
                                         subject: subject_id,
-                                    },
+                                    }
+                                    .into(),
                                 );
                             }
                         }
@@ -78,13 +79,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             ));
                             bundle = bundle.with_constraint(
                                 gi.leq(&sum),
-                                ConstraintDesc::ForbiddenGroup {
+                                StructuralConstraint::ForbiddenGroup {
                                     group_list,
                                     group,
                                     slot,
                                     week,
                                     subject: subject_id,
-                                },
+                                }
+                                .into(),
                             );
                         }
                     }

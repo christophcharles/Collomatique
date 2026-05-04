@@ -2,7 +2,7 @@ use crate::ids::GroupNum;
 use crate::native_extras::{
     MyBundle, V, extra_var, students_for_subject_period_group_list, subject_interrogation_params,
 };
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -49,25 +49,27 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let min_constraint = count.clone().geq(&(i64::from(min_students) * group_has));
                 bundle = bundle.with_constraint(
                     min_constraint,
-                    ConstraintDesc::StudentsPerGroupForSubjectMin {
+                    ProgressiveConstraint::StudentsPerGroupForSubjectMin {
                         group_list,
                         group,
                         subject,
                         period,
                         min_students,
-                    },
+                    }
+                    .into(),
                 );
 
                 let max_constraint = count.leq(&IntLinExpr::constant(i64::from(max_students)));
                 bundle = bundle.with_constraint(
                     max_constraint,
-                    ConstraintDesc::StudentsPerGroupForSubjectMax {
+                    QualityConstraint::StudentsPerGroupForSubjectMax {
                         group_list,
                         group,
                         subject,
                         period,
                         max_students,
-                    },
+                    }
+                    .into(),
                 );
             }
         }

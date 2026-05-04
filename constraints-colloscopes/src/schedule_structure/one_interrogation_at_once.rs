@@ -1,5 +1,5 @@
 use crate::native_extras::{MyBundle, extra_var, is_student_enrolled, weeks_for_slot};
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, StructuralConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_time::SlotWithDuration;
@@ -71,12 +71,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     }));
                     bundle = bundle.with_constraint(
                         (expr_a + expr_b).leq(&IntLinExpr::constant(1)),
-                        ConstraintDesc::OneInterrogationAtOnce {
+                        StructuralConstraint::OneInterrogationAtOnce {
                             student,
                             slot_a: *slot_a,
                             slot_b: *slot_b,
                             week,
-                        },
+                        }
+                        .into(),
                     );
                 }
             }

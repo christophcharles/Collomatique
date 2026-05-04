@@ -1,6 +1,6 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, V, extra_var};
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, PreferenceConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId};
@@ -161,12 +161,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     }
                     let sum = student_at_interrogation_sum(student, week, &day_slots);
                     let constraint = sum.leq(&IntLinExpr::constant(i64::from(max)));
-                    let desc = ConstraintDesc::MaxInterrogationsPerDay {
+                    let desc = PreferenceConstraint::MaxInterrogationsPerDay {
                         student,
                         week,
                         day,
                         max,
-                    };
+                    }
+                    .into();
                     if sp.soft {
                         soft_max_per_day = soft_max_per_day.with_constraint(constraint, desc);
                     } else {
@@ -180,7 +181,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let all_slot_ids: Vec<SlotId> = counted_slots.iter().map(|(s, _)| *s).collect();
                 let sum = student_at_interrogation_sum(student, week, &all_slot_ids);
                 let constraint = sum.leq(&IntLinExpr::constant(i64::from(max)));
-                let desc = ConstraintDesc::MaxInterrogationsPerWeek { student, week, max };
+                let desc =
+                    PreferenceConstraint::MaxInterrogationsPerWeek { student, week, max }.into();
                 if sp.soft {
                     soft_max_per_week = soft_max_per_week.with_constraint(constraint, desc);
                 } else {
@@ -193,7 +195,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let all_slot_ids: Vec<SlotId> = counted_slots.iter().map(|(s, _)| *s).collect();
                 let sum = student_at_interrogation_sum(student, week, &all_slot_ids);
                 let constraint = sum.geq(&IntLinExpr::constant(i64::from(min)));
-                let desc = ConstraintDesc::MinInterrogationsPerWeek { student, week, min };
+                let desc =
+                    PreferenceConstraint::MinInterrogationsPerWeek { student, week, min }.into();
                 if sp.soft {
                     soft_min_per_week = soft_min_per_week.with_constraint(constraint, desc);
                 } else {

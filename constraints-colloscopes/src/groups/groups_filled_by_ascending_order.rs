@@ -1,5 +1,5 @@
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, PreferenceConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -25,7 +25,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             }));
             bundle = bundle.with_constraint(
                 current.geq(&next),
-                ConstraintDesc::GroupFilledByAscendingOrder { group_list, group },
+                PreferenceConstraint::GroupFilledByAscendingOrder { group_list, group }.into(),
             );
         }
     }

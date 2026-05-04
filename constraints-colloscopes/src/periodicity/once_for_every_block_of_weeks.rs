@@ -1,6 +1,6 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, subject_interrogation_params};
-use crate::types::ConstraintDesc;
+use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
@@ -67,14 +67,16 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                 if active_count == 0 {
                     // Nothing to constrain
                 } else if active_count % wpb != 0 {
-                    bundle =
-                        bundle.with_infeasible(ConstraintDesc::PeriodicityOncePerBlockInfeasible {
+                    bundle = bundle.with_infeasible(
+                        InfeasibleConstraint::PeriodicityOncePerBlockInfeasible {
                             student,
                             subject: *subject_id,
                             first_week: first_global_week,
                             last_week: last_global_week,
                             weeks_per_block: weeks_per_block.get(),
-                        });
+                        }
+                        .into(),
+                    );
                 } else {
                     for chunk in active_weeks_in_period.chunks(wpb) {
                         let block_first = chunk[0];
@@ -87,23 +89,25 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                         );
                         bundle = bundle.with_constraint(
                             count_expr.eq(&IntLinExpr::constant(1)),
-                            ConstraintDesc::PeriodicityInterrogationCountExact {
+                            ProgressiveConstraint::PeriodicityInterrogationCountExact {
                                 student,
                                 subject: *subject_id,
                                 first_week: block_first,
                                 last_week: block_last,
                                 count: 1,
-                            },
+                            }
+                            .into(),
                         );
                         bundle = bundle.with_constraint(
                             count_expr.leq(&IntLinExpr::constant(1)),
-                            ConstraintDesc::PeriodicityInterrogationCountMax {
+                            QualityConstraint::PeriodicityInterrogationCountMax {
                                 student,
                                 subject: *subject_id,
                                 first_week: block_first,
                                 last_week: block_last,
                                 max_count: 1,
-                            },
+                            }
+                            .into(),
                         );
                     }
                 }
@@ -119,12 +123,13 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                     count_interrogations_expr(&slot_week_pairs, student, win_first, win_last);
                 bundle = bundle.with_constraint(
                     sep_expr.leq(&IntLinExpr::constant(1)),
-                    ConstraintDesc::PeriodicitySeparation {
+                    QualityConstraint::PeriodicitySeparation {
                         student,
                         subject: *subject_id,
                         first_week: win_first,
                         last_week: win_last,
-                    },
+                    }
+                    .into(),
                 );
             }
         }

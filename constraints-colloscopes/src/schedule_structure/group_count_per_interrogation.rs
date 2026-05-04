@@ -1,5 +1,5 @@
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_interrogation, weeks_for_slot};
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
@@ -41,20 +41,22 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }));
                 bundle = bundle.with_constraint(
                     sum.clone().geq(&(min_groups as i64 * has_groups)),
-                    ConstraintDesc::GroupCountPerInterrogationMin {
+                    ProgressiveConstraint::GroupCountPerInterrogationMin {
                         slot,
                         week,
                         min_groups,
-                    },
+                    }
+                    .into(),
                 );
 
                 bundle = bundle.with_constraint(
                     sum.leq(&IntLinExpr::constant(max_groups as i64)),
-                    ConstraintDesc::GroupCountPerInterrogationMax {
+                    QualityConstraint::GroupCountPerInterrogationMax {
                         slot,
                         week,
                         max_groups,
-                    },
+                    }
+                    .into(),
                 );
             }
         }

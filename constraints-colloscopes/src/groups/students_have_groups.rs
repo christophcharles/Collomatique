@@ -1,5 +1,5 @@
 use crate::native_extras::{MyBundle, V, base_var};
-use crate::types::ConstraintDesc;
+use crate::types::StructuralConstraint;
 use collomatique_binding_colloscopes::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -22,10 +22,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             let constraint = expr.geq(&IntLinExpr::constant(0));
             bundle = bundle.with_constraint(
                 constraint,
-                ConstraintDesc::StudentHasGroup {
+                StructuralConstraint::StudentHasGroup {
                     student,
                     group_list,
-                },
+                }
+                .into(),
             );
         }
     }

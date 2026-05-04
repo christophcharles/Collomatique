@@ -3,7 +3,7 @@ use crate::native_extras::{
     MyBundle, V, active_slots_for_subject_week, extra_var, is_at_most_once_per_week,
     student_has_interrogation_in_expr,
 };
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, PreferenceConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PairingRuleId, StudentId, SubjectId};
@@ -108,11 +108,12 @@ fn emit_pairing_constraint(
             let max_ant = active_slots_for_subject_week(env, ant_subject, week).len() as i64;
             *bundle = std::mem::take(bundle).with_constraint(
                 ant_expr.leq(&(max_ant * con_expr)),
-                ConstraintDesc::PairingHavingImpliesHaving {
+                PreferenceConstraint::PairingHavingImpliesHaving {
                     student,
                     week,
                     rule: rule_id,
-                },
+                }
+                .into(),
             );
         }
         (true, false) => {
@@ -122,11 +123,12 @@ fn emit_pairing_constraint(
                 let ant_expr = student_has_interrogation_in_expr(env, student, ant_subject, week);
                 *bundle = std::mem::take(bundle).with_constraint(
                     con_expr.leq(&(max_con * (1i64 - ant_expr))),
-                    ConstraintDesc::PairingHavingImpliesNotHaving {
+                    PreferenceConstraint::PairingHavingImpliesNotHaving {
                         student,
                         week,
                         rule: rule_id,
-                    },
+                    }
+                    .into(),
                 );
             } else {
                 let reif =
@@ -137,11 +139,12 @@ fn emit_pairing_constraint(
                     }));
                 *bundle = std::mem::take(bundle).with_constraint(
                     con_expr.leq(&(max_con * (1i64 - reif))),
-                    ConstraintDesc::PairingHavingImpliesNotHaving {
+                    PreferenceConstraint::PairingHavingImpliesNotHaving {
                         student,
                         week,
                         rule: rule_id,
-                    },
+                    }
+                    .into(),
                 );
             }
         }
@@ -150,11 +153,12 @@ fn emit_pairing_constraint(
             let con_expr = student_has_interrogation_in_expr(env, student, con_subject, week);
             *bundle = std::mem::take(bundle).with_constraint(
                 (ant_expr + con_expr).geq(&IntLinExpr::constant(1)),
-                ConstraintDesc::PairingNotHavingImpliesHaving {
+                PreferenceConstraint::PairingNotHavingImpliesHaving {
                     student,
                     week,
                     rule: rule_id,
-                },
+                }
+                .into(),
             );
         }
         (false, false) => {
@@ -163,11 +167,12 @@ fn emit_pairing_constraint(
             let max_con = active_slots_for_subject_week(env, con_subject, week).len() as i64;
             *bundle = std::mem::take(bundle).with_constraint(
                 con_expr.leq(&(max_con * ant_expr)),
-                ConstraintDesc::PairingNotHavingImpliesNotHaving {
+                PreferenceConstraint::PairingNotHavingImpliesNotHaving {
                     student,
                     week,
                     rule: rule_id,
-                },
+                }
+                .into(),
             );
         }
     }

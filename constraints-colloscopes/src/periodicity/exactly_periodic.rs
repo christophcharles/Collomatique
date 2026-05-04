@@ -1,6 +1,6 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, subject_interrogation_params};
-use crate::types::ConstraintDesc;
+use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, StudentId, SubjectId};
@@ -97,13 +97,14 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
             for run in &runs {
                 if run.active_weeks.len() < periodicity {
                     bundle = bundle.with_infeasible(
-                        ConstraintDesc::PeriodicityExactlyPeriodicInfeasible {
+                        InfeasibleConstraint::PeriodicityExactlyPeriodicInfeasible {
                             student,
                             subject: *subject_id,
                             first_week: run.first_global_week,
                             last_week: run.last_global_week,
                             periodicity: periodicity_in_weeks.get(),
-                        },
+                        }
+                        .into(),
                     );
                 } else {
                     for window in run.active_weeks.windows(periodicity) {
@@ -117,23 +118,25 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                         );
                         bundle = bundle.with_constraint(
                             count_expr.eq(&IntLinExpr::constant(1)),
-                            ConstraintDesc::PeriodicityInterrogationCountExact {
+                            ProgressiveConstraint::PeriodicityInterrogationCountExact {
                                 student,
                                 subject: *subject_id,
                                 first_week: win_first,
                                 last_week: win_last,
                                 count: 1,
-                            },
+                            }
+                            .into(),
                         );
                         bundle = bundle.with_constraint(
                             count_expr.leq(&IntLinExpr::constant(1)),
-                            ConstraintDesc::PeriodicityInterrogationCountMax {
+                            QualityConstraint::PeriodicityInterrogationCountMax {
                                 student,
                                 subject: *subject_id,
                                 first_week: win_first,
                                 last_week: win_last,
                                 max_count: 1,
-                            },
+                            }
+                            .into(),
                         );
                     }
                 }

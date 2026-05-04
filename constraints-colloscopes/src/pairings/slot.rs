@@ -2,7 +2,7 @@ use crate::ids::GlobalWeek;
 use crate::native_extras::{
     MyBundle, V, extra_var, groups_for_interrogation, subject_interrogation_params, weeks_for_slot,
 };
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ExtraVarName, ProgressiveConstraint, StructuralConstraint};
 use collomatique_binding_colloscopes::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SlotId;
@@ -81,10 +81,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     let con_count = slot_group_count_expr(env, con_slot_id, subject_id, week);
                     *target = std::mem::take(target).with_constraint(
                         ant_count.leq(&(max_groups * con_count)),
-                        ConstraintDesc::SlotPairingUsedImpliesUsed {
+                        ProgressiveConstraint::SlotPairingUsedImpliesUsed {
                             rule: rule_id,
                             week,
-                        },
+                        }
+                        .into(),
                     );
                 }
                 (true, false) => {
@@ -93,10 +94,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     if max_groups == 1 {
                         *target = std::mem::take(target).with_constraint(
                             con_count.leq(&(max_groups * (1i64 - ant_count))),
-                            ConstraintDesc::SlotPairingUsedImpliesNotUsed {
+                            StructuralConstraint::SlotPairingUsedImpliesNotUsed {
                                 rule: rule_id,
                                 week,
-                            },
+                            }
+                            .into(),
                         );
                     } else {
                         let has_groups =
@@ -106,10 +108,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             }));
                         *target = std::mem::take(target).with_constraint(
                             con_count.leq(&(max_groups * (1i64 - has_groups))),
-                            ConstraintDesc::SlotPairingUsedImpliesNotUsed {
+                            StructuralConstraint::SlotPairingUsedImpliesNotUsed {
                                 rule: rule_id,
                                 week,
-                            },
+                            }
+                            .into(),
                         );
                     }
                 }
@@ -118,10 +121,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     let con_count = slot_group_count_expr(env, con_slot_id, subject_id, week);
                     *target = std::mem::take(target).with_constraint(
                         (ant_count + con_count).geq(&IntLinExpr::constant(1)),
-                        ConstraintDesc::SlotPairingNotUsedImpliesUsed {
+                        ProgressiveConstraint::SlotPairingNotUsedImpliesUsed {
                             rule: rule_id,
                             week,
-                        },
+                        }
+                        .into(),
                     );
                 }
                 (false, false) => {
@@ -129,10 +133,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     let con_count = slot_group_count_expr(env, con_slot_id, subject_id, week);
                     *target = std::mem::take(target).with_constraint(
                         con_count.leq(&(max_groups * ant_count)),
-                        ConstraintDesc::SlotPairingNotUsedImpliesNotUsed {
+                        StructuralConstraint::SlotPairingNotUsedImpliesNotUsed {
                             rule: rule_id,
                             week,
-                        },
+                        }
+                        .into(),
                     );
                 }
             }
