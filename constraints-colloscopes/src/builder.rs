@@ -117,6 +117,11 @@ impl ProblemBuilder {
             .apply_bundle(slot_pairings_bundle.into_general())
             .expect("no duplicate extras from slot_pairings");
 
+        let periodicity_bundle = crate::periodicity::build(&env);
+        modeler
+            .apply_bundle(periodicity_bundle.into_general())
+            .expect("no duplicate extras from periodicity");
+
         let model = modeler
             .build(&env)
             .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));

@@ -205,6 +205,33 @@ pub enum ConstraintDesc {
         rule: SlotPairingRuleId,
         week: GlobalWeek,
     },
+    PeriodicityInterrogationCountExact {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        count: u32,
+    },
+    PeriodicityInterrogationCountMin {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        min_count: u32,
+    },
+    PeriodicityInterrogationCountMax {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        max_count: u32,
+    },
+    PeriodicitySeparation {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+    },
 }
 
 impl ConstraintDesc {
@@ -509,6 +536,92 @@ impl ConstraintDesc {
                     week.0 + 1,
                     ant,
                     con,
+                )
+            }
+            ConstraintDesc::PeriodicityInterrogationCountExact {
+                student,
+                subject,
+                first_week,
+                last_week,
+                count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                if *count == 0 {
+                    format!(
+                        "{} ne doit pas avoir de colle en {} entre la semaine {} et la semaine {}",
+                        s_name,
+                        subj_name,
+                        first_week.0 + 1,
+                        last_week.0 + 1,
+                    )
+                } else {
+                    let plural = if *count > 1 { "s" } else { "" };
+                    format!(
+                        "{} doit avoir exactement {} colle{} en {} entre la semaine {} et la semaine {}",
+                        s_name,
+                        count,
+                        plural,
+                        subj_name,
+                        first_week.0 + 1,
+                        last_week.0 + 1,
+                    )
+                }
+            }
+            ConstraintDesc::PeriodicityInterrogationCountMin {
+                student,
+                subject,
+                first_week,
+                last_week,
+                min_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let plural = if *min_count > 1 { "s" } else { "" };
+                format!(
+                    "{} doit avoir au moins {} colle{} en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    min_count,
+                    plural,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            ConstraintDesc::PeriodicityInterrogationCountMax {
+                student,
+                subject,
+                first_week,
+                last_week,
+                max_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let plural = if *max_count > 1 { "s" } else { "" };
+                format!(
+                    "{} doit avoir au plus {} colle{} en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    max_count,
+                    plural,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
+                )
+            }
+            ConstraintDesc::PeriodicitySeparation {
+                student,
+                subject,
+                first_week,
+                last_week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "{} ne doit pas avoir plus d'une colle en {} entre la semaine {} et la semaine {}",
+                    s_name,
+                    subj_name,
+                    first_week.0 + 1,
+                    last_week.0 + 1,
                 )
             }
         }
