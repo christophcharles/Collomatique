@@ -285,10 +285,20 @@ where
         }
     }
 
+    /// Create a bundle containing a single infeasible constraint.
+    pub fn infeasible(desc: C) -> Self {
+        Self::new().with_infeasible(desc)
+    }
+
     /// Add a constraint with description.
     pub fn with_constraint(mut self, constraint: IntConstraint<Var<B, E>>, desc: C) -> Self {
         self.constraints.push((constraint, desc));
         self
+    }
+
+    /// Add an always-false constraint with description.
+    pub fn with_infeasible(self, desc: C) -> Self {
+        self.with_constraint(IntConstraint::infeasible(), desc)
     }
 
     /// Add a weighted objective.

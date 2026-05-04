@@ -368,6 +368,11 @@ impl<V: UsableData> IntConstraint<V> {
     pub fn get_lhs(&self) -> &LinExpr<V> {
         self.0.get_lhs()
     }
+
+    /// Create an always-false constraint (1 <= 0).
+    pub fn infeasible() -> Self {
+        IntLinExpr::<V>::constant(1).leq(&IntLinExpr::constant(0))
+    }
 }
 
 impl<V: UsableData> std::ops::Deref for IntConstraint<V> {
