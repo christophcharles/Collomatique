@@ -24,9 +24,6 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     };
     eprintln!("Building ILP problem...");
 
-    use collomatique_binding_colloscopes::scripts::SqliteDatabaseDriver;
-    use collomatique_constraints_colloscopes::{default_problem_builder, get_default_main_module};
-
     let pool = sqlx::SqlitePool::connect(":memory:")
         .await
         .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
@@ -36,27 +33,10 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
         .await
         .map_err(|e| anyhow!("Error populating DB: {}", e))?;
-    let db_conn = SqliteDatabaseDriver::new_connection("collomatique", &pool)
-        .await
-        .map_err(|e| anyhow!("Error creating DB connection: {}", e))?;
 
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let main_script = get_default_main_module();
-    let b = match default_problem_builder(main_script).await {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("Script panic: {}", e);
-            return Ok(());
-        }
-    };
-    let problem = match b.build(&pool, Some(db_conn)).await {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Script panic: {}", e);
-            return Ok(());
-        }
-    };
+    let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
 
     println!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);

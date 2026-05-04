@@ -1347,11 +1347,7 @@ impl EditorPanel {
         self.main_script_ast = MainScriptAst::Compiling;
 
         sender.oneshot_command(async move {
-            use collomatique_constraints_colloscopes::{
-                default_problem_builder, get_default_main_module,
-            };
-
-            let result = default_problem_builder(get_default_main_module()).await;
+            let result = Ok(collomatique_constraints_colloscopes::default_problem_builder());
 
             EditorCommandOutput::MainScriptCompiled { result }
         });

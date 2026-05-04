@@ -12,7 +12,7 @@ mod problem;
 mod schedule_structure;
 mod types;
 
-pub use builder::{ProblemBuilder, default_problem_builder};
+pub use builder::{ProblemBuilder, build_problem, default_problem_builder};
 pub use problem::{FeasableSolution, Problem, Solution};
 pub use problem::{IlpInnerProblem, ProblemConstraintSource, ProblemInternalVar};
 pub use types::{

@@ -744,14 +744,6 @@ impl Colloscope {
     fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
         self.update_ilp_repr(ComputationState::ComputingConstraints, &sender);
 
-        let builder = self
-            .ilp_problem_builder
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .builder
-            .clone();
         let params = self.params.clone();
         let colloscope = self.colloscope.clone();
 
@@ -773,14 +765,8 @@ impl Colloscope {
                 collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
                     .await
                     .map_err(|e| format!("{}", e))?;
-                let db_conn = collo_ml::SqliteDatabaseDriver::new_connection("collomatique", &pool)
-                    .await
-                    .map_err(|e| format!("{}", e))?;
 
-                let problem = builder
-                    .build(&pool, Some(db_conn))
-                    .await
-                    .map_err(|e| format!("{}", e))?;
+                let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
                 Ok(IlpProblem { env, problem })
             }
             .await;
