@@ -194,7 +194,9 @@ impl CbcSolver {
         let config = match problem.build_config(config_data) {
             Ok(c) => c,
             Err(_) => {
-                if raw_model.status() == coin_cbc::raw::Status::Finished {
+                if raw_model.status() == coin_cbc::raw::Status::Finished
+                    && raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::HasSolution
+                {
                     panic!(
                         "CBC reported optimal (Status::Finished) but build_config failed \
                          (missing variables). This should never happen."
@@ -207,7 +209,10 @@ impl CbcSolver {
             }
         };
 
-        if !config.is_feasable() && raw_model.status() == coin_cbc::raw::Status::Finished {
+        if !config.is_feasable()
+            && raw_model.status() == coin_cbc::raw::Status::Finished
+            && raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::HasSolution
+        {
             let violated_count = config.blame().len();
             panic!(
                 "CBC reported optimal solution (Status::Finished) but {violated_count} \
