@@ -303,6 +303,7 @@ pub enum PreferenceConstraint {
         student: StudentId,
         subject: SubjectId,
         teacher: TeacherId,
+        period: u32,
         first_week: GlobalWeek,
         last_week: GlobalWeek,
         max_count: u32,
@@ -886,23 +887,21 @@ impl PreferenceConstraint {
             }
             PreferenceConstraint::BalancingSlotRotation {
                 student,
-                subject,
+                subject: _,
                 slot,
                 first_week,
                 last_week,
                 max_count,
             } => {
                 let s_name = student_name(env, *student);
-                let subj_name = subject_name(env, *subject);
                 let sl_name = slot_name(env, *slot);
                 let plural = if *max_count > 1 { "s" } else { "" };
                 format!(
-                    "{} ne doit pas avoir plus de {} colle{} dans le créneau {} en {} ({})",
+                    "{} ne doit pas avoir plus de {} colle{} dans le créneau {} ({})",
                     s_name,
                     max_count,
                     plural,
                     sl_name,
-                    subj_name,
                     week_range_text(*first_week, *last_week),
                 )
             }
@@ -910,6 +909,7 @@ impl PreferenceConstraint {
                 student,
                 subject,
                 teacher,
+                period,
                 first_week,
                 last_week,
                 max_count,
@@ -919,12 +919,13 @@ impl PreferenceConstraint {
                 let t_name = teacher_name(env, *teacher);
                 let plural = if *max_count > 1 { "s" } else { "" };
                 format!(
-                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} sur la période ({})",
+                    "{} ne doit pas avoir plus de {} colle{} avec {} en {} sur la période {} ({})",
                     s_name,
                     max_count,
                     plural,
                     t_name,
                     subj_name,
+                    period,
                     week_range_text(*first_week, *last_week),
                 )
             }

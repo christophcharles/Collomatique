@@ -16,7 +16,7 @@ use super::helpers::{
 fn period_interrogation_windows(
     env: &VarEnv,
     subject_id: SubjectId,
-) -> Vec<(GlobalWeek, GlobalWeek, u32)> {
+) -> Vec<(GlobalWeek, GlobalWeek, u32, u32)> {
     let Some(year_nb_interr) = year_interrogation_count(env, subject_id) else {
         return vec![];
     };
@@ -28,9 +28,9 @@ fn period_interrogation_windows(
         return vec![];
     };
 
-    let mut period_active_weeks: Vec<Vec<GlobalWeek>> = Vec::new();
+    let mut period_active_weeks: Vec<(Vec<GlobalWeek>, u32)> = Vec::new();
     let mut global_week = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (i, (period_id, period_desc)) in env.periods.ordered_period_list.iter().enumerate() {
         if subject.excluded_periods.contains(period_id) {
             global_week += period_desc.len();
             continue;
@@ -43,18 +43,21 @@ fn period_interrogation_windows(
             global_week += 1;
         }
         if !weeks.is_empty() {
-            period_active_weeks.push(weeks);
+            period_active_weeks.push((weeks, (i + 1) as u32));
         }
     }
 
-    let total_active: u64 = period_active_weeks.iter().map(|w| w.len() as u64).sum();
+    let total_active: u64 = period_active_weeks
+        .iter()
+        .map(|(w, _)| w.len() as u64)
+        .sum();
     if total_active == 0 {
         return vec![];
     }
 
     period_active_weeks
         .iter()
-        .map(|weeks| {
+        .map(|(weeks, period)| {
             let first_week = *weeks.first().unwrap();
             let last_week = *weeks.last().unwrap();
             let period_weeks = weeks.len() as u64;
@@ -62,7 +65,7 @@ fn period_interrogation_windows(
                 1,
                 ((year_nb_interr as u64) * period_weeks + total_active - 1) / total_active,
             ) as u32;
-            (first_week, last_week, nb_interr)
+            (first_week, last_week, nb_interr, *period)
         })
         .collect()
 }
@@ -95,7 +98,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let mut hard_bundle = MyBundle::new();
         let mut soft_bundle = MyBundle::new();
 
-        for (first_week, last_week, nb_interr) in &windows {
+        for (first_week, last_week, nb_interr, period) in &windows {
             let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
             if ntot == 0 {
                 continue;
@@ -121,6 +124,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         student,
                         subject: *subject_id,
                         teacher,
+                        period: *period,
                         first_week: *first_week,
                         last_week: *last_week,
                         max_count,
