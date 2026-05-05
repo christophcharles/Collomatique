@@ -194,12 +194,29 @@ impl CbcSolver {
         let config = match problem.build_config(config_data) {
             Ok(c) => c,
             Err(_) => {
+                if raw_model.status() == coin_cbc::raw::Status::Finished {
+                    panic!(
+                        "CBC reported optimal (Status::Finished) but build_config failed \
+                         (missing variables). This should never happen."
+                    );
+                }
                 return TimeLimitSolution {
                     config: None,
                     time_limit_reached,
                 };
             }
         };
+
+        if !config.is_feasable() && raw_model.status() == coin_cbc::raw::Status::Finished {
+            let violated_count = config.blame().len();
+            panic!(
+                "CBC reported optimal solution (Status::Finished) but {violated_count} \
+                 constraint(s) violated by the returned values. This indicates a numerical \
+                 tolerance mismatch between CBC and our feasibility check \
+                 (TOLERANCE = {}).",
+                crate::TOLERANCE
+            );
+        }
 
         let feasable_config = config.into_feasable();
 
