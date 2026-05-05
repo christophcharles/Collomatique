@@ -15,8 +15,10 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
+use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{
-    Constraint, LinExpr, Objective, ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
+    Config, ConfigData, Constraint, DefaultRepr, FeasableConfig, LinExpr, Objective,
+    ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
 };
 
 pub mod bundle;
@@ -256,6 +258,7 @@ where
         Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
     checker_reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
     checker_base_variable_set: HashSet<B>,
+    base_var_list: HashMap<B, Variable>,
 }
 
 impl<B, E, C> Model<B, E, C>
@@ -382,6 +385,188 @@ where
         Ok(builder
             .build()
             .expect("checker reconstruction problem should always be valid"))
+    }
+
+    /// Solve the full optimization problem.
+    pub fn solve<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    where
+        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+    {
+        solver
+            .solve(&self.problem)
+            .map(|feasable_config| FeasableSolution { feasable_config })
+    }
+
+    /// Build a [`Solution`] by reconstructing extra variable
+    /// values from base variable values (full reconstruction).
+    pub fn solution_from_data<S>(
+        &self,
+        config_data: &ConfigData<B>,
+        solver: &S,
+    ) -> Option<Solution<'_, B, E, C>>
+    where
+        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+    {
+        if !self.check_no_missing_variables(config_data) {
+            return None;
+        }
+
+        let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
+        let recon_problem = self.reconstruction_problem(&base_values).ok()?;
+        let recon_sol = solver
+            .solve(&recon_problem)
+            .expect("There should always be a (unique!) solution to the reconstruction problem");
+
+        let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
+
+        Some(
+            self.solution_from_complete_data(new_config_data)
+                .expect("The configuration data should be valid!"),
+        )
+    }
+
+    /// Build a [`Solution`] by reconstructing only the extra
+    /// variable values needed for constraint checking.
+    pub fn checker_solution_from_data<S>(
+        &self,
+        config_data: &ConfigData<B>,
+        solver: &S,
+    ) -> Option<Solution<'_, B, E, C>>
+    where
+        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+    {
+        if !self.check_no_missing_variables(config_data) {
+            return None;
+        }
+
+        let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
+        let recon_problem = self.checker_reconstruction_problem(&base_values).ok()?;
+        let recon_sol = solver.solve(&recon_problem).expect(
+            "There should always be a (unique!) solution to the checker reconstruction problem",
+        );
+
+        let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
+
+        Some(Solution {
+            config: self.checker_problem.build_config(new_config_data).ok()?,
+        })
+    }
+
+    /// Build a [`Solution`] from a complete set of variable values
+    /// (base + extra + helper).
+    pub fn solution_from_complete_data(
+        &self,
+        config_data: ConfigData<InternalVar<B, E>>,
+    ) -> Option<Solution<'_, B, E, C>> {
+        Some(Solution {
+            config: self.problem.build_config(config_data).ok()?,
+        })
+    }
+
+    fn check_no_missing_variables(&self, config_data: &ConfigData<B>) -> bool {
+        if !config_data
+            .get_values()
+            .keys()
+            .all(|x| self.base_var_list.contains_key(x))
+        {
+            return false;
+        }
+
+        self.base_var_list
+            .iter()
+            .all(|(var, var_def)| match config_data.get(var.clone()) {
+                Some(v) => var_def.checks_value(v),
+                None => false,
+            })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Solution / FeasableSolution
+// ---------------------------------------------------------------------------
+
+/// A solution (possibly infeasible) evaluated against a [`Model`].
+#[derive(Debug, Clone)]
+pub struct Solution<'a, B: UsableData, E: UsableData, C: UsableData> {
+    config: Config<'a, InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+}
+
+impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
+    /// Extract base variable values only.
+    pub fn get_data(&self) -> ConfigData<B> {
+        ConfigData::from(self.config.get_values().into_iter().filter_map(
+            |(var, value)| match var {
+                InternalVar::Base(v) => Some((v, value)),
+                _ => None,
+            },
+        ))
+    }
+
+    /// Get all variable values (base + extra + helper).
+    pub fn get_complete_data(&self) -> ConfigData<InternalVar<B, E>> {
+        ConfigData::from(self.config.get_values())
+    }
+
+    pub fn is_feasable(&self) -> bool {
+        self.config.is_feasable()
+    }
+
+    pub fn into_feasable(self) -> Option<FeasableSolution<'a, B, E, C>> {
+        Some(FeasableSolution {
+            feasable_config: self.config.into_feasable()?,
+        })
+    }
+
+    /// Iterate over unsatisfied constraints.
+    pub fn blame<'b>(
+        &'b self,
+    ) -> impl ExactSizeIterator<Item = &'b (Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>
+    + use<'a, 'b, B, E, C> {
+        self.config.blame()
+    }
+}
+
+/// A feasible solution evaluated against a [`Model`].
+#[derive(Debug, Clone)]
+pub struct FeasableSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
+    feasable_config: FeasableConfig<
+        'a,
+        InternalVar<B, E>,
+        ConstraintSource<E, C>,
+        DefaultRepr<InternalVar<B, E>>,
+    >,
+}
+
+impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasableSolution<'a, B, E, C> {
+    pub fn into_solution(self) -> Solution<'a, B, E, C> {
+        Solution {
+            config: self.feasable_config.into_inner(),
+        }
+    }
+
+    /// Extract base variable values only.
+    pub fn get_data(&self) -> ConfigData<B> {
+        ConfigData::from(self.feasable_config.get_values().into_iter().filter_map(
+            |(var, value)| match var {
+                InternalVar::Base(v) => Some((v, value)),
+                _ => None,
+            },
+        ))
+    }
+
+    /// Get all variable values (base + extra + helper).
+    pub fn get_complete_data(&self) -> ConfigData<InternalVar<B, E>> {
+        ConfigData::from(self.feasable_config.get_values())
     }
 }
 
@@ -1043,6 +1228,7 @@ where
             checker_reconstruction_constraints,
             checker_reconstruction_variables,
             checker_base_variable_set,
+            base_var_list: base_vars,
         })
     }
 }

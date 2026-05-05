@@ -36,7 +36,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
 
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
+    let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
 
     println!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);

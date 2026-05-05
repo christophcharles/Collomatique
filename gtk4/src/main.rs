@@ -81,7 +81,7 @@ fn run_debug(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
         let pool = sqlx::SqlitePool::connect(":memory:").await?;
         collomatique_sqlite_state::create_schema(&pool).await?;
         collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data).await?;
-        let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
+        let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
         eprintln!("  ILP problem built in {:.2?}", t1.elapsed());
 
         match mode {
@@ -101,7 +101,7 @@ fn run_debug(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
 }
 
 fn debug_reconstruction(
-    problem: &collomatique_constraints_colloscopes::Problem,
+    problem: &collomatique_constraints_colloscopes::ColloscopeModel,
     inner_data: &collomatique_state_colloscopes::InnerData,
 ) {
     eprintln!("Building config from current colloscope...");
@@ -123,7 +123,7 @@ fn debug_reconstruction(
 }
 
 fn debug_solution(
-    problem: &collomatique_constraints_colloscopes::Problem,
+    problem: &collomatique_constraints_colloscopes::ColloscopeModel,
     inner_data: &collomatique_state_colloscopes::InnerData,
 ) {
     use collomatique_constraints_colloscopes::ConstraintSource;
@@ -175,7 +175,7 @@ fn debug_solution(
     }
 }
 
-fn debug_solve(problem: &collomatique_constraints_colloscopes::Problem) {
+fn debug_solve(problem: &collomatique_constraints_colloscopes::ColloscopeModel) {
     eprintln!("Solving full ILP (CBC logging enabled, no time limit)...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
     let t = std::time::Instant::now();

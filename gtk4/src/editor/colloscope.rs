@@ -57,7 +57,7 @@ pub enum ColloscopeOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collomatique_constraints_colloscopes::Problem,
+    problem: collomatique_constraints_colloscopes::ColloscopeModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -620,7 +620,7 @@ impl Colloscope {
     fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
         self.update_ilp_repr(ComputationState::RecomputingWarnings, &sender);
 
-        let inner_problem = ilp_problem.problem.get_inner_problem().clone();
+        let inner_problem = ilp_problem.problem.problem().clone();
         sender
             .output(ColloscopeOutput::UpdateIlpProblem(Some(inner_problem)))
             .unwrap();
@@ -687,7 +687,7 @@ impl Colloscope {
                     .await
                     .map_err(|e| format!("{}", e))?;
 
-                let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
+                let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
                 Ok(IlpProblem { env, problem })
             }
             .await;

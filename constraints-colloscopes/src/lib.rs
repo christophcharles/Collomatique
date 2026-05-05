@@ -8,19 +8,23 @@ mod misc;
 mod native_extras;
 mod pairings;
 mod periodicity;
-mod problem;
 mod schedule_structure;
 pub mod tools;
 mod types;
 pub mod vars;
 
-pub use builder::build_problem;
-pub use problem::{FeasableSolution, Problem, Solution};
-pub use problem::{IlpInnerProblem, ProblemConstraintSource, ProblemInternalVar};
+pub use builder::build_model;
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
     ProgressiveConstraint, QualityConstraint, StructuralConstraint,
 };
 
-pub use collomatique_ilp_modeler::ConstraintSource;
+pub use collomatique_ilp_modeler::{
+    ConstraintSource, FeasableSolution, InternalVar, Model, Solution,
+};
 pub use vars::Var;
+
+pub type ColloscopeModel = Model<Var, ExtraVarName, ConstraintDesc>;
+pub type ProblemConstraintSource = ConstraintSource<ExtraVarName, ConstraintDesc>;
+pub type ProblemInternalVar = InternalVar<Var, ExtraVarName>;
+pub type IlpInnerProblem = collomatique_ilp::Problem<ProblemInternalVar, ProblemConstraintSource>;
