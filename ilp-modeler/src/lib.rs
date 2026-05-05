@@ -238,6 +238,16 @@ where
 // Model
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
+pub struct ModelStats {
+    pub base_variable_count: usize,
+    pub user_constraint_count: usize,
+    pub constraint_extra_count: usize,
+    pub constraint_defining_constraint_count: usize,
+    pub objective_extra_count: usize,
+    pub objective_defining_constraint_count: usize,
+}
+
 /// The output of [`Modeler::build`]. Wraps the assembled
 /// [`Problem`] and carries data needed to build a
 /// reconstruction problem (for computing extra/helper values
@@ -339,6 +349,43 @@ where
     /// constraint-needed extras only, trivial objective).
     pub fn checker_problem(&self) -> &Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
         &self.checker_problem
+    }
+
+    pub fn stats(&self) -> ModelStats {
+        let base_variable_count = self.base_var_list.len();
+
+        let user_constraint_count = self
+            .problem
+            .get_constraints()
+            .iter()
+            .filter(|(_, src)| matches!(src, ConstraintSource::User(_)))
+            .count();
+
+        let constraint_extra_count = self
+            .checker_reconstruction_variables
+            .keys()
+            .filter(|v| !matches!(v, InternalVar::Base(_)))
+            .count();
+
+        let constraint_defining_constraint_count = self.checker_reconstruction_constraints.len();
+
+        let all_extra_count = self
+            .reconstruction_variables
+            .keys()
+            .filter(|v| !matches!(v, InternalVar::Base(_)))
+            .count();
+
+        let all_defining_constraint_count = self.reconstruction_constraints.len();
+
+        ModelStats {
+            base_variable_count,
+            user_constraint_count,
+            constraint_extra_count,
+            constraint_defining_constraint_count,
+            objective_extra_count: all_extra_count - constraint_extra_count,
+            objective_defining_constraint_count: all_defining_constraint_count
+                - constraint_defining_constraint_count,
+        }
     }
 
     /// Build a checker reconstruction problem: given base variable
@@ -974,7 +1021,20 @@ where
     /// Run the lazy expansion fixpoint and return the assembled
     /// [`Model`]. `env` is passed to every extra-definition
     /// closure and to the fixer chain.
-    pub fn build(mut self, env: &Env) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+    pub fn build(self, env: &Env) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        self.build_with_log(env, &mut |_: &str| {})
+    }
+
+    /// Like [`Self::build`], but calls `log` with progress
+    /// messages as each step completes.
+    pub fn build_with_log(
+        mut self,
+        env: &Env,
+        log: &mut dyn FnMut(&str),
+    ) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        use std::time::Instant;
+        let t_total = Instant::now();
+
         // Move data out of self for the build scope.
         let mut extras = std::mem::take(&mut self.extras);
         let base_vars = std::mem::take(&mut self.base_vars);
@@ -997,6 +1057,7 @@ where
 
         // Step 0: lazily resolve fixes for user constraints and
         // objectives via the VarContext cache.
+        let t_step = Instant::now();
         {
             let mut all_undeclared: HashSet<B> = HashSet::new();
             for (c, _) in &self.constraints {
@@ -1034,7 +1095,13 @@ where
             }
         }
 
+        log(&format!(
+            "[Modeler::build] Step 0: Fix resolution ({:.2?})",
+            t_step.elapsed()
+        ));
+
         // Step 1: transmute user constraints/objectives to InternalVar.
+        let t_step = Instant::now();
         let user_constraints: Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)> = self
             .constraints
             .iter()
@@ -1061,7 +1128,13 @@ where
         let folded_obj: Objective<InternalVar<B, E>> =
             folded_obj_var.transmute(|v| InternalVar::from(v.clone()));
 
+        log(&format!(
+            "[Modeler::build] Step 1: Transmutation ({:.2?})",
+            t_step.elapsed()
+        ));
+
         // Step 2: collect initial roots (two passes).
+        let t_step = Instant::now();
         let mut constraint_roots: Vec<E> = Vec::new();
         let mut seen_root: HashSet<E> = HashSet::new();
         for (c, _) in &user_constraints {
@@ -1073,6 +1146,11 @@ where
                 }
             }
         }
+        log(&format!(
+            "[Modeler::build] Step 2a: Constraint root collection ({:.2?})",
+            t_step.elapsed()
+        ));
+        let t_step = Instant::now();
         let mut objective_roots: Vec<E> = Vec::new();
         for v in folded_obj.get_function().variable_refs() {
             if let InternalVar::Extra(e) = v
@@ -1082,8 +1160,14 @@ where
             }
         }
 
+        log(&format!(
+            "[Modeler::build] Step 2b: Objective root collection ({:.2?})",
+            t_step.elapsed()
+        ));
+
         // Step 3: DFS expansion — constraint roots first, then
         // objective-only roots.
+        let t_step = Instant::now();
         let mut state: BuildState<B, E, C> = BuildState {
             out_vars: HashMap::new(),
             out_constraints: user_constraints,
@@ -1119,7 +1203,13 @@ where
             )?;
         }
 
+        log(&format!(
+            "[Modeler::build] Step 3: DFS expansion ({:.2?})",
+            t_step.elapsed()
+        ));
+
         // Step 4: partition constraints for reconstruction.
+        let t_step = Instant::now();
         let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
         for (b, kind) in &base_vars {
             all_vars.insert(InternalVar::Base(b.clone()), kind.clone());
@@ -1216,7 +1306,13 @@ where
             }
         }
 
+        log(&format!(
+            "[Modeler::build] Step 4: Constraint partitioning ({:.2?})",
+            t_step.elapsed()
+        ));
+
         // Step 5: feed everything into ProblemBuilder.
+        let t_step = Instant::now();
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
                 .set_variables(all_vars)
@@ -1233,6 +1329,15 @@ where
                     ObjectiveSense::Minimize,
                 ));
         let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
+
+        log(&format!(
+            "[Modeler::build] Step 5: Problem assembly ({:.2?})",
+            t_step.elapsed()
+        ));
+        log(&format!(
+            "[Modeler::build] Total ({:.2?})",
+            t_total.elapsed()
+        ));
 
         Ok(Model {
             problem,

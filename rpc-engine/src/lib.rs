@@ -15,6 +15,7 @@ pub fn send_exit() {
 
 async fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
+    use std::time::Instant;
 
     let data_msg =
         EncodedMsg::send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
@@ -22,6 +23,8 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
     };
+
+    let t_build = Instant::now();
     eprintln!("Building ILP problem...");
 
     let pool = sqlx::SqlitePool::connect(":memory:")
@@ -36,7 +39,23 @@ async fn try_solve() -> Result<(), anyhow::Error> {
 
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
+    let problem = collomatique_constraints_colloscopes::build_model_with_log(&pool, &mut |msg| {
+        eprintln!("  {msg}")
+    })
+    .await;
+    eprintln!("ILP problem built in {:.2?}", t_build.elapsed());
+    let stats = problem.stats();
+    eprintln!("  Model statistics:");
+    eprintln!("    Base variables: {}", stats.base_variable_count);
+    eprintln!("    User constraints: {}", stats.user_constraint_count);
+    eprintln!(
+        "    Constraint extras: {} ({} defining constraints)",
+        stats.constraint_extra_count, stats.constraint_defining_constraint_count,
+    );
+    eprintln!(
+        "    Objective extras: {} ({} defining constraints)",
+        stats.objective_extra_count, stats.objective_defining_constraint_count,
+    );
 
     println!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);

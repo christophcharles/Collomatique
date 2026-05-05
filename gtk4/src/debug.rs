@@ -23,13 +23,26 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
         let inner_data = data.get_inner_data().clone();
         eprintln!("  File loaded in {:.2?}", t.elapsed());
 
-        let t = Instant::now();
         eprintln!("Building ILP model...");
         let pool = sqlx::SqlitePool::connect(":memory:").await?;
         collomatique_sqlite_state::create_schema(&pool).await?;
         collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data).await?;
-        let model = collomatique_constraints_colloscopes::build_model(&pool).await;
-        eprintln!("  Model built in {:.2?}", t.elapsed());
+        let model = collomatique_constraints_colloscopes::build_model_with_log(&pool, &mut |msg| {
+            eprintln!("  {msg}")
+        })
+        .await;
+        let stats = model.stats();
+        eprintln!("  Model statistics:");
+        eprintln!("    Base variables: {}", stats.base_variable_count);
+        eprintln!("    User constraints: {}", stats.user_constraint_count);
+        eprintln!(
+            "    Constraint extras: {} ({} defining constraints)",
+            stats.constraint_extra_count, stats.constraint_defining_constraint_count,
+        );
+        eprintln!(
+            "    Objective extras: {} ({} defining constraints)",
+            stats.objective_extra_count, stats.objective_defining_constraint_count,
+        );
 
         match mode {
             DebugMode::CheckerRecon => recon(&model, &inner_data, true),

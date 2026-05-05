@@ -13,14 +13,14 @@ pub mod tools;
 mod types;
 pub mod vars;
 
-pub use builder::build_model;
+pub use builder::{build_model, build_model_with_log};
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
     ProgressiveConstraint, QualityConstraint, StructuralConstraint,
 };
 
 pub use collomatique_ilp_modeler::{
-    ConstraintSource, FeasableSolution, InternalVar, Model, Solution,
+    ConstraintSource, FeasableSolution, InternalVar, Model, ModelStats, Solution,
 };
 pub use vars::Var;
 
