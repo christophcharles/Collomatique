@@ -1,6 +1,6 @@
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_interrogation, weeks_for_slot};
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {

@@ -1,7 +1,7 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, V, extra_var, weeks_for_slot};
 use crate::types::ExtraVarName;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
 use std::collections::BTreeSet;

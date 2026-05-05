@@ -1,7 +1,7 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, V, extra_var};
 use crate::types::{ExtraVarName, PreferenceConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId};
 use collomatique_state_colloscopes::settings::SoftParam;
@@ -76,10 +76,7 @@ fn counted_slots_for_student_week(
             continue;
         }
         for (slot_id, slot_data) in &subject_slots.ordered_slots {
-            let active = collomatique_binding_colloscopes::tools::extract_week_pattern(
-                env,
-                slot_data.week_pattern,
-            );
+            let active = crate::tools::extract_week_pattern(env, slot_data.week_pattern);
             if !active.get(week.0).copied().unwrap_or(false) {
                 continue;
             }

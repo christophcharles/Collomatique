@@ -1,7 +1,7 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{V, extra_var, subject_interrogation_params};
 use crate::types::ExtraVarName;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::balancing::BalancingOptions;
 use collomatique_state_colloscopes::ids::{SlotId, StudentId, SubjectId, TeacherId};

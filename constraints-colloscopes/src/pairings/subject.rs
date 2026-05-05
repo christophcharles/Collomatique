@@ -5,7 +5,7 @@ use crate::native_extras::{
     student_has_interrogation_in_expr,
 };
 use crate::types::{ExtraVarName, PreferenceConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PairingRuleId, StudentId, SubjectId};
 

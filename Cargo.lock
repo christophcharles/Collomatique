@@ -419,10 +419,9 @@ dependencies = [
 name = "collomatique-constraints-colloscopes"
 version = "0.1.0"
 dependencies = [
- "collo-ml",
- "collomatique-binding-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
  "derivative",
@@ -436,8 +435,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "collo-ml",
- "collomatique-binding-colloscopes",
  "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-mps",
@@ -543,7 +540,6 @@ name = "collomatique-rpc-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "collomatique-binding-colloscopes",
  "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ops",

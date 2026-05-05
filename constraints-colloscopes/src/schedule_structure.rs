@@ -2,7 +2,7 @@ mod group_count_per_interrogation;
 mod one_interrogation_at_once;
 
 use crate::native_extras::MyBundle;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {
     let bundle = group_count_per_interrogation::build(env);

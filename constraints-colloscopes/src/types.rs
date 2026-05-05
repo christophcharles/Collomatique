@@ -2,21 +2,9 @@ use crate::ids::{
     GlobalWeek, GroupListId, GroupNum, IncompatId, PairingRuleId, PeriodId, SlotId,
     SlotPairingRuleId, StudentId, SubjectId, TeacherId,
 };
-use collo_ml::SqliteDatabaseConnection;
-use collo_ml::eval::Origin;
-use collo_ml::script_feeder::ReifiedVar;
-use derivative::Derivative;
 
-#[derive(Derivative)]
-#[derivative(
-    Debug(bound = ""),
-    Clone(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    Script(ReifiedVar<SqliteDatabaseConnection>),
     GroupInInterrogation {
         slot: SlotId,
         week: GlobalWeek,
@@ -94,12 +82,6 @@ pub enum ExtraVarName {
     BalancingPeriodRotationPenalty {
         subject: SubjectId,
     },
-}
-
-impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {
-    fn from(v: ReifiedVar<SqliteDatabaseConnection>) -> Self {
-        ExtraVarName::Script(v)
-    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -327,16 +309,8 @@ pub enum PreferenceConstraint {
     },
 }
 
-#[derive(Derivative)]
-#[derivative(
-    Debug(bound = ""),
-    Clone(bound = ""),
-    Hash(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ConstraintDesc {
-    Script(Option<Origin<SqliteDatabaseConnection>>),
     Level0(InfeasibleConstraint),
     Level1(StructuralConstraint),
     Level2(QualityConstraint),
@@ -964,8 +938,6 @@ impl ConstraintDesc {
         env: &collomatique_state_colloscopes::colloscope_params::Parameters,
     ) -> String {
         match self {
-            ConstraintDesc::Script(Some(origin)) => origin.to_string(),
-            ConstraintDesc::Script(None) => "Script (origine inconnue)".to_string(),
             ConstraintDesc::Level0(c) => c.user_readable(env),
             ConstraintDesc::Level1(c) => c.user_readable(env),
             ConstraintDesc::Level2(c) => c.user_readable(env),
@@ -1148,11 +1120,5 @@ fn group_name(
     match name {
         Some(name) => format!("{} ({})", number, name),
         None => format!("{}", number),
-    }
-}
-
-impl From<Option<Origin<SqliteDatabaseConnection>>> for ConstraintDesc {
-    fn from(v: Option<Origin<SqliteDatabaseConnection>>) -> Self {
-        ConstraintDesc::Script(v)
     }
 }

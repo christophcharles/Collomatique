@@ -1,6 +1,6 @@
 use crate::native_extras::{MyBundle, extra_var, weeks_for_slot};
 use crate::types::ExtraVarName;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {

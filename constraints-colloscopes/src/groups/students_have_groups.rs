@@ -1,6 +1,6 @@
 use crate::native_extras::{MyBundle, V, base_var};
 use crate::types::StructuralConstraint;
-use collomatique_binding_colloscopes::vars::{Var, VarEnv};
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 use collomatique_state_colloscopes::ids::Id;

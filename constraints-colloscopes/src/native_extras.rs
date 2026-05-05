@@ -1,6 +1,6 @@
 use crate::ids::{GlobalWeek, GroupNum};
 use crate::types::{ConstraintDesc, ExtraVarName};
-use collomatique_binding_colloscopes::vars::{Var, VarEnv};
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
@@ -32,7 +32,7 @@ pub(crate) fn extra_var(v: ExtraVarName) -> V {
 // ---- Helper functions reading from Parameters ----
 
 pub(crate) fn week_to_period_id(env: &VarEnv, week: GlobalWeek) -> Option<(PeriodId, usize)> {
-    collomatique_binding_colloscopes::tools::week_to_period_id(env, week.0)
+    crate::tools::week_to_period_id(env, week.0)
 }
 
 pub(crate) fn group_list_for_interrogation(
@@ -84,7 +84,7 @@ pub(crate) fn weeks_for_slot(
     slot: &Slot,
     excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<GlobalWeek> {
-    collomatique_binding_colloscopes::tools::enumerate_weeks_for_slot(env, slot, excluded_periods)
+    crate::tools::enumerate_weeks_for_slot(env, slot, excluded_periods)
         .into_iter()
         .map(GlobalWeek)
         .collect()
@@ -163,10 +163,7 @@ pub(crate) fn active_slots_for_subject_week(
             {
                 return false;
             }
-            let pattern = collomatique_binding_colloscopes::tools::extract_week_pattern(
-                env,
-                slot_data.week_pattern,
-            );
+            let pattern = crate::tools::extract_week_pattern(env, slot_data.week_pattern);
             pattern.get(week.0).copied().unwrap_or(false)
         })
         .map(|(slot_id, _)| *slot_id)
@@ -216,8 +213,7 @@ pub(crate) fn weeks_for_week_pattern(
     week_pattern_id: Option<WeekPatternId>,
     excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<GlobalWeek> {
-    let week_pattern =
-        collomatique_binding_colloscopes::tools::extract_week_pattern(env, week_pattern_id);
+    let week_pattern = crate::tools::extract_week_pattern(env, week_pattern_id);
     let mut output = Vec::new();
     let mut global_week = 0usize;
     for (period_id, period_desc) in &env.periods.ordered_period_list {
@@ -642,11 +638,10 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
                                 && !excluded.contains(&period_id)
                                 && is_student_enrolled(env, student, *subj_id, week)
                                 && {
-                                    let pattern =
-                                        collomatique_binding_colloscopes::tools::extract_week_pattern(
-                                            env,
-                                            slot_data.week_pattern,
-                                        );
+                                    let pattern = crate::tools::extract_week_pattern(
+                                        env,
+                                        slot_data.week_pattern,
+                                    );
                                     pattern.get(week.0).copied().unwrap_or(false)
                                 }
                         })

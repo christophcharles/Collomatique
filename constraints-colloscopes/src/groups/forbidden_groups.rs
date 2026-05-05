@@ -4,7 +4,7 @@ use crate::native_extras::{
     students_for_subject_period_group_list, week_to_period_id, weeks_for_slot,
 };
 use crate::types::{ExtraVarName, StructuralConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 

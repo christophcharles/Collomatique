@@ -3,7 +3,7 @@ mod interrogation_cost;
 mod limits;
 
 use crate::native_extras::MyBundle;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {
     let bundle = incompats::build(env);

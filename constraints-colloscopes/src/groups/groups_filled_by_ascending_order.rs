@@ -1,6 +1,6 @@
 use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
 use crate::types::{ExtraVarName, PreferenceConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 

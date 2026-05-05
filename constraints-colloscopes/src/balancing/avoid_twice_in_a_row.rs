@@ -6,7 +6,7 @@ use crate::native_extras::{
     MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
 };
 use crate::types::{ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{StudentId, SubjectId, TeacherId};
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;

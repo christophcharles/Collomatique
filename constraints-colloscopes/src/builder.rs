@@ -1,7 +1,7 @@
 use crate::native_extras::build_native_extras;
 use crate::problem::Problem;
 use crate::types::{ConstraintDesc, ExtraVarName};
-use collomatique_binding_colloscopes::vars::{Var, VarEnv};
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::Variable;
 use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;

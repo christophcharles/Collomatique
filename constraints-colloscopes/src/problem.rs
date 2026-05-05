@@ -1,5 +1,5 @@
 use crate::types::{ConstraintDesc, ExtraVarName};
-use collomatique_binding_colloscopes::vars::Var;
+use crate::vars::Var;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, DefaultRepr, Variable};
 use collomatique_ilp_modeler::{ConstraintSource, InternalVar, Model};

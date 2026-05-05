@@ -1,7 +1,7 @@
 use crate::ids::GroupNum;
 use crate::native_extras::{MyBundle, V, extra_var, students_for_group_list};
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::GroupListId;

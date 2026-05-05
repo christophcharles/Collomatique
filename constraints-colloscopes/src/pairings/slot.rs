@@ -4,7 +4,7 @@ use crate::native_extras::{
     MyBundle, V, extra_var, groups_for_interrogation, subject_interrogation_params, weeks_for_slot,
 };
 use crate::types::{ExtraVarName, ProgressiveConstraint, StructuralConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SlotId;
 use std::collections::BTreeSet;

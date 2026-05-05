@@ -3,7 +3,7 @@ use crate::native_extras::{
     MyBundle, V, extra_var, is_student_enrolled, week_to_period_id, weeks_for_week_pattern,
 };
 use crate::types::{ExtraVarName, StructuralConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
 use collomatique_time::SlotWithDuration;
@@ -141,10 +141,7 @@ fn find_overlapping_slots(
                 && !excluded.contains(&period_id)
                 && is_student_enrolled(env, student, *subj_id, week)
                 && {
-                    let pattern = collomatique_binding_colloscopes::tools::extract_week_pattern(
-                        env,
-                        slot_data.week_pattern,
-                    );
+                    let pattern = crate::tools::extract_week_pattern(env, slot_data.week_pattern);
                     pattern.get(week.0).copied().unwrap_or(false)
                 }
         })

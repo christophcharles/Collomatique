@@ -1,7 +1,7 @@
 use crate::ids::GlobalWeek;
 use crate::native_extras::{MyBundle, subject_interrogation_params};
 use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, StudentId, SubjectId};
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;

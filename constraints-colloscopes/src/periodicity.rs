@@ -5,7 +5,7 @@ mod helpers;
 mod once_for_every_block_of_weeks;
 
 use crate::native_extras::MyBundle;
-use collomatique_binding_colloscopes::vars::VarEnv;
+use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();

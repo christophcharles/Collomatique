@@ -1,5 +1,5 @@
-use collomatique_binding_colloscopes::tools;
-use collomatique_binding_colloscopes::vars::Var;
+use crate::tools;
+use crate::vars::Var;
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
