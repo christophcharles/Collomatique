@@ -27,8 +27,7 @@ CREATE TABLE all_ids (
 
 CREATE TABLE metadata (
     id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-    first_week TEXT,
-    main_script TEXT
+    first_week TEXT
 );
 
 -- ============================================================================

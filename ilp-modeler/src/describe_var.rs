@@ -7,17 +7,10 @@ use collomatique_ilp::{UsableData, Variable};
 ///
 /// The `Env` associated type holds all data needed for
 /// enumeration and fixing (ranges, availability maps, etc.).
-/// The environment is loaded asynchronously (via [`LoadEnv`])
-/// before these sync methods are called.
 ///
-/// Use [`Modeler::from_described`] for optimal single-load
-/// construction, or rely on the blanket [`SourceVar`]
-/// implementation (which reloads the env per call, mitigated
-/// by [`VarContext`] caching).
+/// Use [`Modeler::from_described`] to build a modeler from
+/// an environment reference.
 ///
-/// [`LoadEnv`]: crate::LoadEnv
-/// [`SourceVar`]: crate::SourceVar
-/// [`VarContext`]: crate::VarContext
 /// [`Modeler::from_described`]: crate::Modeler::from_described
 pub trait DescribeVar: UsableData {
     /// The environment type holding pre-loaded data for

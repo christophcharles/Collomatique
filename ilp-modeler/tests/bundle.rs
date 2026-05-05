@@ -34,18 +34,18 @@ fn empty_bundle<'m>() -> ConstraintBundle<'m, B, E, C, (), String> {
     ConstraintBundle::new()
 }
 
-#[tokio::test]
-async fn empty_bundle_apply_is_noop() {
+#[test]
+fn empty_bundle_apply_is_noop() {
     let mut m = fresh();
     m.apply_bundle(empty_bundle()).unwrap();
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     assert_eq!(pb.get_constraints().len(), 0);
     // Two declared base variables, no extras, no helpers.
     assert_eq!(pb.get_variables().len(), 2);
 }
 
-#[tokio::test]
-async fn bundle_only_constraints() {
+#[test]
+fn bundle_only_constraints() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![
@@ -54,12 +54,12 @@ async fn bundle_only_constraints() {
     ]);
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     assert_eq!(pb.get_constraints().len(), 2);
 }
 
-#[tokio::test]
-async fn bundle_only_objectives() {
+#[test]
+fn bundle_only_objectives() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let bundle = ConstraintBundle::<B, E, C, (), String>::new()
@@ -68,7 +68,7 @@ async fn bundle_only_objectives() {
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
     // Should maximize 2a + b → both 1 (binary).
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
@@ -80,20 +80,19 @@ async fn bundle_only_objectives() {
     );
 }
 
-#[tokio::test]
-async fn bundle_only_extras() {
+#[test]
+fn bundle_only_extras() {
     // Bundle declares one extra `s = a + b` and nothing else.
     let entry: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, e| {
-            Box::pin(async move {
-                let lhs = LinExpr::var(ExtraVar::Extra(e));
-                let rhs = LinExpr::var(ExtraVar::Base("a".to_string()))
-                    + LinExpr::var(ExtraVar::Base("b".to_string()));
-                Ok(vec![lhs.eq(&rhs)])
-            })
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, e| {
+            let lhs = LinExpr::var(ExtraVar::Extra(e));
+            let rhs = LinExpr::var(ExtraVar::Base("a".to_string()))
+                + LinExpr::var(ExtraVar::Base("b".to_string()));
+            Ok(vec![lhs.eq(&rhs)])
         });
-    let bundle: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry).unwrap();
+    let bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry)
+        .unwrap();
 
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
@@ -102,13 +101,13 @@ async fn bundle_only_extras() {
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
         "s<=1".into(),
     );
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     // Three vars: a, b, s.
     assert_eq!(pb.get_variables().len(), 3);
 }
 
-#[tokio::test]
-async fn bundle_merge_concat() {
+#[test]
+fn bundle_merge_concat() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let left = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
@@ -132,8 +131,8 @@ async fn bundle_merge_concat() {
     assert_eq!(merged.constraints()[1].1, "right");
 }
 
-#[tokio::test]
-async fn constraint_bundle_from_constraints_roundtrip() {
+#[test]
+fn constraint_bundle_from_constraints_roundtrip() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let c1 = (&a + &b).leq(&LinExpr::constant(1.0));
@@ -147,8 +146,8 @@ async fn constraint_bundle_from_constraints_roundtrip() {
     assert_eq!(bundle.constraints()[1].0, c2);
 }
 
-#[tokio::test]
-async fn int_bundle_from_constraints_roundtrip() {
+#[test]
+fn int_bundle_from_constraints_roundtrip() {
     let a = IntLinExpr::var(base("a"));
     let b = IntLinExpr::var(base("b"));
     let c1: IntConstraint<Var<B, E>> = (&a + &b).leq(&IntLinExpr::constant(1));
@@ -162,8 +161,8 @@ async fn int_bundle_from_constraints_roundtrip() {
     assert_eq!(bundle.constraints()[1].0, c2);
 }
 
-#[tokio::test]
-async fn int_bundle_into_general_unwraps() {
+#[test]
+fn int_bundle_into_general_unwraps() {
     let a = IntLinExpr::var(base("a"));
     let b = IntLinExpr::var(base("b"));
     let c1: IntConstraint<Var<B, E>> = (&a + &b).leq(&IntLinExpr::constant(1));
@@ -200,8 +199,8 @@ fn fresh_reify<'m>() -> Modeler<'m, B, E, C, (), TestErr> {
     Modeler::new(vars)
 }
 
-#[tokio::test]
-async fn reify_empty_bundle_pins_indicator_to_one() {
+#[test]
+fn reify_empty_bundle_pins_indicator_to_one() {
     // An empty IntConstraintBundle, when reified, produces a
     // bundle whose only contribution is a single extra (the
     // indicator) constrained to 1.
@@ -210,8 +209,11 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
     assert_eq!(reified.constraints().len(), 0);
     assert_eq!(reified.objectives().len(), 0);
     assert_eq!(reified.extras().len(), 1);
-    assert_eq!(*reified.extras()[0].name(), "ind");
-    assert_eq!(*reified.extras()[0].kind(), Variable::binary());
+    assert!(reified.extras().contains_key(&"ind".to_string()));
+    assert_eq!(
+        *reified.extras().get(&"ind".to_string()).unwrap().kind(),
+        Variable::binary()
+    );
 
     // Apply and build; the resulting problem should require ind=1.
     let mut m = fresh_reify();
@@ -221,7 +223,7 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
         "ref ind".into(),
     );
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
@@ -230,8 +232,8 @@ async fn reify_empty_bundle_pins_indicator_to_one() {
     );
 }
 
-#[tokio::test]
-async fn reify_and_with_solver() {
+#[test]
+fn reify_and_with_solver() {
     // Reify {a + b <= 1, a + b >= 1} into `is_one`. The
     // indicator is 1 iff a + b == 1. For binary a, b, that
     // means is_one == 1 iff exactly one of {a, b} is 1.
@@ -256,7 +258,7 @@ async fn reify_and_with_solver() {
         Objective::new(LinExpr::var(xtra("is_one")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let is_one = cfg
         .get(InternalVar::<B, E>::Extra("is_one".to_string()))
@@ -267,8 +269,8 @@ async fn reify_and_with_solver() {
     assert_eq!(av + bv, 1.0);
 }
 
-#[tokio::test]
-async fn reify_continuous_var_errors() {
+#[test]
+fn reify_continuous_var_errors() {
     // Reify a constraint over a *continuous* base variable. The
     // discreteness check inside reify_and_inner should fire and
     // surface as BuildError::ExtraError.
@@ -288,7 +290,7 @@ async fn reify_continuous_var_errors() {
         "ref ind".into(),
     );
 
-    let err = m.build(&()).await.unwrap_err();
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::ExtraError(name, TestErr::Reify(ReifyError::NonDiscreteVariable(_))) => {
             assert_eq!(name, "ind");
@@ -300,8 +302,8 @@ async fn reify_continuous_var_errors() {
     }
 }
 
-#[tokio::test]
-async fn int_bundle_merge_concat() {
+#[test]
+fn int_bundle_merge_concat() {
     let a = IntLinExpr::var(base("a"));
     let b = IntLinExpr::var(base("b"));
     let c1: IntConstraint<Var<B, E>> = (&a + &b).leq(&IntLinExpr::constant(1));
@@ -320,48 +322,45 @@ async fn int_bundle_merge_concat() {
     assert_eq!(merged.constraints()[1].1, "right");
 }
 
-#[tokio::test]
-async fn apply_bundle_duplicate_extra_fails() {
+#[test]
+fn apply_bundle_duplicate_extra_fails() {
     let mut m = fresh();
     // Declare an extra directly on the modeler.
-    m.declare_extra_sync("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
         Ok(vec![])
     })
     .unwrap();
     // Then try to apply a bundle that defines the same extra.
     let entry: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
-            Box::pin(async move { Ok(vec![]) })
-        });
-    let bundle: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry).unwrap();
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![]));
+    let bundle: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry)
+        .unwrap();
     let err = m.apply_bundle(bundle).unwrap_err();
     assert_eq!(err.0, "s");
 }
 
-#[tokio::test]
-async fn merged_bundles_duplicate_extra_fails() {
+#[test]
+fn merged_bundles_duplicate_extra_fails() {
     // Two bundles each define extra "s"; merge them and apply.
     let entry1: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
-            Box::pin(async move { Ok(vec![]) })
-        });
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![]));
     let entry2: ExtraEntry<B, E, (), String> =
-        ExtraEntry::new("s".to_string(), Variable::integer(), |_f, _ctx, _e| {
-            Box::pin(async move { Ok(vec![]) })
-        });
-    let left: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry1).unwrap();
-    let right: ConstraintBundle<B, E, C, (), String> =
-        ConstraintBundle::new().with_extra(entry2).unwrap();
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![]));
+    let left: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry1)
+        .unwrap();
+    let right: ConstraintBundle<B, E, C, (), String> = ConstraintBundle::new()
+        .with_extra("s".to_string(), entry2)
+        .unwrap();
     match left.merge(right) {
         Err(DuplicateExtra(name)) => assert_eq!(name, "s"),
         Ok(_) => panic!("expected DuplicateExtra, got Ok"),
     }
 }
 
-#[tokio::test]
-async fn reify_invalid_epsilon_fails() {
+#[test]
+fn reify_invalid_epsilon_fails() {
     let a = IntLinExpr::var(base("a"));
     let c = a.leq(&IntLinExpr::constant(1));
     for bad_eps in [0.0, 1.0, -0.5, 1.5, f64::NAN] {
@@ -377,15 +376,14 @@ async fn reify_invalid_epsilon_fails() {
     }
 }
 
-#[tokio::test]
-async fn reify_duplicate_variable_fails() {
+#[test]
+fn reify_duplicate_variable_fails() {
     // Bundle already has an extra named "x"; reify("x") should fail.
     let entry: ExtraEntry<B, E, (), TestErr> =
-        ExtraEntry::new("x".to_string(), Variable::integer(), |_f, _ctx, _e| {
-            Box::pin(async move { Ok(vec![]) })
-        });
-    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> =
-        IntConstraintBundle::new().with_extra(entry).unwrap();
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![]));
+    let int_bundle: IntConstraintBundle<B, E, C, (), TestErr> = IntConstraintBundle::new()
+        .with_extra("x".to_string(), entry)
+        .unwrap();
     match int_bundle.reify("x".to_string()) {
         Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "x"),
         Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
@@ -393,10 +391,101 @@ async fn reify_duplicate_variable_fails() {
     }
 }
 
+// ----- with_reified / and_reified tests ----------------------------------
+
+#[test]
+fn with_reified_constructor() {
+    let bundle =
+        IntConstraintBundle::<B, E, C, (), TestErr>::with_reified("ind".to_string(), || {
+            let a = IntLinExpr::var(base("a"));
+            vec![a.leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap();
+    assert_eq!(bundle.constraints().len(), 0);
+    assert_eq!(bundle.extras().len(), 1);
+    assert!(bundle.extras().contains_key(&"ind".to_string()));
+}
+
+#[test]
+fn and_reified_accumulates() {
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::new()
+        .and_reified("x".to_string(), || {
+            vec![IntLinExpr::var(base("a")).leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap()
+        .and_reified("y".to_string(), || {
+            vec![IntLinExpr::var(base("b")).leq(&IntLinExpr::constant(1))]
+        })
+        .unwrap();
+    assert_eq!(bundle.extras().len(), 2);
+    assert!(bundle.extras().contains_key(&"x".to_string()));
+    assert!(bundle.extras().contains_key(&"y".to_string()));
+}
+
+#[test]
+fn and_reified_duplicate_fails() {
+    let result = IntConstraintBundle::<B, E, C, (), TestErr>::new()
+        .and_reified("dup".to_string(), || vec![])
+        .unwrap()
+        .and_reified("dup".to_string(), || vec![]);
+    match result {
+        Err(EagerReifyError::DuplicateVariable(name)) => assert_eq!(name, "dup"),
+        Err(other) => panic!("expected DuplicateVariable, got {other:?}"),
+        Ok(_) => panic!("expected DuplicateVariable, got Ok"),
+    }
+}
+
+#[test]
+fn and_reified_with_epsilon_validates() {
+    for bad_eps in [0.0, 1.0, -0.5, 1.5, f64::NAN] {
+        let result = IntConstraintBundle::<B, E, C, (), TestErr>::new().and_reified_with_epsilon(
+            "ind".to_string(),
+            || vec![],
+            bad_eps,
+        );
+        match result {
+            Err(EagerReifyError::InvalidEpsilon(_)) => {}
+            Err(other) => panic!("expected InvalidEpsilon for {bad_eps}, got {other:?}"),
+            Ok(_) => panic!("expected InvalidEpsilon for {bad_eps}, got Ok"),
+        }
+    }
+}
+
+#[test]
+fn with_reified_matches_reify_behavior() {
+    let a = IntLinExpr::var(base("a"));
+    let b = IntLinExpr::var(base("b"));
+    let c1 = (&a + &b).leq(&IntLinExpr::constant(1));
+    let c2 = (&a + &b).geq(&IntLinExpr::constant(1));
+
+    let bundle = IntConstraintBundle::<B, E, C, (), TestErr>::with_reified(
+        "is_one".to_string(),
+        move || vec![c1, c2],
+    )
+    .unwrap();
+
+    let mut m = fresh_reify();
+    m.apply_bundle(bundle.into_general()).unwrap();
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("is_one")), ObjectiveSense::Maximize),
+    );
+
+    let pb = m.build(&()).unwrap().into_problem();
+    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let is_one = cfg
+        .get(InternalVar::<B, E>::Extra("is_one".to_string()))
+        .unwrap();
+    let av = cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap();
+    let bv = cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap();
+    assert_eq!(is_one, 1.0);
+    assert_eq!(av + bv, 1.0);
+}
+
 // ----- Reification coverage tests ----------------------------------------
 
-#[tokio::test]
-async fn reify_equality_constraint() {
+#[test]
+fn reify_equality_constraint() {
     // Reify { x == 3 } into indicator `eq_ind`.
     // Maximize eq_ind: solver should set x = 3, eq_ind = 1.
     let mut vars: HashMap<B, Variable> = HashMap::new();
@@ -414,7 +503,7 @@ async fn reify_equality_constraint() {
         Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
@@ -424,8 +513,8 @@ async fn reify_equality_constraint() {
     assert_eq!(xv, 3.0);
 }
 
-#[tokio::test]
-async fn reify_equality_constraint_forced_false() {
+#[test]
+fn reify_equality_constraint_forced_false() {
     // Reify { x == 3 } but force x >= 4. eq_ind must be 0.
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
@@ -447,7 +536,7 @@ async fn reify_equality_constraint_forced_false() {
         Objective::new(LinExpr::var(xtra("eq_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
@@ -455,8 +544,8 @@ async fn reify_equality_constraint_forced_false() {
     assert_eq!(eq_ind, 0.0);
 }
 
-#[tokio::test]
-async fn reify_non_binary_integer_variable() {
+#[test]
+fn reify_non_binary_integer_variable() {
     // Reify { x <= 2 } into indicator `le_ind`.
     // Maximize 10 * le_ind + x: solver should pick x = 2, le_ind = 1
     // (score 12) over x = 5, le_ind = 0 (score 5).
@@ -479,7 +568,7 @@ async fn reify_non_binary_integer_variable() {
         Objective::new(LinExpr::var(base("x")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
@@ -489,8 +578,8 @@ async fn reify_non_binary_integer_variable() {
     assert_eq!(xv, 2.0);
 }
 
-#[tokio::test]
-async fn reify_non_binary_integer_variable_forced_false() {
+#[test]
+fn reify_non_binary_integer_variable_forced_false() {
     // Reify { x <= 2 } but force x >= 3. le_ind must be 0.
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::integer().min(0.0).max(5.0));
@@ -511,7 +600,7 @@ async fn reify_non_binary_integer_variable_forced_false() {
         Objective::new(LinExpr::var(xtra("le_ind")), ObjectiveSense::Maximize),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
@@ -521,8 +610,8 @@ async fn reify_non_binary_integer_variable_forced_false() {
 
 // ----- Objectify tests ---------------------------------------------------
 
-#[tokio::test]
-async fn objectify_empty_bundle_errors() {
+#[test]
+fn objectify_empty_bundle_errors() {
     let bundle = ConstraintBundle::<B, E, C, (), String>::new();
     match bundle.objectify("pen".to_string()) {
         Err(EagerObjectifyError::EmptyConstraints) => {}
@@ -531,18 +620,17 @@ async fn objectify_empty_bundle_errors() {
     }
 }
 
-#[tokio::test]
-async fn objectify_duplicate_variable_errors() {
+#[test]
+fn objectify_duplicate_variable_errors() {
     let a = LinExpr::var(base("a"));
     let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
         a.leq(&LinExpr::constant(0.0)),
         "c".into(),
     )])
-    .with_extra(ExtraEntry::new(
+    .with_extra(
         "pen".to_string(),
-        Variable::integer(),
-        |_f, _ctx, _e| Box::pin(async move { Ok(vec![]) }),
-    ))
+        ExtraEntry::new(Variable::integer(), |_f, _ctx, _e| Ok(vec![])),
+    )
     .unwrap();
     match bundle.objectify("pen".to_string()) {
         Err(EagerObjectifyError::DuplicateVariable(name)) => assert_eq!(name, "pen"),
@@ -551,8 +639,8 @@ async fn objectify_duplicate_variable_errors() {
     }
 }
 
-#[tokio::test]
-async fn objectify_invalid_balance_errors() {
+#[test]
+fn objectify_invalid_balance_errors() {
     let a = LinExpr::var(base("a"));
     for bad_alpha in [-0.1, 1.1, f64::NAN] {
         let bundle = ConstraintBundle::<B, E, C, (), String>::from_constraints(vec![(
@@ -567,8 +655,8 @@ async fn objectify_invalid_balance_errors() {
     }
 }
 
-#[tokio::test]
-async fn objectify_single_inequality() {
+#[test]
+fn objectify_single_inequality() {
     // x <= 3 on x in [0,5], force x = 5. Penalty = 2.0.
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::non_negative().max(5.0));
@@ -587,7 +675,7 @@ async fn objectify_single_inequality() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
@@ -595,8 +683,8 @@ async fn objectify_single_inequality() {
     assert_eq!(pen, 2.0);
 }
 
-#[tokio::test]
-async fn objectify_single_equality() {
+#[test]
+fn objectify_single_equality() {
     // x == 3 on x in [0,5], force x = 5. Penalty = |5-3| = 2.0.
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::non_negative().max(5.0));
@@ -614,7 +702,7 @@ async fn objectify_single_equality() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
@@ -624,7 +712,7 @@ async fn objectify_single_equality() {
 
 /// Helper: build a two-constraint objectify problem with forced
 /// violations of 2 and 3, then return the penalty value.
-async fn objectify_two_constraints(alpha: f64) -> f64 {
+fn objectify_two_constraints(alpha: f64) -> f64 {
     // x <= 2 (violation 2 when x=4) and y <= 2 (violation 3 when y=5).
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::non_negative().max(5.0));
@@ -651,35 +739,35 @@ async fn objectify_two_constraints(alpha: f64) -> f64 {
         "y>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     cfg.get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap()
 }
 
-#[tokio::test]
-async fn objectify_alpha_0_sum() {
+#[test]
+fn objectify_alpha_0_sum() {
     // alpha=0: penalty = (1-0)/2 * (2+3) = 2.5
-    let pen = objectify_two_constraints(0.0).await;
+    let pen = objectify_two_constraints(0.0);
     assert_eq!(pen, 2.5);
 }
 
-#[tokio::test]
-async fn objectify_alpha_1_minimax() {
+#[test]
+fn objectify_alpha_1_minimax() {
     // alpha=1: penalty = 1*max(2,3) = 3.0
-    let pen = objectify_two_constraints(1.0).await;
+    let pen = objectify_two_constraints(1.0);
     assert_eq!(pen, 3.0);
 }
 
-#[tokio::test]
-async fn objectify_alpha_half_balanced() {
+#[test]
+fn objectify_alpha_half_balanced() {
     // alpha=0.5: penalty = 0.5*3 + 0.5/2*(2+3) = 1.5 + 1.25 = 2.75
-    let pen = objectify_two_constraints(0.5).await;
+    let pen = objectify_two_constraints(0.5);
     assert_eq!(pen, 2.75);
 }
 
-#[tokio::test]
-async fn objectify_int_bundle_convenience() {
+#[test]
+fn objectify_int_bundle_convenience() {
     // Verify IntConstraintBundle::objectify works.
     let mut vars: HashMap<B, Variable> = HashMap::new();
     vars.insert("x".to_string(), Variable::non_negative().max(5.0));
@@ -697,7 +785,7 @@ async fn objectify_int_bundle_convenience() {
         "x>=5".into(),
     );
 
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
@@ -705,8 +793,8 @@ async fn objectify_int_bundle_convenience() {
     assert_eq!(pen, 2.0);
 }
 
-#[tokio::test]
-async fn objectify_with_coef_scales_penalty() {
+#[test]
+fn objectify_with_coef_scales_penalty() {
     // x <= 3 on x in [0,5], force x = 5.
     // With coef=1, optimal x would be 3 (penalty=0). Force x=5, penalty=2.
     // With coef=2, the objective contribution is 2*penalty instead of 1*penalty.
@@ -730,7 +818,7 @@ async fn objectify_with_coef_scales_penalty() {
         m.apply_bundle(objectified.into_general()).unwrap();
         m.maximize(1.5, LinExpr::var(base("x")));
 
-        let pb = m.build(&()).await.unwrap().into_problem();
+        let pb = m.build(&()).unwrap().into_problem();
         let cfg = CbcSolver::new().solve(&pb).expect("solvable");
         let x_val = cfg.get(InternalVar::<B, E>::Base("x".to_string())).unwrap();
         assert_eq!(x_val, expected_x, "coef={coef}: expected x={expected_x}");
@@ -739,8 +827,8 @@ async fn objectify_with_coef_scales_penalty() {
 
 // ----- fixer + reify/objectify tests -------------------------------------
 
-#[tokio::test]
-async fn fix_in_reify_closure() {
+#[test]
+fn fix_in_reify_closure() {
     // Reify {a + c <= 1} where c is fixed to 0.
     // With c=0, constraint becomes a <= 1, which is always true
     // for binary a. The indicator should be 1.
@@ -760,11 +848,12 @@ async fn fix_in_reify_closure() {
         1.0,
         Objective::new(LinExpr::var(xtra("ind")), ObjectiveSense::Maximize),
     );
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(0.0) } else { None } })
-    });
-    let model = m.build(&()).await.unwrap();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(0.0) } else { None }
+        },
+    );
+    let model = m.build(&()).unwrap();
     let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
@@ -773,8 +862,8 @@ async fn fix_in_reify_closure() {
     );
 }
 
-#[tokio::test]
-async fn fix_non_integer_in_reify_fails() {
+#[test]
+fn fix_non_integer_in_reify_fails() {
     // Reify a constraint where a fixed variable has value 0.5.
     // Should fail with NonIntegerFixValue.
     let mut vars: HashMap<B, Variable> = HashMap::new();
@@ -793,11 +882,12 @@ async fn fix_non_integer_in_reify_fails() {
         LinExpr::var(xtra("ind")).leq(&LinExpr::constant(1.0)),
         "ref ind".into(),
     );
-    m.add_fixer(|b: &String, _db: &()| {
-        let b = b.clone();
-        Box::pin(async move { if b == "c" { Some(0.5) } else { None } })
-    });
-    let err = m.build(&()).await.unwrap_err();
+    m.add_fixer(
+        |b: &String, _env: &()| {
+            if b == "c" { Some(0.5) } else { None }
+        },
+    );
+    let err = m.build(&()).unwrap_err();
     match err {
         BuildError::ExtraError(name, TestErr::Reify(ReifyError::NonIntegerFixValue { .. })) => {
             assert_eq!(name, "ind");
@@ -811,8 +901,8 @@ async fn fix_non_integer_in_reify_fails() {
 
 // ----- objective helper tests --------------------------------------------
 
-#[tokio::test]
-async fn bundle_with_maximize() {
+#[test]
+fn bundle_with_maximize() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let bundle = ConstraintBundle::<B, E, C, (), String>::new()
@@ -820,7 +910,7 @@ async fn bundle_with_maximize() {
         .with_maximize(1.0, b);
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     // Maximize 2a + b → both 1 (binary).
     assert_eq!(
@@ -833,8 +923,8 @@ async fn bundle_with_maximize() {
     );
 }
 
-#[tokio::test]
-async fn bundle_with_minimize() {
+#[test]
+fn bundle_with_minimize() {
     let a = LinExpr::var(base("a"));
     let b = LinExpr::var(base("b"));
     let bundle = ConstraintBundle::<B, E, C, (), String>::new()
@@ -842,7 +932,7 @@ async fn bundle_with_minimize() {
         .with_minimize(1.0, b);
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
-    let pb = m.build(&()).await.unwrap().into_problem();
+    let pb = m.build(&()).unwrap().into_problem();
     let cfg = CbcSolver::new().solve(&pb).expect("solvable");
     // Minimize a + b → both 0 (binary).
     assert_eq!(

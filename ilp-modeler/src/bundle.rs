@@ -31,17 +31,18 @@ use crate::{DefineFn, DuplicateExtra, ExtraVar, HelperFactory, Modeler, Var, Var
 
 /// One declare-extra worth of arguments, stored as a value so
 /// that it can sit inside a bundle until the bundle is applied.
-pub struct ExtraEntry<'m, B, E, Db, Err>
+/// The extra's name is not stored here — it serves as the key
+/// in the bundle's `HashMap<E, ExtraEntry>`.
+pub struct ExtraEntry<'m, B, E, Env, Err>
 where
     B: UsableData,
     E: UsableData,
 {
-    name: E,
     kind: Variable,
-    define: Box<DefineFn<'m, B, E, Db, Err>>,
+    define: Box<DefineFn<'m, B, E, Env, Err>>,
 }
 
-impl<'m, B, E, Db, Err> ExtraEntry<'m, B, E, Db, Err>
+impl<'m, B, E, Env, Err> ExtraEntry<'m, B, E, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -50,28 +51,20 @@ where
     /// [`Modeler::declare_extra`]. The closure is boxed under
     /// the proper HRTB so callers don't have to wrangle the
     /// `dyn` lifetimes themselves.
-    pub fn new<F>(name: E, kind: Variable, define: F) -> Self
+    pub fn new<F>(kind: Variable, define: F) -> Self
     where
         F: for<'a> FnOnce(
                 &'a mut crate::HelperFactory<B, E>,
-                &'a crate::VarContext<'a, B, E, Db>,
+                &'a crate::VarContext<'a, B, E, Env>,
                 E,
-            ) -> crate::BoxFuture<
-                'a,
-                Result<Vec<Constraint<crate::ExtraVar<B, E>>>, Err>,
-            > + Send
+            ) -> Result<Vec<Constraint<crate::ExtraVar<B, E>>>, Err>
+            + Send
             + 'm,
     {
         ExtraEntry {
-            name,
             kind,
             define: Box::new(define),
         }
-    }
-
-    /// The extra's name.
-    pub fn name(&self) -> &E {
-        &self.name
     }
 
     /// The extra's variable kind.
@@ -80,8 +73,8 @@ where
     }
 
     /// Consume the entry and return its parts.
-    pub(crate) fn into_parts(self) -> (E, Variable, Box<DefineFn<'m, B, E, Db, Err>>) {
-        (self.name, self.kind, self.define)
+    pub(crate) fn into_parts(self) -> (Variable, Box<DefineFn<'m, B, E, Env, Err>>) {
+        (self.kind, self.define)
     }
 }
 
@@ -94,7 +87,7 @@ where
 /// [`Modeler::add_objective`] and [`Modeler::declare_extra`]
 /// one-to-one. Bundles compose by appending and are consumed by
 /// [`Modeler::apply_bundle`].
-pub struct ConstraintBundle<'m, B, E, C, Db, Err>
+pub struct ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -102,11 +95,11 @@ where
 {
     constraints: Vec<(Constraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
-    _phantom: PhantomData<Db>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Env, Err>>,
+    _phantom: PhantomData<Env>,
 }
 
-impl<'m, B, E, C, Db, Err> Default for ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Default for ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -116,13 +109,13 @@ where
         ConstraintBundle {
             constraints: Vec::new(),
             objectives: Vec::new(),
-            extras: Vec::new(),
+            extras: HashMap::new(),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'m, B, E, C, Db, Err> ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -182,12 +175,13 @@ where
     /// already exists in this bundle.
     pub fn with_extra(
         mut self,
-        entry: ExtraEntry<'m, B, E, Db, Err>,
+        name: E,
+        entry: ExtraEntry<'m, B, E, Env, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
-        if self.extras.iter().any(|e| e.name == entry.name) {
-            return Err(DuplicateExtra(entry.name));
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
         }
-        self.extras.push(entry);
+        self.extras.insert(name, entry);
         Ok(self)
     }
 
@@ -202,18 +196,18 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Env, Err>> {
         &self.extras
     }
 
     /// Append all of `other`'s entries into `self`. Constraints,
-    /// objectives, and extras concat in order; no arithmetic.
+    /// objectives, and extras are combined; no arithmetic.
     /// Returns [`DuplicateExtra`] if any extra in `other` has
     /// the same name as one already in `self`.
     pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
-        for entry in &other.extras {
-            if self.extras.iter().any(|e| e.name == entry.name) {
-                return Err(DuplicateExtra(entry.name.clone()));
+        for key in other.extras.keys() {
+            if self.extras.contains_key(key) {
+                return Err(DuplicateExtra(key.clone()));
             }
         }
         self.constraints.extend(other.constraints);
@@ -230,7 +224,7 @@ where
 /// Same shape as [`ConstraintBundle`] but the eager constraints
 /// are [`IntConstraint`] rather than [`Constraint`]. The
 /// objective stays as [`Objective`] (no `IntObjective`).
-pub struct IntConstraintBundle<'m, B, E, C, Db, Err>
+pub struct IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -238,11 +232,11 @@ where
 {
     constraints: Vec<(IntConstraint<Var<B, E>>, C)>,
     objectives: Vec<(f64, Objective<Var<B, E>>)>,
-    extras: Vec<ExtraEntry<'m, B, E, Db, Err>>,
-    _phantom: PhantomData<Db>,
+    extras: HashMap<E, ExtraEntry<'m, B, E, Env, Err>>,
+    _phantom: PhantomData<Env>,
 }
 
-impl<'m, B, E, C, Db, Err> Default for IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Default for IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -252,13 +246,13 @@ where
         IntConstraintBundle {
             constraints: Vec::new(),
             objectives: Vec::new(),
-            extras: Vec::new(),
+            extras: HashMap::new(),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -291,10 +285,20 @@ where
         }
     }
 
+    /// Create a bundle containing a single infeasible constraint.
+    pub fn infeasible(desc: C) -> Self {
+        Self::new().with_infeasible(desc)
+    }
+
     /// Add a constraint with description.
     pub fn with_constraint(mut self, constraint: IntConstraint<Var<B, E>>, desc: C) -> Self {
         self.constraints.push((constraint, desc));
         self
+    }
+
+    /// Add an always-false constraint with description.
+    pub fn with_infeasible(self, desc: C) -> Self {
+        self.with_constraint(IntConstraint::infeasible(), desc)
     }
 
     /// Add a weighted objective.
@@ -318,12 +322,13 @@ where
     /// already exists in this bundle.
     pub fn with_extra(
         mut self,
-        entry: ExtraEntry<'m, B, E, Db, Err>,
+        name: E,
+        entry: ExtraEntry<'m, B, E, Env, Err>,
     ) -> Result<Self, DuplicateExtra<E>> {
-        if self.extras.iter().any(|e| e.name == entry.name) {
-            return Err(DuplicateExtra(entry.name));
+        if self.extras.contains_key(&name) {
+            return Err(DuplicateExtra(name));
         }
-        self.extras.push(entry);
+        self.extras.insert(name, entry);
         Ok(self)
     }
 
@@ -338,18 +343,18 @@ where
     }
 
     /// Read-only access to the extra definitions.
-    pub fn extras(&self) -> &[ExtraEntry<'m, B, E, Db, Err>] {
+    pub fn extras(&self) -> &HashMap<E, ExtraEntry<'m, B, E, Env, Err>> {
         &self.extras
     }
 
     /// Append all of `other`'s entries into `self`. Constraints,
-    /// objectives, and extras concat in order; no arithmetic.
+    /// objectives, and extras are combined; no arithmetic.
     /// Returns [`DuplicateExtra`] if any extra in `other` has
     /// the same name as one already in `self`.
     pub fn merge(mut self, other: Self) -> Result<Self, DuplicateExtra<E>> {
-        for entry in &other.extras {
-            if self.extras.iter().any(|e| e.name == entry.name) {
-                return Err(DuplicateExtra(entry.name.clone()));
+        for key in other.extras.keys() {
+            if self.extras.contains_key(key) {
+                return Err(DuplicateExtra(key.clone()));
             }
         }
         self.constraints.extend(other.constraints);
@@ -361,7 +366,7 @@ where
     /// Drop the int wrapping. Each [`IntConstraint`] is unwrapped
     /// into its underlying [`Constraint`]; objectives and extras
     /// pass through unchanged.
-    pub fn into_general(self) -> ConstraintBundle<'m, B, E, C, Db, Err> {
+    pub fn into_general(self) -> ConstraintBundle<'m, B, E, C, Env, Err> {
         ConstraintBundle {
             constraints: self
                 .constraints
@@ -379,7 +384,7 @@ where
 // Modeler::apply_bundle
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> Modeler<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
 where
     B: UsableData,
     E: UsableData,
@@ -392,7 +397,7 @@ where
     /// / `declare_extra` calls in field-then-vec order.
     pub fn apply_bundle(
         &mut self,
-        bundle: ConstraintBundle<'m, B, E, C, Db, Err>,
+        bundle: ConstraintBundle<'m, B, E, C, Env, Err>,
     ) -> Result<(), DuplicateExtra<E>> {
         for (c, desc) in bundle.constraints {
             self.add_constraint(c, desc);
@@ -400,8 +405,8 @@ where
         for (coef, obj) in bundle.objectives {
             self.add_objective(coef, obj);
         }
-        for entry in bundle.extras {
-            let (name, kind, define) = entry.into_parts();
+        for (name, entry) in bundle.extras {
+            let (kind, define) = entry.into_parts();
             self.declare_extra_boxed(name, kind, define)?;
         }
         Ok(())
@@ -468,9 +473,9 @@ pub enum EagerReifyError<E: UsableData> {
 /// Look up the kind of any [`ExtraVar`] reference reachable
 /// from inside an extra-definition closure. Helpers are routed
 /// through the factory; base/extra refs through `kinds`.
-fn lookup_kind<'a, B, E, Db>(
+fn lookup_kind<'a, B, E, Env>(
     var: &ExtraVar<B, E>,
-    kinds: &'a VarContext<'a, B, E, Db>,
+    kinds: &'a VarContext<'a, B, E, Env>,
     factory: &'a HelperFactory<B, E>,
 ) -> Option<&'a Variable>
 where
@@ -488,11 +493,11 @@ where
 /// indicator. Direct port of
 /// `collo-ml/src/problem/builder.rs:582` (`reify_constraint`)
 /// generalised to operate on `ExtraVar<B, E>`.
-fn reify_and_inner<B, E, Db>(
+pub(crate) fn reify_and_inner<B, E, Env>(
     constraints: &[Constraint<ExtraVar<B, E>>],
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarContext<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Env>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -545,11 +550,11 @@ where
 /// in the big-M linearization. Correctness relies on all
 /// referenced variables being integer: with integrality, an
 /// integer expression `<= epsilon` is equivalent to `<= 0`.
-fn reify_single<B, E, Db>(
+pub(crate) fn reify_single<B, E, Env>(
     constraint: &Constraint<ExtraVar<B, E>>,
     indicator: ExtraVar<B, E>,
     factory: &mut HelperFactory<B, E>,
-    kinds: &VarContext<'_, B, E, Db>,
+    kinds: &VarContext<'_, B, E, Env>,
     epsilon: f64,
 ) -> Result<Vec<Constraint<ExtraVar<B, E>>>, ReifyError<B, E>>
 where
@@ -662,107 +667,130 @@ where
 // IntConstraintBundle::reify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
-    C: UsableData,
-    Db: Sync + 'm,
+    C: UsableData + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static + From<ReifyError<B, E>>,
 {
-    /// Reify with a custom epsilon. See
-    /// [`IntConstraintBundle::reify`] for the general contract.
+    /// Add a lazy reified extra to this bundle.
     ///
-    /// `epsilon` must satisfy `0 < epsilon < 1`. It controls the
-    /// slack in the big-M linearization; correctness relies on
-    /// all referenced variables being integer.
+    /// `build_constraints` is only called during
+    /// [`Modeler::build`] if the extra is actually referenced.
+    /// At that point, the returned `IntConstraint`s are
+    /// transmuted, fixed, and linearized via big-M reification.
     ///
-    /// Returns `Err` eagerly if `epsilon` is out of range or if
-    /// `var` conflicts with an extra already in the bundle.
-    /// Lazy [`ReifyError`]s (undeclared variables, non-integer
-    /// variables, infinite ranges) still surface later as
-    /// `BuildError::ExtraError`.
+    /// `epsilon` must satisfy `0 < epsilon < 1`. Returns `Err`
+    /// eagerly if `epsilon` is out of range or if `var` conflicts
+    /// with an extra already in the bundle.
+    pub fn and_reified_with_epsilon<F>(
+        mut self,
+        var: E,
+        build_constraints: F,
+        epsilon: f64,
+    ) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        if !(epsilon > 0.0 && epsilon < 1.0) {
+            return Err(EagerReifyError::InvalidEpsilon(epsilon));
+        }
+        if self.extras.contains_key(&var) {
+            return Err(EagerReifyError::DuplicateVariable(var));
+        }
+
+        let entry = ExtraEntry::new(
+            Variable::binary(),
+            move |factory: &mut HelperFactory<B, E>, ctx, e| {
+                let int_constraints = build_constraints();
+                let constraints: Vec<Constraint<ExtraVar<B, E>>> = int_constraints
+                    .into_iter()
+                    .map(|c| c.into_constraint().transmute(|v| ExtraVar::from(v.clone())))
+                    .collect();
+                let (reduced, fixes) = ctx.fix_constraints(constraints);
+
+                for (b, &val) in &fixes {
+                    if val != val.round() {
+                        return Err(Err::from(ReifyError::NonIntegerFixValue {
+                            variable: ExtraVar::Base(b.clone()),
+                            value: val,
+                        }));
+                    }
+                }
+
+                reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon)
+                    .map_err(Err::from)
+            },
+        );
+
+        self.extras.insert(var, entry);
+        Ok(self)
+    }
+
+    /// Add a lazy reified extra with the default epsilon of 0.1.
+    pub fn and_reified<F>(self, var: E, build_constraints: F) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        self.and_reified_with_epsilon(var, build_constraints, 0.1)
+    }
+
+    /// Construct a bundle containing a single lazy reified extra
+    /// with a custom epsilon.
+    pub fn with_reified_with_epsilon<F>(
+        var: E,
+        build_constraints: F,
+        epsilon: f64,
+    ) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        Self::new().and_reified_with_epsilon(var, build_constraints, epsilon)
+    }
+
+    /// Construct a bundle containing a single lazy reified extra
+    /// with the default epsilon of 0.1.
+    pub fn with_reified<F>(var: E, build_constraints: F) -> Result<Self, EagerReifyError<E>>
+    where
+        F: FnOnce() -> Vec<IntConstraint<Var<B, E>>> + Send + 'm,
+    {
+        Self::new().and_reified(var, build_constraints)
+    }
+
+    /// Reify the bundle's eager `constraints` into a binary
+    /// indicator named `var` with a custom epsilon.
+    ///
+    /// Returns a new bundle whose `constraints` is empty (the
+    /// linearization lives inside the new extra's closure),
+    /// `objectives` is a pass-through, and `extras` is
+    /// `self.extras` plus one new binary extra for `var`.
     pub fn reify_with_epsilon(
         self,
         var: E,
         epsilon: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
-        if !(epsilon > 0.0 && epsilon < 1.0) {
-            return Err(EagerReifyError::InvalidEpsilon(epsilon));
-        }
-        if self.extras.iter().any(|e| e.name == var) {
-            return Err(EagerReifyError::DuplicateVariable(var));
-        }
-
-        // Capture inputs by move into the closure.
-        let int_constraints: Vec<Constraint<ExtraVar<B, E>>> = self
-            .constraints
-            .into_iter()
-            .map(|(c, _desc)| {
-                // Drop the int wrapping and lift Var → ExtraVar.
-                c.into_constraint().transmute(|v| ExtraVar::from(v.clone()))
-            })
-            .collect();
-
-        let entry = ExtraEntry::new(
-            var.clone(),
-            Variable::binary(),
-            move |factory: &mut HelperFactory<B, E>, ctx, e| {
-                let int_constraints = int_constraints; // move
-                Box::pin(async move {
-                    // Reduce captured constraints with fixed variable
-                    // values before reification inspects them (for
-                    // range computation, variable kind checks, etc.).
-                    let (reduced, fixes) = ctx.fix_constraints(int_constraints).await;
-
-                    // Integrality check: reification requires integer
-                    // fixed values.
-                    for (b, &val) in &fixes {
-                        if val != val.round() {
-                            return Err(Err::from(ReifyError::NonIntegerFixValue {
-                                variable: ExtraVar::Base(b.clone()),
-                                value: val,
-                            }));
-                        }
-                    }
-
-                    let result =
-                        reify_and_inner(&reduced, ExtraVar::Extra(e), factory, ctx, epsilon);
-                    result.map_err(Err::from)
-                })
-            },
-        );
-
-        let mut extras = self.extras;
-        extras.push(entry);
-
-        Ok(IntConstraintBundle {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerReifyError<E>> {
+        let constraints = self.constraints;
+        IntConstraintBundle {
             constraints: Vec::new(),
             objectives: self.objectives,
-            extras,
+            extras: self.extras,
             _phantom: PhantomData,
-        })
+        }
+        .and_reified_with_epsilon(
+            var,
+            move || constraints.into_iter().map(|(c, _desc)| c).collect(),
+            epsilon,
+        )
     }
 
-    /// Reify the bundle's `constraints` field into a binary
+    /// Reify the bundle's eager `constraints` into a binary
     /// indicator named `var` using the default epsilon of 0.1.
-    ///
-    /// Returns a new [`IntConstraintBundle`] whose:
-    ///
-    /// - `constraints` is empty (the linearization lives inside
-    ///   the new extra's body, not at top level),
-    /// - `objectives` is a pass-through copy of self's,
-    /// - `extras` is `self.extras` unchanged plus one new
-    ///   `ExtraEntry` for `var` with kind binary.
-    ///
-    /// Returns `Err` if `var` conflicts with an extra already
-    /// in the bundle. Lazy [`ReifyError`]s surface later as
-    /// `BuildError::ExtraError(var, _)` when the modeler
-    /// expands the new extra.
     pub fn reify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerReifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerReifyError<E>> {
         self.reify_with_epsilon(var, 0.1)
     }
 }
@@ -892,12 +920,12 @@ where
 // ConstraintBundle::objectify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> ConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> ConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: Sync + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static,
 {
     /// Convert the bundle's constraints into a penalty variable
@@ -919,18 +947,17 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         if self.constraints.is_empty() {
             return Err(EagerObjectifyError::EmptyConstraints);
         }
         if !(alpha >= 0.0 && alpha <= 1.0) {
             return Err(EagerObjectifyError::InvalidBalance(alpha));
         }
-        if self.extras.iter().any(|e| e.name == var) {
+        if self.extras.contains_key(&var) {
             return Err(EagerObjectifyError::DuplicateVariable(var));
         }
 
-        // Capture constraints by move, lifting Var → ExtraVar.
         let constraints: Vec<Constraint<ExtraVar<B, E>>> = self
             .constraints
             .into_iter()
@@ -938,26 +965,20 @@ where
             .collect();
 
         let entry = ExtraEntry::new(
-            var.clone(),
             Variable::non_negative(),
             move |factory: &mut HelperFactory<B, E>, ctx, e| {
-                let constraints = constraints; // move
-                Box::pin(async move {
-                    // Reduce captured constraints with fixed variable
-                    // values before objectification processes them.
-                    let (reduced, _fixes) = ctx.fix_constraints(constraints).await;
-                    Ok(objectify_inner(
-                        &reduced,
-                        ExtraVar::Extra(e),
-                        factory,
-                        alpha,
-                    ))
-                })
+                let (reduced, _fixes) = ctx.fix_constraints(constraints);
+                Ok(objectify_inner(
+                    &reduced,
+                    ExtraVar::Extra(e),
+                    factory,
+                    alpha,
+                ))
             },
         );
 
         let mut extras = self.extras;
-        extras.push(entry);
+        extras.insert(var.clone(), entry);
 
         let mut objectives = self.objectives;
         objectives.push((
@@ -978,7 +999,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -987,7 +1008,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -995,7 +1016,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }
@@ -1004,12 +1025,12 @@ where
 // IntConstraintBundle::objectify
 // ---------------------------------------------------------------------------
 
-impl<'m, B, E, C, Db, Err> IntConstraintBundle<'m, B, E, C, Db, Err>
+impl<'m, B, E, C, Env, Err> IntConstraintBundle<'m, B, E, C, Env, Err>
 where
     B: UsableData + 'm,
     E: UsableData + 'm,
     C: UsableData,
-    Db: Sync + 'm,
+    Env: Sync + 'm,
     Err: Debug + Send + 'static,
 {
     /// Convenience wrapper: drops the int wrapping and delegates
@@ -1019,7 +1040,7 @@ where
         var: E,
         alpha: f64,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.into_general()
             .objectify_with_balance_and_coef(var, alpha, coef)
     }
@@ -1030,7 +1051,7 @@ where
         self,
         var: E,
         alpha: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, alpha, 1.0)
     }
 
@@ -1040,7 +1061,7 @@ where
         self,
         var: E,
         coef: f64,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, coef)
     }
 
@@ -1049,7 +1070,7 @@ where
     pub fn objectify(
         self,
         var: E,
-    ) -> Result<IntConstraintBundle<'m, B, E, C, Db, Err>, EagerObjectifyError<E>> {
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
 }

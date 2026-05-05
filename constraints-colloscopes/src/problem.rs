@@ -1,18 +1,13 @@
-use collo_ml::SqliteDatabaseConnection;
-use collo_ml::eval::Origin;
-use collo_ml::script_feeder::ReifiedVar;
-use collomatique_binding_colloscopes::vars::Var;
+use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::vars::Var;
 use collomatique_ilp::solvers::Solver;
 use collomatique_ilp::{ConfigData, DefaultRepr, Variable};
 use collomatique_ilp_modeler::{ConstraintSource, InternalVar, Model};
 use derivative::Derivative;
 use std::collections::HashMap;
 
-pub type ProblemConstraintSource = ConstraintSource<
-    ReifiedVar<SqliteDatabaseConnection>,
-    Option<Origin<SqliteDatabaseConnection>>,
->;
-pub type ProblemInternalVar = InternalVar<Var, ReifiedVar<SqliteDatabaseConnection>>;
+pub type ProblemConstraintSource = ConstraintSource<ExtraVarName, ConstraintDesc>;
+pub type ProblemInternalVar = InternalVar<Var, ExtraVarName>;
 pub type IlpInnerProblem = collomatique_ilp::Problem<ProblemInternalVar, ProblemConstraintSource>;
 
 #[derive(Derivative)]
@@ -23,18 +18,13 @@ pub type IlpInnerProblem = collomatique_ilp::Problem<ProblemInternalVar, Problem
     Eq(bound = "")
 )]
 pub struct Problem {
-    model:
-        Model<Var, ReifiedVar<SqliteDatabaseConnection>, Option<Origin<SqliteDatabaseConnection>>>,
+    model: Model<Var, ExtraVarName, ConstraintDesc>,
     original_var_list: HashMap<Var, Variable>,
 }
 
 impl Problem {
     pub(crate) fn from_model(
-        model: Model<
-            Var,
-            ReifiedVar<SqliteDatabaseConnection>,
-            Option<Origin<SqliteDatabaseConnection>>,
-        >,
+        model: Model<Var, ExtraVarName, ConstraintDesc>,
         original_var_list: HashMap<Var, Variable>,
     ) -> Self {
         Problem {

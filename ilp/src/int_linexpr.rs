@@ -227,6 +227,83 @@ impl<V: UsableData> std::ops::AddAssign<IntLinExpr<V>> for IntLinExpr<V> {
     }
 }
 
+// SubAssign
+impl<V: UsableData> std::ops::SubAssign<&IntLinExpr<V>> for IntLinExpr<V> {
+    fn sub_assign(&mut self, rhs: &IntLinExpr<V>) {
+        self.0 -= &rhs.0;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<IntLinExpr<V>> for IntLinExpr<V> {
+    fn sub_assign(&mut self, rhs: IntLinExpr<V>) {
+        *self -= &rhs;
+    }
+}
+
+// AddAssign/SubAssign for i64
+impl<V: UsableData> std::ops::AddAssign<i64> for IntLinExpr<V> {
+    fn add_assign(&mut self, rhs: i64) {
+        self.0 += rhs as f64;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<i64> for IntLinExpr<V> {
+    fn sub_assign(&mut self, rhs: i64) {
+        self.0 -= rhs as f64;
+    }
+}
+
+// i64 + IntLinExpr
+impl<V: UsableData> std::ops::Add<&IntLinExpr<V>> for i64 {
+    type Output = IntLinExpr<V>;
+    fn add(self, rhs: &IntLinExpr<V>) -> IntLinExpr<V> {
+        rhs + self
+    }
+}
+
+impl<V: UsableData> std::ops::Add<IntLinExpr<V>> for i64 {
+    type Output = IntLinExpr<V>;
+    fn add(self, rhs: IntLinExpr<V>) -> IntLinExpr<V> {
+        &rhs + self
+    }
+}
+
+// i64 - IntLinExpr
+impl<V: UsableData> std::ops::Sub<&IntLinExpr<V>> for i64 {
+    type Output = IntLinExpr<V>;
+    fn sub(self, rhs: &IntLinExpr<V>) -> IntLinExpr<V> {
+        -rhs + self
+    }
+}
+
+impl<V: UsableData> std::ops::Sub<IntLinExpr<V>> for i64 {
+    type Output = IntLinExpr<V>;
+    fn sub(self, rhs: IntLinExpr<V>) -> IntLinExpr<V> {
+        -&rhs + self
+    }
+}
+
+// Sum
+impl<V: UsableData> std::iter::Sum for IntLinExpr<V> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut acc = IntLinExpr::constant(0);
+        for item in iter {
+            acc += item;
+        }
+        acc
+    }
+}
+
+impl<'a, V: UsableData> std::iter::Sum<&'a IntLinExpr<V>> for IntLinExpr<V> {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        let mut acc = IntLinExpr::constant(0);
+        for item in iter {
+            acc += item;
+        }
+        acc
+    }
+}
+
 // i32 * IntLinExpr (for convenience)
 impl<V: UsableData> std::ops::Mul<&IntLinExpr<V>> for i32 {
     type Output = IntLinExpr<V>;
@@ -290,6 +367,11 @@ impl<V: UsableData> IntConstraint<V> {
     /// Get the internal left-hand side expression.
     pub fn get_lhs(&self) -> &LinExpr<V> {
         self.0.get_lhs()
+    }
+
+    /// Create an always-false constraint (1 <= 0).
+    pub fn infeasible() -> Self {
+        IntLinExpr::<V>::constant(1).leq(&IntLinExpr::constant(0))
     }
 }
 
@@ -369,5 +451,66 @@ mod tests {
         let a = IntLinExpr::<String>::var("A");
         let b: IntLinExpr<String> = a.transmute(|v| format!("prefix_{v}"));
         assert_eq!(b.get("prefix_A"), Some(1.0));
+    }
+
+    #[test]
+    fn int_linexpr_sub_assign() {
+        let mut a = IntLinExpr::<String>::var("A");
+        let b = IntLinExpr::<String>::var("B");
+        a -= &b;
+        assert_eq!(a.get("A"), Some(1.0));
+        assert_eq!(a.get("B"), Some(-1.0));
+    }
+
+    #[test]
+    fn int_linexpr_add_assign_i64() {
+        let mut a = IntLinExpr::<String>::var("A");
+        a += 5i64;
+        assert_eq!(a.get("A"), Some(1.0));
+        assert_eq!(a.get_constant(), 5.0);
+    }
+
+    #[test]
+    fn int_linexpr_sub_assign_i64() {
+        let mut a = IntLinExpr::<String>::var("A");
+        a -= 3i64;
+        assert_eq!(a.get("A"), Some(1.0));
+        assert_eq!(a.get_constant(), -3.0);
+    }
+
+    #[test]
+    fn int_linexpr_reverse_add_i64() {
+        let a = IntLinExpr::<String>::var("A");
+        let expr = 5i64 + &a;
+        assert_eq!(expr.get("A"), Some(1.0));
+        assert_eq!(expr.get_constant(), 5.0);
+    }
+
+    #[test]
+    fn int_linexpr_reverse_sub_i64() {
+        let a = IntLinExpr::<String>::var("A");
+        let expr = 5i64 - &a;
+        assert_eq!(expr.get("A"), Some(-1.0));
+        assert_eq!(expr.get_constant(), 5.0);
+    }
+
+    #[test]
+    fn int_linexpr_sum_iterator() {
+        let exprs = vec![
+            IntLinExpr::<String>::var("A"),
+            IntLinExpr::<String>::var("B"),
+            IntLinExpr::constant(3),
+        ];
+        let sum: IntLinExpr<String> = exprs.into_iter().sum();
+        assert_eq!(sum.get("A"), Some(1.0));
+        assert_eq!(sum.get("B"), Some(1.0));
+        assert_eq!(sum.get_constant(), 3.0);
+    }
+
+    #[test]
+    fn int_linexpr_sum_empty_iterator() {
+        let sum: IntLinExpr<String> = Vec::<IntLinExpr<String>>::new().into_iter().sum();
+        assert!(sum.variables().is_empty());
+        assert_eq!(sum.get_constant(), 0.0);
     }
 }

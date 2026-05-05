@@ -44,8 +44,6 @@ pub mod settings;
 pub use settings::*;
 pub mod balancing;
 pub use balancing::*;
-pub mod main_script;
-pub use main_script::*;
 pub mod colloscope;
 pub use colloscope::*;
 pub mod export_config;
@@ -69,7 +67,6 @@ pub enum OpCategory {
     GroupLists,
     Settings,
     Balancing,
-    MainScript,
     Colloscope,
     ExportConfig,
 }
@@ -89,7 +86,6 @@ pub enum UpdateOp {
     GroupLists(GroupListsUpdateOp),
     Settings(SettingsUpdateOp),
     Balancing(BalancingUpdateOp),
-    MainScript(MainScriptUpdateOp),
     Colloscope(ColloscopeUpdateOp),
     ExportConfig(ExportConfigUpdateOp),
 }
@@ -123,8 +119,6 @@ pub enum UpdateError {
     #[error(transparent)]
     Balancing(#[from] BalancingUpdateError),
     #[error(transparent)]
-    MainScript(#[from] MainScriptUpdateError),
-    #[error(transparent)]
     Colloscope(#[from] ColloscopeUpdateError),
     #[error(transparent)]
     ExportConfig(#[from] ExportConfigUpdateError),
@@ -145,7 +139,6 @@ pub enum UpdateWarning {
     GroupLists(GroupListsUpdateWarning),
     Settings(SettingsUpdateWarning),
     Balancing(BalancingUpdateWarning),
-    MainScript(MainScriptUpdateWarning),
     Colloscope(ColloscopeUpdateWarning),
     ExportConfig(ExportConfigUpdateWarning),
 }
@@ -228,12 +221,6 @@ impl From<BalancingUpdateWarning> for UpdateWarning {
     }
 }
 
-impl From<MainScriptUpdateWarning> for UpdateWarning {
-    fn from(value: MainScriptUpdateWarning) -> Self {
-        UpdateWarning::MainScript(value)
-    }
-}
-
 impl From<ColloscopeUpdateWarning> for UpdateWarning {
     fn from(value: ColloscopeUpdateWarning) -> Self {
         UpdateWarning::Colloscope(value)
@@ -265,7 +252,6 @@ impl UpdateWarning {
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
             UpdateWarning::Balancing(w) => w.build_desc_from_data(data),
-            UpdateWarning::MainScript(w) => w.build_desc_from_data(data),
             UpdateWarning::Colloscope(w) => w.build_desc_from_data(data),
             UpdateWarning::ExportConfig(w) => w.build_desc_from_data(data),
         }
@@ -349,9 +335,6 @@ impl UpdateOp {
             UpdateOp::Balancing(balancing_op) => {
                 CleaningOp::downcast(balancing_op.get_next_cleaning_op(data))
             }
-            UpdateOp::MainScript(main_script_op) => {
-                CleaningOp::downcast(main_script_op.get_next_cleaning_op(data))
-            }
             UpdateOp::Colloscope(colloscope_op) => {
                 CleaningOp::downcast(colloscope_op.get_next_cleaning_op(data))
             }
@@ -418,10 +401,6 @@ impl UpdateOp {
                 balancing_op.apply_no_cleaning(data)?;
                 Ok(None)
             }
-            UpdateOp::MainScript(main_script_op) => {
-                main_script_op.apply_no_cleaning(data)?;
-                Ok(None)
-            }
             UpdateOp::Colloscope(colloscope_op) => {
                 colloscope_op.apply_no_cleaning(data)?;
                 Ok(None)
@@ -472,7 +451,6 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
             UpdateOp::Balancing(balancing_op) => balancing_op.get_desc(),
-            UpdateOp::MainScript(main_script_op) => main_script_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
             UpdateOp::ExportConfig(export_config_op) => export_config_op.get_desc(),
         }

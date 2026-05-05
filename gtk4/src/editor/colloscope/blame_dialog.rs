@@ -14,7 +14,7 @@ pub struct Dialog {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComputationState {
-    AwaitingRecompilation,
+    Debouncing,
     ComputingConstraints,
     RecomputingWarnings,
     ResultAvailable(Result<Vec<String>, String>),
@@ -37,9 +37,9 @@ pub enum DialogInput {
 }
 
 impl Dialog {
-    fn is_awaiting_recompilation(&self) -> bool {
+    fn is_debouncing(&self) -> bool {
         match &self.warnings {
-            ComputationState::AwaitingRecompilation => true,
+            ComputationState::Debouncing => true,
             _ => false,
         }
     }
@@ -99,7 +99,7 @@ impl SimpleComponent for Dialog {
                             set_orientation: gtk::Orientation::Horizontal,
                             set_spacing: 10,
                             #[watch]
-                            set_visible: model.is_awaiting_recompilation(),
+                            set_visible: model.is_debouncing(),
                             gtk::Box {
                                 set_hexpand: true,
                             },
@@ -107,7 +107,7 @@ impl SimpleComponent for Dialog {
                                 set_size_request: (30,30),
                             },
                             gtk::Label {
-                                set_label: "En attente de recompilation du code ColloML...",
+                                set_label: "En attente des données...",
                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                             },
                             gtk::Box {
@@ -128,7 +128,7 @@ impl SimpleComponent for Dialog {
                                 set_size_request: (30,30),
                             },
                             gtk::Label {
-                                set_label: "Constraintes en cours de reconstruction...",
+                                set_label: "Contraintes en cours de construction...",
                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                             },
                             gtk::Box {

@@ -8,20 +8,19 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
+
 mod blame_dialog;
 mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
 
-use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
-
 #[derive(Debug)]
 pub enum ColloscopeInput {
     Update(
         collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
-        Option<Result<ProblemBuilder, SimpleScriptError>>,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -70,7 +69,7 @@ pub struct IlpRepr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ComputationState {
-    AwaitingRecompilation(std::time::Instant),
+    Debouncing(std::time::Instant),
     ComputingConstraints,
     RecomputingWarnings,
     ResultAvailable(Result<IlpRepr, String>),
@@ -83,12 +82,6 @@ impl ComputationState {
             _ => None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IlpProblemBuilder {
-    builder: ProblemBuilder,
-    ilp_repr: ComputationState,
 }
 
 pub struct Colloscope {
@@ -108,41 +101,33 @@ pub struct Colloscope {
         usize,
     )>,
 
-    ilp_problem_builder: Option<Result<IlpProblemBuilder, SimpleScriptError>>,
+    computation_state: Option<ComputationState>,
 }
 
 impl Colloscope {
     fn get_ilp_repr(&self) -> Option<&Result<IlpRepr, String>> {
-        self.ilp_problem_builder
-            .as_ref()
-            .and_then(|r| r.as_ref().ok())
-            .and_then(|b| b.ilp_repr.as_ref())
+        self.computation_state.as_ref().and_then(|s| s.as_ref())
     }
 
-    fn is_awaiting_recompilation(&self) -> bool {
-        match &self.ilp_problem_builder {
+    fn is_debouncing(&self) -> bool {
+        match &self.computation_state {
             None => true,
-            Some(Ok(builder)) => {
-                matches!(builder.ilp_repr, ComputationState::AwaitingRecompilation(_))
-            }
-            Some(Err(_)) => false,
+            Some(s) => matches!(s, ComputationState::Debouncing(_)),
         }
     }
 
     fn is_constructing_constraints(&self) -> bool {
-        match &self.ilp_problem_builder {
-            None => false,
-            Some(Ok(builder)) => matches!(builder.ilp_repr, ComputationState::ComputingConstraints),
-            Some(Err(_)) => false,
-        }
+        matches!(
+            &self.computation_state,
+            Some(ComputationState::ComputingConstraints)
+        )
     }
 
     fn is_rebuilding_warnings(&self) -> bool {
-        match &self.ilp_problem_builder {
-            None => false,
-            Some(Ok(builder)) => matches!(builder.ilp_repr, ComputationState::RecomputingWarnings),
-            Some(Err(_)) => false,
-        }
+        matches!(
+            &self.computation_state,
+            Some(ComputationState::RecomputingWarnings)
+        )
     }
 
     fn has_warnings(&self) -> bool {
@@ -152,22 +137,11 @@ impl Colloscope {
         }
     }
 
-    fn has_compilation_error(&self) -> bool {
-        match &self.ilp_problem_builder {
-            Some(Err(_)) => true,
-            Some(Ok(_)) => false,
-            None => false,
-        }
-    }
-
     fn has_evaluation_error(&self) -> bool {
-        match &self.ilp_problem_builder {
-            Some(Err(_)) => false,
-            Some(Ok(builder)) => {
-                matches!(&builder.ilp_repr, ComputationState::ResultAvailable(Err(_)))
-            }
-            None => false,
-        }
+        matches!(
+            &self.computation_state,
+            Some(ComputationState::ResultAvailable(Err(_)))
+        )
     }
 
     fn has_success(&self) -> bool {
@@ -234,12 +208,12 @@ impl Component for Colloscope {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
                                 #[watch]
-                                set_visible: model.is_awaiting_recompilation(),
+                                set_visible: model.is_debouncing(),
                                 adw::Spinner {
                                     set_halign: gtk::Align::Start,
                                 },
                                 gtk::Label {
-                                    set_label: "<i><small>Compilation de ColloML...</small></i>",
+                                    set_label: "<i><small>En attente des données...</small></i>",
                                     set_use_markup: true,
                                 },
                             },
@@ -287,26 +261,12 @@ impl Component for Colloscope {
                                 set_spacing: 5,
                                 add_css_class: "error",
                                 #[watch]
-                                set_visible: model.has_compilation_error(),
-                                gtk::Image {
-                                    set_icon_name: Some("dialog-error-symbolic"),
-                                },
-                                gtk::Label {
-                                    set_label: "<b>Erreur de compilation</b>",
-                                    set_use_markup: true,
-                                },
-                            },
-                            gtk::Box {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                set_spacing: 5,
-                                add_css_class: "error",
-                                #[watch]
                                 set_visible: model.has_evaluation_error(),
                                 gtk::Image {
                                     set_icon_name: Some("dialog-error-symbolic"),
                                 },
                                 gtk::Label {
-                                    set_label: "<b>Erreur d'évaluation</b>",
+                                    set_label: "<b>Erreur de base de données</b>",
                                     set_use_markup: true,
                                 },
                             },
@@ -453,7 +413,7 @@ impl Component for Colloscope {
             colloscope_display,
             interrogation_dialog,
             edited_interrogation: None,
-            ilp_problem_builder: None,
+            computation_state: None,
             blame_dialog,
         };
 
@@ -466,55 +426,25 @@ impl Component for Colloscope {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            ColloscopeInput::Update(params, colloscope, builder) => {
+            ColloscopeInput::Update(params, colloscope) => {
                 self.params = params;
                 self.colloscope = colloscope;
 
-                match builder {
+                match &self.computation_state {
                     None => {
-                        self.ilp_problem_builder = None;
-                        self.update_blame_dialog();
+                        self.debounce_compute(sender.clone());
                     }
-                    Some(Err(e)) => {
-                        self.ilp_problem_builder = Some(Err(e));
-                        self.update_blame_dialog();
+                    Some(ComputationState::ResultAvailable(Ok(ilp_repr))) => {
+                        if ilp_repr.ilp_problem.env != self.params {
+                            self.debounce_compute(sender.clone());
+                        } else if ilp_repr.colloscope != self.colloscope {
+                            let ilp_problem = ilp_repr.ilp_problem.clone();
+                            self.recompute_warnings(sender.clone(), ilp_problem);
+                        }
                     }
-                    Some(Ok(pb_builder)) => match &self.ilp_problem_builder {
-                        None | Some(Err(_)) => {
-                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
-                                builder: pb_builder,
-                                ilp_repr: ComputationState::AwaitingRecompilation(
-                                    std::time::Instant::now(),
-                                ),
-                            }));
-                            self.debounce_compute(sender.clone());
-                        }
-                        Some(Ok(old_builder)) if old_builder.builder != pb_builder => {
-                            self.ilp_problem_builder = Some(Ok(IlpProblemBuilder {
-                                builder: pb_builder,
-                                ilp_repr: ComputationState::AwaitingRecompilation(
-                                    std::time::Instant::now(),
-                                ),
-                            }));
-                            self.debounce_compute(sender.clone());
-                        }
-                        Some(Ok(old_builder)) => {
-                            match &old_builder.ilp_repr {
-                                ComputationState::ResultAvailable(Ok(ilp_repr)) => {
-                                    if ilp_repr.ilp_problem.env != self.params {
-                                        self.debounce_compute(sender.clone());
-                                    } else if ilp_repr.colloscope != self.colloscope {
-                                        let ilp_problem = ilp_repr.ilp_problem.clone();
-                                        self.recompute_warnings(sender.clone(), ilp_problem);
-                                    }
-                                    // else: nothing changed, do nothing
-                                }
-                                _ => {
-                                    self.debounce_compute(sender.clone());
-                                }
-                            }
-                        }
-                    },
+                    Some(_) => {
+                        self.debounce_compute(sender.clone());
+                    }
                 }
 
                 self.update_group_list_entries();
@@ -674,20 +604,14 @@ impl Component for Colloscope {
                 }
                 self.update_ilp_repr(ComputationState::ResultAvailable(Ok(ilp_repr)), &sender);
             }
-            ColloscopeCommandOutput::DebouncedStart(instant) => match &self.ilp_problem_builder {
-                Some(b) => match b {
-                    Ok(builder) => match builder.ilp_repr {
-                        ComputationState::AwaitingRecompilation(t) => {
-                            if t == instant {
-                                self.compute_ilp_repr(sender);
-                            }
-                        }
-                        _ => {}
-                    },
-                    Err(_) => {}
-                },
-                None => {}
-            },
+            ColloscopeCommandOutput::DebouncedStart(instant) => {
+                if matches!(
+                    &self.computation_state,
+                    Some(ComputationState::Debouncing(t)) if *t == instant
+                ) {
+                    self.compute_ilp_repr(sender);
+                }
+            }
         }
     }
 }
@@ -704,7 +628,7 @@ impl Colloscope {
         let colloscope = self.colloscope.clone();
 
         sender.spawn_oneshot_command(move || {
-            let config_data = collomatique_binding_colloscopes::convert::build_complete_config(
+            let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
                 &ilp_problem.env,
                 &colloscope,
             );
@@ -716,8 +640,7 @@ impl Colloscope {
             let warnings = sol
                 .blame()
                 .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(Some(origin)) => Some(origin.to_string()),
-                    ConstraintSource::User(None) => None,
+                    ConstraintSource::User(desc) => Some(desc.user_readable(&ilp_problem.env)),
                     ConstraintSource::DefiningExtra { .. } => None,
                 })
                 .collect();
@@ -731,13 +654,10 @@ impl Colloscope {
 
     fn debounce_compute(&mut self, sender: ComponentSender<Self>) {
         let instant = std::time::Instant::now();
-        self.update_ilp_repr(
-            ComputationState::AwaitingRecompilation(instant.clone()),
-            &sender,
-        );
+        self.update_ilp_repr(ComputationState::Debouncing(instant.clone()), &sender);
 
         sender.oneshot_command(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            tokio::time::sleep(DEBOUNCE_DURATION).await;
             ColloscopeCommandOutput::DebouncedStart(instant)
         });
     }
@@ -745,14 +665,6 @@ impl Colloscope {
     fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
         self.update_ilp_repr(ComputationState::ComputingConstraints, &sender);
 
-        let builder = self
-            .ilp_problem_builder
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .builder
-            .clone();
         let params = self.params.clone();
         let colloscope = self.colloscope.clone();
 
@@ -774,14 +686,8 @@ impl Colloscope {
                 collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
                     .await
                     .map_err(|e| format!("{}", e))?;
-                let db_conn = collo_ml::SqliteDatabaseDriver::new_connection("collomatique", &pool)
-                    .await
-                    .map_err(|e| format!("{}", e))?;
 
-                let problem = builder
-                    .build(&pool, Some(db_conn))
-                    .await
-                    .map_err(|e| format!("{}", e))?;
+                let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
                 Ok(IlpProblem { env, problem })
             }
             .await;
@@ -794,28 +700,21 @@ impl Colloscope {
     }
 
     fn update_blame_dialog(&self) {
-        let ilp_repr_opt = match &self.ilp_problem_builder {
-            Some(r) => match r {
-                Ok(b) => match &b.ilp_repr {
-                    ComputationState::AwaitingRecompilation(_) => {
-                        blame_dialog::ComputationState::AwaitingRecompilation
-                    }
-                    ComputationState::ComputingConstraints => {
-                        blame_dialog::ComputationState::ComputingConstraints
-                    }
-                    ComputationState::RecomputingWarnings => {
-                        blame_dialog::ComputationState::RecomputingWarnings
-                    }
-                    ComputationState::ResultAvailable(r) => {
-                        blame_dialog::ComputationState::ResultAvailable(
-                            r.as_ref()
-                                .map(|x| x.warnings.clone())
-                                .map_err(|e| e.clone()),
-                        )
-                    }
-                },
-                Err(e) => blame_dialog::ComputationState::ResultAvailable(Err(e.to_string())),
-            },
+        let ilp_repr_opt = match &self.computation_state {
+            Some(ComputationState::Debouncing(_)) => blame_dialog::ComputationState::Debouncing,
+            Some(ComputationState::ComputingConstraints) => {
+                blame_dialog::ComputationState::ComputingConstraints
+            }
+            Some(ComputationState::RecomputingWarnings) => {
+                blame_dialog::ComputationState::RecomputingWarnings
+            }
+            Some(ComputationState::ResultAvailable(r)) => {
+                blame_dialog::ComputationState::ResultAvailable(
+                    r.as_ref()
+                        .map(|x| x.warnings.clone())
+                        .map_err(|e| e.clone()),
+                )
+            }
             None => blame_dialog::ComputationState::ComputingConstraints,
         };
 
@@ -825,13 +724,10 @@ impl Colloscope {
             .unwrap();
     }
 
-    fn update_ilp_repr(&mut self, ilp_repr: ComputationState, sender: &ComponentSender<Self>) {
-        let Some(Ok(ref mut builder)) = self.ilp_problem_builder else {
-            return;
-        };
-        builder.ilp_repr = ilp_repr;
-        match &builder.ilp_repr {
-            ComputationState::AwaitingRecompilation(_) | ComputationState::ComputingConstraints => {
+    fn update_ilp_repr(&mut self, new_state: ComputationState, sender: &ComponentSender<Self>) {
+        self.computation_state = Some(new_state);
+        match &self.computation_state {
+            Some(ComputationState::Debouncing(_) | ComputationState::ComputingConstraints) => {
                 sender
                     .output(ColloscopeOutput::UpdateIlpProblem(None))
                     .unwrap();

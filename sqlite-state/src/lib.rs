@@ -232,9 +232,8 @@ async fn insert_metadata(
         .as_ref()
         .map(|w| w.monday().format("%Y-%m-%d").to_string());
 
-    sqlx::query("INSERT INTO metadata (id, first_week, main_script) VALUES (1, ?, ?)")
+    sqlx::query("INSERT INTO metadata (id, first_week) VALUES (1, ?)")
         .bind(&first_week)
-        .bind(&params.main_script)
         .execute(&mut **tx)
         .await?;
 
@@ -1329,8 +1328,6 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
     let balancing = read_balancing(pool).await?;
     let pairings = read_pairings(pool).await?;
     let slot_pairings = read_slot_pairings(pool).await?;
-    let main_script = read_main_script(pool).await?;
-
     Ok(colloscope_params::Parameters {
         periods,
         subjects,
@@ -1345,7 +1342,6 @@ async fn read_parameters(pool: &SqlitePool) -> Result<colloscope_params::Paramet
         pairings,
         slot_pairings,
         balancing,
-        main_script,
     })
 }
 
@@ -2186,15 +2182,6 @@ async fn read_slot_pairings(pool: &SqlitePool) -> Result<slot_pairings::SlotPair
     Ok(slot_pairings::SlotPairings {
         slot_pairing_rule_map,
     })
-}
-
-async fn read_main_script(pool: &SqlitePool) -> Result<Option<String>, Error> {
-    let result: Option<Option<String>> =
-        sqlx::query_scalar("SELECT main_script FROM metadata WHERE id = 1")
-            .fetch_optional(pool)
-            .await?;
-
-    Ok(result.flatten())
 }
 
 async fn read_colloscope(

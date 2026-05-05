@@ -1,5 +1,0 @@
-import "collomatique" as collomatique;
-import "collomatique_db" as *;
-
-pub let constraint(db: Db) -> Constraint = collomatique::default_constraint(db);
-pub let objective(db: Db) -> [LinExpr | Constraint] = collomatique::default_objective(db);

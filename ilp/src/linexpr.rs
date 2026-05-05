@@ -1659,6 +1659,50 @@ impl<V: UsableData> std::ops::SubAssign<LinExpr<V>> for LinExpr<V> {
     }
 }
 
+impl<V: UsableData> std::ops::AddAssign<f64> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: f64) {
+        self.constant += rhs;
+    }
+}
+
+impl<V: UsableData> std::ops::AddAssign<i32> for LinExpr<V> {
+    fn add_assign(&mut self, rhs: i32) {
+        *self += f64::from(rhs);
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<f64> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: f64) {
+        self.constant -= rhs;
+    }
+}
+
+impl<V: UsableData> std::ops::SubAssign<i32> for LinExpr<V> {
+    fn sub_assign(&mut self, rhs: i32) {
+        *self -= f64::from(rhs);
+    }
+}
+
+impl<V: UsableData> std::iter::Sum for LinExpr<V> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut acc = LinExpr::default();
+        for item in iter {
+            acc += item;
+        }
+        acc
+    }
+}
+
+impl<'a, V: UsableData> std::iter::Sum<&'a LinExpr<V>> for LinExpr<V> {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        let mut acc = LinExpr::default();
+        for item in iter {
+            acc += item;
+        }
+        acc
+    }
+}
+
 impl<V: UsableData> std::ops::Add for &LinExpr<V> {
     type Output = LinExpr<V>;
 

@@ -9,7 +9,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use collomatique_constraints_colloscopes::{ProblemBuilder, SimpleScriptError};
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
@@ -32,7 +31,6 @@ mod export_panel;
 mod general_planning;
 mod group_lists;
 mod incompats;
-mod main_script;
 mod pairings;
 mod run_second_instance;
 mod settings;
@@ -95,10 +93,6 @@ pub enum EditorCommandOutput {
     ScriptNotChosen,
     ScriptLoaded(PathBuf, String),
     ScriptLoadingFailed(PathBuf, String),
-    MainScriptCompiled {
-        source: Option<String>,
-        result: Result<ProblemBuilder, SimpleScriptError>,
-    },
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
     ExportSqliteSuccessful(PathBuf),
@@ -133,9 +127,8 @@ enum PanelNumbers {
     Pairings = 10,
     Balancing = 11,
     ExtraSettings = 12,
-    MainScript = 13,
-    Colloscope = 14,
-    Export = 15,
+    Colloscope = 13,
+    Export = 14,
 }
 
 impl PanelNumbers {
@@ -154,7 +147,6 @@ impl PanelNumbers {
             PanelNumbers::Pairings,
             PanelNumbers::Balancing,
             PanelNumbers::ExtraSettings,
-            PanelNumbers::MainScript,
             PanelNumbers::Colloscope,
             PanelNumbers::Export,
         ]
@@ -176,7 +168,6 @@ impl PanelNumbers {
             PanelNumbers::Pairings => "pairings",
             PanelNumbers::Balancing => "balancing",
             PanelNumbers::ExtraSettings => "extra_settings",
-            PanelNumbers::MainScript => "main_script",
             PanelNumbers::Colloscope => "colloscope",
             PanelNumbers::Export => "export",
         }
@@ -197,27 +188,15 @@ impl PanelNumbers {
             PanelNumbers::Pairings => "Appariements des matières",
             PanelNumbers::Balancing => "Équilibrage",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
-            PanelNumbers::MainScript => "Script ColloML (avancé)",
             PanelNumbers::Colloscope => "Colloscope",
             PanelNumbers::Export => "Exporter",
         }
     }
 }
 
-#[derive(Clone)]
-enum MainScriptAst {
-    /// No compilation has been attempted yet
-    Uninitialized,
-    /// Compilation is in progress (async task running)
-    Compiling,
-    /// Compilation completed with a result
-    Ready(Result<ProblemBuilder, SimpleScriptError>),
-}
-
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data, Desc>,
-    main_script_ast: MainScriptAst,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
@@ -243,7 +222,6 @@ pub struct EditorPanel {
     pairings: Controller<pairings::Pairings>,
     settings: Controller<settings::Settings>,
     balancing: Controller<balancing::Balancing>,
-    main_script: Controller<main_script::MainScript>,
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
     check_script_dialog: Controller<check_script::Dialog>,
@@ -522,28 +500,11 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
-        let ast_option = match &self.main_script_ast {
-            MainScriptAst::Ready(result) => Some(result.clone()),
-            _ => None,
-        };
-        self.main_script
-            .sender()
-            .send(main_script::MainScriptInput::Update(
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .main_script
-                    .clone(),
-                ast_option.clone(),
-            ))
-            .unwrap();
         self.colloscope
             .sender()
             .send(colloscope::ColloscopeInput::Update(
                 self.data.get_data().get_inner_data().params.clone(),
                 self.data.get_data().get_inner_data().colloscope.clone(),
-                ast_option,
             ))
             .unwrap();
         let annotations: BTreeSet<String> = self
@@ -583,7 +544,6 @@ impl EditorPanel {
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
-            collomatique_ops::OpCategory::MainScript => Some(PanelNumbers::MainScript),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
             collomatique_ops::OpCategory::ExportConfig => Some(PanelNumbers::Export),
         }
@@ -857,12 +817,6 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
             });
 
-        let main_script = main_script::MainScript::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::MainScript(op))
-            });
-
         let colloscope =
             colloscope::Colloscope::builder()
                 .launch(())
@@ -932,7 +886,6 @@ impl Component for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
-            main_script_ast: MainScriptAst::Uninitialized,
             dirty: false,
             toast_info: None,
             pages_names,
@@ -953,7 +906,6 @@ impl Component for EditorPanel {
             pairings,
             settings,
             balancing,
-            main_script,
             colloscope,
             export_panel,
             check_script_dialog,
@@ -977,7 +929,6 @@ impl Component for EditorPanel {
                 PanelNumbers::Pairings => model.pairings.widget().clone().upcast(),
                 PanelNumbers::Balancing => model.balancing.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
-                PanelNumbers::MainScript => model.main_script.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
                 PanelNumbers::Export => model.export_panel.widget().clone().upcast(),
             };
@@ -1001,10 +952,7 @@ impl Component for EditorPanel {
                 self.file_name = file_name;
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
-                self.update_data_and_recompile_main_script(
-                    DataUpdate::Replace(AppState::new(data)),
-                    sender.clone(),
-                );
+                self.update_data(DataUpdate::Replace(AppState::new(data)));
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
@@ -1052,7 +1000,7 @@ impl Component for EditorPanel {
                 if self.data.can_undo() {
                     let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
-                    self.update_data_and_recompile_main_script(DataUpdate::Undo, sender.clone());
+                    self.update_data(DataUpdate::Undo);
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -1061,7 +1009,7 @@ impl Component for EditorPanel {
                 if self.data.can_redo() {
                     let (cat, _) = self.data.get_redo_name().expect("Should be able to redo");
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
-                    self.update_data_and_recompile_main_script(DataUpdate::Redo, sender.clone());
+                    self.update_data(DataUpdate::Redo);
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -1099,12 +1047,7 @@ impl Component for EditorPanel {
             }
             EditorInput::CommitUpdateOp(new_state) => {
                 self.dirty = true;
-                self.update_data_and_recompile_main_script(
-                    DataUpdate::Replace(new_state),
-                    sender.clone(),
-                );
-                // Update interface anyway, this is useful if we need to restore
-                // some GUI element to the correct state in case of error
+                self.update_data(DataUpdate::Replace(new_state));
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::ContinueOp => {
@@ -1138,10 +1081,7 @@ impl Component for EditorPanel {
                     .unwrap();
             }
             EditorInput::NewStateFromSecondInstance(new_data) => {
-                self.update_data_and_recompile_main_script(
-                    DataUpdate::Replace(new_data),
-                    sender.clone(),
-                );
+                self.update_data(DataUpdate::Replace(new_data));
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
@@ -1293,26 +1233,6 @@ impl Component for EditorPanel {
                     .output(EditorOutput::ExportError(path, error))
                     .unwrap();
             }
-            EditorCommandOutput::MainScriptCompiled { source, result } => {
-                // Check if source code still matches current data
-                let current_source = self
-                    .data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .main_script
-                    .clone();
-                if source != current_source {
-                    // Script changed since compilation started - ignore stale result
-                    return;
-                }
-
-                // Update the AST field
-                self.main_script_ast = MainScriptAst::Ready(result);
-
-                // Trigger interface update
-                self.send_msg_for_interface_update(sender);
-            }
         }
     }
 
@@ -1356,20 +1276,7 @@ enum DataUpdate {
 }
 
 impl EditorPanel {
-    fn update_data_and_recompile_main_script(
-        &mut self,
-        update: DataUpdate,
-        sender: ComponentSender<Self>,
-    ) {
-        let previous_script = self
-            .data
-            .get_data()
-            .get_inner_data()
-            .params
-            .main_script
-            .clone();
-
-        // Update self.data based on the update type
+    fn update_data(&mut self, update: DataUpdate) {
         match update {
             DataUpdate::Undo => {
                 self.data.undo().expect("Should be able to undo");
@@ -1381,38 +1288,6 @@ impl EditorPanel {
                 self.data = new_state;
             }
         }
-
-        if (self.data.get_data().get_inner_data().params.main_script == previous_script)
-            && !matches!(self.main_script_ast, MainScriptAst::Uninitialized)
-        {
-            return;
-        }
-
-        // Set to Compiling to indicate compilation in progress
-        self.main_script_ast = MainScriptAst::Compiling;
-
-        // Get the current main script source
-        let source = self
-            .data
-            .get_data()
-            .get_inner_data()
-            .params
-            .main_script
-            .clone();
-
-        sender.oneshot_command(async move {
-            use collomatique_constraints_colloscopes::{
-                default_problem_builder, get_default_main_module,
-            };
-
-            let main_module = source
-                .as_deref()
-                .unwrap_or_else(|| get_default_main_module());
-
-            let result = default_problem_builder(main_module).await;
-
-            EditorCommandOutput::MainScriptCompiled { source, result }
-        });
     }
 }
 
