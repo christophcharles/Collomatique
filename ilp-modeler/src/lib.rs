@@ -397,6 +397,16 @@ where
             .map(|feasable_config| FeasableSolution { feasable_config })
     }
 
+    /// Solve the checker problem (feasibility only, no objective optimization).
+    pub fn solve_checker<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    where
+        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+    {
+        solver
+            .solve(&self.checker_problem)
+            .map(|feasable_config| FeasableSolution { feasable_config })
+    }
+
     /// Build a [`Solution`] by reconstructing extra variable
     /// values from base variable values (full reconstruction).
     pub fn solution_from_data<S>(
@@ -533,6 +543,11 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
     ) -> impl ExactSizeIterator<Item = &'b (Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>
     + use<'a, 'b, B, E, C> {
         self.config.blame()
+    }
+
+    /// Evaluate the objective function for this solution.
+    pub fn eval(&self) -> f64 {
+        self.config.eval()
     }
 }
 

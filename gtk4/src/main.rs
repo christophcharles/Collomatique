@@ -7,12 +7,17 @@ use clap::Parser;
 use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum DebugMode {
-    Reconstruction,
-    Solution,
-    Solve,
+    CheckerRecon,
+    CheckerBlame,
+    CheckerSolve,
+    FullRecon,
+    FullBlame,
+    FullSolve,
+    Objective,
 }
 
 #[derive(Parser, Debug)]
@@ -70,88 +75,105 @@ fn main() -> Result<(), anyhow::Error> {
 fn run_debug(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
-        let t0 = std::time::Instant::now();
+        let t_total = Instant::now();
+
+        let t = Instant::now();
         eprintln!("Loading file: {:?}", file);
         let (data, _caveats) = collomatique_storage::load_data_from_file(&file).await?;
         let inner_data = data.get_inner_data().clone();
-        eprintln!("  File loaded in {:.2?}", t0.elapsed());
+        eprintln!("  File loaded in {:.2?}", t.elapsed());
 
-        let t1 = std::time::Instant::now();
-        eprintln!("Building ILP problem...");
+        let t = Instant::now();
+        eprintln!("Building ILP model...");
         let pool = sqlx::SqlitePool::connect(":memory:").await?;
         collomatique_sqlite_state::create_schema(&pool).await?;
         collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data).await?;
-        let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
-        eprintln!("  ILP problem built in {:.2?}", t1.elapsed());
+        let model = collomatique_constraints_colloscopes::build_model(&pool).await;
+        eprintln!("  Model built in {:.2?}", t.elapsed());
 
         match mode {
-            DebugMode::Reconstruction => {
-                debug_reconstruction(&problem, &inner_data);
-            }
-            DebugMode::Solution => {
-                debug_solution(&problem, &inner_data);
-            }
-            DebugMode::Solve => {
-                debug_solve(&problem);
-            }
+            DebugMode::CheckerRecon => debug_recon(&model, &inner_data, true),
+            DebugMode::FullRecon => debug_recon(&model, &inner_data, false),
+            DebugMode::CheckerBlame => debug_blame(&model, &inner_data, true),
+            DebugMode::FullBlame => debug_blame(&model, &inner_data, false),
+            DebugMode::CheckerSolve => debug_solve(&model, true),
+            DebugMode::FullSolve => debug_solve(&model, false),
+            DebugMode::Objective => debug_objective(&model, &inner_data),
         }
 
+        eprintln!("Total: {:.2?}", t_total.elapsed());
         Ok(())
     })
 }
 
-fn debug_reconstruction(
-    problem: &collomatique_constraints_colloscopes::ColloscopeModel,
+fn debug_recon(
+    model: &collomatique_constraints_colloscopes::ColloscopeModel,
     inner_data: &collomatique_state_colloscopes::InnerData,
+    checker: bool,
 ) {
+    let label = if checker { "checker" } else { "full" };
+
+    let t = Instant::now();
     eprintln!("Building config from current colloscope...");
     let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
         &inner_data.params,
         &inner_data.colloscope,
     );
+    eprintln!("  Config built in {:.2?}", t.elapsed());
 
-    eprintln!("Running reconstruction (CBC logging enabled)...");
+    let t = Instant::now();
+    eprintln!("Running {label} reconstruction (CBC logging enabled)...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let t = std::time::Instant::now();
-    let sol = problem.solution_from_data(&config_data, &solver);
-    let elapsed = t.elapsed();
+    let sol = if checker {
+        model.checker_solution_from_data(&config_data, &solver)
+    } else {
+        model.solution_from_data(&config_data, &solver)
+    };
 
     match sol {
-        Some(_) => eprintln!("  Reconstruction SUCCEEDED in {:.2?}", elapsed),
-        None => eprintln!("  Reconstruction FAILED (returned None) in {:.2?}", elapsed),
+        Some(_) => eprintln!("  Reconstruction SUCCEEDED in {:.2?}", t.elapsed()),
+        None => eprintln!("  Reconstruction FAILED in {:.2?}", t.elapsed()),
     }
 }
 
-fn debug_solution(
-    problem: &collomatique_constraints_colloscopes::ColloscopeModel,
+fn debug_blame(
+    model: &collomatique_constraints_colloscopes::ColloscopeModel,
     inner_data: &collomatique_state_colloscopes::InnerData,
+    checker: bool,
 ) {
     use collomatique_constraints_colloscopes::ConstraintSource;
 
+    let label = if checker { "checker" } else { "full" };
+
+    let t = Instant::now();
     eprintln!("Building config from current colloscope...");
     let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
         &inner_data.params,
         &inner_data.colloscope,
     );
+    eprintln!("  Config built in {:.2?}", t.elapsed());
 
-    eprintln!("Running reconstruction (silent)...");
+    let t = Instant::now();
+    eprintln!("Running {label} reconstruction (silent)...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
-    let t = std::time::Instant::now();
-    let sol = problem.solution_from_data(&config_data, &solver);
-    let elapsed = t.elapsed();
+    let sol = if checker {
+        model.checker_solution_from_data(&config_data, &solver)
+    } else {
+        model.solution_from_data(&config_data, &solver)
+    };
 
     let Some(solution) = sol else {
         eprintln!(
             "  Reconstruction failed in {:.2?}. \
-             Use '--debug reconstruction' to diagnose.",
-            elapsed
+             Use '--debug {label}-recon' to diagnose.",
+            t.elapsed()
         );
         return;
     };
+    eprintln!("  Reconstruction succeeded in {:.2?}", t.elapsed());
 
-    eprintln!("  Reconstruction succeeded in {:.2?}", elapsed);
+    let t = Instant::now();
     eprintln!("Checking constraint violations...");
-
     let env = &inner_data.params;
     let violations: Vec<_> = solution
         .blame()
@@ -162,9 +184,13 @@ fn debug_solution(
         .collect();
 
     if violations.is_empty() {
-        eprintln!("  All user constraints satisfied.");
+        eprintln!("  All user constraints satisfied ({:.2?})", t.elapsed());
     } else {
-        eprintln!("  {} constraint(s) violated:", violations.len());
+        eprintln!(
+            "  {} constraint(s) violated ({:.2?}):",
+            violations.len(),
+            t.elapsed()
+        );
         for (i, msg) in violations.iter().enumerate() {
             eprintln!("    [{}] {}", i + 1, msg);
             if i >= 49 {
@@ -175,15 +201,55 @@ fn debug_solution(
     }
 }
 
-fn debug_solve(problem: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    eprintln!("Solving full ILP (CBC logging enabled, no time limit)...");
+fn debug_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel, checker: bool) {
+    let label = if checker { "checker" } else { "full" };
+
+    let t = Instant::now();
+    eprintln!("Solving {label} ILP (CBC logging enabled)...");
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let t = std::time::Instant::now();
-    let sol = problem.solve(&solver);
-    let elapsed = t.elapsed();
+    let sol = if checker {
+        model.solve_checker(&solver)
+    } else {
+        model.solve(&solver)
+    };
 
     match sol {
-        Some(_) => eprintln!("  Solve SUCCEEDED in {:.2?}", elapsed),
-        None => eprintln!("  Solve FAILED (no feasible solution) in {:.2?}", elapsed),
+        Some(_) => eprintln!("  Solve SUCCEEDED in {:.2?}", t.elapsed()),
+        None => eprintln!(
+            "  Solve FAILED (no feasible solution) in {:.2?}",
+            t.elapsed()
+        ),
     }
+}
+
+fn debug_objective(
+    model: &collomatique_constraints_colloscopes::ColloscopeModel,
+    inner_data: &collomatique_state_colloscopes::InnerData,
+) {
+    let t = Instant::now();
+    eprintln!("Building config from current colloscope...");
+    let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
+        &inner_data.params,
+        &inner_data.colloscope,
+    );
+    eprintln!("  Config built in {:.2?}", t.elapsed());
+
+    let t = Instant::now();
+    eprintln!("Running full reconstruction (silent)...");
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+    let sol = model.solution_from_data(&config_data, &solver);
+
+    let Some(solution) = sol else {
+        eprintln!(
+            "  Reconstruction failed in {:.2?}. \
+             Use '--debug full-recon' to diagnose.",
+            t.elapsed()
+        );
+        return;
+    };
+    eprintln!("  Reconstruction succeeded in {:.2?}", t.elapsed());
+
+    let t = Instant::now();
+    let value = solution.eval();
+    eprintln!("  Objective value: {value} ({:.2?})", t.elapsed());
 }
