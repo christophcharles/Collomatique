@@ -7,13 +7,6 @@ use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProblemBuilder;
-
-pub fn default_problem_builder() -> ProblemBuilder {
-    ProblemBuilder
-}
-
 pub(crate) type MyModeler<'m> =
     Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
 

@@ -14,7 +14,7 @@ pub mod tools;
 mod types;
 pub mod vars;
 
-pub use builder::{ProblemBuilder, build_problem, default_problem_builder};
+pub use builder::build_problem;
 pub use problem::{FeasableSolution, Problem, Solution};
 pub use problem::{IlpInnerProblem, ProblemConstraintSource, ProblemInternalVar};
 pub use types::{
