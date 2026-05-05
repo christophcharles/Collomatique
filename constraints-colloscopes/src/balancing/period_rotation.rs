@@ -68,8 +68,7 @@ fn period_interrogation_windows(
 }
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
-    let mut hard_bundle = MyBundle::new();
-    let mut soft_bundle = MyBundle::new();
+    let mut output = MyBundle::new();
 
     for (subject_id, subject) in &env.subjects.ordered_subject_list {
         let Some(_params) = subject_interrogation_params(env, *subject_id) else {
@@ -92,6 +91,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
+
+        let mut hard_bundle = MyBundle::new();
+        let mut soft_bundle = MyBundle::new();
 
         for (first_week, last_week, nb_interr) in &windows {
             let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
@@ -132,11 +134,17 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
         }
+
+        output = output
+            .merge(merge_objectified(
+                hard_bundle,
+                soft_bundle,
+                ExtraVarName::BalancingPeriodRotationPenalty {
+                    subject: *subject_id,
+                },
+            ))
+            .expect("no duplicate extras from balancing period rotation (distinct subjects)");
     }
 
-    merge_objectified(
-        hard_bundle,
-        soft_bundle,
-        ExtraVarName::BalancingPeriodRotationPenalty,
-    )
+    output
 }

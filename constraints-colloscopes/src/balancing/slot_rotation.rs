@@ -26,8 +26,7 @@ fn slot_week_pairs_for_slot(
 }
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
-    let mut hard_bundle = MyBundle::new();
-    let mut soft_bundle = MyBundle::new();
+    let mut output = MyBundle::new();
 
     let last_week = last_global_week(env);
 
@@ -57,6 +56,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(subject_slots) = env.slots.subject_map.get(subject_id) else {
             continue;
         };
+
+        let mut hard_bundle = MyBundle::new();
+        let mut soft_bundle = MyBundle::new();
 
         for (first_week, last_week, nb_interr) in &windows {
             let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
@@ -92,11 +94,17 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
         }
+
+        output = output
+            .merge(merge_objectified(
+                hard_bundle,
+                soft_bundle,
+                ExtraVarName::BalancingSlotRotationPenalty {
+                    subject: *subject_id,
+                },
+            ))
+            .expect("no duplicate extras from balancing slot rotation (distinct subjects)");
     }
 
-    merge_objectified(
-        hard_bundle,
-        soft_bundle,
-        ExtraVarName::BalancingSlotRotationPenalty,
-    )
+    output
 }

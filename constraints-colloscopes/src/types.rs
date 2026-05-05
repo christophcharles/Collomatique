@@ -64,8 +64,12 @@ pub enum ExtraVarName {
         subject: SubjectId,
         week: GlobalWeek,
     },
-    PairingsPenalty,
-    SlotPairingsPenalty,
+    PairingsPenalty {
+        rule: PairingRuleId,
+    },
+    SlotPairingsPenalty {
+        rule: SlotPairingRuleId,
+    },
     LimitsMaxPerDayPenalty,
     LimitsMaxPerWeekPenalty,
     LimitsMinPerWeekPenalty,
@@ -75,11 +79,21 @@ pub enum ExtraVarName {
         teacher: TeacherId,
         week: GlobalWeek,
     },
-    BalancingAvoidTwiceInARowPenalty,
-    BalancingYearRotationPenalty,
-    BalancingRotationPenalty,
-    BalancingSlotRotationPenalty,
-    BalancingPeriodRotationPenalty,
+    BalancingAvoidTwiceInARowPenalty {
+        subject: SubjectId,
+    },
+    BalancingYearRotationPenalty {
+        subject: SubjectId,
+    },
+    BalancingRotationPenalty {
+        subject: SubjectId,
+    },
+    BalancingSlotRotationPenalty {
+        subject: SubjectId,
+    },
+    BalancingPeriodRotationPenalty {
+        subject: SubjectId,
+    },
 }
 
 impl From<ReifiedVar<SqliteDatabaseConnection>> for ExtraVarName {

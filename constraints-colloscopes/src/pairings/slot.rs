@@ -1,3 +1,4 @@
+use crate::helpers::merge_objectified;
 use crate::ids::GlobalWeek;
 use crate::native_extras::{
     MyBundle, V, extra_var, groups_for_interrogation, subject_interrogation_params, weeks_for_slot,
@@ -28,8 +29,7 @@ fn slot_group_count_expr(
 }
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
-    let mut hard_bundle = MyBundle::new();
-    let mut soft_bundle = MyBundle::new();
+    let mut output = MyBundle::new();
 
     for (&rule_id, rule) in &env.slot_pairings.slot_pairing_rule_map {
         let ant_slot_id = rule.antecedent.slot_id;
@@ -67,6 +67,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let con_weeks: BTreeSet<_> = weeks_for_slot(env, con_slot_data, &combined_excluded)
             .into_iter()
             .collect();
+
+        let mut hard_bundle = MyBundle::new();
+        let mut soft_bundle = MyBundle::new();
 
         for &week in ant_weeks.intersection(&con_weeks) {
             let target = if rule.soft {
@@ -142,13 +145,15 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
         }
+
+        output = output
+            .merge(merge_objectified(
+                hard_bundle,
+                soft_bundle,
+                ExtraVarName::SlotPairingsPenalty { rule: rule_id },
+            ))
+            .expect("no duplicate extras from slot pairings (distinct rules)");
     }
 
-    let bundle = hard_bundle;
-    match soft_bundle.objectify_with_coef(ExtraVarName::SlotPairingsPenalty, 1.0) {
-        Ok(objectified) => bundle
-            .merge(objectified)
-            .expect("no duplicate extras from slot_pairings objectification"),
-        Err(_) => bundle,
-    }
+    output
 }

@@ -1,3 +1,4 @@
+use crate::helpers::merge_objectified;
 use crate::ids::GlobalWeek;
 use crate::native_extras::{
     MyBundle, V, active_slots_for_subject_week, extra_var, is_at_most_once_per_week,
@@ -9,8 +10,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PairingRuleId, StudentId, SubjectId};
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
-    let mut hard_bundle = MyBundle::new();
-    let mut soft_bundle = MyBundle::new();
+    let mut output = MyBundle::new();
 
     for (&rule_id, rule) in &env.pairings.pairing_rule_map {
         let ant_subject = rule.antecedent.subject_id;
@@ -22,6 +22,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(con_subj) = env.subjects.find_subject(con_subject) else {
             continue;
         };
+
+        let mut hard_bundle = MyBundle::new();
+        let mut soft_bundle = MyBundle::new();
 
         let mut global_week_offset = 0usize;
         for (period_id, period_desc) in &env.periods.ordered_period_list {
@@ -78,15 +81,17 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
             global_week_offset += period_desc.len();
         }
+
+        output = output
+            .merge(merge_objectified(
+                hard_bundle,
+                soft_bundle,
+                ExtraVarName::PairingsPenalty { rule: rule_id },
+            ))
+            .expect("no duplicate extras from pairings (distinct rules)");
     }
 
-    let bundle = hard_bundle;
-    match soft_bundle.objectify_with_coef(ExtraVarName::PairingsPenalty, 1.0) {
-        Ok(objectified) => bundle
-            .merge(objectified)
-            .expect("no duplicate extras from pairings objectification"),
-        Err(_) => bundle,
-    }
+    output
 }
 
 #[allow(clippy::too_many_arguments)]

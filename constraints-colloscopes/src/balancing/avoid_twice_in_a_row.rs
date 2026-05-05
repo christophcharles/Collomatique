@@ -171,9 +171,7 @@ fn build_recursive_constraints(
 }
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    let mut hard_bundle = MyBundle::new();
-    let mut soft_bundle = MyBundle::new();
+    let mut output = MyBundle::new();
 
     for (subject_id, subject) in &env.subjects.ordered_subject_list {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
@@ -188,6 +186,10 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+
+        let mut bundle = MyBundle::new();
+        let mut hard_bundle = MyBundle::new();
+        let mut soft_bundle = MyBundle::new();
 
         match &params.periodicity {
             SubjectPeriodicity::ExactlyPeriodic {
@@ -229,6 +231,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         }
                         .into(),
                     );
+                    bundle = bundle
+                        .merge(hard_bundle)
+                        .expect("no duplicate extras from balancing avoid_twice hard");
+                    output = output.merge(bundle).expect(
+                        "no duplicate extras from balancing avoid_twice (distinct subjects)",
+                    );
                     continue;
                 }
                 build_recursive_constraints(
@@ -242,15 +250,21 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 );
             }
         }
+
+        bundle = bundle
+            .merge(hard_bundle)
+            .expect("no duplicate extras from balancing avoid_twice hard");
+        bundle = merge_objectified(
+            bundle,
+            soft_bundle,
+            ExtraVarName::BalancingAvoidTwiceInARowPenalty {
+                subject: *subject_id,
+            },
+        );
+        output = output
+            .merge(bundle)
+            .expect("no duplicate extras from balancing avoid_twice (distinct subjects)");
     }
 
-    bundle = bundle
-        .merge(hard_bundle)
-        .expect("no duplicate extras from balancing avoid_twice hard");
-    bundle = merge_objectified(
-        bundle,
-        soft_bundle,
-        ExtraVarName::BalancingAvoidTwiceInARowPenalty,
-    );
-    bundle
+    output
 }
