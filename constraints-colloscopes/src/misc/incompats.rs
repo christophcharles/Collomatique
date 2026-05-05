@@ -86,6 +86,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                                 StructuralConstraint::IncompatSaturated {
                                     student,
                                     incompat: incompat_id,
+                                    subject: incompat.subject_id,
                                     week,
                                 }
                                 .into(),
@@ -108,6 +109,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         StructuralConstraint::IncompatNonSaturated {
                             student,
                             incompat: incompat_id,
+                            subject: incompat.subject_id,
                             week,
                             minimum_free_slots: incompat.minimum_free_slots.get(),
                         }

@@ -116,11 +116,13 @@ pub enum StructuralConstraint {
     IncompatSaturated {
         student: StudentId,
         incompat: IncompatId,
+        subject: SubjectId,
         week: GlobalWeek,
     },
     IncompatNonSaturated {
         student: StudentId,
         incompat: IncompatId,
+        subject: SubjectId,
         week: GlobalWeek,
         minimum_free_slots: u32,
     },
@@ -426,31 +428,37 @@ impl StructuralConstraint {
             StructuralConstraint::IncompatSaturated {
                 student,
                 incompat,
+                subject,
                 week,
             } => {
                 let s_name = student_name(env, *student);
                 let i_name = incompat_name(env, *incompat);
+                let subj_name = subject_name(env, *subject);
                 format!(
-                    "L'élève {} ne doit pas avoir de colle la semaine {} pendant l'incompatibilité {}",
+                    "L'élève {} ne doit pas avoir de colle la semaine {} pendant l'incompatibilité {} (matière {})",
                     s_name,
                     week.0 + 1,
                     i_name,
+                    subj_name,
                 )
             }
             StructuralConstraint::IncompatNonSaturated {
                 student,
                 incompat,
+                subject,
                 week,
                 minimum_free_slots,
             } => {
                 let s_name = student_name(env, *student);
                 let i_name = incompat_name(env, *incompat);
+                let subj_name = subject_name(env, *subject);
                 format!(
-                    "Au moins {} créneau(x) disponible(s) pour l'élève {} la semaine {} (incompatibilité {})",
+                    "Au moins {} créneau(x) disponible(s) pour l'élève {} la semaine {} (incompatibilité {}, matière {})",
                     minimum_free_slots,
                     s_name,
                     week.0 + 1,
                     i_name,
+                    subj_name,
                 )
             }
             StructuralConstraint::StudentHasGroup {
