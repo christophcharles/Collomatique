@@ -8,6 +8,8 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
+
 mod blame_dialog;
 mod colloscope_display;
 mod group_list_dialog;
@@ -67,7 +69,7 @@ pub struct IlpRepr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ComputationState {
-    AwaitingRecompilation(std::time::Instant),
+    Debouncing(std::time::Instant),
     ComputingConstraints,
     RecomputingWarnings,
     ResultAvailable(Result<IlpRepr, String>),
@@ -107,10 +109,10 @@ impl Colloscope {
         self.computation_state.as_ref().and_then(|s| s.as_ref())
     }
 
-    fn is_awaiting_recompilation(&self) -> bool {
+    fn is_debouncing(&self) -> bool {
         match &self.computation_state {
             None => true,
-            Some(s) => matches!(s, ComputationState::AwaitingRecompilation(_)),
+            Some(s) => matches!(s, ComputationState::Debouncing(_)),
         }
     }
 
@@ -206,12 +208,12 @@ impl Component for Colloscope {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
                                 #[watch]
-                                set_visible: model.is_awaiting_recompilation(),
+                                set_visible: model.is_debouncing(),
                                 adw::Spinner {
                                     set_halign: gtk::Align::Start,
                                 },
                                 gtk::Label {
-                                    set_label: "<i><small>Compilation de ColloML...</small></i>",
+                                    set_label: "<i><small>En attente des données...</small></i>",
                                     set_use_markup: true,
                                 },
                             },
@@ -259,26 +261,12 @@ impl Component for Colloscope {
                                 set_spacing: 5,
                                 add_css_class: "error",
                                 #[watch]
-                                set_visible: false,
-                                gtk::Image {
-                                    set_icon_name: Some("dialog-error-symbolic"),
-                                },
-                                gtk::Label {
-                                    set_label: "<b>Erreur de compilation</b>",
-                                    set_use_markup: true,
-                                },
-                            },
-                            gtk::Box {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                set_spacing: 5,
-                                add_css_class: "error",
-                                #[watch]
                                 set_visible: model.has_evaluation_error(),
                                 gtk::Image {
                                     set_icon_name: Some("dialog-error-symbolic"),
                                 },
                                 gtk::Label {
-                                    set_label: "<b>Erreur d'évaluation</b>",
+                                    set_label: "<b>Erreur de base de données</b>",
                                     set_use_markup: true,
                                 },
                             },
@@ -444,9 +432,6 @@ impl Component for Colloscope {
 
                 match &self.computation_state {
                     None => {
-                        self.computation_state = Some(ComputationState::AwaitingRecompilation(
-                            std::time::Instant::now(),
-                        ));
                         self.debounce_compute(sender.clone());
                     }
                     Some(ComputationState::ResultAvailable(Ok(ilp_repr))) => {
@@ -622,7 +607,7 @@ impl Component for Colloscope {
             ColloscopeCommandOutput::DebouncedStart(instant) => {
                 if matches!(
                     &self.computation_state,
-                    Some(ComputationState::AwaitingRecompilation(t)) if *t == instant
+                    Some(ComputationState::Debouncing(t)) if *t == instant
                 ) {
                     self.compute_ilp_repr(sender);
                 }
@@ -669,13 +654,10 @@ impl Colloscope {
 
     fn debounce_compute(&mut self, sender: ComponentSender<Self>) {
         let instant = std::time::Instant::now();
-        self.update_ilp_repr(
-            ComputationState::AwaitingRecompilation(instant.clone()),
-            &sender,
-        );
+        self.update_ilp_repr(ComputationState::Debouncing(instant.clone()), &sender);
 
         sender.oneshot_command(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            tokio::time::sleep(DEBOUNCE_DURATION).await;
             ColloscopeCommandOutput::DebouncedStart(instant)
         });
     }
@@ -719,9 +701,7 @@ impl Colloscope {
 
     fn update_blame_dialog(&self) {
         let ilp_repr_opt = match &self.computation_state {
-            Some(ComputationState::AwaitingRecompilation(_)) => {
-                blame_dialog::ComputationState::AwaitingRecompilation
-            }
+            Some(ComputationState::Debouncing(_)) => blame_dialog::ComputationState::Debouncing,
             Some(ComputationState::ComputingConstraints) => {
                 blame_dialog::ComputationState::ComputingConstraints
             }
@@ -747,9 +727,7 @@ impl Colloscope {
     fn update_ilp_repr(&mut self, new_state: ComputationState, sender: &ComponentSender<Self>) {
         self.computation_state = Some(new_state);
         match &self.computation_state {
-            Some(
-                ComputationState::AwaitingRecompilation(_) | ComputationState::ComputingConstraints,
-            ) => {
+            Some(ComputationState::Debouncing(_) | ComputationState::ComputingConstraints) => {
                 sender
                     .output(ColloscopeOutput::UpdateIlpProblem(None))
                     .unwrap();
