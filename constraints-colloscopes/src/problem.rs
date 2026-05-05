@@ -77,6 +77,43 @@ impl Problem {
         )
     }
 
+    pub fn checker_solution_from_data<'a, S>(
+        &'a self,
+        config_data: &ConfigData<Var>,
+        solver: &S,
+    ) -> Option<Solution<'a>>
+    where
+        S: Solver<ProblemInternalVar, ProblemConstraintSource, DefaultRepr<ProblemInternalVar>>,
+    {
+        if !self.check_no_missing_variables(config_data) {
+            return None;
+        }
+
+        let base_values: HashMap<Var, f64> = config_data.get_values().into_iter().collect();
+        let recon_problem = self
+            .model
+            .checker_reconstruction_problem(&base_values)
+            .ok()?;
+        let recon_sol = solver.solve(&recon_problem).expect(
+            "There should always be a (unique!) solution to the checker reconstruction problem",
+        );
+
+        let mut complete_values: HashMap<ProblemInternalVar, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
+
+        Some(Solution {
+            config: self
+                .model
+                .checker_problem()
+                .build_config(new_config_data)
+                .ok()?,
+        })
+    }
+
     pub fn solution_from_complete_data<'a>(
         &'a self,
         config_data: ConfigData<ProblemInternalVar>,

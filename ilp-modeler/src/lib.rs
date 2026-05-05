@@ -140,7 +140,11 @@ pub enum ConstraintSource<E, C> {
     /// `extra`. `index` is the constraint's position within the
     /// vec returned by that closure (deterministic only if the
     /// closure itself is).
-    DefiningExtra { extra: E, index: usize },
+    DefiningExtra {
+        extra: E,
+        index: usize,
+        for_constraints: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +251,11 @@ where
     reconstruction_constraints: Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
     reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
     base_variable_set: HashSet<B>,
+    checker_problem: Problem<InternalVar<B, E>, ConstraintSource<E, C>>,
+    checker_reconstruction_constraints:
+        Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
+    checker_reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
+    checker_base_variable_set: HashSet<B>,
 }
 
 impl<B, E, C> Model<B, E, C>
@@ -321,6 +330,58 @@ where
         Ok(builder
             .build()
             .expect("reconstruction problem should always be valid"))
+    }
+
+    /// Access the checker problem (user constraints +
+    /// constraint-needed extras only, trivial objective).
+    pub fn checker_problem(&self) -> &Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
+        &self.checker_problem
+    }
+
+    /// Build a checker reconstruction problem: given base variable
+    /// values, produce a [`Problem`] whose solution determines only
+    /// the extra/helper variable values needed for constraint
+    /// checking.
+    pub fn checker_reconstruction_problem(
+        &self,
+        base_values: &HashMap<B, f64>,
+    ) -> Result<Problem<InternalVar<B, E>, ConstraintSource<E, C>>, ReconstructionError<B>> {
+        for b in &self.checker_base_variable_set {
+            if !base_values.contains_key(b) {
+                return Err(ReconstructionError(b.clone()));
+            }
+        }
+
+        let fixes: HashMap<InternalVar<B, E>, f64> = base_values
+            .iter()
+            .map(|(b, v)| (InternalVar::Base(b.clone()), *v))
+            .collect();
+
+        let reduced_constraints: Vec<_> = self
+            .checker_reconstruction_constraints
+            .iter()
+            .map(|(c, src)| (c.reduce(&fixes), src.clone()))
+            .filter(|(c, _)| !c.is_trivially_true())
+            .collect();
+
+        let recon_vars: HashMap<InternalVar<B, E>, Variable> = self
+            .checker_reconstruction_variables
+            .iter()
+            .filter(|(v, _)| !matches!(v, InternalVar::Base(_)))
+            .map(|(v, kind)| (v.clone(), kind.clone()))
+            .collect();
+
+        let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+            ProblemBuilder::new()
+                .set_variables(recon_vars)
+                .add_constraints(reduced_constraints)
+                .set_objective(Objective::new(
+                    LinExpr::constant(0.0),
+                    ObjectiveSense::Minimize,
+                ));
+        Ok(builder
+            .build()
+            .expect("checker reconstruction problem should always be valid"))
     }
 }
 
@@ -800,27 +861,29 @@ where
         let folded_obj: Objective<InternalVar<B, E>> =
             folded_obj_var.transmute(|v| InternalVar::from(v.clone()));
 
-        // Step 2: collect initial roots.
-        let mut roots: Vec<E> = Vec::new();
+        // Step 2: collect initial roots (two passes).
+        let mut constraint_roots: Vec<E> = Vec::new();
         let mut seen_root: HashSet<E> = HashSet::new();
         for (c, _) in &user_constraints {
             for v in c.variable_refs() {
                 if let InternalVar::Extra(e) = v
                     && seen_root.insert(e.clone())
                 {
-                    roots.push(e.clone());
+                    constraint_roots.push(e.clone());
                 }
             }
         }
+        let mut objective_roots: Vec<E> = Vec::new();
         for v in folded_obj.get_function().variable_refs() {
             if let InternalVar::Extra(e) = v
                 && seen_root.insert(e.clone())
             {
-                roots.push(e.clone());
+                objective_roots.push(e.clone());
             }
         }
 
-        // Step 3: DFS expansion.
+        // Step 3: DFS expansion — constraint roots first, then
+        // objective-only roots.
         let mut state: BuildState<B, E, C> = BuildState {
             out_vars: HashMap::new(),
             out_constraints: user_constraints,
@@ -829,7 +892,7 @@ where
             path: Vec::new(),
         };
 
-        for root in roots {
+        for root in constraint_roots {
             expand(
                 &mut state,
                 &mut extras,
@@ -839,6 +902,20 @@ where
                 env,
                 &fix_cache,
                 root,
+                true,
+            )?;
+        }
+        for root in objective_roots {
+            expand(
+                &mut state,
+                &mut extras,
+                &base_vars,
+                &extras_kinds,
+                &fixers,
+                env,
+                &fix_cache,
+                root,
+                false,
             )?;
         }
 
@@ -875,6 +952,70 @@ where
             })
             .collect();
 
+        // Step 4b: checker-specific partitioning.
+        let checker_reconstruction_constraints: Vec<_> = state
+            .out_constraints
+            .iter()
+            .filter(|(_, src)| {
+                matches!(
+                    src,
+                    ConstraintSource::DefiningExtra {
+                        for_constraints: true,
+                        ..
+                    }
+                )
+            })
+            .cloned()
+            .collect();
+
+        let mut checker_reconstruction_variables: HashMap<InternalVar<B, E>, Variable> =
+            HashMap::new();
+        for (c, _) in &checker_reconstruction_constraints {
+            for v in c.variable_refs() {
+                if let Some(kind) = all_vars.get(v) {
+                    checker_reconstruction_variables.insert(v.clone(), kind.clone());
+                }
+            }
+        }
+
+        let checker_base_variable_set: HashSet<B> = checker_reconstruction_variables
+            .keys()
+            .filter_map(|v| match v {
+                InternalVar::Base(b) => Some(b.clone()),
+                _ => None,
+            })
+            .collect();
+
+        let checker_constraints: Vec<_> = state
+            .out_constraints
+            .iter()
+            .filter(|(_, src)| {
+                matches!(
+                    src,
+                    ConstraintSource::User(_)
+                        | ConstraintSource::DefiningExtra {
+                            for_constraints: true,
+                            ..
+                        }
+                )
+            })
+            .cloned()
+            .collect();
+
+        let mut checker_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
+        for (b, kind) in &base_vars {
+            checker_vars.insert(InternalVar::Base(b.clone()), kind.clone());
+        }
+        for (c, _) in &checker_constraints {
+            for v in c.variable_refs() {
+                if !matches!(v, InternalVar::Base(_)) {
+                    if let Some(kind) = all_vars.get(v) {
+                        checker_vars.insert(v.clone(), kind.clone());
+                    }
+                }
+            }
+        }
+
         // Step 5: feed everything into ProblemBuilder.
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
@@ -883,11 +1024,25 @@ where
                 .set_objective(folded_obj);
         let problem = builder.build().map_err(BuildError::Ilp)?;
 
+        let checker_builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+            ProblemBuilder::new()
+                .set_variables(checker_vars)
+                .add_constraints(checker_constraints)
+                .set_objective(Objective::new(
+                    LinExpr::constant(0.0),
+                    ObjectiveSense::Minimize,
+                ));
+        let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
+
         Ok(Model {
             problem,
             reconstruction_constraints,
             reconstruction_variables,
             base_variable_set,
+            checker_problem,
+            checker_reconstruction_constraints,
+            checker_reconstruction_variables,
+            checker_base_variable_set,
         })
     }
 }
@@ -901,6 +1056,7 @@ fn expand<'s, 'm, B, E, C, Env, Err>(
     env: &'s Env,
     fix_cache: &'s Mutex<HashMap<B, Option<f64>>>,
     e: E,
+    for_constraints: bool,
 ) -> Result<(), BuildError<B, E, C, Err>>
 where
     B: UsableData,
@@ -1005,6 +1161,7 @@ where
             ConstraintSource::DefiningExtra {
                 extra: e.clone(),
                 index: i,
+                for_constraints,
             },
         ));
     }
@@ -1020,6 +1177,7 @@ where
             env,
             fix_cache,
             d,
+            for_constraints,
         )?;
     }
 

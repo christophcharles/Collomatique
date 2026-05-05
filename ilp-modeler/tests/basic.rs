@@ -863,3 +863,200 @@ fn derive_integration_from_described() {
             .unwrap_or(0.0);
     assert_eq!(sum, 1.0);
 }
+
+// ----- checker problem tests ------------------------------------------------
+
+#[test]
+fn checker_excludes_objective_only_extras() {
+    let mut m = fresh();
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+        ])
+    })
+    .unwrap();
+    m.declare_extra("t".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("t")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).unwrap();
+
+    // Full problem has both extras.
+    assert!(
+        model
+            .problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("s".to_string()))
+    );
+    assert!(
+        model
+            .problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("t".to_string()))
+    );
+
+    // Checker problem has "s" but not "t".
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("s".to_string()))
+    );
+    assert!(
+        !model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("t".to_string()))
+    );
+
+    // Checker problem still has all base variables.
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Base("a".to_string()))
+    );
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Base("b".to_string()))
+    );
+}
+
+#[test]
+fn checker_includes_shared_extra() {
+    let mut m = fresh();
+    m.declare_extra("shared".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("a"))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("shared")).leq(&LinExpr::constant(1.0)),
+        "shared<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("shared")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).unwrap();
+
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("shared".to_string()))
+    );
+}
+
+#[test]
+fn checker_includes_transitive_deps() {
+    let mut m = fresh();
+    m.declare_extra("leaf".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+        ])
+    })
+    .unwrap();
+    m.declare_extra("mid".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(eextra("leaf"))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("mid")).leq(&LinExpr::constant(1.0)),
+        "mid<=1".into(),
+    );
+    let model = m.build(&()).unwrap();
+
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("mid".to_string()))
+    );
+    assert!(
+        model
+            .checker_problem()
+            .get_variables()
+            .contains_key(&InternalVar::<B, E>::Extra("leaf".to_string()))
+    );
+}
+
+#[test]
+fn checker_reconstruction_basic() {
+    let mut m = fresh();
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e))
+                .eq(&(LinExpr::var(ebase("a")) + LinExpr::var(ebase("b")))),
+        ])
+    })
+    .unwrap();
+    m.declare_extra("t".to_string(), Variable::integer(), |_f, _ctx, e| {
+        Ok(vec![
+            LinExpr::var(ExtraVar::Extra(e)).eq(&LinExpr::var(ebase("b"))),
+        ])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("t")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).unwrap();
+
+    let base_values = HashMap::from([("a".to_string(), 0.0), ("b".to_string(), 1.0)]);
+    let checker_recon = model.checker_reconstruction_problem(&base_values).unwrap();
+    let recon_cfg = CbcSolver::new().solve(&checker_recon).expect("solvable");
+
+    // s should be reconstructed.
+    assert_eq!(
+        recon_cfg
+            .get(InternalVar::<B, E>::Extra("s".to_string()))
+            .unwrap(),
+        1.0
+    );
+    // t should NOT be in the checker reconstruction.
+    assert!(
+        recon_cfg
+            .get(InternalVar::<B, E>::Extra("t".to_string()))
+            .is_none()
+    );
+}
+
+#[test]
+fn checker_no_extras() {
+    let mut m = fresh();
+    m.add_constraint(
+        LinExpr::var(base("a")).leq(&LinExpr::constant(1.0)),
+        "a<=1".into(),
+    );
+    let model = m.build(&()).unwrap();
+
+    // Checker problem has the user constraint + base variables.
+    assert_eq!(model.checker_problem().get_variables().len(), 2);
+    assert_eq!(model.checker_problem().get_constraints().len(), 1);
+
+    // Checker reconstruction is trivial.
+    let base_values: HashMap<B, f64> = HashMap::new();
+    let checker_recon = model.checker_reconstruction_problem(&base_values).unwrap();
+    assert_eq!(checker_recon.get_constraints().len(), 0);
+    assert_eq!(checker_recon.get_variables().len(), 0);
+}

@@ -635,7 +635,7 @@ impl Colloscope {
             let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
-                .solution_from_data(&config_data, &solver)
+                .checker_solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
             let warnings = sol
                 .blame()
