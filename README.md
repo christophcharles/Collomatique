@@ -4,7 +4,7 @@ Collomatique est un outil de construction automatique de **colloscopes** — les
 
 ## Avertissement
 
-Collomatique est en développement actif et au stade alpha. L'interface, le format des fichiers et le langage de script intégré peuvent changer sans préavis. Des bugs subsistent.
+Collomatique est en développement actif et au stade alpha. L'interface et le format des fichiers peuvent changer sans préavis. Des bugs subsistent.
 
 ## Fonctionnalités
 
@@ -71,16 +71,6 @@ Objectif : minimiser un coût d'équilibrage (par ex. écart entre créneaux)
 
 Le solveur détermine alors que `xA1 = 1, xB2 = 1` (et les autres à 0) est une solution réalisable et optimale.
 
-## ColloML
-
-Collomatique intègre **ColloML**, un petit langage de script pour définir les contraintes de périodicité.
-
-- Langage typé, avec des requêtes SQL vers la base de données interne du colloscope
-- Permet de personnaliser les règles de périodicité sans modifier le code Rust
-- Utilisé en interne pour encoder les différents modes de périodicité (exacte, par blocs, etc.)
-
-ColloML est au stade alpha : la syntaxe et les fonctionnalités peuvent évoluer.
-
 ## Licence
 
 Ce projet est distribué sous la licence **GNU Affero General Public License v3** (AGPL-3.0). Voir le fichier [LICENSE](LICENSE) pour le texte complet.
@@ -96,9 +86,7 @@ Le projet est un workspace Rust composé des crates suivantes :
 | `ilp/` | Primitives ILP : expressions linéaires, contraintes, objectifs, variables, construction de problèmes, interface solveur |
 | `ilp-modeler/` | Modéliseur ILP générique, indépendant du langage : expansion paresseuse de variables, réification, objectification, composition par bundles |
 | `ilp-modeler-derive/` | Macros dérivées pour ilp-modeler (`#[derive(DescribeVar)]`) |
-| `collo-ml/` | Interpréteur ColloML (parseur, vérificateur de types, évaluateur) |
-| `collo-ml-derive/` | Macros dérivées pour collo-ml (`#[derive(EvalVar)]`) |
-| `binding-colloscopes/` | Pont entre les données du colloscope et le solveur ; contient les scripts par défaut ColloML |
+| `constraints-colloscopes/` | Modélisation des contraintes du colloscope en Rust natif : périodicités, appariements, équilibrage, structure d'emploi du temps |
 | `state/` et `state-colloscopes/` | Traits et structures d'état de l'application |
 | `sqlite-state/` | Persistance SQLite (SQLx) |
 | `storage/` | Sérialisation des fichiers (JSON) |
