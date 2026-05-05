@@ -1,3 +1,0 @@
-pub let default_constraint() -> Constraint = trivial;
-
-pub let default_objective() -> [Constraint | LinExpr] = [LinExpr(0)];
