@@ -30,6 +30,9 @@ pub use bundle::{
 mod describe_var;
 pub use describe_var::DescribeVar;
 
+mod enumerate;
+pub use enumerate::{EnumerateAll, EnumerateFrom};
+
 pub mod violation_implication;
 pub use violation_implication::{MinimalBlame, ViolationImplication};
 
