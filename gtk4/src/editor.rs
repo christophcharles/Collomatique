@@ -968,6 +968,8 @@ impl Component for EditorPanel {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
                 self.file_name = Some(path.clone());
+                self.send_msg_for_interface_update(sender.clone());
+
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Enregistrement en cours de {}...", path.to_string_lossy(),),
                     timeout: None,
