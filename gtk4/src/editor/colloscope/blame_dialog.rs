@@ -17,11 +17,11 @@ pub enum ComputationState {
     Debouncing,
     ComputingConstraints,
     RecomputingWarnings,
-    ResultAvailable(Result<Vec<String>, String>),
+    ResultAvailable(Result<Vec<(u8, String)>, String>),
 }
 
 impl ComputationState {
-    fn as_ref(&self) -> Option<&Result<Vec<String>, String>> {
+    fn as_ref(&self) -> Option<&Result<Vec<(u8, String)>, String>> {
         match self {
             ComputationState::ResultAvailable(res) => Some(res),
             _ => None,
@@ -271,7 +271,10 @@ impl Dialog {
     fn update_messages(&mut self) {
         let mut messages = vec![];
         if let ComputationState::ResultAvailable(Ok(warnings)) = &self.warnings {
-            messages.extend(warnings.iter().map(|x| EntryData::Warning(x.clone())));
+            messages.extend(warnings.iter().map(|(s, m)| EntryData::Warning {
+                severity: *s,
+                message: m.clone(),
+            }));
         }
         // On Err, messages stays empty (error shown via label)
         super::super::tools::factories::update_vec_deque(
@@ -284,7 +287,7 @@ impl Dialog {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum EntryData {
-    Warning(String),
+    Warning { severity: u8, message: String },
 }
 
 #[derive(Debug)]
@@ -298,15 +301,29 @@ enum EntryInput {
 }
 
 impl Entry {
-    fn generate_icon_name(&self) -> String {
+    fn generate_icon_name(&self) -> &'static str {
         match &self.data {
-            EntryData::Warning(_) => "dialog-warning-symbolic".into(),
+            EntryData::Warning { severity, .. } => match severity {
+                0 => "computer-fail-symbolic",
+                1 | 2 => "dialog-error-symbolic",
+                3 => "dialog-warning-symbolic",
+                _ => "dialog-information-symbolic",
+            },
         }
     }
 
-    fn generate_label(&self) -> String {
+    fn generate_css_class(&self) -> &'static str {
         match &self.data {
-            EntryData::Warning(s) => s.clone(),
+            EntryData::Warning { severity, .. } => match severity {
+                0..=2 => "error",
+                _ => "warning",
+            },
+        }
+    }
+
+    fn generate_label(&self) -> &str {
+        match &self.data {
+            EntryData::Warning { message, .. } => message,
         }
     }
 }
@@ -325,18 +342,20 @@ impl FactoryComponent for Entry {
             set_margin_all: 5,
             set_orientation: gtk::Orientation::Horizontal,
             #[watch]
-            add_css_class: match &self.data {
-                EntryData::Warning(_) => "warning",
-            },
+            remove_css_class: "error",
+            #[watch]
+            remove_css_class: "warning",
+            #[watch]
+            add_css_class: self.generate_css_class(),
             gtk::Image {
                 set_margin_end: 5,
                 #[watch]
-                set_icon_name: Some(&self.generate_icon_name()),
+                set_icon_name: Some(self.generate_icon_name()),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
                 #[watch]
-                set_label: &self.generate_label(),
+                set_label: self.generate_label(),
             },
         },
     }

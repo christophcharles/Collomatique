@@ -63,7 +63,7 @@ pub struct IlpProblem {
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<String>,
+    warnings: Vec<(u8, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,6 +154,30 @@ impl Colloscope {
         match self.get_ilp_repr() {
             Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
             _ => String::new(),
+        }
+    }
+
+    fn worst_severity_level(&self) -> Option<u8> {
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => ilp_repr.warnings.first().map(|(s, _)| *s),
+            _ => None,
+        }
+    }
+
+    fn warning_icon_name(&self) -> &'static str {
+        match self.worst_severity_level() {
+            Some(0) => "computer-fail-symbolic",
+            Some(1 | 2) => "dialog-error-symbolic",
+            Some(3) => "dialog-warning-symbolic",
+            Some(4) => "dialog-information-symbolic",
+            _ => "dialog-warning-symbolic",
+        }
+    }
+
+    fn warning_css_class(&self) -> &'static str {
+        match self.worst_severity_level() {
+            Some(0..=2) => "error",
+            _ => "warning",
         }
     }
 }
@@ -272,11 +296,17 @@ impl Component for Colloscope {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
-                                add_css_class: "warning",
+                                #[watch]
+                                remove_css_class: "error",
+                                #[watch]
+                                remove_css_class: "warning",
+                                #[watch]
+                                add_css_class: model.warning_css_class(),
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
-                                    set_icon_name: Some("dialog-warning-symbolic"),
+                                    #[watch]
+                                    set_icon_name: Some(model.warning_icon_name()),
                                 },
                                 gtk::Label {
                                     #[watch]
@@ -636,11 +666,12 @@ impl Colloscope {
                 .problem
                 .checker_solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
-            let warnings = sol
+            let mut warnings: Vec<_> = sol
                 .minimal_blame()
                 .iter()
-                .map(|desc| desc.user_readable(&ilp_problem.env))
+                .map(|desc| (desc.severity_level(), desc.user_readable(&ilp_problem.env)))
                 .collect();
+            warnings.sort_by_key(|(s, _)| *s);
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
                 ilp_problem,
                 colloscope,
