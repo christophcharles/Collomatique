@@ -20,7 +20,8 @@ pub use types::{
 };
 
 pub use collomatique_ilp_modeler::{
-    ConstraintSource, FeasableSolution, InternalVar, Model, ModelStats, Solution,
+    ConstraintSource, FeasableSolution, InternalVar, MinimalBlame, Model, ModelStats, Solution,
+    ViolationImplication,
 };
 pub use vars::Var;
 

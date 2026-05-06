@@ -30,6 +30,9 @@ pub use bundle::{
 mod describe_var;
 pub use describe_var::DescribeVar;
 
+pub mod violation_implication;
+pub use violation_implication::{MinimalBlame, ViolationImplication};
+
 /// Re-export the derive macro so users can write
 /// `#[derive(DescribeVar)]` after `use collomatique_ilp_modeler::DescribeVar`.
 #[cfg(feature = "derive")]
@@ -590,6 +593,20 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
     ) -> impl ExactSizeIterator<Item = &'b (Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>
     + use<'a, 'b, B, E, C> {
         self.config.blame()
+    }
+
+    /// Iterate over unsatisfied user constraints, filtered to remove
+    /// redundant ones via violation implication.
+    pub fn minimal_blame(&self) -> MinimalBlame<&C>
+    where
+        C: ViolationImplication,
+    {
+        self.blame()
+            .filter_map(|(_constraint, desc)| match desc {
+                ConstraintSource::User(desc) => Some(desc),
+                ConstraintSource::DefiningExtra { .. } => None,
+            })
+            .collect()
     }
 
     /// Evaluate the objective function for this solution.

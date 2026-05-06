@@ -508,6 +508,81 @@ fn time_period_implies(
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum ViolationCategoryKey {
+    PeriodicityCount {
+        student: StudentId,
+        subject: SubjectId,
+    },
+    TeacherRotation {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+    },
+    SlotRotation {
+        student: StudentId,
+        subject: SubjectId,
+        slot: SlotId,
+    },
+    StudentsInGroup {
+        group_list: GroupListId,
+        group: GroupNum,
+    },
+    GroupCount {
+        slot: SlotId,
+        week: GlobalWeek,
+    },
+    InterrogationsPerTimePeriod {
+        student: StudentId,
+        week: GlobalWeek,
+    },
+}
+
+impl collomatique_ilp_modeler::ViolationImplication for ConstraintDesc {
+    type CategoryKey = ViolationCategoryKey;
+
+    fn violation_category(&self) -> Option<Self::CategoryKey> {
+        self.violation_family().map(|fam| match fam {
+            ViolationFamily::PeriodicityCount {
+                student, subject, ..
+            } => ViolationCategoryKey::PeriodicityCount { student, subject },
+            ViolationFamily::TeacherRotation {
+                student,
+                subject,
+                teacher,
+                ..
+            } => ViolationCategoryKey::TeacherRotation {
+                student,
+                subject,
+                teacher,
+            },
+            ViolationFamily::SlotRotation {
+                student,
+                subject,
+                slot,
+                ..
+            } => ViolationCategoryKey::SlotRotation {
+                student,
+                subject,
+                slot,
+            },
+            ViolationFamily::StudentsInGroup {
+                group_list, group, ..
+            } => ViolationCategoryKey::StudentsInGroup { group_list, group },
+            ViolationFamily::GroupCount { slot, week, .. } => {
+                ViolationCategoryKey::GroupCount { slot, week }
+            }
+            ViolationFamily::InterrogationsPerTimePeriod { student, week, .. } => {
+                ViolationCategoryKey::InterrogationsPerTimePeriod { student, week }
+            }
+        })
+    }
+
+    fn violation_implies(&self, other: &Self) -> bool {
+        self.violation_implies(other)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
