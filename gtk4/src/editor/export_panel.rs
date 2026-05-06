@@ -508,7 +508,25 @@ impl Component for ExportPanel {
                 gtk::Box {
                     set_hexpand: true,
                     set_spacing: 10,
-                    set_margin_top: 40,
+                    set_margin_top: 15,
+                    set_orientation: gtk::Orientation::Vertical,
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "accent",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        adw::ButtonContent {
+                            set_icon_name: "document-export-symbolic",
+                            set_label: "Exporter le colloscope (xlsx)",
+                        },
+                        connect_clicked => ExportPanelInput::ExportClicked,
+                    },
+                },
+                gtk::Box {
+                    set_hexpand: true,
+                    set_spacing: 10,
+                    set_margin_top: 30,
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Separator {
                         set_orientation: gtk::Orientation::Horizontal,

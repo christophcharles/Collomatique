@@ -70,7 +70,6 @@ pub enum EditorInput {
     ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
     UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
-    ExportClicked,
 }
 
 #[derive(Debug)]
@@ -649,21 +648,6 @@ impl Component for EditorPanel {
                                 connect_clicked => EditorInput::RedoClicked,
                             },
                         },
-                        pack_start = &gtk::Button {
-                            add_css_class: "frame",
-                            add_css_class: "raised",
-                            add_css_class: "accent",
-                            set_margin_start: 10,
-                            #[watch]
-                            set_visible: main_stack.visible_child_name().as_ref().map(
-                                |x| x.as_str()
-                            ) == Some(PanelNumbers::Export.panel_name()),
-                            adw::ButtonContent {
-                                set_icon_name: "document-export-symbolic",
-                                set_label: "Exporter le colloscope",
-                            },
-                            connect_clicked => EditorInput::ExportClicked,
-                        },
                         pack_end = &gtk::Separator {
                             set_orientation: gtk::Orientation::Vertical,
                             add_css_class: "spacer",
@@ -1138,9 +1122,6 @@ impl Component for EditorPanel {
             EditorInput::UpdateIlpProblem(problem) => {
                 self.export_panel
                     .emit(ExportPanelInput::UpdateIlpProblem(problem));
-            }
-            EditorInput::ExportClicked => {
-                self.export_panel.emit(ExportPanelInput::ExportClicked);
             }
         }
     }
