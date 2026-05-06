@@ -1,6 +1,8 @@
 //! Solvers module
 //!
-//! This module defines the main trait for solvers: [Solver].
+//! This module defines the main traits for solvers:
+//! [Solver] builds a [SolverModel] from a [Problem],
+//! and [SolverModel::solve] finds an optimal solution.
 //!
 //! It also contains the implementations of different solvers as submodules.
 //! The default solver for collomatique is [coin_cbc].
@@ -17,23 +19,37 @@ use super::mat_repr::ProblemRepr;
 
 /// Solver trait
 ///
-/// Any solver should implement this trait. It provides a single method
-/// [Solver::solve] that takes a problem and returns either a solution
-/// or, if the problem is not solvable, `None`.
+/// A solver translates a [Problem] into a backend-specific [SolverModel]
+/// via [Solver::build_model]. The model can then be solved
+/// via [SolverModel::solve].
 pub trait Solver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
-    /// Solves the problem.
+    /// The backend-specific model type.
+    type Model<'a>: SolverModel<'a, V, C, P>
+    where
+        V: 'a,
+        C: 'a,
+        P: 'a;
+
+    /// Build a model from a problem.
     ///
-    /// This is the main function of the [Solver] trait.
-    ///
-    /// Any solver should this function.
-    /// It takes a problem and returns either a solution
-    /// or, if the problem is not solvable, `None`.
-    ///
-    /// If you want to solve with a time limit, use the [SolverWithTimeLimit] trait.
-    fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>>;
+    /// This translates the problem's variables, constraints, and
+    /// objective into the backend's internal representation.
+    /// The returned model is ready to be solved.
+    fn build_model<'a>(&self, problem: &'a Problem<V, C, P>) -> Self::Model<'a>;
 }
 
-/// Result of [SolverWithTimeLimit::solve_with_time_limit].
+/// A model ready to be solved.
+///
+/// Produced by [Solver::build_model]. Call [SolverModel::solve]
+/// to find an optimal solution. The model is consumed in the process.
+pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
+    /// Solve the model without any time limit.
+    ///
+    /// Returns `None` if the problem is infeasible.
+    fn solve(self) -> Option<FeasableConfig<'a, V, C, P>>;
+}
+
+/// Result of [TimeLimitSolverModel::solve_with_time_limit].
 ///
 /// It contains the solution if one was found but also the reason
 /// for returning.
@@ -53,29 +69,18 @@ pub struct TimeLimitSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>
     pub time_limit_reached: bool,
 }
 
-/// Solver with time limit trait
+/// A model that supports solving with a time limit.
 ///
-/// A solver implements this trait if it supports having a time limit for solving.
-/// If a solver implements this trait, a blanket implementation of the [Solver]
-/// trait is automatically implemented.
-pub trait SolverWithTimeLimit<V: UsableData, C: UsableData, P: ProblemRepr<V>>:
-    Send + Sync
+/// This is a supertrait of [SolverModel]: any model that
+/// supports time limits can also be solved without one.
+pub trait TimeLimitSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>:
+    SolverModel<'a, V, C, P>
 {
-    /// Solves the problem with the time problem.
+    /// Solve the model with a time limit.
     ///
-    /// This is the main function of the [SolverWithTimeLimit] trait.
-    ///
-    /// It takes a problem and returns either a solution
-    /// or, if the problem is not solvable, `None`.
-    ///
-    /// If the time limit is reached, the best solution *so far* is returned.
-    /// So if no solution was found, it still returns `None`. If a solution is found
-    /// it is returned. However, it might not be optimal.
+    /// If the time limit is reached, the best solution found
+    /// so far is returned (which may be `None`).
     ///
     /// You can check this by inspecting [TimeLimitSolution::time_limit_reached].
-    fn solve_with_time_limit<'a>(
-        &self,
-        problem: &'a Problem<V, C, P>,
-        time_limit_in_seconds: u32,
-    ) -> TimeLimitSolution<'a, V, C, P>;
+    fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P>;
 }

@@ -8,7 +8,7 @@
 #[cfg(test)]
 mod tests;
 
-use super::{ProblemRepr, Solver, SolverWithTimeLimit, TimeLimitSolution};
+use super::{ProblemRepr, Solver, SolverModel, TimeLimitSolution, TimeLimitSolverModel};
 use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// Coin-cbc solver
@@ -19,93 +19,25 @@ pub struct CbcSolver {
     disable_logging: bool,
 }
 
-impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverWithTimeLimit<V, C, P> for CbcSolver {
-    fn solve_with_time_limit<'a>(
-        &self,
-        problem: &'a Problem<V, C, P>,
-        time_limit_in_seconds: u32,
-    ) -> TimeLimitSolution<'a, V, C, P> {
-        self.solve_internal(problem, Some(time_limit_in_seconds))
-    }
+/// A CBC model ready to be solved.
+///
+/// Produced by [CbcSolver::build_model].
+pub struct CbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    model: coin_cbc::Model,
+    cols: std::collections::HashMap<V, coin_cbc::Col>,
+    problem: &'a Problem<V, C, P>,
+    disable_logging: bool,
 }
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSolver {
-    fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>> {
-        self.solve_internal(problem, None).config
-    }
-}
+    type Model<'a>
+        = CbcBuiltModel<'a, V, C, P>
+    where
+        V: 'a,
+        C: 'a,
+        P: 'a;
 
-struct CbcModel<V: UsableData> {
-    model: coin_cbc::Model,
-    cols: std::collections::HashMap<V, coin_cbc::Col>,
-}
-
-impl Default for CbcSolver {
-    fn default() -> Self {
-        CbcSolver::new()
-    }
-}
-
-impl CbcSolver {
-    /// Returns a default CBC solver.
-    ///
-    /// The only real configuration for this solver is
-    /// to enable or disable logging.
-    ///
-    /// By default, logging is disabled. But you can change that
-    /// using [CbcSolver::with_disable_logging] rather than this function.
-    pub fn new() -> Self {
-        CbcSolver {
-            disable_logging: true,
-        }
-    }
-
-    /// Builds a CBC solver.
-    ///
-    /// By default, logging is disabled for the CBC solver.
-    /// You can change it here by passing `false` for the `disable_logging`
-    /// argument.
-    pub fn with_disable_logging(disable_logging: bool) -> Self {
-        CbcSolver { disable_logging }
-    }
-}
-
-impl CbcSolver {
-    fn solve_internal<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        &self,
-        problem: &'a Problem<V, C, P>,
-        time_limit_in_seconds: Option<u32>,
-    ) -> TimeLimitSolution<'a, V, C, P> {
-        // cbc does not seem to shut up even if logging is disabled
-        // we block output directly
-        let stdout_gag = gag::Gag::stdout();
-        // We allow for errors in case this is run in multiple threads
-        if !self.disable_logging
-            && let Ok(gag) = stdout_gag
-        {
-            drop(gag);
-        }
-
-        let mut cbc_model = self.build_model(problem);
-
-        Self::add_objective_func(&mut cbc_model, problem);
-
-        if let Some(time_limit) = time_limit_in_seconds {
-            cbc_model.model.set_parameter("timeMode", "elapsed");
-            cbc_model
-                .model
-                .set_parameter("seconds", &time_limit.to_string());
-        }
-
-        let sol = cbc_model.model.solve();
-
-        Self::reconstruct_config(problem, &sol, &cbc_model.cols)
-    }
-
-    fn build_model<V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        &self,
-        problem: &Problem<V, C, P>,
-    ) -> CbcModel<V> {
+    fn build_model<'a>(&self, problem: &'a Problem<V, C, P>) -> Self::Model<'a> {
         use coin_cbc::Model;
         use std::collections::HashMap;
 
@@ -151,34 +83,104 @@ impl CbcSolver {
             }
         }
 
+        let objective = problem.get_objective();
+
+        model.set_obj_sense(match objective.get_sense() {
+            ObjectiveSense::Maximize => coin_cbc::Sense::Maximize,
+            ObjectiveSense::Minimize => coin_cbc::Sense::Minimize,
+        });
+
+        for (var, coef) in objective.get_function().coefficients() {
+            let col = cols[var];
+            model.set_obj_coeff(col, coef);
+        }
+
         if self.disable_logging {
             model.set_parameter("log", "0");
             model.set_parameter("slog", "0");
         }
 
-        CbcModel { model, cols }
+        CbcBuiltModel {
+            model,
+            cols,
+            problem,
+            disable_logging: self.disable_logging,
+        }
     }
+}
 
-    fn add_objective_func<V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        cbc_model: &mut CbcModel<V>,
-        problem: &Problem<V, C, P>,
-    ) {
-        use coin_cbc::Sense;
-        let objective = problem.get_objective();
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, P>
+    for CbcBuiltModel<'a, V, C, P>
+{
+    fn solve(self) -> Option<FeasableConfig<'a, V, C, P>> {
+        self.solve_internal(None).config
+    }
+}
 
-        cbc_model.model.set_obj_sense(match objective.get_sense() {
-            ObjectiveSense::Maximize => Sense::Maximize,
-            ObjectiveSense::Minimize => Sense::Minimize,
-        });
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'a, V, C, P>
+    for CbcBuiltModel<'a, V, C, P>
+{
+    fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P> {
+        self.solve_internal(Some(time_limit_in_seconds))
+    }
+}
 
-        for (var, coef) in objective.get_function().coefficients() {
-            let col = cbc_model.cols[var];
+impl Default for CbcSolver {
+    fn default() -> Self {
+        CbcSolver::new()
+    }
+}
 
-            cbc_model.model.set_obj_coeff(col, coef);
+impl CbcSolver {
+    /// Returns a default CBC solver.
+    ///
+    /// The only real configuration for this solver is
+    /// to enable or disable logging.
+    ///
+    /// By default, logging is disabled. But you can change that
+    /// using [CbcSolver::with_disable_logging] rather than this function.
+    pub fn new() -> Self {
+        CbcSolver {
+            disable_logging: true,
         }
     }
 
-    fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
+    /// Builds a CBC solver.
+    ///
+    /// By default, logging is disabled for the CBC solver.
+    /// You can change it here by passing `false` for the `disable_logging`
+    /// argument.
+    pub fn with_disable_logging(disable_logging: bool) -> Self {
+        CbcSolver { disable_logging }
+    }
+}
+
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CbcBuiltModel<'a, V, C, P> {
+    fn solve_internal(
+        mut self,
+        time_limit_in_seconds: Option<u32>,
+    ) -> TimeLimitSolution<'a, V, C, P> {
+        // cbc does not seem to shut up even if logging is disabled
+        // we block output directly
+        let stdout_gag = gag::Gag::stdout();
+        // We allow for errors in case this is run in multiple threads
+        if !self.disable_logging
+            && let Ok(gag) = stdout_gag
+        {
+            drop(gag);
+        }
+
+        if let Some(time_limit) = time_limit_in_seconds {
+            self.model.set_parameter("timeMode", "elapsed");
+            self.model.set_parameter("seconds", &time_limit.to_string());
+        }
+
+        let sol = self.model.solve();
+
+        Self::reconstruct_config(self.problem, &sol, &self.cols)
+    }
+
+    fn reconstruct_config(
         problem: &'a Problem<V, C, P>,
         sol: &coin_cbc::Solution,
         cols: &std::collections::HashMap<V, coin_cbc::Col>,

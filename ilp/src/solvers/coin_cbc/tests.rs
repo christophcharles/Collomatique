@@ -119,9 +119,12 @@ fn coin_cbc() {
 
     let solver = super::CbcSolver::new();
 
-    use crate::solvers::Solver;
+    use crate::solvers::{Solver, SolverModel};
 
-    let solution = solver.solve(&problem).expect("Solution should be found");
+    let solution = solver
+        .build_model(&problem)
+        .solve()
+        .expect("Solution should be found");
 
     let expected_solution_data = ConfigData::new().set_iter([
         ("x11", 1.0),
@@ -171,9 +174,9 @@ fn coin_cbc_impossible() {
 
     let solver = super::CbcSolver::new();
 
-    use crate::solvers::Solver;
+    use crate::solvers::{Solver, SolverModel};
 
-    let solution = solver.solve(&problem);
+    let solution = solver.build_model(&problem).solve();
 
     assert!(solution.is_none());
 }

@@ -145,9 +145,9 @@
 //! # use collomatique_ilp::solvers;
 //! let solver = solvers::coin_cbc::CbcSolver::new();
 //!
-//! use solvers::Solver;
-//! // Solver::solve returns None when there is no solution
-//! let config = solver.solve(&pb).expect("There should be a solution");
+//! use solvers::{Solver, SolverModel};
+//! // SolverModel::solve returns None when there is no solution
+//! let config = solver.build_model(&pb).solve().expect("There should be a solution");
 //!
 //! // Now config is the optimal solution. We can prob it/
 //! // Because Group X should have course 1 on week 1 (this is prefered by the objective function)

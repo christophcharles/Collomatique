@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use collomatique_ilp::linexpr::LinExpr;
-use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
+use collomatique_ilp::solvers::{Solver, SolverModel, coin_cbc::CbcSolver};
 use collomatique_ilp::{IntConstraint, IntLinExpr, Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
@@ -69,7 +69,7 @@ fn bundle_only_objectives() {
     m.apply_bundle(bundle).unwrap();
     // Should maximize 2a + b → both 1 (binary).
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
         1.0
@@ -224,7 +224,7 @@ fn reify_empty_bundle_pins_indicator_to_one() {
         "ref ind".into(),
     );
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
             .unwrap(),
@@ -259,7 +259,7 @@ fn reify_and_with_solver() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let is_one = cfg
         .get(InternalVar::<B, E>::Extra("is_one".to_string()))
         .unwrap();
@@ -472,7 +472,7 @@ fn with_reified_matches_reify_behavior() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let is_one = cfg
         .get(InternalVar::<B, E>::Extra("is_one".to_string()))
         .unwrap();
@@ -504,7 +504,7 @@ fn reify_equality_constraint() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
         .unwrap();
@@ -537,7 +537,7 @@ fn reify_equality_constraint_forced_false() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let eq_ind = cfg
         .get(InternalVar::<B, E>::Extra("eq_ind".to_string()))
         .unwrap();
@@ -569,7 +569,7 @@ fn reify_non_binary_integer_variable() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
         .unwrap();
@@ -601,7 +601,7 @@ fn reify_non_binary_integer_variable_forced_false() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let le_ind = cfg
         .get(InternalVar::<B, E>::Extra("le_ind".to_string()))
         .unwrap();
@@ -676,7 +676,7 @@ fn objectify_single_inequality() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap();
@@ -703,7 +703,7 @@ fn objectify_single_equality() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap();
@@ -740,7 +740,7 @@ fn objectify_two_constraints(alpha: f64) -> f64 {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     cfg.get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap()
 }
@@ -786,7 +786,7 @@ fn objectify_int_bundle_convenience() {
     );
 
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     let pen = cfg
         .get(InternalVar::<B, E>::Extra("pen".to_string()))
         .unwrap();
@@ -819,7 +819,7 @@ fn objectify_with_coef_scales_penalty() {
         m.maximize(1.5, LinExpr::var(base("x")));
 
         let pb = m.build(&()).unwrap().into_problem();
-        let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+        let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
         let x_val = cfg.get(InternalVar::<B, E>::Base("x".to_string())).unwrap();
         assert_eq!(x_val, expected_x, "coef={coef}: expected x={expected_x}");
     }
@@ -854,7 +854,10 @@ fn fix_in_reify_closure() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = CbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("ind".to_string()))
             .unwrap(),
@@ -911,7 +914,7 @@ fn bundle_with_maximize() {
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     // Maximize 2a + b → both 1 (binary).
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
@@ -933,7 +936,7 @@ fn bundle_with_minimize() {
     let mut m = fresh();
     m.apply_bundle(bundle).unwrap();
     let pb = m.build(&()).unwrap().into_problem();
-    let cfg = CbcSolver::new().solve(&pb).expect("solvable");
+    let cfg = CbcSolver::new().build_model(&pb).solve().expect("solvable");
     // Minimize a + b → both 0 (binary).
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),

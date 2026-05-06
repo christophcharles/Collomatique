@@ -15,7 +15,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
-use collomatique_ilp::solvers::Solver;
+use collomatique_ilp::solvers::{Solver, SolverModel};
 use collomatique_ilp::{
     Config, ConfigData, Constraint, DefaultRepr, FeasableConfig, LinExpr, Objective,
     ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
@@ -446,7 +446,8 @@ where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
         solver
-            .solve(&self.problem)
+            .build_model(&self.problem)
+            .solve()
             .map(|feasable_config| FeasableSolution { feasable_config })
     }
 
@@ -456,7 +457,8 @@ where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
         solver
-            .solve(&self.checker_problem)
+            .build_model(&self.checker_problem)
+            .solve()
             .map(|feasable_config| FeasableSolution { feasable_config })
     }
 
@@ -477,7 +479,8 @@ where
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
         let recon_problem = self.reconstruction_problem(&base_values).ok()?;
         let recon_sol = solver
-            .solve(&recon_problem)
+            .build_model(&recon_problem)
+            .solve()
             .expect("There should always be a (unique!) solution to the reconstruction problem");
 
         let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
@@ -509,7 +512,7 @@ where
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
         let recon_problem = self.checker_reconstruction_problem(&base_values).ok()?;
-        let recon_sol = solver.solve(&recon_problem).expect(
+        let recon_sol = solver.build_model(&recon_problem).solve().expect(
             "There should always be a (unique!) solution to the checker reconstruction problem",
         );
 
