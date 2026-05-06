@@ -42,6 +42,9 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     if let Some(mode) = args.debug {
+        if matches!(mode, debug::DebugMode::Help) {
+            return debug::print_help();
+        }
         let file = args.file.expect("--debug requires a file argument");
         return debug::run(mode, file);
     }

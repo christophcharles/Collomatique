@@ -3,6 +3,7 @@ use std::time::Instant;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub enum DebugMode {
+    Help,
     CheckerRecon,
     CheckerBlame,
     CheckerBlameMax,
@@ -12,6 +13,40 @@ pub enum DebugMode {
     FullBlameMax,
     FullSolve,
     Objective,
+}
+
+pub fn print_help() -> Result<(), anyhow::Error> {
+    eprintln!("Available debug modes:");
+    eprintln!();
+    eprintln!("  help               Show this help message");
+    eprintln!();
+    eprintln!("  Checker modes (user constraints + constraint-needed extras only):");
+    eprintln!(
+        "    checker-recon      Reconstruct extra variables from current colloscope (CBC logging on)"
+    );
+    eprintln!(
+        "    checker-blame      List violated constraints after reconstruction (minimal filtering)"
+    );
+    eprintln!("    checker-blame-max  List ALL violated constraints without filtering");
+    eprintln!("    checker-solve      Solve the checker ILP from scratch (CBC logging on)");
+    eprintln!();
+    eprintln!("  Full modes (all constraints + objectives):");
+    eprintln!("    full-recon         Reconstruct all extra variables (CBC logging on)");
+    eprintln!(
+        "    full-blame         List violated constraints after full reconstruction (minimal filtering)"
+    );
+    eprintln!("    full-blame-max     List ALL violated constraints without filtering");
+    eprintln!("    full-solve         Solve the full ILP from scratch (CBC logging on)");
+    eprintln!();
+    eprintln!("  Other:");
+    eprintln!(
+        "    objective          Compute the objective function value for the current colloscope"
+    );
+    eprintln!();
+    eprintln!("  All modes except 'help' require a file argument.");
+    eprintln!("  Blame modes use 'minimal' filtering by default: redundant constraints implied");
+    eprintln!("  by more specific ones are removed. Use 'blame-max' variants to see everything.");
+    Ok(())
 }
 
 pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
@@ -47,6 +82,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
         );
 
         match mode {
+            DebugMode::Help => unreachable!("handled before file loading"),
             DebugMode::CheckerRecon => recon(&model, &inner_data, true),
             DebugMode::FullRecon => recon(&model, &inner_data, false),
             DebugMode::CheckerBlame => blame(&model, &inner_data, true, true),
