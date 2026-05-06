@@ -47,7 +47,7 @@ Le mode `--release` est fortement recommandé : le solveur ILP est très lent en
 
 Le paquet `coinor-cbc` n'est nécessaire que pour l'exécution des tests.
 
-Malheureusement, adwaita 1.7 est nécessaire et donc Collomatique ne compile pas sur Ubuntu 24.04 (LTS au moment d'écrire).
+Adwaita 1.7 est nécessaire. Collomatique ne compile pas sur Ubuntu 24.04 mais a été testé avec succès sur Ubuntu 25.10 et Ubuntu 26.04 (LTS au moment d'écrire).
 
 ## Résolution par programmation linéaire
 
