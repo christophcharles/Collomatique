@@ -1,4 +1,3 @@
-use collomatique_constraints_colloscopes::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -638,11 +637,9 @@ impl Colloscope {
                 .checker_solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
             let warnings = sol
-                .blame()
-                .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(desc) => Some(desc.user_readable(&ilp_problem.env)),
-                    ConstraintSource::DefiningExtra { .. } => None,
-                })
+                .minimal_blame()
+                .iter()
+                .map(|desc| desc.user_readable(&ilp_problem.env))
                 .collect();
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
                 ilp_problem,

@@ -5,9 +5,11 @@ use std::time::Instant;
 pub enum DebugMode {
     CheckerRecon,
     CheckerBlame,
+    CheckerBlameMax,
     CheckerSolve,
     FullRecon,
     FullBlame,
+    FullBlameMax,
     FullSolve,
     Objective,
 }
@@ -47,8 +49,10 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
         match mode {
             DebugMode::CheckerRecon => recon(&model, &inner_data, true),
             DebugMode::FullRecon => recon(&model, &inner_data, false),
-            DebugMode::CheckerBlame => blame(&model, &inner_data, true),
-            DebugMode::FullBlame => blame(&model, &inner_data, false),
+            DebugMode::CheckerBlame => blame(&model, &inner_data, true, true),
+            DebugMode::CheckerBlameMax => blame(&model, &inner_data, true, false),
+            DebugMode::FullBlame => blame(&model, &inner_data, false, true),
+            DebugMode::FullBlameMax => blame(&model, &inner_data, false, false),
             DebugMode::CheckerSolve => solve(&model, true),
             DebugMode::FullSolve => solve(&model, false),
             DebugMode::Objective => objective(&model, &inner_data),
@@ -93,6 +97,7 @@ fn blame(
     model: &collomatique_constraints_colloscopes::ColloscopeModel,
     inner_data: &collomatique_state_colloscopes::InnerData,
     checker: bool,
+    minimal: bool,
 ) {
     use collomatique_constraints_colloscopes::ConstraintSource;
 
@@ -126,15 +131,24 @@ fn blame(
     eprintln!("  Reconstruction succeeded in {:.2?}", t.elapsed());
 
     let t = Instant::now();
-    eprintln!("Checking constraint violations...");
+    let filter_label = if minimal { "minimal" } else { "all" };
+    eprintln!("Checking constraint violations ({filter_label})...");
     let env = &inner_data.params;
-    let violations: Vec<_> = solution
-        .blame()
-        .filter_map(|(_constraint, desc)| match desc {
-            ConstraintSource::User(desc) => Some(desc.user_readable(env)),
-            ConstraintSource::DefiningExtra { .. } => None,
-        })
-        .collect();
+    let violations: Vec<_> = if minimal {
+        solution
+            .minimal_blame()
+            .iter()
+            .map(|desc| desc.user_readable(env))
+            .collect()
+    } else {
+        solution
+            .blame()
+            .filter_map(|(_constraint, desc)| match desc {
+                ConstraintSource::User(desc) => Some(desc.user_readable(env)),
+                ConstraintSource::DefiningExtra { .. } => None,
+            })
+            .collect()
+    };
 
     if violations.is_empty() {
         eprintln!("  All user constraints satisfied ({:.2?})", t.elapsed());
