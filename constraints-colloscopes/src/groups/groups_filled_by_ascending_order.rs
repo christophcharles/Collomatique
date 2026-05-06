@@ -1,4 +1,4 @@
-use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
+use crate::extras::{MyBundle, V, extra_var, groups_for_group_list};
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

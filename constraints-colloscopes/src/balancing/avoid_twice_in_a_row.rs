@@ -1,10 +1,10 @@
+use crate::extras::{
+    MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
+};
 use crate::helpers::{
     enrolled_students_for_subject, merge_objectified, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
-use crate::native_extras::{
-    MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
-};
 use crate::types::{ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

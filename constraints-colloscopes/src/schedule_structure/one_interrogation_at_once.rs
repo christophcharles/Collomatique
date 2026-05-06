@@ -1,4 +1,4 @@
-use crate::native_extras::{MyBundle, extra_var, is_student_enrolled, weeks_for_slot};
+use crate::extras::{MyBundle, extra_var, is_student_enrolled, weeks_for_slot};
 use crate::types::{ExtraVarName, StructuralConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

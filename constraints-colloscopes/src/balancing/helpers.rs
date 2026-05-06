@@ -1,5 +1,5 @@
+use crate::extras::{V, extra_var, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::native_extras::{V, extra_var, subject_interrogation_params};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

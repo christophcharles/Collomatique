@@ -8,11 +8,6 @@ use crate::ids::{
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    GroupInInterrogation {
-        slot: SlotId,
-        week: GlobalWeek,
-        group: GroupNum,
-    },
     InterrogationHasGroups {
         slot: SlotId,
         week: GlobalWeek,

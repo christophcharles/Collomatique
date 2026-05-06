@@ -1,5 +1,5 @@
+use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::native_extras::{MyBundle, subject_interrogation_params};
 use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

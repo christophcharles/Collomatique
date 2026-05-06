@@ -1,10 +1,10 @@
-use crate::ids::GroupNum;
-use crate::native_extras::{
-    MyBundle, V, extra_var, group_list_for_interrogation, groups_for_group_list,
+use crate::extras::{
+    MyBundle, V, base_var, extra_var, group_list_for_interrogation, groups_for_group_list,
     students_for_subject_period_group_list, week_to_period_id, weeks_for_slot,
 };
+use crate::ids::GroupNum;
 use crate::types::{ExtraVarName, StructuralConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
@@ -41,9 +41,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                                 .any(|s| enrolled.is_some_and(|e| e.contains(s)));
 
                             if !has_enrolled {
-                                let expr = IntLinExpr::<V>::var(extra_var(
-                                    ExtraVarName::GroupInInterrogation { slot, week, group },
-                                ));
+                                let expr =
+                                    IntLinExpr::<V>::var(base_var(Var::GroupInInterrogation {
+                                        slot,
+                                        week,
+                                        group,
+                                    }));
                                 bundle = bundle.with_constraint(
                                     expr.eq(&IntLinExpr::constant(0)),
                                     StructuralConstraint::ForbiddenGroup {
@@ -74,9 +77,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                                 })
                                 .sum();
 
-                            let gi = IntLinExpr::<V>::var(extra_var(
-                                ExtraVarName::GroupInInterrogation { slot, week, group },
-                            ));
+                            let gi = IntLinExpr::<V>::var(base_var(Var::GroupInInterrogation {
+                                slot,
+                                week,
+                                group,
+                            }));
                             bundle = bundle.with_constraint(
                                 gi.leq(&sum),
                                 StructuralConstraint::ForbiddenGroup {

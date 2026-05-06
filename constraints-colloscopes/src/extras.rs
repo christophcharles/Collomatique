@@ -232,35 +232,6 @@ pub(crate) fn weeks_for_week_pattern(
 
 // ---- Reified variable builders (lazy registration) ----
 
-fn build_group_in_interrogation(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
-        let Some(subject) = env.subjects.find_subject(subject_id) else {
-            continue;
-        };
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
-            let slot = *slot_id;
-            for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
-                for group in groups_for_interrogation(env, subject_id, week) {
-                    let var = ExtraVarName::GroupInInterrogation { slot, week, group };
-                    bundle = bundle
-                        .and_reified(var, move || {
-                            let expr =
-                                IntLinExpr::var(base_var(Var::GroupInInterrogationInternal {
-                                    slot,
-                                    week,
-                                    group,
-                                }));
-                            vec![expr.eq(&IntLinExpr::constant(1))]
-                        })
-                        .expect("no duplicate extras");
-                }
-            }
-        }
-    }
-    bundle
-}
-
 fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (&subject_id, subject_slots) in &env.slots.subject_map {
@@ -280,7 +251,7 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
                         let sum: IntLinExpr<V> = groups
                             .iter()
                             .map(|&group| {
-                                IntLinExpr::var(extra_var(ExtraVarName::GroupInInterrogation {
+                                IntLinExpr::var(base_var(Var::GroupInInterrogation {
                                     slot,
                                     week,
                                     group,
@@ -414,9 +385,11 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
                                     group,
                                 }))
                                 .geq(&IntLinExpr::constant(1));
-                                let c2 = IntLinExpr::var(extra_var(
-                                    ExtraVarName::GroupInInterrogation { slot, week, group },
-                                ))
+                                let c2 = IntLinExpr::var(base_var(Var::GroupInInterrogation {
+                                    slot,
+                                    week,
+                                    group,
+                                }))
                                 .geq(&IntLinExpr::constant(1));
                                 vec![c1, c2]
                             })
@@ -475,12 +448,8 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                                 Some(group) => {
                                     bundle = bundle
                                         .and_reified(var, move || {
-                                            let expr = IntLinExpr::var(extra_var(
-                                                ExtraVarName::GroupInInterrogation {
-                                                    slot,
-                                                    week,
-                                                    group,
-                                                },
+                                            let expr = IntLinExpr::var(base_var(
+                                                Var::GroupInInterrogation { slot, week, group },
                                             ));
                                             vec![expr.geq(&IntLinExpr::constant(1))]
                                         })
@@ -686,11 +655,8 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
 
 // ---- Public API ----
 
-pub fn build_native_extras(env: &VarEnv) -> MyBundle {
-    let bundle = build_group_in_interrogation(env);
-    let bundle = bundle
-        .merge(build_interrogation_has_groups(env))
-        .expect("no duplicate extras");
+pub fn build_extras(env: &VarEnv) -> MyBundle {
+    let bundle = build_interrogation_has_groups(env);
     let bundle = bundle
         .merge(build_student_in_group(env))
         .expect("no duplicate extras");

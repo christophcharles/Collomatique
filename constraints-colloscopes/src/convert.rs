@@ -45,7 +45,7 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
 
                 for group_num in &interrogation.assigned_groups {
                     config_data = config_data.set(
-                        Var::GroupInInterrogationInternal {
+                        Var::GroupInInterrogation {
                             slot: *slot_id,
                             week: GlobalWeek(week),
                             group: GroupNum(*group_num as usize),
@@ -127,7 +127,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                         continue;
                     }
                     config_data = config_data.set(
-                        Var::GroupInInterrogationInternal {
+                        Var::GroupInInterrogation {
                             slot: *slot_id,
                             week: GlobalWeek(week),
                             group: GroupNum(group_num),
@@ -160,7 +160,7 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
                         .insert(student, value as u32);
                 }
             }
-            Var::GroupInInterrogationInternal { slot, week, group } => {
+            Var::GroupInInterrogation { slot, week, group } => {
                 if value < 0.5 {
                     continue;
                 }

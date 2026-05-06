@@ -1,5 +1,5 @@
+use crate::extras::{MyBundle, V, extra_var, students_for_group_list};
 use crate::ids::GroupNum;
-use crate::native_extras::{MyBundle, V, extra_var, students_for_group_list};
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

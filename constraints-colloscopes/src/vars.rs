@@ -28,7 +28,7 @@ impl VarEnv {
 #[env(VarEnv)]
 pub enum Var {
     #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]
-    GroupInInterrogationInternal {
+    GroupInInterrogation {
         #[range(Self::compute_slot_range(env))]
         slot: SlotId,
         #[range(Self::compute_week_range(env, slot))]

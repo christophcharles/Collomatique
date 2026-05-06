@@ -1,7 +1,7 @@
-use crate::ids::GlobalWeek;
-use crate::native_extras::{
+use crate::extras::{
     MyBundle, V, extra_var, is_student_enrolled, week_to_period_id, weeks_for_week_pattern,
 };
+use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, StructuralConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

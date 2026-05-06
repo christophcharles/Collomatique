@@ -1,7 +1,7 @@
-use crate::ids::GroupNum;
-use crate::native_extras::{
+use crate::extras::{
     MyBundle, V, extra_var, students_for_subject_period_group_list, subject_interrogation_params,
 };
+use crate::ids::GroupNum;
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};

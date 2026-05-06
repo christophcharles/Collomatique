@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::ColloscopeModel;
-use crate::native_extras::build_native_extras;
+use crate::extras::build_extras;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{Var, VarEnv};
 use collomatique_ilp_modeler::Modeler;
@@ -44,7 +44,7 @@ pub async fn build_model_with_log(
         }};
     }
 
-    apply!("native_extras", build_native_extras(&env));
+    apply!("extras", build_extras(&env));
     apply!("groups", crate::groups::build(&env));
     apply!("schedule_structure", crate::schedule_structure::build(&env));
     apply!("pairings", crate::pairings::build(&env));

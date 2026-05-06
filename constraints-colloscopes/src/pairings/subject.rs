@@ -1,9 +1,9 @@
-use crate::helpers::merge_objectified;
-use crate::ids::GlobalWeek;
-use crate::native_extras::{
+use crate::extras::{
     MyBundle, V, active_slots_for_subject_week, extra_var, is_at_most_once_per_week,
     student_has_interrogation_in_expr,
 };
+use crate::helpers::merge_objectified;
+use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

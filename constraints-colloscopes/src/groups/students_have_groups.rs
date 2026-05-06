@@ -1,4 +1,4 @@
-use crate::native_extras::{MyBundle, V, base_var};
+use crate::extras::{MyBundle, V, base_var};
 use crate::types::StructuralConstraint;
 use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
