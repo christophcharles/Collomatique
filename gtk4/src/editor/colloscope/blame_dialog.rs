@@ -1,15 +1,15 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::FactorySender;
-use relm4::factory::FactoryVecDeque;
-use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::typed_view::list::{RelmListItem, TypedListView};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
+
+use collomatique_constraints_colloscopes::SeverityLevel;
 
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
     warnings: ComputationState,
-    messages: FactoryVecDeque<Entry>,
+    messages: TypedListView<BlameEntry, gtk::SingleSelection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,16 +17,11 @@ pub enum ComputationState {
     Debouncing,
     ComputingConstraints,
     RecomputingWarnings,
-    ResultAvailable(
-        Result<Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>, String>,
-    ),
+    ResultAvailable(Result<Vec<(SeverityLevel, String)>, String>),
 }
 
 impl ComputationState {
-    fn as_ref(
-        &self,
-    ) -> Option<&Result<Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>, String>>
-    {
+    fn as_ref(&self) -> Option<&Result<Vec<(SeverityLevel, String)>, String>> {
         match self {
             ComputationState::ResultAvailable(res) => Some(res),
             _ => None,
@@ -211,11 +206,10 @@ impl SimpleComponent for Dialog {
                             },
                         },
                         #[local_ref]
-                        messages_listbox -> gtk::ListBox {
+                        messages_listview -> gtk::ListView {
                             set_hexpand: true,
                             set_vexpand: true,
                             add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::Single,
                             #[watch]
                             set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if !w.is_empty()),
                         }
@@ -230,9 +224,7 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let messages = FactoryVecDeque::builder()
-            .launch(gtk::ListBox::default())
-            .detach();
+        let messages: TypedListView<BlameEntry, gtk::SingleSelection> = TypedListView::new();
 
         let model = Dialog {
             hidden: true,
@@ -241,7 +233,7 @@ impl SimpleComponent for Dialog {
             messages,
         };
 
-        let messages_listbox = model.messages.widget();
+        let messages_listview = &model.messages.view;
 
         let widgets = view_output!();
 
@@ -274,113 +266,74 @@ impl SimpleComponent for Dialog {
 
 impl Dialog {
     fn update_messages(&mut self) {
-        let mut messages = vec![];
+        self.messages.clear();
         if let ComputationState::ResultAvailable(Ok(warnings)) = &self.warnings {
-            messages.extend(warnings.iter().map(|(s, m)| EntryData::Warning {
-                severity: *s,
-                message: m.clone(),
-            }));
-        }
-        // On Err, messages stays empty (error shown via label)
-        super::super::tools::factories::update_vec_deque(
-            &mut self.messages,
-            messages.into_iter(),
-            EntryInput::Update,
-        );
-    }
-}
-
-use collomatique_constraints_colloscopes::SeverityLevel;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum EntryData {
-    Warning {
-        severity: SeverityLevel,
-        message: String,
-    },
-}
-
-#[derive(Debug)]
-struct Entry {
-    data: EntryData,
-}
-
-#[derive(Debug)]
-enum EntryInput {
-    Update(EntryData),
-}
-
-impl Entry {
-    fn generate_icon_name(&self) -> &'static str {
-        match &self.data {
-            EntryData::Warning { severity, .. } => match severity {
-                SeverityLevel::Infeasibility => "computer-fail-symbolic",
-                SeverityLevel::Structural | SeverityLevel::Quality => "dialog-error-symbolic",
-                SeverityLevel::Progressive => "dialog-warning-symbolic",
-                SeverityLevel::Preference => "dialog-information-symbolic",
-            },
-        }
-    }
-
-    fn generate_css_class(&self) -> &'static str {
-        match &self.data {
-            EntryData::Warning { severity, .. } => match severity {
-                SeverityLevel::Infeasibility
-                | SeverityLevel::Structural
-                | SeverityLevel::Quality => "error",
-                SeverityLevel::Progressive | SeverityLevel::Preference => "warning",
-            },
-        }
-    }
-
-    fn generate_label(&self) -> &str {
-        match &self.data {
-            EntryData::Warning { message, .. } => message,
+            self.messages
+                .extend_from_iter(warnings.iter().map(|(s, m)| BlameEntry {
+                    severity: *s,
+                    message: m.clone(),
+                }));
         }
     }
 }
 
-#[relm4::factory]
-impl FactoryComponent for Entry {
-    type Init = EntryData;
-    type Input = EntryInput;
-    type Output = ();
-    type CommandOutput = ();
-    type ParentWidget = gtk::ListBox;
+struct BlameEntry {
+    severity: SeverityLevel,
+    message: String,
+}
 
-    view! {
-        #[root]
-        root_widget = gtk::Box {
-            set_margin_all: 5,
-            set_orientation: gtk::Orientation::Horizontal,
-            #[watch]
-            remove_css_class: "error",
-            #[watch]
-            remove_css_class: "warning",
-            #[watch]
-            add_css_class: self.generate_css_class(),
-            gtk::Image {
-                set_margin_end: 5,
-                #[watch]
-                set_icon_name: Some(self.generate_icon_name()),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                #[watch]
-                set_label: self.generate_label(),
-            },
-        },
+struct BlameEntryWidgets {
+    icon: gtk::Image,
+    label: gtk::Label,
+}
+
+impl BlameEntry {
+    fn icon_name(&self) -> &'static str {
+        match self.severity {
+            SeverityLevel::Infeasibility => "computer-fail-symbolic",
+            SeverityLevel::Structural | SeverityLevel::Quality => "dialog-error-symbolic",
+            SeverityLevel::Progressive => "dialog-warning-symbolic",
+            SeverityLevel::Preference => "dialog-information-symbolic",
+        }
     }
 
-    fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { data }
-    }
-
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
-        match msg {
-            EntryInput::Update(data) => {
-                self.data = data;
+    fn css_class(&self) -> &'static str {
+        match self.severity {
+            SeverityLevel::Infeasibility | SeverityLevel::Structural | SeverityLevel::Quality => {
+                "error"
             }
+            SeverityLevel::Progressive | SeverityLevel::Preference => "warning",
         }
+    }
+}
+
+impl RelmListItem for BlameEntry {
+    type Root = gtk::Box;
+    type Widgets = BlameEntryWidgets;
+
+    fn setup(_list_item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
+        let root = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_start(5)
+            .margin_end(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .build();
+
+        let icon = gtk::Image::builder().margin_end(5).build();
+        let label = gtk::Label::builder().halign(gtk::Align::Start).build();
+
+        root.append(&icon);
+        root.append(&label);
+
+        (root, BlameEntryWidgets { icon, label })
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, root: &mut Self::Root) {
+        root.remove_css_class("error");
+        root.remove_css_class("warning");
+        root.add_css_class(self.css_class());
+        widgets.icon.set_icon_name(Some(self.icon_name()));
+        widgets.label.set_label(&self.message);
     }
 }
