@@ -63,7 +63,7 @@ pub struct IlpProblem {
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<(u8, String)>,
+    warnings: Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,7 +157,7 @@ impl Colloscope {
         }
     }
 
-    fn worst_severity_level(&self) -> Option<u8> {
+    fn worst_severity_level(&self) -> Option<collomatique_constraints_colloscopes::SeverityLevel> {
         match self.get_ilp_repr() {
             Some(Ok(ilp_repr)) => ilp_repr.warnings.first().map(|(s, _)| *s),
             _ => None,
@@ -165,18 +165,22 @@ impl Colloscope {
     }
 
     fn warning_icon_name(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
         match self.worst_severity_level() {
-            Some(0) => "computer-fail-symbolic",
-            Some(1 | 2) => "dialog-error-symbolic",
-            Some(3) => "dialog-warning-symbolic",
-            Some(4) => "dialog-information-symbolic",
-            _ => "dialog-warning-symbolic",
+            Some(SeverityLevel::Infeasibility) => "computer-fail-symbolic",
+            Some(SeverityLevel::Structural | SeverityLevel::Quality) => "dialog-error-symbolic",
+            Some(SeverityLevel::Progressive) => "dialog-warning-symbolic",
+            Some(SeverityLevel::Preference) => "dialog-information-symbolic",
+            None => "dialog-warning-symbolic",
         }
     }
 
     fn warning_css_class(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
         match self.worst_severity_level() {
-            Some(0..=2) => "error",
+            Some(
+                SeverityLevel::Infeasibility | SeverityLevel::Structural | SeverityLevel::Quality,
+            ) => "error",
             _ => "warning",
         }
     }

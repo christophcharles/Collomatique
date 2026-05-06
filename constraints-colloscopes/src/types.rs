@@ -354,26 +354,42 @@ impl From<PreferenceConstraint> for ConstraintDesc {
     }
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(usize)]
+pub enum SeverityLevel {
+    Infeasibility = 0,
+    Structural = 1,
+    Quality = 2,
+    Progressive = 3,
+    Preference = 4,
+}
+
 pub const SEVERITY_LEVEL_COUNT: usize = 5;
 
-impl ConstraintDesc {
-    pub fn severity_level(&self) -> u8 {
+impl SeverityLevel {
+    pub fn label(&self) -> &'static str {
         match self {
-            ConstraintDesc::Level0(_) => 0,
-            ConstraintDesc::Level1(_) => 1,
-            ConstraintDesc::Level2(_) => 2,
-            ConstraintDesc::Level3(_) => 3,
-            ConstraintDesc::Level4(_) => 4,
+            SeverityLevel::Infeasibility => "Infeasibility",
+            SeverityLevel::Structural => "Structural",
+            SeverityLevel::Quality => "Quality",
+            SeverityLevel::Progressive => "Progressive",
+            SeverityLevel::Preference => "Preference",
+        }
+    }
+}
+
+impl ConstraintDesc {
+    pub fn severity_level(&self) -> SeverityLevel {
+        match self {
+            ConstraintDesc::Level0(_) => SeverityLevel::Infeasibility,
+            ConstraintDesc::Level1(_) => SeverityLevel::Structural,
+            ConstraintDesc::Level2(_) => SeverityLevel::Quality,
+            ConstraintDesc::Level3(_) => SeverityLevel::Progressive,
+            ConstraintDesc::Level4(_) => SeverityLevel::Preference,
         }
     }
 
     pub fn severity_label(&self) -> &'static str {
-        match self {
-            ConstraintDesc::Level0(_) => "Infeasibility",
-            ConstraintDesc::Level1(_) => "Structural",
-            ConstraintDesc::Level2(_) => "Quality",
-            ConstraintDesc::Level3(_) => "Progressive",
-            ConstraintDesc::Level4(_) => "Preference",
-        }
+        self.severity_level().label()
     }
 }

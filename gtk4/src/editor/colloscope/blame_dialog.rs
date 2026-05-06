@@ -17,11 +17,16 @@ pub enum ComputationState {
     Debouncing,
     ComputingConstraints,
     RecomputingWarnings,
-    ResultAvailable(Result<Vec<(u8, String)>, String>),
+    ResultAvailable(
+        Result<Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>, String>,
+    ),
 }
 
 impl ComputationState {
-    fn as_ref(&self) -> Option<&Result<Vec<(u8, String)>, String>> {
+    fn as_ref(
+        &self,
+    ) -> Option<&Result<Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>, String>>
+    {
         match self {
             ComputationState::ResultAvailable(res) => Some(res),
             _ => None,
@@ -285,9 +290,14 @@ impl Dialog {
     }
 }
 
+use collomatique_constraints_colloscopes::SeverityLevel;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum EntryData {
-    Warning { severity: u8, message: String },
+    Warning {
+        severity: SeverityLevel,
+        message: String,
+    },
 }
 
 #[derive(Debug)]
@@ -304,10 +314,10 @@ impl Entry {
     fn generate_icon_name(&self) -> &'static str {
         match &self.data {
             EntryData::Warning { severity, .. } => match severity {
-                0 => "computer-fail-symbolic",
-                1 | 2 => "dialog-error-symbolic",
-                3 => "dialog-warning-symbolic",
-                _ => "dialog-information-symbolic",
+                SeverityLevel::Infeasibility => "computer-fail-symbolic",
+                SeverityLevel::Structural | SeverityLevel::Quality => "dialog-error-symbolic",
+                SeverityLevel::Progressive => "dialog-warning-symbolic",
+                SeverityLevel::Preference => "dialog-information-symbolic",
             },
         }
     }
@@ -315,8 +325,10 @@ impl Entry {
     fn generate_css_class(&self) -> &'static str {
         match &self.data {
             EntryData::Warning { severity, .. } => match severity {
-                0..=2 => "error",
-                _ => "warning",
+                SeverityLevel::Infeasibility
+                | SeverityLevel::Structural
+                | SeverityLevel::Quality => "error",
+                SeverityLevel::Progressive | SeverityLevel::Preference => "warning",
             },
         }
     }
