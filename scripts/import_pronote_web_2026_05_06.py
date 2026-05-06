@@ -25,6 +25,8 @@ def build_subject_set(csv_content):
     S = set({})
     for csv_line in csv_content:
         for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
+            if column not in csv_line:
+                continue
             opt = csv_line[column][0]
             if opt:
                 S.add(opt)
@@ -70,7 +72,7 @@ def split_student_name(student_full_name):
 
 def add_student_from_csv_line(session, csv_line, subject_ids):
     file = session.get_current_collomatique_file()
-    student_full_name = csv_line['\ufeff'][0] # Yes, the pronote CSV is that bad
+    student_full_name = csv_line['\ufeffÉlèves'][0]
     if not student_full_name:
         collomatique.log("Bad line: {}".format(csv_line))
         return
@@ -84,6 +86,8 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
     periods = file.get_main_params().periods
 
     for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
+        if column not in csv_line:
+            continue
         opt = csv_line[column][0]
         if not opt:
             continue
