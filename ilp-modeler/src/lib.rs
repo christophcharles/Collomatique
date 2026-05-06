@@ -440,15 +440,50 @@ where
             .expect("checker reconstruction problem should always be valid"))
     }
 
+    /// Solve the full optimization problem using a callback.
+    ///
+    /// The callback receives the problem and should return
+    /// the solver's result. This allows customizing the solving
+    /// strategy (e.g., time limits).
+    pub fn solve_with(
+        &self,
+        f: impl FnOnce(
+            &Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                '_,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<FeasibleSolution<'_, B, E, C>> {
+        f(&self.problem).map(|feasible_config| FeasibleSolution { feasible_config })
+    }
+
     /// Solve the full optimization problem.
     pub fn solve<S>(&self, solver: &S) -> Option<FeasibleSolution<'_, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
-        solver
-            .build_model(&self.problem)
-            .solve()
-            .map(|feasible_config| FeasibleSolution { feasible_config })
+        self.solve_with(|pb| solver.build_model(pb).solve())
+    }
+
+    /// Solve the checker problem (feasibility only) using a callback.
+    pub fn solve_checker_with(
+        &self,
+        f: impl FnOnce(
+            &Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                '_,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<FeasibleSolution<'_, B, E, C>> {
+        f(&self.checker_problem).map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Solve the checker problem (feasibility only, no objective optimization).
@@ -456,31 +491,33 @@ where
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
-        solver
-            .build_model(&self.checker_problem)
-            .solve()
-            .map(|feasible_config| FeasibleSolution { feasible_config })
+        self.solve_checker_with(|pb| solver.build_model(pb).solve())
     }
 
     /// Build a [`Solution`] by reconstructing extra variable
-    /// values from base variable values (full reconstruction).
-    pub fn solution_from_data<S>(
+    /// values from base variable values (full reconstruction),
+    /// using a callback.
+    pub fn solution_from_data_with(
         &self,
         config_data: &ConfigData<B>,
-        solver: &S,
-    ) -> Option<Solution<'_, B, E, C>>
-    where
-        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
-    {
+        f: impl for<'a> FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<Solution<'_, B, E, C>> {
         if !self.check_no_missing_variables(config_data) {
             return None;
         }
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
         let recon_problem = self.reconstruction_problem(&base_values).ok()?;
-        let recon_sol = solver
-            .build_model(&recon_problem)
-            .solve()
+        let recon_sol = f(&recon_problem)
             .expect("There should always be a (unique!) solution to the reconstruction problem");
 
         let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
@@ -496,9 +533,9 @@ where
         )
     }
 
-    /// Build a [`Solution`] by reconstructing only the extra
-    /// variable values needed for constraint checking.
-    pub fn checker_solution_from_data<S>(
+    /// Build a [`Solution`] by reconstructing extra variable
+    /// values from base variable values (full reconstruction).
+    pub fn solution_from_data<S>(
         &self,
         config_data: &ConfigData<B>,
         solver: &S,
@@ -506,13 +543,33 @@ where
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
+        self.solution_from_data_with(config_data, |pb| solver.build_model(pb).solve())
+    }
+
+    /// Build a [`Solution`] by reconstructing only the extra
+    /// variable values needed for constraint checking,
+    /// using a callback.
+    pub fn checker_solution_from_data_with(
+        &self,
+        config_data: &ConfigData<B>,
+        f: impl for<'a> FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<Solution<'_, B, E, C>> {
         if !self.check_no_missing_variables(config_data) {
             return None;
         }
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
         let recon_problem = self.checker_reconstruction_problem(&base_values).ok()?;
-        let recon_sol = solver.build_model(&recon_problem).solve().expect(
+        let recon_sol = f(&recon_problem).expect(
             "There should always be a (unique!) solution to the checker reconstruction problem",
         );
 
@@ -526,6 +583,19 @@ where
         Some(Solution {
             config: self.checker_problem.build_config(new_config_data).ok()?,
         })
+    }
+
+    /// Build a [`Solution`] by reconstructing only the extra
+    /// variable values needed for constraint checking.
+    pub fn checker_solution_from_data<S>(
+        &self,
+        config_data: &ConfigData<B>,
+        solver: &S,
+    ) -> Option<Solution<'_, B, E, C>>
+    where
+        S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+    {
+        self.checker_solution_from_data_with(config_data, |pb| solver.build_model(pb).solve())
     }
 
     /// Build a [`Solution`] from a complete set of variable values
