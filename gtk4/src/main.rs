@@ -10,6 +10,8 @@ use std::path::PathBuf;
 
 mod debug;
 
+const WORKER_THREAD_COUNT: usize = 4;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 /// Collomatique gtk4 UI
@@ -57,6 +59,10 @@ fn main() -> Result<(), anyhow::Error> {
     let program_invocation = std::env::args().next().unwrap();
     let mut gtk_args = vec![program_invocation];
     gtk_args.extend(args.gtk_options.clone());
+
+    relm4::RELM_THREADS
+        .set(WORKER_THREAD_COUNT)
+        .expect("RELM_THREADS should not have been set before");
 
     let app = RelmApp::new("fr.collomatique.gtk4").with_args(gtk_args);
     app.allow_multiple_instances(true);
