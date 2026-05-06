@@ -1,10 +1,9 @@
+use crate::ids::{GlobalWeek, GroupNum};
 use crate::tools;
 use crate::vars::Var;
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
-
-use collomatique_state_colloscopes::ids::Id;
 
 pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
@@ -21,8 +20,8 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
         for (student_id, group) in &group_list.groups_for_students {
             config_data = config_data.set(
                 Var::StudentGroup {
-                    student: student_id.inner() as i32,
-                    group_list: group_list_id.inner() as i32,
+                    student: *student_id,
+                    group_list: *group_list_id,
                 },
                 *group as f64,
             );
@@ -45,12 +44,11 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
                 let week = first_week_in_period + week_num;
 
                 for group_num in &interrogation.assigned_groups {
-                    let group = *group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogationInternal {
-                            slot: slot_id.inner() as i32,
-                            week: week as i32,
-                            group,
+                            slot: *slot_id,
+                            week: GlobalWeek(week),
+                            group: GroupNum(*group_num as usize),
                         },
                         1.0,
                     );
@@ -81,8 +79,8 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                 continue;
             }
             let var = Var::StudentGroup {
-                student: student_id.inner() as i32,
-                group_list: group_list_id.inner() as i32,
+                student: *student_id,
+                group_list: *group_list_id,
             };
             if config_data.get(var.clone()).is_some() {
                 continue;
@@ -124,16 +122,15 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
 
                 let week = first_week_in_period + week_num;
 
-                for group_num in 0..group_list.params.group_names.len() as u32 {
-                    if interrogation.assigned_groups.contains(&group_num) {
+                for group_num in 0..group_list.params.group_names.len() {
+                    if interrogation.assigned_groups.contains(&(group_num as u32)) {
                         continue;
                     }
-                    let group = group_num as i32;
                     config_data = config_data.set(
                         Var::GroupInInterrogationInternal {
-                            slot: slot_id.inner() as i32,
-                            week: week as i32,
-                            group,
+                            slot: *slot_id,
+                            week: GlobalWeek(week),
+                            group: GroupNum(group_num),
                         },
                         0.0,
                     );
@@ -157,33 +154,25 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
                 group_list,
             } => {
                 if value >= -0.1 {
-                    let group_list_id = unsafe {
-                        collomatique_state_colloscopes::ids::GroupListId::new(group_list as u64)
-                    };
-                    let student_id = unsafe {
-                        collomatique_state_colloscopes::ids::StudentId::new(student as u64)
-                    };
-                    let collo_group_list = colloscope.group_lists.get_mut(&group_list_id)?;
+                    let collo_group_list = colloscope.group_lists.get_mut(&group_list)?;
                     collo_group_list
                         .groups_for_students
-                        .insert(student_id, value as u32);
+                        .insert(student, value as u32);
                 }
             }
             Var::GroupInInterrogationInternal { slot, week, group } => {
                 if value < 0.5 {
                     continue;
                 }
-                let slot_id =
-                    unsafe { collomatique_state_colloscopes::ids::SlotId::new(slot as u64) };
-                let (period_id, num_in_period) = tools::week_to_period_id(env, week as usize)?;
+                let (period_id, num_in_period) = tools::week_to_period_id(env, week.0)?;
                 let collo_period = colloscope.period_map.get_mut(&period_id)?;
-                let collo_slot = collo_period.slot_map.get_mut(&slot_id)?;
+                let collo_slot = collo_period.slot_map.get_mut(&slot)?;
                 let collo_interrogation_opt = collo_slot.interrogations.get_mut(num_in_period)?;
 
                 let Some(collo_interrogation) = collo_interrogation_opt else {
                     return None;
                 };
-                collo_interrogation.assigned_groups.insert(group as u32);
+                collo_interrogation.assigned_groups.insert(group.0 as u32);
             }
         }
     }

@@ -6,7 +6,7 @@ use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::WeekPatternId;
-use collomatique_state_colloscopes::ids::{GroupListId, Id, PeriodId, StudentId, SubjectId};
+use collomatique_state_colloscopes::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 use collomatique_state_colloscopes::slots::Slot;
 use collomatique_time::SlotWithDuration;
 use std::collections::BTreeSet;
@@ -247,9 +247,9 @@ fn build_group_in_interrogation(env: &VarEnv) -> MyBundle {
                         .and_reified(var, move || {
                             let expr =
                                 IntLinExpr::var(base_var(Var::GroupInInterrogationInternal {
-                                    slot: slot.inner() as i32,
-                                    week: week.0 as i32,
-                                    group: group.0 as i32,
+                                    slot,
+                                    week,
+                                    group,
                                 }));
                             vec![expr.eq(&IntLinExpr::constant(1))]
                         })
@@ -311,8 +311,8 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
                 bundle = bundle
                     .and_reified(var, move || {
                         let expr = IntLinExpr::var(base_var(Var::StudentGroup {
-                            group_list: group_list.inner() as i32,
-                            student: student.inner() as i32,
+                            group_list,
+                            student,
                         }));
                         let group_i64: i64 =
                             group.0.try_into().expect("group index should fit in i64");
