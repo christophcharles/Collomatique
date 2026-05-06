@@ -180,3 +180,111 @@ fn coin_cbc_impossible() {
 
     assert!(solution.is_none());
 }
+
+#[test]
+fn coin_cbc_warm_start() {
+    use crate::{ConfigData, LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
+
+    let x11 = LinExpr::<String>::var("x11");
+    let x12 = LinExpr::<String>::var("x12");
+    let x21 = LinExpr::<String>::var("x21");
+    let x22 = LinExpr::<String>::var("x22");
+
+    let y11 = LinExpr::<String>::var("y11");
+    let y12 = LinExpr::<String>::var("y12");
+    let y21 = LinExpr::<String>::var("y21");
+    let y22 = LinExpr::<String>::var("y22");
+
+    let one = LinExpr::<String>::constant(1.0);
+
+    let problem = ProblemBuilder::<String, String>::new()
+        .set_variables([
+            ("x11", Variable::binary()),
+            ("x12", Variable::binary()),
+            ("x21", Variable::binary()),
+            ("x22", Variable::binary()),
+        ])
+        .set_variables([
+            ("y11", Variable::binary()),
+            ("y12", Variable::binary()),
+            ("y21", Variable::binary()),
+            ("y22", Variable::binary()),
+        ])
+        .add_constraints([
+            ((&x11 + &y11).leq(&one), ""),
+            ((&x12 + &y12).leq(&one), ""),
+            ((&x21 + &y21).leq(&one), ""),
+            ((&x22 + &y22).leq(&one), ""),
+        ])
+        .add_constraints([
+            ((&x11 + &x21).leq(&one), ""),
+            ((&x12 + &x22).leq(&one), ""),
+            ((&y11 + &y21).leq(&one), ""),
+            ((&y12 + &y22).leq(&one), ""),
+        ])
+        .add_constraints([
+            ((&x11 + &x12).eq(&one), ""),
+            ((&x21 + &x22).eq(&one), ""),
+            ((&y11 + &y12).eq(&one), ""),
+            ((&y21 + &y22).eq(&one), ""),
+        ])
+        .set_objective(Objective::new(x11.clone(), ObjectiveSense::Maximize))
+        .build()
+        .unwrap();
+
+    let hint = ConfigData::new().set_iter([
+        ("x11", 1.0),
+        ("x12", 0.0),
+        ("x21", 0.0),
+        ("x22", 1.0),
+        ("y11", 0.0),
+        ("y12", 1.0),
+        ("y21", 1.0),
+        ("y22", 0.0),
+    ]);
+
+    let solver = super::CbcSolver::new();
+
+    use crate::solvers::{Solver, SolverModel, WarmSolver};
+
+    let cold_solution = solver
+        .build_model(&problem)
+        .solve()
+        .expect("Cold solve should find a solution");
+
+    let warm_solution = solver
+        .build_warm_model(&problem, &hint)
+        .solve()
+        .expect("Warm solve should find a solution");
+
+    assert!(cold_solution.into_inner() == warm_solution.into_inner());
+}
+
+#[test]
+fn coin_cbc_warm_start_partial_hint() {
+    use crate::{ConfigData, LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
+
+    let x = LinExpr::<String>::var("x");
+    let y = LinExpr::<String>::var("y");
+    let one = LinExpr::<String>::constant(1.0);
+
+    let problem = ProblemBuilder::<String, String>::new()
+        .set_variables([("x", Variable::binary()), ("y", Variable::binary())])
+        .add_constraint((&x + &y).leq(&one), "")
+        .set_objective(Objective::new(&x + &y, ObjectiveSense::Maximize))
+        .build()
+        .unwrap();
+
+    let partial_hint = ConfigData::new().set("x", 1.0);
+
+    let solver = super::CbcSolver::new();
+
+    use crate::solvers::{SolverModel, WarmSolver};
+
+    let solution = solver
+        .build_warm_model(&problem, &partial_hint)
+        .solve()
+        .expect("Warm solve with partial hint should find a solution");
+
+    assert_eq!(solution.eval(), 1.0);
+}

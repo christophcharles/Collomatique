@@ -12,7 +12,7 @@ pub mod coin_cbc;
 #[cfg(feature = "good_lp")]
 pub mod good_lp;
 
-use super::{FeasibleConfig, Problem};
+use super::{ConfigData, FeasibleConfig, Problem};
 
 use super::UsableData;
 use super::mat_repr::ProblemRepr;
@@ -83,4 +83,33 @@ pub trait TimeLimitSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<
     ///
     /// You can check this by inspecting [TimeLimitSolution::time_limit_reached].
     fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P>;
+}
+
+/// A solver that supports warm starting from an initial solution hint.
+///
+/// Warm starting provides the solver with a known (or candidate) solution
+/// to use as a starting point. This can significantly speed up MIP solving
+/// by giving the solver a good incumbent early in the search.
+///
+/// The hint is a [ConfigData] rather than a [Config](super::Config) so that
+/// solutions from different (but related) problem instances can be reused
+/// — for example, when re-solving after modifying constraints.
+///
+/// The hint is best-effort: variables missing from the hint are
+/// solver-dependent (typically defaulting to 0), and the solver may
+/// ignore the hint entirely if it is not useful.
+///
+/// This trait is on the [Solver] rather than the [SolverModel] to
+/// guarantee the hint is applied at construction time, before any
+/// solving occurs.
+pub trait WarmSolver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Solver<V, C, P> {
+    /// Build a model from a problem, seeded with an initial solution hint.
+    ///
+    /// Behaves like [Solver::build_model] but additionally injects the
+    /// hint as an initial solution for the solver backend.
+    fn build_warm_model<'a>(
+        &self,
+        problem: &'a Problem<V, C, P>,
+        hint: &ConfigData<V>,
+    ) -> Self::Model<'a>;
 }

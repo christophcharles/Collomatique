@@ -8,7 +8,9 @@
 #[cfg(test)]
 mod tests;
 
-use super::{ProblemRepr, Solver, SolverModel, TimeLimitSolution, TimeLimitSolverModel};
+use super::{
+    ProblemRepr, Solver, SolverModel, TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
+};
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// Coin-cbc solver
@@ -29,15 +31,12 @@ pub struct CbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     disable_logging: bool,
 }
 
-impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSolver {
-    type Model<'a>
-        = CbcBuiltModel<'a, V, C, P>
-    where
-        V: 'a,
-        C: 'a,
-        P: 'a;
-
-    fn build_model<'a>(&self, problem: &'a Problem<V, C, P>) -> Self::Model<'a> {
+impl CbcSolver {
+    fn build_model_internal<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
+        &self,
+        problem: &'a Problem<V, C, P>,
+        hint: Option<&ConfigData<V>>,
+    ) -> CbcBuiltModel<'a, V, C, P> {
         use coin_cbc::Model;
         use std::collections::HashMap;
 
@@ -100,12 +99,43 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSol
             model.set_parameter("slog", "0");
         }
 
+        if let Some(hint) = hint {
+            for (var, col) in &cols {
+                if let Some(value) = hint.get(var.clone()) {
+                    model.set_col_initial_solution(*col, value);
+                }
+            }
+        }
+
         CbcBuiltModel {
             model,
             cols,
             problem,
             disable_logging: self.disable_logging,
         }
+    }
+}
+
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSolver {
+    type Model<'a>
+        = CbcBuiltModel<'a, V, C, P>
+    where
+        V: 'a,
+        C: 'a,
+        P: 'a;
+
+    fn build_model<'a>(&self, problem: &'a Problem<V, C, P>) -> Self::Model<'a> {
+        self.build_model_internal(problem, None)
+    }
+}
+
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> WarmSolver<V, C, P> for CbcSolver {
+    fn build_warm_model<'a>(
+        &self,
+        problem: &'a Problem<V, C, P>,
+        hint: &ConfigData<V>,
+    ) -> Self::Model<'a> {
+        self.build_model_internal(problem, Some(hint))
     }
 }
 
