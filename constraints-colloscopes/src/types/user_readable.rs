@@ -371,7 +371,8 @@ impl PreferenceConstraint {
             PreferenceConstraint::GroupFilledByAscendingOrder { group_list, group } => {
                 let gl_name = group_list_name(env, *group_list);
                 let g_name = group_name(env, *group_list, *group);
-                let next_g_name = group_name(env, *group_list, group.next());
+                let next_g_name =
+                    group_name(env, *group_list, group.next().expect("not the last group"));
                 format!(
                     "Le groupe {} de la liste {} doit être rempli avant le groupe {}",
                     g_name, gl_name, next_g_name,
@@ -768,12 +769,12 @@ fn group_name(
     group_list: GroupListId,
     group: GroupNum,
 ) -> String {
-    let number = group.0 + 1;
+    let number = group.index() + 1;
     let name = env
         .group_lists
         .group_list_map
         .get(&group_list)
-        .and_then(|gl| gl.params.group_names.get(group.0))
+        .and_then(|gl| gl.params.group_names.get(group.index()))
         .and_then(|name| name.as_ref());
     match name {
         Some(name) => format!("{} ({})", number, name),

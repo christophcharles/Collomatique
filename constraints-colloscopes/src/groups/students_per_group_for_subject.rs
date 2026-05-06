@@ -21,9 +21,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             };
 
-            for group_index in 0..gl.params.group_names.len() {
-                let group = GroupNum(group_index);
-
+            for group in GroupNum::enumerate(env, group_list) {
                 bundle = add_reification(env, bundle, group_list, gl, group, subject, period);
 
                 let students = students_for_subject_period_group_list(env, gl, subject, period);
@@ -100,7 +98,7 @@ fn add_reification(
                 .period_map
                 .get(&period)
                 .and_then(|pa| pa.subject_map.get(&subject));
-            let has_students = groups.get(group.0).is_some_and(|g| {
+            let has_students = groups.get(group.index()).is_some_and(|g| {
                 g.students
                     .iter()
                     .any(|s| enrolled.is_some_and(|e| e.contains(s)))

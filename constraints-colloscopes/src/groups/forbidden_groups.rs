@@ -34,7 +34,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             .and_then(|pa| pa.subject_map.get(&subject_id));
 
                         for (group_index, prefilled_group) in groups.iter().enumerate() {
-                            let group = GroupNum(group_index);
+                            let group = GroupNum::new(env, group_list, group_index)
+                                .expect("valid group index");
                             let has_enrolled = prefilled_group
                                 .students
                                 .iter()
@@ -65,7 +66,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         let students =
                             students_for_subject_period_group_list(env, gl, subject_id, period);
 
-                        for group in groups_for_group_list(gl) {
+                        for group in groups_for_group_list(env, group_list) {
                             let sum: IntLinExpr<V> = students
                                 .iter()
                                 .map(|&student| {

@@ -94,13 +94,10 @@ impl Var {
             Some(id) => id,
             None => return default,
         };
-        let group_list = match env.group_lists.group_list_map.get(group_list_id) {
-            Some(group_list) => group_list,
-            None => return default,
-        };
-        (0..group_list.params.group_names.len())
-            .map(GroupNum)
-            .collect()
+        if !env.group_lists.group_list_map.contains_key(group_list_id) {
+            return default;
+        }
+        GroupNum::enumerate(env, *group_list_id).collect()
     }
 
     pub fn compute_group_list_range(env: &VarEnv) -> Vec<GroupListId> {

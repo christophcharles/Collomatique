@@ -1,8 +1,18 @@
 use collomatique_state_colloscopes::slots::Slot;
 use collomatique_state_colloscopes::{
-    PeriodId, SlotId, WeekPatternId, colloscope_params::Parameters,
+    GroupListId, PeriodId, SlotId, WeekPatternId, colloscope_params::Parameters,
 };
 use std::collections::BTreeSet;
+
+pub fn group_list_for_slot(
+    params: &Parameters,
+    period: PeriodId,
+    slot: SlotId,
+) -> Option<GroupListId> {
+    let (subject_id, _) = params.slots.find_slot_subject_and_position(slot)?;
+    let period_associations = params.group_lists.subjects_associations.get(&period)?;
+    period_associations.get(&subject_id).copied()
+}
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;

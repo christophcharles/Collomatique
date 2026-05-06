@@ -610,7 +610,7 @@ mod tests {
         GlobalWeek(n)
     }
     fn group(n: usize) -> GroupNum {
-        GroupNum(n)
+        GroupNum::new_for_test(group_list(0), n)
     }
 
     #[test]

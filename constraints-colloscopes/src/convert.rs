@@ -44,11 +44,18 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
                 let week = first_week_in_period + week_num;
 
                 for group_num in &interrogation.assigned_groups {
+                    let group = GroupNum::new(
+                        env,
+                        tools::group_list_for_slot(env, *period_id, *slot_id)
+                            .expect("slot should have a group list"),
+                        *group_num as usize,
+                    )
+                    .expect("group number should be valid");
                     config_data = config_data.set(
                         Var::GroupInInterrogation {
                             slot: *slot_id,
                             week: GlobalWeek(week),
-                            group: GroupNum(*group_num as usize),
+                            group,
                         },
                         1.0,
                     );
@@ -130,7 +137,8 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                         Var::GroupInInterrogation {
                             slot: *slot_id,
                             week: GlobalWeek(week),
-                            group: GroupNum(group_num),
+                            group: GroupNum::new(env, *group_list_id, group_num)
+                                .expect("group number should be valid"),
                         },
                         0.0,
                     );
@@ -172,7 +180,9 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
                 let Some(collo_interrogation) = collo_interrogation_opt else {
                     return None;
                 };
-                collo_interrogation.assigned_groups.insert(group.0 as u32);
+                collo_interrogation
+                    .assigned_groups
+                    .insert(group.index() as u32);
             }
         }
     }
