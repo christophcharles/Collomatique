@@ -170,17 +170,16 @@ fn blame(
     let filter_label = if minimal { "minimal" } else { "all" };
     eprintln!("Checking constraint violations ({filter_label})...");
     let env = &inner_data.params;
-    let violations: Vec<_> = if minimal {
-        solution
-            .minimal_blame()
-            .iter()
-            .map(|desc| desc.user_readable(env))
-            .collect()
+
+    use collomatique_constraints_colloscopes::SEVERITY_LEVEL_COUNT;
+    let violations: Vec<&collomatique_constraints_colloscopes::ConstraintDesc> = if minimal {
+        let mb = solution.minimal_blame();
+        mb.iter().copied().collect()
     } else {
         solution
             .blame()
             .filter_map(|(_constraint, desc)| match desc {
-                ConstraintSource::User(desc) => Some(desc.user_readable(env)),
+                ConstraintSource::User(desc) => Some(desc),
                 ConstraintSource::DefiningExtra { .. } => None,
             })
             .collect()
@@ -188,19 +187,57 @@ fn blame(
 
     if violations.is_empty() {
         eprintln!("  All user constraints satisfied ({:.2?})", t.elapsed());
-    } else {
-        eprintln!(
-            "  {} constraint(s) violated ({:.2?}):",
-            violations.len(),
-            t.elapsed()
-        );
-        for (i, msg) in violations.iter().enumerate() {
-            eprintln!("    [{}] {}", i + 1, msg);
-            if i >= 49 {
-                eprintln!("    ... ({} more)", violations.len() - 50);
-                break;
-            }
+        return;
+    }
+
+    eprintln!(
+        "  {} constraint(s) violated ({:.2?}):",
+        violations.len(),
+        t.elapsed()
+    );
+
+    let mut buckets: [Vec<&collomatique_constraints_colloscopes::ConstraintDesc>;
+        SEVERITY_LEVEL_COUNT] = Default::default();
+    for desc in &violations {
+        buckets[desc.severity_level() as usize].push(desc);
+    }
+
+    const MAX_DETAIL_LINES: usize = 50;
+    let mut budget = MAX_DETAIL_LINES;
+    let mut global_index: usize = 0;
+
+    for (level, descs) in buckets.iter().enumerate() {
+        if descs.is_empty() {
+            continue;
         }
+
+        let count = descs.len();
+        eprintln!();
+        eprintln!(
+            "Severity Level {}: {} ({} failure{})",
+            level,
+            descs[0].severity_label(),
+            count,
+            if count == 1 { "" } else { "s" },
+        );
+
+        if budget == 0 {
+            continue;
+        }
+
+        eprintln!("---");
+        let printable = budget.min(count);
+        for desc in &descs[..printable] {
+            global_index += 1;
+            eprintln!("  [{}] {}", global_index, desc.user_readable(env));
+        }
+        budget -= printable;
+
+        let remaining = count - printable;
+        if remaining > 0 {
+            eprintln!("(... and {} more)", remaining);
+        }
+        global_index += remaining;
     }
 }
 

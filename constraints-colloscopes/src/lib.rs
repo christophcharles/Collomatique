@@ -16,7 +16,7 @@ pub mod vars;
 pub use builder::{build_model, build_model_with_log};
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
-    ProgressiveConstraint, QualityConstraint, StructuralConstraint,
+    ProgressiveConstraint, QualityConstraint, SEVERITY_LEVEL_COUNT, StructuralConstraint,
 };
 
 pub use collomatique_ilp_modeler::{

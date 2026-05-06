@@ -353,3 +353,27 @@ impl From<PreferenceConstraint> for ConstraintDesc {
         ConstraintDesc::Level4(c)
     }
 }
+
+pub const SEVERITY_LEVEL_COUNT: usize = 5;
+
+impl ConstraintDesc {
+    pub fn severity_level(&self) -> u8 {
+        match self {
+            ConstraintDesc::Level0(_) => 0,
+            ConstraintDesc::Level1(_) => 1,
+            ConstraintDesc::Level2(_) => 2,
+            ConstraintDesc::Level3(_) => 3,
+            ConstraintDesc::Level4(_) => 4,
+        }
+    }
+
+    pub fn severity_label(&self) -> &'static str {
+        match self {
+            ConstraintDesc::Level0(_) => "Infeasibility",
+            ConstraintDesc::Level1(_) => "Structural",
+            ConstraintDesc::Level2(_) => "Quality",
+            ConstraintDesc::Level3(_) => "Progressive",
+            ConstraintDesc::Level4(_) => "Preference",
+        }
+    }
+}
